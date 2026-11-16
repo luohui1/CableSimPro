@@ -13,7 +13,9 @@ import type { LibraryJob, SeriesSummary, SeriesView, SpecificationReport, SpecVi
 export async function walkLibrary(browser: Browser, base: string, home: string, out: string, probe: () => string[], problems: string[]) {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   page.on('pageerror', error => problems.push(`library page error: ${error.message}`));
-  page.on('console', message => { if (message.type() === 'error') problems.push(`library console error: ${message.text()}`); });
+  // A size that does not exist is asked for once on purpose, and the host answers it with a 404 the browser logs.
+  let expectUnreadable = false;
+  page.on('console', message => { if (message.type() === 'error' && !(expectUnreadable && /404/.test(message.text()))) problems.push(`library console error: ${message.text()}`); });
   // The address changes the page pushes are kept, so the jump to the workbench can be read even after the workbench redirects.
   await page.addInitScript(() => {
     const seen: string[] = [];
@@ -292,10 +294,12 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await capture('series-method-refusal');
 
     // A version that does not exist is said so, with the way back, instead of a page that stays empty.
+    expectUnreadable = true;
     await page.goto(`${base}/library/${armoured.id}?spec=${encodeURIComponent(spec('3×240').id)}&version=99`);
     await page.getByText('读不到这个规格').waitFor();
     await page.getByRole('button', { name: '回到最新版', exact: true }).click();
     await title('3×240');
+    expectUnreadable = false;
 
     // ---- A new type typed in from nothing: with the imported series' own declaration and one imported size's structure, the
     // library fingerprints it as it fingerprints the imported one ----
