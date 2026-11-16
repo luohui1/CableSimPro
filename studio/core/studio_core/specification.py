@@ -169,6 +169,10 @@ def render(snapshot, snapshot_sha256, path):
         issues.append('标准核对有不通过项，见逐条核对表；不得将本文件解释为合规证明。')
     if any(row.get('status') != 'succeeded' for row in results.get('rating', {}).get('rows', [])):
         issues.append('部分载流量条件被方法拒算，表中保留拒算原因，不补入估计值。')
+    for sheet in snapshot.get('rating_tables', []):
+        refused = sum(1 for row in sheet['rows'] if row['status'] != 'succeeded')
+        if refused:
+            issues.append(f"载流量表“{sheet['title']}”有 {refused} 个条件被方法拒算，表中保留拒算原因，不补入估计值。")
     story.extend(text('• ' + item) for item in issues)
     if not issues:
         story.append(text('未发现计算失败；标准核对中的缺实测值和未覆盖项仍须单独确认。'))
@@ -221,6 +225,22 @@ def render(snapshot, snapshot_sha256, path):
         story.append(text('三芯排管采用三回水平模板；表内回路口径逐行注明。这里的基准条件不替代具体工程的敷设条件。', 'StudioNote'))
     else:
         story.append(text(rating.get('error', {}).get('message', '本版本无当前有效结果。')))
+
+    # Tables the engineer asked for, each number of which is a record of a run (see host/rating-tables.ts).
+    for sheet in snapshot.get('rating_tables', []):
+        story.append(text(f"载流量表 · {sheet['title']}", 'StudioHeading'))
+        rows = []
+        for row in sheet['rows']:
+            spacing = f"；中心距 {number(row['spacing_m'])} m" if row.get('spacing_m') else ''
+            rows.append([f"{row['label']}\n{row['layout_label']} · {row['circuits'] or '未声明'} 回路{spacing}",
+                         f"{number(row['depth_m'])} m / {number(row['ambient_temperature_c'])} °C", number(row['soil_thermal_resistivity']),
+                         f"{row['ampacity_a']:.1f}" if row.get('ampacity_a') is not None and row['status'] == 'succeeded' else '拒算',
+                         row['error']['message'] if row.get('error') else f"{row.get('tier_label') or ''}；{row.get('basis_name') or ''}",
+                         f"{row['run']['run']}\n输入 {row['run']['inputs_sha256'][:12]}"])
+        story.append(table(['条件 / 敷设', '中心埋深 / 环温', '土壤热阻率\nK·m/W', '载流量 A', '适用性 / 说明', '运行记录'], rows, [2.6, 1.4, 1, 1, 2.2, 1.8]))
+        method = sheet['rows'][0]['run']
+        story.append(text(f"计算工程 {sheet['project']}：表内每个数对应该工程里的一条运行记录（右列），记录保存当时的输入、方法版本和请求摘要。"
+                          f"{method['plugin_id']} {method['plugin_version']}；方法 {method['method_version']}；编制 {sheet['by']} · {sheet['created']}。", 'StudioNote'))
 
     story.append(text('标准核对逐条记录', 'StudioHeading'))
     if check.get('current') and check.get('rows'):

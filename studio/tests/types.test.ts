@@ -10,9 +10,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { type App, createApp } from '../host/server.ts';
-import type { SeriesCreated, SpecCreated } from '../shared/model-types.ts';
+import type { RatingTable, RatingTableCondition, SeriesCreated, SpecCreated } from '../shared/model-types.ts';
 import type {
-  CheckRow, LibraryJob, RatingRow, SeriesDeclaration, SeriesView, SpecificationReport, SpecView, TableInspection, ValueRow,
+  CheckRow, LibraryJob, ProjectView, RatingRow, RunRecord, SeriesDeclaration, SeriesView, SpecificationReport, SpecView, TableInspection, ValueRow,
 } from '../shared/types.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'cable-studio-model-types-'));
@@ -75,6 +75,7 @@ const structureValues = (spec: SpecView) => Object.fromEntries(spec.structure.fi
 const projection = (result: SpecView['results'][keyof SpecView['results']]) => (result!.rows as (CheckRow & ValueRow & RatingRow)[]).map(row => ({
   id: row.id, verdict: row.verdict, limit: row.limit, actual: row.actual, value: row.value, ampacity_a: row.ampacity_a, status: row.status }));
 const entry = (spec: SpecView) => spec.derivation as unknown as Record<string, string>;
+let typedSpec = '';
 
 test('a specification typed in is the same kind of object as the imported one it copies, and gives the same results', async () => {
   const { series, declaration, view } = await importPublished('表3 YJV22');
@@ -92,6 +93,7 @@ test('a specification typed in is the same kind of object as the imported one it
   assert.deepEqual([empty.specs.length, empty.series.created_by], [0, app.studio.user]);
 
   const typed = await op<SpecCreated>('library.spec.create', { series: created.series, values: structureValues(imported) });
+  typedSpec = typed.spec;
   const version = typed.view.version;
   assert.deepEqual([typed.version, version.number, version.review, version.note], [1, 1, 'draft', '人工填写']);
   assert.equal(version.created_by, app.studio.user);
@@ -150,4 +152,90 @@ test('a specification typed in is the same kind of object as the imported one it
   const text = pdfText(report.id);
   assert.match(text, /录入方式：人工填写/);
   assert.ok(text.includes(app.studio.user));
+});
+
+test('an ampacity table is kept on a specification version, each number is a run record, and each equals a single check of the same inputs', async () => {
+  const { series, view } = published.get('表3 YJV22')!;
+  const target = view.specs.find(spec => spec.key === '3×240')!;
+  const conditions: RatingTableCondition[] = [
+    { label: '直埋单回 · 0.7 m', layout: 'three_core_buried_single', depth_m: 0.7, soil_thermal_resistivity: 1.0, ambient_temperature_c: 25 },
+    { layout: 'three_core_buried_single', depth_m: 1.0, soil_thermal_resistivity: 1.5, ambient_temperature_c: 20 },
+    { layout: 'three_core_buried_horizontal', depth_m: 0.8, soil_thermal_resistivity: 1.2, ambient_temperature_c: 25 },
+  ];
+  const projects = () => op<{ id: string }[]>('project.list', {}).then(list => list.length);
+  const before = await projects();
+
+  // A condition the laying cannot hold stops everything before anything is written.
+  const shallow = await call('library.rating.table', { spec: target.id, conditions: [conditions[0], { ...conditions[1], depth_m: 0.03 }] });
+  assert.deepEqual([shallow.status, shallow.body.error?.code], [422, 'LAYOUT_INVALID']);
+  assert.match(shallow.body.error!.message, /第 2 条条件/);
+  assert.deepEqual([await projects(), await op('library.rating.tables', { spec: target.id })], [before, []]);
+
+  const table = await op<RatingTable>('library.rating.table', { spec: target.id, title: '规格书载流量表', conditions });
+  assert.deepEqual([table.rows.length, table.spec, table.version, table.by, table.title], [3, target.id, 1, app.studio.user, '规格书载流量表']);
+  assert.equal(await projects(), before + 1);
+  assert.deepEqual(await op<RatingTable[]>('library.rating.tables', { spec: target.id }), [table]);
+
+  // The batch of the library computes the reference condition too: the same number.
+  const job = await op<LibraryJob>('library.compute', { series, specs: [target.id], kinds: ['rating'] });
+  assert.equal((await finished(job)).state, 'done');
+  const batch = ((await op<SpecView>('library.spec.get', { spec: target.id })).results.rating!.rows as RatingRow[]).find(row => row.id === 'three_core_buried_single@1')!;
+  assert.ok(Math.abs(batch.ampacity_a! - table.rows[0].ampacity_a!) < 1e-6);
+
+  for (const [index, row] of table.rows.entries()) {
+    assert.equal(row.status, 'succeeded');
+    assert.ok(row.ampacity_a! > 300 && row.run.project === table.project);
+    // The number is a number of a run record: the inputs, the method and its version are in it.
+    const record = await op<RunRecord>('run.get', { project: table.project, run: row.run.run });
+    assert.equal(record.summary!.ampacity!.value_a, row.ampacity_a);
+    assert.deepEqual([record.inputs.cable.id, record.inputs.cable.content_sha256], [target.id, table.content_sha256]);
+    assert.deepEqual([record.inputs_sha256, record.plugin_id, record.plugin_version, record.method_version, record.manifest_sha256, record.request_sha256],
+      [row.run.inputs_sha256, row.run.plugin_id, row.run.plugin_version, row.run.method_version, row.run.manifest_sha256, row.run.request_sha256]);
+    assert.deepEqual([record.inputs.installation.depth_m, record.inputs.conditions.soil_thermal_resistivity],
+      [conditions[index].depth_m, conditions[index].soil_thermal_resistivity]);
+    // The same inputs checked alone in a project of their own: the same number, from the same inputs.
+    const alone = await op<ProjectView>('project.create', { name: `单算对照 ${index + 1}`, model_id: target.id });
+    await op('installation.set', { project: alone.meta.id, layout: conditions[index].layout, depth_m: conditions[index].depth_m });
+    await op('conditions.set', { project: alone.meta.id, soil_thermal_resistivity: conditions[index].soil_thermal_resistivity,
+      ambient_temperature_c: conditions[index].ambient_temperature_c, currents_a: [0] });
+    const single = await op<RunRecord>('run.rate', { project: alone.meta.id });
+    assert.ok(Math.abs(single.summary!.ampacity!.value_a - row.ampacity_a!) < 1e-9, `${row.label}: ${single.summary!.ampacity!.value_a} ≠ ${row.ampacity_a}`);
+    assert.equal(single.inputs_sha256, row.run.inputs_sha256);
+  }
+  assert.deepEqual(table.rows.map(row => row.circuits), [1, 1, 3]);
+  assert.ok(table.rows[2].ampacity_a! < table.rows[0].ampacity_a!);  // three circuits side by side carry less each
+
+  // A table belongs to the version it was computed for: the next draft of the same specification has none.
+  const typedFirst = await op<RatingTable>('library.rating.table', { spec: typedSpec, version: 1, conditions: [conditions[0]] });
+  assert.equal(typedFirst.version, 1);
+  assert.ok(Math.abs(typedFirst.rows[0].ampacity_a! - table.rows[0].ampacity_a!) < 1e-9);  // the same structure, the same number
+  assert.deepEqual([(await op<RatingTable[]>('library.rating.tables', { spec: typedSpec, version: 1 })).length,
+    (await op<RatingTable[]>('library.rating.tables', { spec: typedSpec })).length], [1, 0]);
+  const unknown = await call('library.rating.table', { spec: typedSpec, version: 9, conditions: [conditions[0]] });
+  assert.deepEqual([unknown.status, unknown.body.error?.code], [404, 'SPEC_UNKNOWN']);
+
+  // An agent may ask for a table; the record says who.
+  const asked = await app.studio.invoke('library.rating.table', { spec: target.id, conditions: [conditions[1]] }, { by: 'agent' }) as RatingTable;
+  assert.equal(asked.by, 'Agent');
+  assert.equal((await op<RunRecord>('run.get', { project: asked.project, run: asked.rows[0].run.run })).by, 'agent');
+
+  // The specification sheet carries the table, with the record of each number.
+  const report = await op<SpecificationReport>('library.export', { spec: target.id, version: 1 });
+  const text = pdfText(report.id).replace(/\s+/g, ' ');
+  assert.match(text, /载流量表 · 规格书载流量表/);
+  for (const row of table.rows) {
+    assert.ok(text.includes(row.ampacity_a!.toFixed(1)), row.label);
+    assert.ok(text.includes(row.run.run), row.run.run);
+  }
+  assert.ok(text.includes(table.project));
+
+  // A size the method does not cover gets its refusal in the table, with the record of the refusal: no number is made up.
+  const outside = view.specs.find(spec => spec.key === '3×50')!;
+  const refused = await op<RatingTable>('library.rating.table', { spec: outside.id, conditions: [conditions[0]] });
+  assert.deepEqual([refused.rows[0].status, refused.rows[0].ampacity_a, refused.rows[0].error?.code], ['failed', null, 'SL_FILLER_GEOMETRY_RANGE']);
+  const record = await op<RunRecord>('run.get', { project: refused.project, run: refused.rows[0].run.run });
+  assert.deepEqual([record.status, record.summary!.error?.code], ['failed', 'SL_FILLER_GEOMETRY_RANGE']);
+  const refusedText = pdfText((await op<SpecificationReport>('library.export', { spec: outside.id, version: 1 })).id).replace(/\s+/g, ' ');
+  assert.match(refusedText, /有 1 个条件被方法拒算/);
+  assert.ok(refusedText.includes(refused.rows[0].run.run));
 });

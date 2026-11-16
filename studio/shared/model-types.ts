@@ -14,3 +14,70 @@ export interface ManualDerivation extends Derivation {
 
 export interface SeriesCreated { series: string; name: string; description: string; declaration: SeriesDeclaration }
 export interface SpecCreated { spec: string; version: number; view: SpecView }
+
+// ---- Ampacity tables kept on a specification version ----
+
+/** One laying condition of a table, as the engineer states it. */
+export interface RatingTableCondition {
+  label?: string;
+  layout: string;
+  depth_m: number;
+  spacing_m?: number | null;
+  bonding?: 'both_ends' | 'single_point';
+  duct?: { inner_diameter_m: number; outer_diameter_m: number; thermal_resistivity?: number } | null;
+  soil_thermal_resistivity: number;
+  ambient_temperature_c: number;
+  frequency_hz?: number;
+  system_voltage_v?: number | null;
+}
+
+/** The record a number of the table is traced to: one run of the project the table was computed in. */
+export interface RatingTableRun {
+  project: string;
+  run: string;
+  sequence: number;
+  inputs_sha256: string;
+  plugin_id: string;
+  plugin_version: string;
+  capability: string;
+  method_version: string;
+  manifest_sha256: string;
+  request_sha256: string;
+}
+
+export interface RatingTableRow {
+  id: string;
+  label: string;
+  layout: string;
+  layout_label: string;
+  depth_m: number;
+  /** The centre spacing the template resolved to; null for a single circuit. */
+  spacing_m: number | null;
+  bonding: string;
+  soil_thermal_resistivity: number;
+  ambient_temperature_c: number;
+  frequency_hz: number;
+  system_voltage_v: number | null;
+  circuits: number | null;
+  status: 'succeeded' | 'failed';
+  /** The method's own number, unrounded; there is none when the method refuses the condition. */
+  ampacity_a: number | null;
+  basis_name: string | null;
+  tier: string | null;
+  tier_label: string | null;
+  error?: { code: string; message: string; path?: string };
+  run: RatingTableRun;
+}
+
+export interface RatingTable {
+  id: string;
+  title: string;
+  spec: string;
+  version: number;
+  content_sha256: string;
+  /** The project holding one run record per row. */
+  project: string;
+  created: string;
+  by: string;
+  rows: RatingTableRow[];
+}
