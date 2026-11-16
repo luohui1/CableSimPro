@@ -30,6 +30,12 @@ export function Typing({ className }: { className?: string }) {
   </span>;
 }
 
+/** The end of an answer that is still arriving: a caret after the last word. Inline, inside the last paragraph. */
+export function StreamCaret({ className }: { className?: string }) {
+  return <span role="status" aria-label="Agent 正在回答"
+    className={cn('ml-1 inline-block h-4 w-0.5 animate-pulse rounded-full bg-ink align-middle motion-reduce:animate-none', className)} />;
+}
+
 /**
  * Markdown as the Agent writes it. Paragraphs and lists only; numbers in tabular figures. Wrap assistant-ui's
  * MarkdownTextPrimitive in it, or any rendered markdown.

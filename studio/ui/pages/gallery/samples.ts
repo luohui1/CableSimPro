@@ -161,6 +161,20 @@ export const STEPS_STOPPED: Step[] = [
   ...MODEL_STEPS_RUNNING.slice(0, 3),
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'interrupted' },
 ];
+/** The engineer's request the refusal of 3×50 answers (the same project conditions: three-core, buried, single circuit). */
+export const REFUSED_ASK = 'YJV22-8.7/15 kV 3×50 直埋单回，算一下载流量。';
+/** The structure table being attached to the next message, while it uploads. */
+export const UPLOADING = { name: '人民电缆 8.7-15kV 结构表（公开手册）.xlsx', detail: '正在上传' };
+/** The export of conversation 01a1e22e when the host stops answering before its last step: the steps that were done, the one
+ *  that was under way, and the message of studio/ui/state/api.ts (HOST_DOWN). */
+export const STEPS_CUT: Step[] = [
+  ...EXPORT_STEPS.slice(0, 4),
+  { ...EXPORT_STEPS[4], state: 'interrupted', seconds: undefined, notes: undefined },
+];
+/** The text of conversation 01a1e240's answer up to the point it had reached while it was still being written. */
+export const STREAMED = '已选 YJV22-8.7/15 kV 3×240（人民电缆公开结构表，钢带铠装），按三芯直埋单回、埋深 1.2 m、土壤热阻率 1 K·m/W、环境 25 °C 算了一条运行记录。';
+export const STREAMING_LINE = '允许电流 458.7 A；保存负荷 300 A 时导体 49.7 °C（限值 90 °C），离允许电流还差';
+
 /** What the CAD plugin answers for a stranding it does not build: the message of
  *  plugins/cablesim.cable-geometry/src/cablesim_cable_geometry/main.py, word for word. */
 export const MODEL_REFUSAL = '圆绞合支持 1+6+12…完整同心绞层，请核对根数';

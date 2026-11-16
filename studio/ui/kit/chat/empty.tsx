@@ -1,5 +1,6 @@
 // A conversation with nothing in it yet: what can be handed over, in one sentence; the composer; and real tasks to start
-// from, grouped by the two things the product does. A task is a button: one click sends it.
+// from, grouped by the two things the product does. Each group is a tile with the product's own drawing of it (the section
+// of a cable, a cable in the warmth of its soil) and what the library holds; a task is a button: one click sends it.
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon, ProductMark } from '../icon';
@@ -9,7 +10,7 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
   /** One sentence: what the Agent can be handed. */
   lead: string;
   composer: ReactNode;
-  groups: { label: string; icon: string; tasks: ReactNode }[];
+  groups: { label: string; icon: string; tasks: ReactNode; figure?: ReactNode; facts?: ReactNode }[];
   /** Something that stops the Agent from working (no model configured), above the composer. */
   notice?: ReactNode;
   className?: string;
@@ -24,13 +25,29 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
       {notice}
       {composer}
     </div>
-    <div className="grid grid-cols-2 gap-6">
-      {groups.map(group => <section key={group.label} className="flex min-w-0 flex-col gap-2" aria-label={group.label}>
-        <h2 className="m-0 flex items-center gap-2 px-3 text-xs font-medium text-ink-2"><Icon name={group.icon} />{group.label}</h2>
-        <div className="flex flex-col gap-1">{group.tasks}</div>
-      </section>)}
+    <div className="grid grid-cols-2 gap-4">
+      {groups.map(group => group.figure
+        ? <section key={group.label} className="flex min-w-0 flex-col overflow-hidden rounded-panel border border-line bg-surface" aria-label={group.label}>
+          <header className="relative flex h-28 items-center overflow-hidden border-b border-line bg-canvas">
+            <div aria-hidden="true" className="absolute inset-y-0 right-0 w-48 fade-start">{group.figure}</div>
+            <div className="relative flex min-w-0 flex-col gap-2 px-4">
+              <h2 className="m-0 flex items-center gap-2 text-h3 text-ink"><Icon name={group.icon} className="text-copper" />{group.label}</h2>
+              {group.facts && <div className="flex flex-col gap-1 text-sm text-ink-2">{group.facts}</div>}
+            </div>
+          </header>
+          <div className="flex flex-col gap-1 p-2">{group.tasks}</div>
+        </section>
+        : <section key={group.label} className="flex min-w-0 flex-col gap-2" aria-label={group.label}>
+          <h2 className="m-0 flex items-center gap-2 px-3 text-xs font-medium text-ink-2"><Icon name={group.icon} />{group.label}</h2>
+          <div className="flex flex-col gap-1">{group.tasks}</div>
+        </section>)}
     </div>
   </div>;
+}
+
+/** A fact in a tile: the number in ink, the words around it in the secondary colour (10 个系列, 最近一次校核 458.7 A). */
+export function TileFact({ value, before, children }: { value: ReactNode; before?: ReactNode; children?: ReactNode }) {
+  return <span>{before && <>{before} </>}<span className="font-semibold text-ink tabular-nums">{value}</span>{children && <> {children}</>}</span>;
 }
 
 /** One task to start from: an icon, what it asks for, and what comes back. */

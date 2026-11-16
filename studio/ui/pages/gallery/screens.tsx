@@ -3,20 +3,24 @@
 // (studio/DESIGN.md).
 import type { ReactNode } from 'react';
 import { AppFrame, TopBar, type Mode } from '@/kit/frame';
-import { CardAction, FileCard, OpenInWorkbench, ProposalCard, RatingCard } from '@/kit/chat/cards';
-import { ComposerAttach, ComposerBar, ComposerFrame, ComposerInput, ComposerSend } from '@/kit/chat/composer';
-import { AgentEmpty, TaskStarter } from '@/kit/chat/empty';
-import { AssistantMessage, Prose, ThreadColumn, UserMessage, threadViewportClass } from '@/kit/chat/messages';
+import { CardAction, FileCard, ModelCard, OpenInWorkbench, ProposalCard, RatingCard, RefusalCard } from '@/kit/chat/cards';
+import { ComposerAttach, ComposerBar, ComposerFrame, ComposerInput, ComposerSend, ComposerStop, FileChip } from '@/kit/chat/composer';
+import { AgentEmpty, ChatNotice, TaskStarter, TileFact } from '@/kit/chat/empty';
+import { AssistantMessage, Prose, StreamCaret, ThreadColumn, UserMessage, threadViewportClass } from '@/kit/chat/messages';
+import { Button } from '@/components/ui/button';
+import { Icon } from '@/kit/icon';
 import { cn } from '@/lib/utils';
 import { ChatGroup, ChatItem, ChatSearch, ChatSidebar, NewChatButton } from '@/kit/chat/sidebar';
 import { StepTrace } from '@/kit/chat/steps';
 import { useTheme } from '@/state/theme';
-import { SectionThumb } from './figures';
+import { CableSection, SectionThumb } from './figures';
+import { LIBRARY } from './library-data';
 import { ProjectNew, RatingBody, RatingEdit, RatingSelection, RatingSweep } from './rating-screens';
 import { ImportScreen, SeriesParams, SeriesRating, SeriesVersions, TypeNewManual, TypeNewStandard, type ImportStep } from './type-screens';
 import { LibraryBody, SeriesBody, WorkbenchSide } from './workbench-screens';
 import {
-  ACTIVE_CHAT, CHATS, EXPORT_ASK, EXPORT_STEPS, MODEL, NEW_PROJECT, RATING, RATING_ASK, RATING_STEPS, SHEET, STARTERS,
+  ACTIVE_CHAT, CHATS, EXPORT_ASK, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK, RATING_STEPS, REFUSED_ASK,
+  REFUSED_RATING, SHEET, STARTERS, STEPS_CUT, STEPS_FAILED, STEPS_WAITING, STREAMED, STREAMING_LINE, UPLOADING,
 } from './samples';
 
 export type ScreenGroup = 'agent' | 'types' | 'rating';
@@ -30,36 +34,118 @@ function Frame({ mode, side, children }: { mode: Mode; side?: ReactNode; childre
   return <AppFrame top={<TopBar mode={mode} model={MODEL} theme={theme} onThemeToggle={toggle} />} side={side}>{children}</AppFrame>;
 }
 
-function Conversations({ active }: { active?: string }) {
+function Conversations({ active, running }: { active?: string; running?: boolean }) {
   return <ChatSidebar header={<><NewChatButton /><ChatSearch /></>}>
     <ChatGroup label="今天">
-      {CHATS.map(chat => <ChatItem key={chat.id} title={chat.title} active={chat.id === active} />)}
+      {CHATS.map(chat => <ChatItem key={chat.id} title={chat.title} active={chat.id === active} running={running && chat.id === active} />)}
     </ChatGroup>
   </ChatSidebar>;
 }
 
-function Composer({ placeholder = '交办一件事，或把 Excel、CSV 结构表拖到这里' }: { placeholder?: string }) {
+function Composer({ placeholder = '交办一件事，或把 Excel、CSV 结构表拖到这里', working, attachments }: { placeholder?: string; working?: boolean; attachments?: ReactNode }) {
   return <ComposerFrame>
+    {attachments && <div className="flex flex-wrap gap-2 px-3 pt-3">{attachments}</div>}
     <ComposerInput placeholder={placeholder} />
-    <ComposerBar start={<ComposerAttach />} end={<ComposerSend disabled />} />
+    <ComposerBar start={<ComposerAttach />} end={working ? <ComposerStop /> : <ComposerSend disabled />} />
   </ComposerFrame>;
+}
+
+/** A conversation screen: the thread from its start (it is short), and the composer under it. */
+function Thread({ active, running, composer, children }: { active: string; running?: boolean; composer: ReactNode; children: ReactNode }) {
+  return <Frame mode="agent" side={<Conversations active={active} running={running} />}>
+    <div className={cn(threadViewportClass, 'flex-col-reverse')}>
+      <ThreadColumn className="gap-8 pt-8 pb-6">{children}</ThreadColumn>
+    </div>
+    <div className="shrink-0 pb-4"><ThreadColumn className="gap-3">{composer}</ThreadColumn></div>
+  </Frame>;
 }
 
 // ---- Agent 模式 ----
 
+const SPECS = LIBRARY.reduce((sum, series) => sum + series.specs.length, 0);
+
 function AgentEmptyScreen() {
   return <Frame mode="agent" side={<Conversations />}>
-    <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto py-12">
+    <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto py-10">
       <AgentEmpty
         title="今天要处理哪款电缆？"
         lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。"
         composer={<Composer />}
         groups={[
-          { label: '电缆型号', icon: 'nav/cable-type', tasks: STARTERS.types.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
-          { label: '载流量计算', icon: 'calc/ampacity', tasks: STARTERS.rating.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
+          { label: '电缆型号', icon: 'nav/cable-type', figure: <div className="absolute -right-4 -bottom-10 size-40"><CableSection size={160} /></div>,
+            facts: <><TileFact value={LIBRARY.length}>个系列</TileFact><TileFact value={SPECS}>个规格</TileFact></>,
+            tasks: STARTERS.types.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
+          { label: '载流量计算', icon: 'calc/ampacity', figure: <SectionThumb width={192} height={112} />,
+            facts: <><TileFact value={2}>个工程</TileFact><TileFact before="最近一次校核" value={`${RATING.current} A`} /></>,
+            tasks: STARTERS.rating.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
         ]} />
     </div>
   </Frame>;
+}
+
+// ---- Conversations under way: a step working, the answer arriving, a proposal waiting, a refusal, the host gone ----
+
+function AgentRunningScreen() {
+  return <Thread active={CHATS[0].id} running composer={<Composer placeholder="Agent 在做事；可以接着打字，或停下它" working />}>
+    <UserMessage>{CHATS[0].title}</UserMessage>
+    <AssistantMessage>
+      <StepTrace steps={MODEL_STEPS_RUNNING} defaultOpen />
+      <ModelCard title="三维模型 · YJV22-8.7/15 kV 3×240" state="loading" />
+    </AssistantMessage>
+  </Thread>;
+}
+
+function AgentStreamingScreen() {
+  return <Thread active={ACTIVE_CHAT} running composer={<Composer placeholder="Agent 在回答；可以接着打字，或停下它" working />}>
+    <UserMessage>{RATING_ASK}</UserMessage>
+    <AssistantMessage>
+      <StepTrace steps={RATING_STEPS} />
+      <ProposalCard action="新建工程" subject="YJV22-8.7/15 3×240 直埋载流量校核" changes={NEW_PROJECT} phase="accepted" />
+      <RatingCard {...RATING} figure={<SectionThumb />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} />
+      <Prose>
+        <p>{STREAMED}</p>
+        <ul><li>{STREAMING_LINE}<StreamCaret /></li></ul>
+      </Prose>
+    </AssistantMessage>
+  </Thread>;
+}
+
+function AgentWaitingScreen() {
+  return <Thread active={ACTIVE_CHAT} composer={<Composer placeholder="接受或拒绝上面的提案，Agent 接着做" />}>
+    <UserMessage>{RATING_ASK}</UserMessage>
+    <AssistantMessage>
+      <StepTrace steps={STEPS_WAITING} />
+      <ProposalCard action="新建工程" subject="YJV22-8.7/15 3×240 直埋载流量校核" changes={NEW_PROJECT} phase="pending" />
+    </AssistantMessage>
+  </Thread>;
+}
+
+function AgentRefusedScreen() {
+  return <Thread active={ACTIVE_CHAT} composer={<Composer placeholder="接着交办，或追问这条结果" attachments={<FileChip name={UPLOADING.name} detail={UPLOADING.detail} state="uploading" onRemove={() => undefined} />} />}>
+    <UserMessage>{REFUSED_ASK}</UserMessage>
+    <AssistantMessage>
+      <StepTrace steps={STEPS_FAILED.map(step => ({ ...step, reason: undefined }))} />
+      <RefusalCard kind="refused" title={REFUSED_RATING.title} reason={REFUSED_RATING.reason} missing={REFUSED_RATING.missing}
+        actions={<OpenInWorkbench />} />
+    </AssistantMessage>
+  </Thread>;
+}
+
+function AgentErrorScreen() {
+  return <Thread active={CHATS[4].id} composer={<>
+    <ChatNotice tone="error">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="min-w-0 flex-1">{HOST_DOWN}</span>
+        <Button variant="outline" size="sm"><Icon name="agent/retry" data-icon="inline-start" />重试</Button>
+      </div>
+    </ChatNotice>
+    <Composer placeholder="接着交办，或追问这条结果" />
+  </>}>
+    <UserMessage>{EXPORT_ASK}</UserMessage>
+    <AssistantMessage>
+      <StepTrace steps={STEPS_CUT} defaultOpen />
+    </AssistantMessage>
+  </Thread>;
 }
 
 function AgentChatScreen() {
@@ -108,8 +194,13 @@ const IMPORT_SCREENS: { step: ImportStep; title: string; job: string }[] = [
 ];
 
 export const SCREENS: ScreenSpec[] = [
-  { id: 'agent-empty', group: 'agent', title: 'Agent 模式 · 空状态', job: '工程师在这屏把一件电缆的事交给 Agent：说一句话、拖入结构表，或点一个现成的任务。', render: () => <AgentEmptyScreen /> },
+  { id: 'agent-empty', group: 'agent', title: 'Agent 模式 · 空状态', job: '工程师在这屏把一件电缆的事交给 Agent：说一句话、拖入结构表，或从两类现成的任务里点一个。', render: () => <AgentEmptyScreen /> },
   { id: 'agent-chat', group: 'agent', title: 'Agent 模式 · 做完的对话', job: '工程师在这屏看 Agent 做了什么、算出了什么，审它提的改动，拿走结果和文件。', render: () => <AgentChatScreen /> },
+  { id: 'agent-running', group: 'agent', title: 'Agent 模式 · 步骤进行中', job: '工程师在这屏看 Agent 正在做哪一步、做完了哪几步，需要时停下它。', render: () => <AgentRunningScreen /> },
+  { id: 'agent-streaming', group: 'agent', title: 'Agent 模式 · 回答正在写出', job: '工程师在这屏边看结果卡边读 Agent 正在写的交代，不必等它写完。', render: () => <AgentStreamingScreen /> },
+  { id: 'agent-waiting', group: 'agent', title: 'Agent 模式 · 提案等你决定', job: '工程师在这屏看清 Agent 要建或要改的每一项，接受，或写下原因拒绝。', render: () => <AgentWaitingScreen /> },
+  { id: 'agent-refused', group: 'agent', title: 'Agent 模式 · 拒算，附件上传中', job: '工程师在这屏看懂为什么没有算出结果、缺什么或超出什么范围，并接着交办下一件事。', render: () => <AgentRefusedScreen /> },
+  { id: 'agent-error', group: 'agent', title: 'Agent 模式 · 出错', job: '工程师在这屏知道任务停在哪一步、为什么停，确认服务恢复后重试。', render: () => <AgentErrorScreen /> },
   { id: 'library', group: 'types', title: '工作台 · 型号库', job: '工程师在这屏找到一款型号，看清它每个规格的尺寸、审核状态和核对结果，打开它或导入新的结构表。',
     render: () => workbench('library', <LibraryBody />) },
   ...IMPORT_SCREENS.map(item => ({ id: `import-${item.step}`, group: 'types' as const, title: `工作台 · ${item.title}`, job: item.job,
