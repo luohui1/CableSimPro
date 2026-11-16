@@ -1,10 +1,11 @@
 // The gallery section of round two's parts: forms, stepped tasks, where a value came from, the run records of a project, a
 // version's review, the side editor and the charts of results, each in its states. Data as in the screens.
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/kit/icon';
 import { CurveChart, TargetBar } from '@/kit/workbench/chart';
 import { Stepper } from '@/kit/workbench/flow';
-import { ChoiceCards, ChoiceSelect, ConnectionCheck, DropZone, FormNote, FormRow, ReadonlyValue, Segmented, SourceTag, UnitInput } from '@/kit/workbench/form';
+import { ChoiceCards, ChoiceSelect, ConnectionCheck, DropZone, FormNote, FormRow, ReadonlyValue, Segmented, SourceTag, StandardsInput, UnitInput } from '@/kit/workbench/form';
 import { Metric, MetricGroup } from '@/kit/metric';
 import { PageTabs } from '@/kit/workbench/page';
 import { ReviewActions, ReviewTrack, VersionSelect, type ReviewStamp } from '@/kit/workbench/review';
@@ -14,6 +15,7 @@ import type { Review } from '@/kit/marks';
 import { BONDING_NAMES, fixed } from '@shared/format';
 import { DEFAULTS, IMPORT, LAYOUTS, PROPOSAL, RUNS, SELECTION, SWEEP, VERSIONS } from './host-records';
 import { MODEL, REFUSED_IMPORT } from './samples';
+import { LIBRARY, WORKSPACE } from './library-data';
 import { Specimen, State } from './sections';
 import { when } from './type-screens';
 
@@ -29,6 +31,15 @@ const REVIEW_STATES: { state: Review; label: string; created: string; stamps: Pa
 ];
 const dimension = (field: string) => PROPOSAL.complete.dimensions.find(item => item.field === field)!;
 const { installation, conditions } = DEFAULTS;
+
+/** The standards the host's records cite: the series' declarations and the check's and the parameters' clauses. */
+const KNOWN_STANDARDS = [...new Set([...LIBRARY.flatMap(series => series.standards), ...WORKSPACE.check.map(row => String(row.standard)),
+  ...WORKSPACE.electrical.flatMap(row => row.standard ? [row.standard] : [])])].sort();
+
+function StandardsSpecimen() {
+  const [standards, setStandards] = useState(LIBRARY[0].standards);
+  return <StandardsInput label="执行标准" value={standards} options={KNOWN_STANDARDS} onValueChange={setStandards} />;
+}
 
 export function FlowSection() {
   return <>
@@ -52,6 +63,9 @@ export function FlowSection() {
       }))} /></State>
       <State label="下拉" className="w-72"><ChoiceSelect label="护套接地" value={installation.bonding} options={Object.entries(BONDING_NAMES).map(([value, label]) => ({ value, label }))} /></State>
       <State label="分段"><Segmented label="芯数" value={String(PROPOSAL.inputs.cores)} options={[{ value: '1', label: '单芯' }, { value: '3', label: '三芯' }]} /></State>
+    </Specimen>
+    <Specimen title="执行标准" rule="系列声明的执行标准：可多选，每项可去掉；从宿主已知的标准里选，清单里没有的直接输入编号回车添加，或点“添加”那一行。写法照 Base UI 自己的 creatable tags 示例。">
+      <State label="人民电缆 YJV22 系列（试着输入一份清单里没有的）" className="w-full max-w-prose"><StandardsSpecimen /></State>
     </Specimen>
     <Specimen title="出处" rule="每个值从哪来：标准（条款与页码）、推算（按哪条算出）、给定、厂家表、人工填写。一个图标一个词，位置跟在后面。">
       <State label="标准"><SourceTag kind="standard" place={`${dimension('insulation_thickness').clause} · PDF 第 ${dimension('insulation_thickness').pdf_page} 页`} /></State>

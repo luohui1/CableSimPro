@@ -1,10 +1,11 @@
 // Forms of the workbench: a titled section of rows, each row a label, its control and (only when it helps) a hint; numbers
 // with their unit inside the field; a choice among a few options as cards; where a value came from as a tag.
-import type { ComponentProps, ReactNode } from 'react';
+import { useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Combobox, ComboboxChip, ComboboxChips, ComboboxChipsInput, ComboboxContent, ComboboxItem, ComboboxList, ComboboxValue, useComboboxAnchor } from '@/components/ui/combobox';
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { NumberField, NumberFieldAddon, NumberFieldGroup, NumberFieldInput } from '@/components/ui/number-field';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -263,4 +264,64 @@ export function ConnectionCheck({ state, when, error, onCheck, disabled }: {
     </div>
     {state === 'failed' && error && <p className="m-0 text-sm text-error">{error}</p>}
   </div>;
+}
+
+/** A standard in the list: one the host knows, or the typed text offered to be added. */
+interface StandardItem { value: string; isNew?: boolean }
+
+/**
+ * The standards a series declares (执行标准): several, each removable, chosen from the standards the host knows; one the list
+ * lacks is typed and added with Enter, or with its 添加 row. Base UI's multiple Combobox with chips. The added row and Enter on
+ * typed text follow Base UI's own creatable-tags example (mui/base-ui docs/src/app/(private)/experiments/combobox/
+ * creatable-tags.tsx): the typed text joins the items as a new item when nothing matches it exactly, choosing that item adds
+ * it, and Enter with no row highlighted commits the text.
+ */
+export function StandardsInput({ value, options, onValueChange, label, placeholder = '选一份标准，或输入编号后回车' }: {
+  value: string[];
+  /** The standards the host knows. */
+  options: string[];
+  onValueChange: (value: string[]) => void;
+  /** What the field is called for assistive technology: 执行标准. */
+  label: string;
+  placeholder?: string;
+}) {
+  const [input, setInput] = useState('');
+  const anchor = useComboboxAnchor();
+  const highlighted = useRef<StandardItem | null>(null);
+  const typed = input.trim();
+  const listed = useMemo(() => [...new Set([...value, ...options])], [value, options]);
+  const exact = listed.find(standard => standard.toLocaleLowerCase() === typed.toLocaleLowerCase());
+  // The chosen ones first, then the rest; the typed text as a new item when nothing matches it exactly.
+  const items = useMemo<StandardItem[]>(() => {
+    const ordered = [...listed.filter(standard => value.includes(standard)), ...listed.filter(standard => !value.includes(standard))].map(standard => ({ value: standard }));
+    return typed && !exact ? [...ordered, { value: typed, isNew: true }] : ordered;
+  }, [listed, value, typed, exact]);
+  const chosen = useMemo(() => value.map(standard => items.find(item => item.value === standard)).filter((item): item is StandardItem => Boolean(item)), [items, value]);
+  const add = (standard: string) => {
+    if (!standard) return;
+    onValueChange(value.includes(standard) ? value : [...value, standard]);
+    setInput('');
+  };
+  return <Combobox items={items} multiple value={chosen} inputValue={input} onInputValueChange={setInput}
+    itemToStringLabel={(item: StandardItem) => item.value}
+    onItemHighlighted={(item: StandardItem | undefined) => { highlighted.current = item ?? null; }}
+    onValueChange={(next: StandardItem[]) => {
+      const last = next.at(-1);
+      if (last?.isNew) { add(last.value); return; }
+      onValueChange(next.filter(item => !item.isNew).map(item => item.value));
+      setInput('');
+    }}>
+    <ComboboxChips ref={anchor}>
+      <ComboboxValue>{(selected: StandardItem[]) => <>
+        {selected.map(item => <ComboboxChip key={item.value} aria-label={item.value}>{item.value}</ComboboxChip>)}
+        <ComboboxChipsInput aria-label={label} placeholder={selected.length > 0 ? '' : placeholder}
+          onKeyDown={event => { if (event.key === 'Enter' && highlighted.current == null) { event.preventDefault(); add(exact ?? typed); } }} />
+      </>}</ComboboxValue>
+    </ComboboxChips>
+    <ComboboxContent anchor={anchor}>
+      <ComboboxList>{(item: StandardItem) => item.isNew
+        ? <ComboboxItem key={`new:${item.value}`} value={item}><Icon name="action/add" className="text-ink-2" />添加“{item.value}”</ComboboxItem>
+        : <ComboboxItem key={item.value} value={item}>{item.value}</ComboboxItem>}</ComboboxList>
+    </ComboboxContent>
+  </Combobox>;
 }
