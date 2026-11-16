@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { SpecificationReport, SpecView } from '../shared/types.ts';
 import { StudioError } from './core.ts';
 import type { Studio } from './operations.ts';
+import { ratingTables } from './rating-tables.ts';
 
 const ID = /^sheet-[0-9a-f]{24}$/;
 const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
@@ -28,7 +29,7 @@ export async function exportSpecification(studio: Studio, view: SpecView, by: st
   const id = 'sheet-' + randomBytes(12).toString('hex');
   const created = new Date().toISOString();
   const snapshot = JSON.stringify({ schema: 'cablesim.studio.specification/1', id, created, by, view,
-    declaration: studio.library.declaration(view.series.id) }, null, 2);
+    declaration: studio.library.declaration(view.series.id), rating_tables: ratingTables(studio.library, view.version.id) }, null, 2);
   const snapshot_sha256 = hash(snapshot);
   const dir = join(studio.home, 'specifications', id);
   mkdirSync(dir, { recursive: true });

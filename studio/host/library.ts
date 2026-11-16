@@ -9,6 +9,7 @@ import type {
   ReviewState, SeriesDeclaration, SeriesSummary, SeriesView, SpecRow, SpecView, StructureValue, ValueRow, VersionHeader,
 } from '../shared/types.ts';
 import { REVIEW_NAMES } from '../shared/format.ts';
+import type { ManualDerivation } from '../shared/model-types.ts';
 import { StudioError } from './core.ts';
 import { digest } from './store.ts';
 
@@ -271,6 +272,37 @@ export class Library {
     return id;
   }
 
+  /** A new series with no specification yet, entered by hand; its specifications are added one at a time. */
+  openSeries(declaration: SeriesDeclaration, description: string, actor: string): string {
+    if (this.db.prepare('select 1 from series where name = ?').get(declaration.name)) {
+      throw new StudioError({ code: 'SERIES_EXISTS', message: `产品库里已有名为“${declaration.name}”的系列，请改名。`, path: '/name' }, 409);
+    }
+    const id = 's-' + randomBytes(4).toString('hex');
+    this.db.transaction(() => {
+      this.#insertSeries(id, declaration, description, actor);
+      this.#event(actor, 'series', id, 'created', { specs: 0, entry: 'manual' });
+    })();
+    return id;
+  }
+
+  /** One specification typed in: its first version is a draft, the same kind of object an import leaves. */
+  addSpec(series: string, row: Extract<BuiltRow, { ok: true }>, note: string, actor: string): string {
+    this.#series(series);
+    const spec = `${series}.${slug(row.key)}`;
+    if (this.db.prepare('select 1 from spec where series_id = ? and key = ?').get(series, row.key) || this.db.prepare('select 1 from spec where id = ?').get(spec)) {
+      throw new StudioError({ code: 'SPEC_EXISTS', message: `这个系列里已有 ${row.key}；要改它的尺寸请用“修改结构”，会生成新版本。` }, 409);
+    }
+    this.db.transaction(() => {
+      const next = this.db.prepare('select coalesce(max(position), -1) + 1 as next from spec where series_id = ?').get(series) as { next: number };
+      this.db.prepare('insert into spec (id, series_id, key, name, area_mm2, position) values (?, ?, ?, ?, ?, ?)').run(spec, series, row.key, row.name, row.area_mm2, next.next);
+      this.#insertVersion(spec, 1, 'draft', row.entry, { structure: row.structure, closure: row.closure, derivation: row.derivation,
+        warnings: row.warnings, note }, actor);
+      this.db.prepare('update series set updated = ? where id = ?').run(now(), series);
+      this.#event(actor, 'version', `${spec}@1`, 'created', { entry: 'manual', note });
+    })();
+    return spec;
+  }
+
   /** A changed structure is a new draft; the versions before it stay as they were. */
   revise(spec: string, row: Extract<BuiltRow, { ok: true }>, note: string, actor: string): VersionHeader {
     const latest = this.#version(spec);
@@ -282,12 +314,20 @@ export class Library {
     const at = now();
     const structure = row.structure.map(value => {
       const before = previous.find(item => item.key === value.key);
+      // What a value rested on is kept: on the value while it stays, on the revision once it is changed.
+      const basis = before?.basis ?? (before?.revision as { previous_basis?: string } | undefined)?.previous_basis;
       return { ...value, ...(before && before.value !== value.value
-        ? { revision: { previous: before.value, by: actor, at, note } }
-        : before?.revision ? { revision: before.revision } : {}) };
+        ? { revision: { previous: before.value, by: actor, at, note, ...(basis ? { previous_basis: basis } : {}) } }
+        : { ...(before?.revision ? { revision: before.revision } : {}), ...(before?.basis && !value.basis ? { basis: before.basis } : {}) }) };
     });
+    // A structure that was typed in stays typed in: who typed it, when, and the source line of that entry, whoever revises it later.
+    const typed = parse<Partial<ManualDerivation>>(latest.derivation);
+    const manual = typed.entry === 'manual';
+    const derivation: Derivation = manual
+      ? { ...row.derivation, entry: 'manual', entered_by: typed.entered_by, entered_at: typed.entered_at, entered_how: typed.entered_how } as ManualDerivation : row.derivation;
+    const entry = manual ? { ...row.entry, source: parse<LibraryEntry>(latest.entry).source } : row.entry;
     this.db.transaction(() => {
-      this.#insertVersion(spec, number, 'draft', row.entry, { structure, closure: row.closure, derivation: row.derivation,
+      this.#insertVersion(spec, number, 'draft', entry, { structure, closure: row.closure, derivation,
         warnings: row.warnings, note }, actor);
       this.db.prepare('update series set updated = ? where id = (select series_id from spec where id = ?)').run(now(), spec);
       this.#event(actor, 'version', `${spec}@${number}`, 'revised', { from: latest.number, note });

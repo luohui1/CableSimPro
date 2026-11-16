@@ -85,7 +85,8 @@ def table(headers, rows, weights):
 def structure_source(row):
     origin = {'table': '结构表', 'series': '系列声明', 'standard': '标准规定'}.get(row['origin'], row['origin'])
     revision = row.get('revision')
-    source = origin + ('；' + row['basis'] if row.get('basis') else '')
+    basis = row.get('basis') or (revision or {}).get('previous_basis')
+    source = origin + ('；' + basis if basis else '')
     if revision:
         source = (f"工程师修改；上版值 {number(revision['previous'])} {row['unit']}；{revision['by']} · {revision['at']}；"
                   f"{revision['note']}；原始依据：{source}")
@@ -169,6 +170,10 @@ def render(snapshot, snapshot_sha256, path):
         issues.append('标准核对有不通过项，见逐条核对表；不得将本文件解释为合规证明。')
     if any(row.get('status') != 'succeeded' for row in results.get('rating', {}).get('rows', [])):
         issues.append('部分载流量条件被方法拒算，表中保留拒算原因，不补入估计值。')
+    for sheet in snapshot.get('rating_tables', []):
+        refused = sum(1 for row in sheet['rows'] if row['status'] != 'succeeded')
+        if refused:
+            issues.append(f"载流量表“{sheet['title']}”有 {refused} 个条件被方法拒算，表中保留拒算原因，不补入估计值。")
     story.extend(text('• ' + item) for item in issues)
     if not issues:
         story.append(text('未发现计算失败；标准核对中的缺实测值和未覆盖项仍须单独确认。'))
@@ -222,6 +227,24 @@ def render(snapshot, snapshot_sha256, path):
     else:
         story.append(text(rating.get('error', {}).get('message', '本版本无当前有效结果。')))
 
+    # Tables the engineer asked for, each number of which is a record of a run (see host/rating-tables.ts).
+    for sheet in snapshot.get('rating_tables', []):
+        story.append(text(f"载流量表 · {sheet['title']}", 'StudioHeading'))
+        rows = []
+        for row in sheet['rows']:
+            spacing = f"；中心距 {number(row['spacing_m'])} m" if row.get('spacing_m') else ''
+            rows.append([f"{row['label']}\n{row['layout_label']} · {row['circuits'] or '未声明'} 回路{spacing}",
+                         f"{number(row['depth_m'])} m / {number(row['ambient_temperature_c'])} °C", number(row['soil_thermal_resistivity']),
+                         f"{row['ampacity_a']:.1f}" if row.get('ampacity_a') is not None and row['status'] == 'succeeded' else '拒算',
+                         row['error']['message'] if row.get('error') else f"{row.get('tier_label') or ''}；{row.get('basis_name') or ''}",
+                         f"{row['run']['run']}\n输入 {row['run']['inputs_sha256'][:12]}"])
+        story.append(table(['条件 / 敷设', '中心埋深 / 环温', '土壤热阻率\nK·m/W', '载流量 A', '适用性 / 说明', '运行记录'], rows, [2.6, 1.4, 1, 1, 2.2, 1.8]))
+        method = sheet['rows'][0]['run']
+        story.append(text(f"计算工程 {sheet['project']}：表内每个数对应该工程里的一条运行记录（右列），记录保存当时的输入、方法版本和请求摘要。"
+                          f"{method['plugin_id']} {method['plugin_version']}；方法 {method['method_version']}；编制 {sheet['by']} · {sheet['created']}。", 'StudioNote'))
+        if version.get('reviewed') and sheet['created'] > version['reviewed']:
+            story.append(text(f"本表在版本审核（{version['reviewed']}）之后追加，审核不覆盖这张表。", 'StudioNote'))
+
     story.append(text('标准核对逐条记录', 'StudioHeading'))
     if check.get('current') and check.get('rows'):
         ranking = {'failed': 0, 'missing': 1, 'uncovered': 2, 'passed': 3}
@@ -235,9 +258,21 @@ def render(snapshot, snapshot_sha256, path):
 
     story.append(text('版本、方法与来源追溯', 'StudioHeading'))
     story.append(text(f"版本说明：{version['note']}；建立人 {version['created_by']}；建立时间 {version['created']}。"))
+    typed = view['derivation'] if view['derivation'].get('entry') == 'manual' else None
     source = declaration.get('source') or {}
-    story.append(text(f"资料：{source.get('title') or entry['source']}；{source.get('location', '')}"))
-    story.append(text('资料 SHA-256：' + source.get('sha256', '未提供'), 'StudioNote'))
+    if typed:
+        # What a person typed is not the file the series was imported from: the version says who typed it, when and where.
+        how = typed.get('entered_how', '人工填写')
+        story.append(text(f"录入方式：{how}；填写人 {typed.get('entered_by', '未记录')}；填写时间 {typed.get('entered_at', '未记录')}。", 'StudioNote'))
+        proposal = typed.get('proposal')
+        if proposal:
+            method = proposal['method']
+            story.append(text(f"取用的标准提案 {proposal['id']}：{proposal['standard']}；字段 {'、'.join(proposal['fields'])}；"
+                              f"{method['plugin_id']} {method['plugin_version']}；方法 {method['method_version']}；请求摘要 {method['request_sha256']}。", 'StudioNote'))
+        story.append(text(f"资料：{how}；Cable Studio 型号库 · {typed.get('entered_by', '未记录')} · {typed.get('entered_at', '未记录')}；所在系列：{view['series']['name']}"))
+    else:
+        story.append(text(f"资料：{source.get('title') or entry['source']}；{source.get('location', '')}"))
+        story.append(text('资料 SHA-256：' + source.get('sha256', '未提供'), 'StudioNote'))
     story.append(text('结构 SHA-256：' + version['content_sha256'], 'StudioNote'))
     story.append(text('快照 SHA-256：' + snapshot_sha256, 'StudioNote'))
     for kind, result in results.items():
