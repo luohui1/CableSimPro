@@ -1,12 +1,12 @@
 // The conversation page's runtime: assistant-ui drives the thread, the host owns the conversation. The page sends messages, stops
 // runs and switches conversations through the host's API, and reads the messages the host rebuilds from its session files.
 import { useNavigate } from '@tanstack/react-router';
-import { useExternalStoreRuntime, type AttachmentAdapter, type ThreadMessageLike } from '@assistant-ui/react';
+import { useExternalStoreRuntime, type AppendMessage, type AttachmentAdapter, type ThreadMessageLike } from '@assistant-ui/react';
 import { useMutation } from '@tanstack/react-query';
 import type { ChatMessage, ChatStep } from '@shared/types';
 import { reportFailure } from '@/components/notice';
 import { api } from '@/state/api';
-import { queryClient, useChat, useChats } from '@/state/queries';
+import { chatQuery, queryClient, useChat, useChats } from '@/state/queries';
 
 /** Real tasks to start from; one click sends it. */
 const STARTERS = [
@@ -28,6 +28,14 @@ const attachments: AttachmentAdapter = {
 };
 
 const stepStatus = (step: ChatStep) => (step.status === 'failed' || step.status === 'rejected');
+
+/** What the person wrote and the tables that went with it, as the host takes them. */
+function toSend(message: AppendMessage) {
+  return {
+    text: message.content.map(part => (part.type === 'text' ? part.text : '')).join('').trim(),
+    files: (message.attachments ?? []).map(item => ({ upload: item.id, file: item.name })),
+  };
+}
 
 function convert(message: ChatMessage): ThreadMessageLike {
   const content = message.parts.map(part => (part.type === 'text'
@@ -56,7 +64,7 @@ export function useAgentRuntime(sessionId: string | undefined) {
     onSuccess: async reply => {
       if (reply.session === sessionId) return;
       // A new conversation: load it once so its first message is on the page when the address changes.
-      await queryClient.fetchQuery({ queryKey: ['chat', reply.session], queryFn: () => api.chat(reply.session), staleTime: 0 });
+      await queryClient.fetchQuery({ ...chatQuery(reply.session), staleTime: 0 });
       void navigate({ to: '/chat/$sessionId', params: { sessionId: reply.session } });
     },
     onError: reportFailure,
@@ -69,19 +77,18 @@ export function useAgentRuntime(sessionId: string | undefined) {
     isLoading: Boolean(sessionId) && view.isPending,
     suggestions: STARTERS,
     onNew: async message => {
-      const text = message.content.map(part => (part.type === 'text' ? part.text : '')).join('').trim();
-      const files = (message.attachments ?? []).map(item => ({ upload: item.id, file: item.name }));
-      if (!text && !files.length) return;
-      await send.mutateAsync({ text, files }).catch(() => undefined);
+      const { text, files } = toSend(message);
+      if (text || files.length) await send.mutateAsync({ text, files }).catch(() => undefined);
     },
     onCancel: async () => {
       if (sessionId) await api.stop(sessionId);
     },
-    // Sending while the agent works is a message to it, not a new run: the host holds it until the current step is done.
+    // With a queue adapter every send goes through it, idle or not. The host does the queueing: a message sent while the agent works
+    // is held until the current step is done and shown on the page as waiting, so this adapter only passes the message on.
     queue: {
       items: [], steerItems: [],
-      enqueue: message => void send.mutate({ text: message.content.map(part => (part.type === 'text' ? part.text : '')).join('').trim(), files: [] }),
-      steer: message => void send.mutate({ text: message.content.map(part => (part.type === 'text' ? part.text : '')).join('').trim(), files: [] }),
+      enqueue: message => { const { text, files } = toSend(message); if (text || files.length) send.mutate({ text, files }); },
+      steer: message => { const { text, files } = toSend(message); if (text || files.length) send.mutate({ text, files }); },
       move: () => undefined, edit: () => undefined, remove: () => undefined,
     },
     adapters: {

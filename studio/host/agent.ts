@@ -2,7 +2,7 @@
 // has are the studio's own operations and a reader that opens nothing but the skill files. A write waits in a gate until the
 // engineer accepts or rejects it. Conversations are pi's session files under <home>/agent, so they survive a restart.
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
@@ -19,6 +19,19 @@ import type { Operation, Studio } from './operations.ts';
 const STUDIO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS = join(STUDIO, 'skills');
 const PROPOSAL_ENTRY = 'cable-studio.proposal';
+
+/** The skills' names in Chinese (what comes before the first full-width colon of their description), read without the session layer so a
+ *  conversation opened from its file can name them too. */
+function skillTitles(dir: string): Map<string, string> {
+  const titles = new Map<string, string>();
+  if (!existsSync(dir)) return titles;
+  for (const name of readdirSync(dir)) {
+    const file = join(dir, name, 'SKILL.md');
+    const description = existsSync(file) ? /^description:\s*(.+)$/m.exec(readFileSync(file, 'utf-8'))?.[1] : undefined;
+    if (description) titles.set(name, description.split('：')[0]);
+  }
+  return titles;
+}
 
 export interface ModelConfig {
   models: ModelRuntime;
@@ -40,7 +53,7 @@ export const SYSTEM_PROMPT = `你是在 Cable Studio 里干活的电缆工程师
 5. 做一类事之前先读对应的技能（技能目录在下面），照技能里的步骤做。
 6. 有限元仿真本机不跑，超算还没接通：被问到就如实说做不了，不给任何仿真数字。
 7. 用户消息里的“[附件：…（upload u-xxxx）]”是已上传的结构表，用 inspect_table 读取。
-8. 想让工程师看某个对象，就调用 open_in_workbench。结果表、断面、文件、三维模型由界面的卡片显示，不要把表格抄一遍。
+8. 想让工程师看某个对象，就调用 open_in_workbench。结果表、断面、文件、三维模型由界面的卡片显示，不要把表格抄一遍；回答里用名称说话，不要写工程、运行记录、电缆的内部编号（p-…、run-…、cable/c1）。
 9. 用简体中文。调用工具之间不写过程说明；做完后一次性交代，最多五行，每行一句话，不用标题和列表：做了什么、结论、需要工程师注意或决定的事。`;
 
 /** Which model the environment names, without building anything. */
@@ -100,6 +113,7 @@ interface Live {
   run?: Promise<void>;
   timer?: NodeJS.Timeout;
   dirty: boolean;
+  revision: number;
   unsubscribe(): void;
 }
 
@@ -173,7 +187,7 @@ export class AgentService {
     return target;
   }
 
-  #skillTitles = new Map<string, string>();
+  #skillTitles = skillTitles(SKILLS);
   /** The skill's name in Chinese, from a skill name or from the path of its file. */
   #skillTitle(path: string): string | undefined {
     const clean = path.trim().replace(/\\/g, '/');
@@ -202,7 +216,8 @@ export class AgentService {
     const first = messages.find(message => message.role === 'user');
     const last = messages.at(-1);
     return { id, title: first ? titleOf(plainText(first)) : '新对话', created: new Date(first?.timestamp ?? Date.now()).toISOString(),
-      updated: new Date(last?.timestamp ?? Date.now()).toISOString(), message_count: items.length, running: live?.running ?? false, items, waiting: this.#pending(id) };
+      updated: new Date(last?.timestamp ?? Date.now()).toISOString(), message_count: items.length, running: live?.running ?? false, revision: live?.revision ?? 0,
+      items, waiting: this.#pending(id) };
   }
 
   #changed(live: Live, now = false): void {
@@ -210,6 +225,7 @@ export class AgentService {
       if (live.timer) clearTimeout(live.timer);
       live.timer = undefined;
       live.dirty = false;
+      live.revision += 1;
       const { items, waiting, ...summary } = this.#viewOf(live.id, live.session.messages as PiMessage[], live.manager, live);
       this.#studio.emit({ type: 'chat', summary, tail: items.slice(-3), count: items.length, waiting });
       return;
@@ -228,7 +244,7 @@ export class AgentService {
     const rows: ChatSummary[] = infos.map(info => {
       seen.add(info.id);
       return { id: info.id, title: info.name ?? titleOf(info.firstMessage), created: info.created.toISOString(), updated: info.modified.toISOString(),
-        message_count: info.messageCount, running: Boolean(this.#live.get(info.id)?.running) };
+        message_count: info.messageCount, running: Boolean(this.#live.get(info.id)?.running), revision: this.#live.get(info.id)?.revision ?? 0 };
     });
     for (const live of this.#live.values()) {
       if (seen.has(live.id)) continue;
@@ -315,7 +331,7 @@ export class AgentService {
     } else {
       manager = SessionManager.create(this.#cwd, this.#sessions);
     }
-    const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, unsubscribe: () => undefined };
+    const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, revision: 0, unsubscribe: () => undefined };
     const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: true, maxRetries: 2 }, enableInstallTelemetry: false });
     const loader = new DefaultResourceLoader({
       cwd: this.#cwd, agentDir: this.#agentDir, settingsManager,
@@ -327,7 +343,6 @@ export class AgentService {
     await loader.reload();
     const { skills, diagnostics } = loader.getSkills();
     for (const item of diagnostics) console.warn('技能文件有问题：', JSON.stringify(item));
-    for (const skill of skills) this.#skillTitles.set(skill.name, skill.description.split('：')[0]);
     const reader = skillReader(skills, path => readFileSync(path, 'utf-8'));
     const tools = [...operationTools(this.#studio, () => live.id), reader];
     const { session } = await createAgentSession({

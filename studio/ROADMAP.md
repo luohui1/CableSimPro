@@ -55,6 +55,22 @@ Cable Studio 做什么、先做什么、怎样算做完，以本文件为准。�
 4. 视觉只认 `design/tokens.css`。
 5. 每加一个库，写明它负责什么；用不上的当轮删掉。
 
+### 第 1 轮定下的底座（2026-11-15 核对）
+
+| 库 | 版本 | 许可 | 负责什么 |
+| --- | --- | --- | --- |
+| Tailwind CSS 4 | 4.3.5 | MIT | 样式工具类；颜色、圆角、字号只来自 `design/tokens.css`，由 `ui/styles/app.css` 映射成主题 |
+| shadcn/ui，Base UI 版（style `base-nova`） | 命令行 4.23.0 | MIT | 通用控件：按钮、输入框、标签页（模式切换）、对话框、提示、折叠、徽标、表格、骨架屏。源码复制在 `ui/components/ui/`，底层是 `@base-ui/react` 1.9.0；它的语义色、圆角、字号变量全部指向设计令牌 |
+| assistant-ui（`@assistant-ui/react`） | 0.15.36 | MIT | 对话页：线程、消息、输入框、附件、发送中插话、会话列表、运行时。用外部状态运行时接宿主的对话；复制进来的部件在 `ui/components/assistant-ui/elements/`，删去了语音、分支、重写、推理 |
+| `@assistant-ui/react-markdown`、remark-gfm | 0.14.26、4.0.1 | MIT | 回答里的 Markdown |
+| tw-animate-css | 1.4.0 | MIT | shadcn 控件的进出场动画 |
+| lucide-react | 1.73.0 | ISC | 图标 |
+| pi 会话层（`@earendil-works/pi-coding-agent`） | 1.5.2 | MIT | Agent 内核，见 README 的试验结论 |
+
+核对结果：assistant-ui 声明的对等依赖是 React 18 或 19；shadcn 的 Base UI 控件只依赖 `@base-ui/react`；Vite 8、React Compiler、Tailwind 4.3 下构建、类型检查和 1366、1920 走查都通过。assistant-ui 自己依赖 `radix-ui` 的原语，我们不直接使用。
+
+本轮没装：表格库（规格对比表第 2 轮选）、分栏、图表、命令面板。Mantine 仍在，只给第 2 轮之前的工作台页面用。
+
 ## 界面规矩
 
 1. 动手前写一句“这屏要干成哪件事”。写不出来，就不做这一屏。

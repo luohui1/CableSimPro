@@ -209,18 +209,23 @@ const AssistantMessage: FC<{ step: ToolCallMessagePartComponent }> = ({ step: St
   </MessagePrimitive.Root>
 );
 
-const UserMessage: FC = () => (
+const UserMessage: FC = () => {
+  // A message sent while the agent was busy waits for the current step; say so, so it is not mistaken for ignored.
+  const queued = useAuiState((s) => Boolean(s.message.metadata.custom?.queued));
+  return (
   <MessagePrimitive.Root
     data-slot="aui_user-message-root"
     data-role="user"
     className="fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 duration-150 [&:where(>*)]:col-start-2"
   >
     <UserMessageAttachments />
-    <div className="relative col-start-2 min-w-0">
+    <div className="relative col-start-2 flex min-w-0 flex-col items-end gap-1">
       <div className="bg-muted text-foreground rounded-2xl px-4 py-2 wrap-break-word empty:hidden">
         <MessagePrimitive.Parts />
       </div>
+      {queued && <span className="text-muted-foreground text-sm">排队中，当前一步做完后处理</span>}
     </div>
   </MessagePrimitive.Root>
-);
+  );
+};
 

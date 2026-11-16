@@ -199,7 +199,8 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await capture('library-rating');
     await properties.getByRole('button', { name: /概要$/ }).click();
     await properties.getByRole('button', { name: /^标准核对/ }).click();
-    assert.equal(await properties.locator('.ws-counts [data-verdict="failed"]').innerText(), '不通过 0');
+    // The count sits in an inline-flex box, which newer browsers read as two lines; the words and the number are what matter.
+    assert.equal((await properties.locator('.ws-counts [data-verdict="failed"]').innerText()).replace(/\s+/g, ' '), '不通过 0');
     await capture('library-checks');
     await properties.getByRole('button', { name: '规格书', exact: true }).click();
     const exportResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.export'));

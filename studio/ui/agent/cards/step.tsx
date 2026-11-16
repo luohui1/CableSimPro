@@ -59,6 +59,8 @@ function ResultCard({ card, step }: { card: CardRef; step: ChatStep }) {
 export const StepPart: ToolCallMessagePartComponent = ({ result }) => {
   const step = result as ChatStep | undefined;
   if (!step || step.type !== 'step') return null;
+  // A button that opens something needs no row saying it was made.
+  if (step.card?.kind === 'open' && step.status === 'done') return <ResultCard card={step.card} step={step} />;
   return <div className="flex flex-col gap-2" data-step={step.tool} data-status={step.status}>
     <StepRow step={step} />
     {step.proposal && <ProposalCard proposal={step.proposal} />}

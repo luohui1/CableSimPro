@@ -222,7 +222,7 @@ export function productOperations(studio: Studio): Operation[] {
       },
       brief: (report: SpecificationReport) => ({ id: report.id, title: report.title, version: report.version, review: REVIEW_NAMES[report.review] ?? report.review,
         draft_marking: report.review === 'draft' ? '版本未审核，文件上标为草稿' : undefined, url: report.url }),
-      card: (_params: unknown, report: SpecificationReport): CardRef => ({ kind: 'file', url: report.url, title: report.title, type: 'pdf', href: specHref(report.spec, report.version) }),
+      card: (_params: unknown, report: SpecificationReport): CardRef => ({ kind: 'file', url: report.url, title: report.title, type: 'pdf', href: specHref(report.spec, report.version), status: REVIEW_NAMES[report.review] ?? report.review }),
       notes: (_params: unknown, report: SpecificationReport) => [report.title, `审核状态：${REVIEW_NAMES[report.review] ?? report.review}`] },
     { id: 'library.series', tool: 'list_series', title: '产品系列', kind: 'read', parameters: obj({}),
       description: '列出产品库的全部系列：名称、厂家、型号、电压、执行标准、规格数和各审核状态的数量。',

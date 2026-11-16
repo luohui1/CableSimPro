@@ -307,7 +307,8 @@ export interface AgentStatus { configured: boolean; model?: string; provider?: s
 export type CardRef =
   | { kind: 'run'; project: string; run: string; href: string }
   | { kind: 'check'; series: string; href: string }
-  | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html'; href?: string }
+  /** status: where the version stands in review (draft or not), so an unreviewed sheet is never taken for an issued one. */
+  | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html'; href?: string; status?: string }
   | { kind: 'model3d'; spec: string; version: number; href: string }
   | { kind: 'open'; label: string; href: string };
 
@@ -343,7 +344,8 @@ export interface ChatMessage {
   status?: 'streaming' | 'done' | 'stopped' | 'error';
   error?: string;
 }
-export interface ChatSummary { id: string; title: string; created: string; updated: string; message_count: number; running: boolean }
+/** revision counts the states the host has sent of a running conversation; the page keeps only a state newer than the one it holds. */
+export interface ChatSummary { id: string; title: string; created: string; updated: string; message_count: number; running: boolean; revision: number }
 export interface ChatView extends ChatSummary { items: ChatMessage[]; waiting: Proposal[] }
 
 // ---- The product library: series → specification → version ----

@@ -43,10 +43,35 @@ export const useRun = (project: string, run: string | undefined) =>
 // ---- Conversations with the agent ----
 
 export const useChats = () => useQuery({ queryKey: ['chats'], queryFn: api.chats, refetchOnMount: 'always' });
-export const useChat = (id: string | undefined) => useQuery({ queryKey: ['chat', id], queryFn: () => api.chat(id as string), enabled: Boolean(id), staleTime: Infinity });
 
-/** The host sends the last few messages as they stand; they replace the page's own tail. A gap means events were missed: read the whole conversation again. */
-function takeChat(event: Extract<StudioEvent, { type: 'chat' }>): void {
+type ChatEvent = Extract<StudioEvent, { type: 'chat' }>;
+/** The newest state of a conversation that arrived while the page held nothing of it: a read of the whole conversation that was already
+ *  on its way may have been made before it, and a conversation that waits for a decision sends nothing more. */
+const early = new Map<string, ChatEvent>();
+
+/** The host sends the last few messages as they stand; they replace the page's own tail. Null: events were missed, read it again. */
+function merged(held: ChatView, event: ChatEvent): ChatView | null {
+  if (event.summary.revision <= held.revision) return held;
+  const kept = event.count - event.tail.length;
+  if (kept < 0 || held.items.length < kept) return null;
+  return { ...held, ...event.summary, items: [...held.items.slice(0, kept), ...event.tail], waiting: event.waiting };
+}
+
+/** Reads a whole conversation and brings it up to date with what arrived while the read was on its way. */
+export const chatQuery = (id: string | undefined) => ({
+  queryKey: ['chat', id],
+  enabled: Boolean(id),
+  staleTime: Infinity,
+  queryFn: async () => {
+    const view = await api.chat(id as string);
+    const event = early.get(id as string);
+    early.delete(id as string);
+    return (event && merged(view, event)) || view;
+  },
+});
+export const useChat = (id: string | undefined) => useQuery(chatQuery(id));
+
+function takeChat(event: ChatEvent): void {
   const id = event.summary.id;
   queryClient.setQueryData<ChatSummary[]>(['chats'], list => {
     if (!list) return list;
@@ -55,15 +80,13 @@ function takeChat(event: Extract<StudioEvent, { type: 'chat' }>): void {
   });
   const held = queryClient.getQueryData<ChatView>(['chat', id]);
   if (!held) {
+    early.set(id, event);
     void queryClient.invalidateQueries({ queryKey: ['chats'] });
     return;
   }
-  const kept = event.count - event.tail.length;
-  if (kept < 0 || held.items.length < kept) {
-    void queryClient.invalidateQueries({ queryKey: ['chat', id] });
-    return;
-  }
-  queryClient.setQueryData<ChatView>(['chat', id], { ...held, ...event.summary, items: [...held.items.slice(0, kept), ...event.tail], waiting: event.waiting });
+  const next = merged(held, event);
+  if (next) queryClient.setQueryData<ChatView>(['chat', id], next);
+  else void queryClient.invalidateQueries({ queryKey: ['chat', id] });
 }
 
 export function useHostEvents() {

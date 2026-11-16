@@ -1,6 +1,6 @@
 # Cable Studio
 
-面向电缆厂技术部的设计计算软件，主线是“一份询价单 → 一套技术文件”。当前从产品库开始，已有断面工作台负责单条电缆的细算：地下敷设（直埋、排管）的稳态载流量校核、扫描与选型；Agent 与人使用同一套宿主操作。
+给电缆厂和科研人员用的专业软件，做两件事：**电缆型号**（导入结构表、算参数、按国标核对、改版、出规格书、建三维模型）和**载流量计算**（一款型号在地下直埋或排管敷设下的允许电流，哪根电缆先到温限）。有两种模式，操作同一份数据、走同一套宿主操作：**Agent 模式**是一个对话页，Agent 按技能调用软件的操作去做，结果以卡片呈现；**工作台模式**是专业界面（产品库、断面工作台）。方向、路线和界面规矩见 [ROADMAP.md](ROADMAP.md)。
 
 ## 运行
 
@@ -8,9 +8,9 @@
 
 ```sh
 cd studio
-npm install
+npm ci
 npm run build     # 构建界面到 studio/dist
-npm start         # http://127.0.0.1:8200/ ，只监听本机
+npm start         # http://127.0.0.1:8200/ ，只监听本机；首页是 Agent 模式，顶栏切到工作台
 ```
 
 `npm run dev` 另起带热更新的界面（8201），接口转发到 8200 上的宿主。
@@ -24,22 +24,26 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机
 | `CABLE_STUDIO_MODEL_BASE_URL`、`CABLE_STUDIO_MODEL_ID`、`CABLE_STUDIO_MODEL_API_KEY` | Agent 用任意 OpenAI 兼容接口 |
 | `CABLE_STUDIO_MODEL_THINKING` | 思考强度 `off`（默认）/ `low` / `medium` / `high` |
 
-密钥只从环境变量读取，不写入磁盘。没有配置模型时 Agent 面板显示“模型未配置”，其余功能照常可用。
+密钥只从环境变量读取，不写入磁盘（会话文件、日志里都没有）。没有配置模型时 Agent 模式显示“模型未配置”，工作台照常可用。
 
 ## 结构
 
 | 目录 | 内容 |
 | --- | --- |
 | `core/studio_core/` | Python 计算核心，不含算法：`runner.py` 按 `cablesim.run/2` 在独立进程里运行 `plugins/` 下的插件，运行前核对封签；`library.py` 型号库；`layouts.py` 敷设模板；`scene.py` 把型号、敷设、工况组成 `cablesim.domain/1` 文档；`study.py` 校核、扫描、选型；`methods.py` 方法卡与可信分档；`__main__.py` 给宿主用的本机服务（标准输入输出，每行一个 JSON） |
-| `host/` | Node 宿主（TypeScript，由 Node 直接运行）：`store.ts` 工程文件夹；`operations.ts` 操作层；`agent.ts` Agent；`report.ts` 计算书；`server.ts` HTTP 与界面 |
+| `host/` | Node 宿主（TypeScript，由 Node 直接运行）：`store.ts` 工程文件夹；`operations.ts` 操作层；`products.ts` 产品库的操作；`agent.ts` Agent 服务（pi 会话层、写操作的审阅关口、对话落盘）；`agent-tools.ts` 把操作变成工具、只能读技能文件的 `read`；`chat-view.ts` 把会话文件还原成对话页要显示的消息；`report.ts` 计算书；`server.ts` HTTP 与界面 |
+| `skills/` | Agent 的技能，每类工作一份 `skills/<名称>/SKILL.md`：载流量校核与选型、型号导入与标准核对、型号改版、规格书与计算书、电缆三维结构建模 |
 | `shared/` | 宿主与界面共用的类型、数值写法和绘图几何 |
-| `ui/` | React 界面：`pages/` 产品库与导入；`components/product-controls.tsx` Mantine 业务控件；`series/` 系列工作区（结构浏览器、断面与三维视图、属性面板、规格对比表）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`state/` 读取宿主与视图状态；`pages/gallery.tsx` 工作台组件陈列（`/gallery`） |
+| `ui/` | React 界面：`shell/` 外壳与两种模式的切换；`agent/` Agent 模式的对话页、运行时和结果卡；`components/ui/` shadcn/ui 通用控件，`components/assistant-ui/` 对话部件；`pages/` 产品库与导入（工作台模式，第 2 轮重做）；`components/product-controls.tsx` Mantine 业务控件；`series/` 系列工作区（结构浏览器、断面与三维视图、属性面板、规格对比表）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`state/` 读取宿主与视图状态；`pages/gallery.tsx` 工作台组件陈列（`/gallery`） |
 | `core/tests/`、`tests/` | 真实流程测试与界面走查 |
 
 计算核心直接引用仓库里的 `cablesim_sdk/` 和 `plugins/cablesim.iec60287/`，不复制、不改算法。厂家公开结构表读自 `backend/kernel/model_series_data/`。
 
 ## 界面
 
+- 外壳：顶栏固定放品牌、模式切换（Agent、工作台）、模型名和主题按钮；`/` 是 Agent 模式（`/chat/<对话>` 打开一段对话），`/library`、`/workbench`、`/p/<工程>` 是工作台模式。切换时回到该模式上次停留的地方。
+- Agent 模式（`ui/agent/`）：左侧对话列表，中间对话，底部输入框。输入框可以中止；任务进行中再发消息会在当前一步做完后插话；可把 Excel 或 CSV 结构表拖进去。空对话给出四个可以直接点的真实任务。对话里每个操作是一行（操作中文名、对象、状态，点开看要点，没有原始 JSON），写操作停在待审卡（每项改前、改后和单位，接受或拒绝），结果以卡片呈现：载流量结果卡（允许电流、先到温限的电缆、可信分档、断面缩略图；扫描和选型是表）、标准核对卡（通过、不通过、缺项的数量和不通过项清单）、文件卡（规格书、计算书的预览和下载）、三维模型卡（复用工作台的三维查看部件），每张卡带“在工作台打开”。卡片只拿引用，数字由界面向宿主读取，不经过模型。
+- 组件底座见 [ROADMAP.md](ROADMAP.md) 的“组件”一节：Tailwind 4、shadcn/ui（Base UI 版）、assistant-ui。shadcn 的语义色、圆角、字号变量在 `ui/styles/app.css` 里全部指向 `design/tokens.css`，没有第二套颜色。
 - `design/tokens.css` 保存工程配色与字体，`ui/styles/app.css` 映射为 Tailwind CSS 4 工具类。产品库的布局和 Mantine 主题适配集中在 `ui/styles/product.css`，主题同时覆盖浮层；保留 Tailwind 默认尺度供组件库使用。
 - 产品库使用 Mantine 9 的按钮、表单、复选框、导航、步骤条、拖放上传、标签页和弹窗；统一主题在 `product-provider.tsx`。系列工作区的对象视图和规格对比表为自研组件，规则集中在 `ui/styles/workspace.css`：面板贴边平铺，一种强调色只用于选中，三种状态色，材料色只用于图纸；数字和拉丁字母用 Inter，中文用 Noto Sans SC；图标采用 Lucide。工程工作台沿用 Base UI 控件和 `design/icons/`；断面按保存的工程尺寸绘制。
 - 产品库、导入、规格表和断面工作台按路由分别加载；首页不预加载规格表和三维绘图模块。
@@ -92,11 +96,29 @@ Windows 核心进程在开始读取标准输入前加载工作簿依赖，避免
 
 ## 操作层与 Agent
 
-工作台的每个动作在 `host/operations.ts` 里只有一份：人点按钮经 `POST /api/ops/<操作>` 调用，Agent 把同一个操作当工具调用。Agent 内核是 pi 的 `@earendil-works/pi-agent-core`，只有这些操作，没有读写文件、命令行或联网工具。
+工作台的每个动作在 `host/operations.ts` 和 `host/products.ts` 里只有一份：人点按钮经 `POST /api/ops/<操作>` 调用，Agent 把同一个操作当工具调用。
 
-- 读取和计算（校核、扫描、选型、导出计算书）直接执行；计算生成的是运行记录，不改输入。
-- 改输入（换型号、改敷设、改工况、改方法参数）在 `beforeToolCall` 里停下，变成一项待审改动：带着改了什么、改动后的可信分档和改动后的断面。接受后才写入；拒绝的原因会告诉 Agent。
-- 任务和步骤由内核的事件流驱动（`/api/events`），只有步骤和去向；结果落在运行记录里，和人手工算出来的是同一种东西。
+Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `createAgentSession`，`host/agent.ts`），它自带的读写文件、命令行和联网工具全部关闭：
+
+- **工具**：所有带 `tool` 名的操作，由 `host/agent-tools.ts` 逐个转成工具，调用一个接一个执行；外加一个叫 `read` 的工具，只能打开技能文件，别的路径（包括仓库里的 `AGENTS.md`、`CLAUDE.md`）一律拒绝。工作台自己的草算（`draft.*`）不是工具，Agent 用 `run_rating`。
+- **只许人做的**：审核、批准、发布（`library.review*`）带 `human_only` 标记。`Studio.invoke` 对 `by: 'agent'` 的调用在校验参数之前就拒绝（403），它们也不在工具里。
+- **审阅**：写操作（新建、重命名工程，更换型号，改敷设、工况、方法参数，导入系列，改结构）在 `tool_call` 钩子里停住，界面出现待审卡；接受后才执行，拒绝的原因会告诉模型。每个写操作都要有审阅说明（`plan` 或 `review`），宿主启动时检查，没有的不会作为工具提供。停止对话时等待中的改动按拒绝处理。
+- **计算和导出**（校核、扫描、选型、批量核对、规格书、计算书、三维实体）直接执行，生成运行记录或文件，不改输入。`compute_series` 对 Agent 会等这一批算完才返回。
+- **技能**：`skills/<名称>/SKILL.md`，中文，写清什么时候用、步骤、用哪些工具、容易错在哪、什么情况必须停下来问人。系统提示里只有技能的名称和一句说明，模型要用时用 `read` 取全文。
+- **系统提示**：电缆工程师同事；数字只来自工具结果；缺数据如实说；改动先交人审；回答最多五行。pi 默认带的“当前工作目录”一段被去掉，模型不知道本机的路径。
+- **会话**：落在 `<CABLE_STUDIO_HOME>/agent/sessions/`（pi 的会话文件，每行一个条目），宿主重启后列表和历史还在；审阅结果存成会话里的自定义条目。对话页看到的消息由 `host/chat-view.ts` 从会话文件还原，所以正在进行的对话和重新打开的对话长得一样；重启时没做完的步骤显示“已中断”。
+- **结果卡**：操作可以带 `card`（引用，如运行记录、系列、文件、规格版本，加工作台深链接）和 `notes`（步骤行里的要点）。引用和要点存在会话里，卡片里的数字由界面向宿主读取。
+- **网络**：pi 的安装遥测和模型目录下载都关了（`PI_TELEMETRY=0`、`PI_OFFLINE=1`，设置里 `enableInstallTelemetry: false`），密钥用内存凭据，不写 pi 的 `auth.json`；唯一的外部流量是配置好的模型接口。
+
+### 内核试验结论（第 1 轮）
+
+先用脚本化模型试验能否从 `pi-agent-core` 的裸循环换到会话层，三项都通过才换，结论：换。
+
+1. 内置工具全关、只注册我们的操作时，写操作能停下来等人接受或拒绝，然后继续：用内联扩展的 `tool_call` 钩子，钩子里等一个 Promise。拒绝时工具不执行，原因交给模型。注意：等待审阅时必须监听 `ctx.signal`，否则 `abort()` 会一直等到有人答复；所有工具要设 `executionMode: 'sequential'`，否则同一轮里的 `[改动, 校核]` 会并行，校核按改动前的输入算。
+2. 技能能被发现并按需加载：pi 自己的加载器能找到 `SKILL.md`，但它只在选中了 `read` 或 `bash` 时才把技能目录写进系统提示。所以注册一个名叫 `read`、只能读技能文件的工具顶替内置的，技能目录就由 pi 原生写进提示，模型用它取全文；读别的文件被拒绝。
+3. 仓库的开发约定不进上下文：默认的发现会把往上各级的 `AGENTS.md`、`CLAUDE.md` 读进提示（对照试验证实），所以用 `noContextFiles`、`noSkills`、`noExtensions`、`noPromptTemplates`、`noThemes` 关掉发现，再显式给出技能目录和系统提示。
+
+另外试了：会话落盘后关闭、重开、再发消息；留在文件里的“有调用没结果”的条目，pi-ai 在发给模型前会补上占位结果，不会让模型接口报错；发消息时 `steer` 能在等待审阅期间排队，等这一步做完再送给模型；整个包第一次加载约 5 秒、多占 75 MB，所以宿主启动时后台预加载，不拖慢启动。
 
 ## 可信分档
 
@@ -110,7 +132,7 @@ Windows 核心进程在开始读取标准输入前加载工作簿依赖，避免
 
 ## 参数覆盖与核实
 
-目标是让电缆厂技术部把一份询价单做成一整套技术文件。下表是技术参数表里每一类数现在的来路，以及用公开厂家手册核实的结果。对照源是 Bahra 的中压铅套电缆手册（CU/XLPE/LC/PVC 3.6/6 kV 单芯，13 个截面，`core/studio_core/catalogues/bahra_mv_lead_sheathed.json`，写明了页码和文件摘要）。
+下表是技术参数表里每一类数现在的来路，以及用公开厂家手册核实的结果。对照源是 Bahra 的中压铅套电缆手册（CU/XLPE/LC/PVC 3.6/6 kV 单芯，13 个截面，`core/studio_core/catalogues/bahra_mv_lead_sheathed.json`，写明了页码和文件摘要）。
 
 | 参数 | 来路 | 与手册对照（13 个截面） | 说明 |
 | --- | --- | --- | --- |
@@ -141,9 +163,12 @@ Windows 核心进程在开始读取标准输入前加载工作簿依赖，避免
 
 ```sh
 python -m pytest studio/core/tests          # 计算核心；设 CABLESIM_TB880_FIXTURES 后重算 TB 880 六个算例
-cd studio && npm test                       # 宿主：工程师流程与 Agent 流程（脚本模型）
-cd studio && npm run build && npm run walk  # 真实导入、批量计算、审核、修改、PDF 与工作台；桌面及 390×844 产品库走查
+cd studio && npm test                       # 宿主：工程师流程、产品库流程、Agent 流程（脚本模型：工具集、读技能、审核操作拒绝 Agent、导入核对、停止、插话、重启）
+cd studio && npm run build && npm run walk  # 真实导入、批量计算、审核、修改、PDF 与工作台；桌面及 390×844 产品库走查；再走一遍 Agent 模式
+cd studio && npm run build && npm run walk:agent  # 只走 Agent 模式，约 1 分钟
 ```
+
+Agent 模式的走查（`tests/agent-walk.ts`）用脚本化的模型，在页面里像人一样操作：点起始任务、审阅并接受新建工程、读载流量结果卡、从卡片进工作台再回到对话、看标准核对卡和规格书文件卡（预览、关闭）、拖一张 CSV 结构表进输入框并发送；每步截图并检查文字有没有重叠或被截断，在 1366×768 和 1920×1080 各走一遍。
 
 走查的截图默认写到 `<仓库>/.tmp/studio-walk/`，也可以把输出目录作为参数给出。产品库走查在隔离库中经页面导入 35 个规格，计算三个系列，检查实际参数、人工审核步骤、新草稿、减薄绝缘的三项不通过及旧版本保留；同目录留下真实下载的两份 PDF、JSON 快照和公开 Excel 样例。截图与布局检查覆盖 1366×768、1920×1080 和 390×844。测试内的审核意见明确标为隔离验收，不改用户工程库。
 
