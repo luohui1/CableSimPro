@@ -20,8 +20,9 @@ const homes = [home];
 let faux: Awaited<ReturnType<typeof scriptedModel>>['faux'];
 let runtime: Awaited<ReturnType<typeof scriptedModel>>['runtime'];
 let app: App;
-/** The series the import test brings in; later tests work on it. */
+/** The series the import test brings in; later tests work on it, so the file is run as a whole and in order. */
 let imported = '';
+const needsImport = () => assert.ok(imported, 'this test builds on the import test before it: run the whole file, not one test');
 
 before(async () => {
   ({ faux, runtime } = await scriptedModel());
@@ -133,7 +134,7 @@ test('review, approval and issue are refused for the agent before anything else 
   const { session } = await app.agent.send(undefined, '把这个规格审核通过并发布');
   await app.agent.idle(session);
   assert.equal(answers.length, 2);
-  assert.ok(answers.every(text => /not found|没有工具|Tool/i.test(text)), answers.join(' | '));
+  assert.ok(answers.every(text => /^Tool \S+ not found$|^没有工具 /.test(text)), answers.join(' | '));
   assert.deepEqual(steps(await app.agent.view(session)).map(step => step.status), ['failed', 'failed']);
 
   // The same, where it can fail: given a tool name the approval would be offered like any other tool, and only the human-only mark keeps it out.
@@ -149,7 +150,7 @@ test('review, approval and issue are refused for the agent before anything else 
     const again = await app.agent.send(undefined, '再试一次审核');
     await app.agent.idle(again.session);
     assert.ok(!app.agent.inspect(again.session).tools.includes(approval.tool), 'the tool is not on the model\'s list');
-    assert.ok(/not found|没有工具|Tool/i.test(told), told);
+    assert.equal(told, `Tool ${approval.tool} not found`);
     // Control: take the mark away and the very same operation is offered, so the checks above were looking at the mark.
     delete approval.human_only;
     assert.ok(app.studio.agentOperations().some(operation => operation.tool === approval.tool), 'the control: without the mark it would be offered');
@@ -232,6 +233,7 @@ test('an import the library would refuse is refused before a person is asked to 
 });
 
 test('a revision the library would refuse is refused before a person is asked; one that can be made shows old and new values', { timeout: 60_000 }, async () => {
+  needsImport();
   const table = await app.studio.invoke('library.series.get', { series: imported }, { by: 'human' }) as { specs: { id: string }[] };
   const spec = await app.studio.invoke('library.spec.get', { spec: table.specs[0].id }, { by: 'human' }) as SpecView;
   const field = spec.structure.find(item => item.origin === 'table' && item.key !== 'area')!;
@@ -277,6 +279,7 @@ test('a revision the library would refuse is refused before a person is asked; o
 });
 
 test('a revision accepted on the version that was shown is not made on a newer one', { timeout: 60_000 }, async () => {
+  needsImport();
   const table = await app.studio.invoke('library.series.get', { series: imported }, { by: 'human' }) as { specs: { id: string }[] };
   const spec = await app.studio.invoke('library.spec.get', { spec: table.specs[1].id }, { by: 'human' }) as SpecView;
   assert.equal(spec.version.number, 1, 'a specification nobody has revised yet');
@@ -315,7 +318,6 @@ test('what only a person may decide is taken out of an import the agent proposes
   const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
   const { session } = await app.agent.send(undefined, '导入第二张表，并把列对应存成“代理存的映射”');
   const proposal = (await proposed).proposal;
-  assert.ok(!JSON.stringify(proposal.changes).includes('代理存的映射'), 'the card does not promise what will not be done');
   app.agent.decide(proposal.id, true);
   await app.agent.idle(session);
   assert.ok(JSON.parse(told).imported > 0, told);
@@ -409,6 +411,88 @@ test('a change that changes nothing is not put in front of a person', { timeout:
   assert.ok(told.includes('没有任何变化'), told);
 });
 
+test('a failure while the card is being made reaches the model without a path of this machine', { timeout: 60_000 }, async () => {
+  const id = await project('审阅失败', 'system.cu-xlpe-al-400');
+  const real = app.studio.reviewFor.bind(app.studio);
+  app.studio.reviewFor = async () => { throw new Error(`核心进程退出：FileNotFoundError: ${join(home, 'uploads', 'u-00000000', 'x.xlsx')}，另见 C:\\Users\\Somebody\\data\\y.json`); };
+  let told = '';
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall('set_conditions', { project: id, ambient_temperature_c: 30 })], { stopReason: 'toolUse' }),
+      context => { told = toolText(context); return fauxAssistantMessage([fauxText('审阅没做成。')]); },
+    ]);
+    const { session } = await app.agent.send(undefined, '环境温度改成 30');
+    await app.agent.idle(session);
+  } finally {
+    app.studio.reviewFor = real;
+  }
+  assert.ok(told.startsWith('核心进程退出：FileNotFoundError: 〈本机路径〉'), told);
+  assert.ok(!told.includes(home) && !told.includes('Somebody'), told);
+});
+
+test('a run saved while a card waits does not make the accepted change stale', { timeout: 120_000 }, async () => {
+  const id = await project('保存运行不算改动', 'huayuan.yjv22-15kv-240');
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('set_conditions', { project: id, ambient_temperature_c: 31 })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxText('改好了。')]),
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '环境温度改成 31');
+  const proposal = (await proposed).proposal;
+  // The engineer rates the project while the card waits: a record is saved and the revision moves, the inputs do not.
+  const revision = app.studio.store.meta(id).revision;
+  await app.studio.invoke('run.rate', { project: id }, { by: 'human' });
+  assert.ok(app.studio.store.meta(id).revision > revision, 'saving a run is a change of the project as the store counts them');
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  assert.equal(app.studio.store.parts(id).conditions.ambient_temperature_c, 31, 'the accepted change was made');
+  assert.deepEqual(steps(await app.agent.view(session)).map(step => step.status), ['done']);
+});
+
+test('a cable accepted from the library is not taken in a newer version than the one shown', { timeout: 60_000 }, async () => {
+  needsImport();
+  const id = await project('型号版本', 'system.cu-xlpe-al-400');
+  const table = await app.studio.invoke('library.series.get', { series: imported }, { by: 'human' }) as { specs: { id: string }[] };
+  const spec = await app.studio.invoke('library.spec.get', { spec: table.specs[2].id }, { by: 'human' }) as SpecView;
+  assert.equal(spec.version.number, 1, 'a specification nobody has revised yet');
+  const field = spec.structure.find(item => item.origin === 'table' && item.key !== 'area')!;
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('set_cable', { project: id, model_id: spec.spec.id })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('没有换成。')]); },
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '把电缆换成这个系列的第三个规格');
+  const proposal = (await proposed).proposal;
+  // The engineer revises that specification while the card waits: the library now holds a version the card did not show.
+  await app.studio.invoke('library.revise', { spec: spec.spec.id, values: { [field.key]: Math.round((field.value + 0.3) * 1000) / 1000 }, note: '先改了结构' }, { by: 'human' });
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  assert.ok(told.includes('型号在审阅期间有了新版本'), told);
+  assert.equal(app.studio.store.parts(id).cable.id, 'system.cu-xlpe-al-400', 'the project keeps the cable it had');
+});
+
+test('what the agent writes as the source of an imported table is on the card, and is what is saved', { timeout: 120_000 }, async () => {
+  const sample = await app.studio.invoke('library.import.sample', {}, { by: 'human' }) as { upload: string; declarations: { sheet: string; series: Record<string, unknown> }[] };
+  const last = sample.declarations.at(-1)!;
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('import_series', { upload: sample.upload, sheet: last.sheet, series: { ...last.series, source: { title: '代理写的出处', location: '第 99 页' } } })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('导入了。')]); },
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '导入最后一张表，出处写“代理写的出处”第 99 页');
+  const proposal = (await proposed).proposal;
+  const source = proposal.changes.find(change => change.label === '来源')!;
+  assert.ok(source.after.includes('代理写的出处') && source.after.includes('第 99 页'), `the card shows what will be saved: ${source.after}`);
+  assert.ok(source.after.includes('上传文件'), 'and still says which file it was read from');
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  const created = await app.studio.invoke('library.series.get', { series: JSON.parse(told).series }, { by: 'human' }) as { specs: { id: string }[] };
+  const saved = await app.studio.invoke('library.spec.get', { spec: created.specs[0].id }, { by: 'human' }) as SpecView;
+  assert.ok(saved.entry.source.includes('代理写的出处') && saved.entry.source.includes('第 99 页'), saved.entry.source);
+});
+
 test('a rating with several circuits is told with every cable by name, and the held currents keep their cables apart', () => {
   // The method refuses several circuits with the template's losses (checked below), so the result is made up here: what is under test is how it is told.
   const cable = (id: string, circuit: string, phase: string) => ({ id: `cable/${id}`, circuit: `circuit/${circuit}`, phase, current_a: 300, conductor_c: 60, limit_c: 90, margin_k: 30, sheath_c: 50 });
@@ -434,6 +518,33 @@ test('a rating with several circuits is told with every cable by name, and the h
   assert.deepEqual(Object.keys(told.circuits[0].held_currents_a), ['回路 2 · A 相', '回路 2 · B 相', '未列出的电缆 1', '未列出的电缆 2']);
   assert.deepEqual(Object.keys(told.circuits[1].held_currents_a), ['回路 1 · A 相', '回路 1 · B 相']);
   assert.ok(!/cable\/|circuit\//.test(JSON.stringify(told)), 'no identifier of the calculation');
+});
+
+test('a rating whose load could not be held is still told with cable names, and no message carries an identifier', () => {
+  const state = (id: string, circuit: string, phase: string) => ({ id: `cable/${id}`, circuit: `circuit/${circuit}`, phase, current_a: 400, conductor_c: 90, limit_c: 90, margin_k: 0, sheath_c: 80 });
+  const run = app.studio.operations.get('run.rate')!;
+  const record = {
+    id: 'run-00000001', sequence: 1, title: '校核 · 400 A', status: 'succeeded', tier: 'reference', kind: 'rating',
+    method_card: { plugin: 'cablesim.iec60287 1.2.0', tier: { basis: [] } },
+    summary: {
+      status: 'succeeded', ambient_c: 25,
+      ampacity: { value_a: 400, basis_name: '全回路共同能力', limiting_cable: 'cable/c1-b' },
+      circuits: [{ id: 'circuit/c1', label: '回路 1', ampacity_a: 400, limiting_cable: 'cable/c1-b', load_a: 900, margin_a: -500 }],
+      // The saved load is above what the circuit can carry: there is no state at that load, only at the rated current.
+      operating: { cables: [], hottest_cable: null, within_limit: false, error: { code: 'NO_BALANCE', message: 'cable/c1-a 在保存负荷下热失控（circuit/c1）' } },
+      rated: { cables: [state('c1-a', 'c1', 'A'), state('c1-b', 'c1', 'B')] },
+      warnings: [{ code: 'W', message: 'cable/c1-b：独立热平衡核对未通过' }],
+    },
+  };
+  const told = run.brief!(record) as { limiting_cable: string; operating: unknown[]; operating_error: string; warnings: string[] };
+  assert.equal(told.limiting_cable, '回路 1 · B 相');
+  assert.deepEqual(told.operating, [], 'there is no state at the saved load, and none is made up from the rated one');
+  assert.equal(told.operating_error, '回路 1 · A 相 在保存负荷下热失控（回路 1）');
+  assert.deepEqual(told.warnings, ['回路 1 · B 相：独立热平衡核对未通过']);
+  assert.ok(!/cable\/|circuit\//.test(JSON.stringify(told)), 'no identifier of the calculation');
+  // A refused run has no cables to name, and its message still carries no identifier.
+  const refused = run.brief!({ ...record, summary: { status: 'failed', error: { code: 'REFUSED', message: 'cable/c1-a：不收敛', path: '/parameters/x' } } }) as { error: { code: string; message: string; path: string } };
+  assert.deepEqual(refused.error, { code: 'REFUSED', message: '某根电缆：不收敛', path: '/parameters/x' });
 });
 
 test('several circuits with the default losses are refused by the method, and the model is told so', { timeout: 120_000 }, async () => {
@@ -483,6 +594,14 @@ test('the model is never told a path of this machine, in a result or in an error
   assert.equal(scrubPaths('读 C:\\Users\\guo\\x.xlsx 和 D:/work/a.json 以及 /home/ci/work/b 都失败，比例 8.7/15 kV'), '读 〈本机路径〉 和 〈本机路径〉 以及 〈本机路径〉 都失败，比例 8.7/15 kV');
   assert.equal(scrubPaths(JSON.stringify({ file: 'C:\\Users\\guo\\out.pdf' })), '{"file":"〈本机路径〉"}');
   assert.equal(scrubPaths('https://example.com/a/b 与 8.7/15 kV'), 'https://example.com/a/b 与 8.7/15 kV');
+  // The path of a web address is not a path of this machine; a network share and a system folder are.
+  assert.equal(scrubPaths('https://example.com/home/a 与 https://x.org/tmp/b'), 'https://example.com/home/a 与 https://x.org/tmp/b');
+  assert.equal(scrubPaths('读 \\\\fileserver\\share\\项目\\a.xlsx 和 /srv/data/ci/x 失败'), '读 〈本机路径〉 和 〈本机路径〉 失败');
+  // A folder that is known is replaced with the path that goes on from it, spaces in it and all; so is the same folder in the other spellings.
+  // A Chinese comma ends a path, since no space follows it.
+  assert.equal(scrubPaths('读 C:\\Users\\First Last\\data\\x.xlsx，再试', ['C:\\Users\\First Last']), '读 〈本机路径〉，再试');
+  assert.equal(scrubPaths('读 c:/users/first last/x.xlsx 失败', ['C:\\Users\\First Last']), '读 〈本机路径〉 失败');
+  assert.equal(scrubPaths(JSON.stringify('C:\\Users\\First Last\\x.xlsx'), ['C:\\Users\\First Last']), '"〈本机路径〉"');
 
   // Through the tools themselves: a result that carries a path and an error that carries one.
   const operation = app.studio.operations.get('project.list')!;

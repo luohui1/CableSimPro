@@ -328,28 +328,30 @@ export function productOperations(studio: Studio): Operation[] {
         const words = await vocabulary();
         const label = (list: { key: string; label: string }[], key: string) => list.find(item => item.key === key)?.label ?? key;
         const unit = (list: { key: string; unit: string }[], key: string) => list.find(item => item.key === key)?.unit ?? '';
-        const brief = (text: string) => (text.length > 60 ? `${text.slice(0, 60)}…` : text);
         // What the commit itself would refuse is refused here, before a person is asked to approve something that cannot happen.
         if (!result.preview.ready) throw new StudioError({ code: 'IMPORT_EMPTY', message: '没有可以导入的规格。' });
         if (library.seriesList().some(item => item.name === declared.name)) {
           throw new StudioError({ code: 'SERIES_EXISTS', message: `产品库里已有名为“${declared.name}”的系列，请改名后再导入。`, path: '/series/name' }, 409);
         }
+        const measuredSource = `${result.file.file} · 工作表“${params.sheet}”`;
+        const savedSource = [declared.source?.title ?? result.file.file, declared.source?.location].filter(Boolean).join(' · ');
         const changes: Change[] = [
           { part: 'series', field: 'name', label: '新系列', before: '—', after: `${declared.name}（${declared.designation}）` },
           { part: 'series', field: 'specs', label: '规格数', before: '—', after: `${result.preview.ready} 个` },
           ...(result.preview.failed ? [{ part: 'series', field: 'left_out', label: '跳过的行', before: '—', after: `${result.preview.failed} 行不能导入` }] : []),
-          { part: 'series', field: 'rating', label: '芯数与电压', before: '—', after: `${declared.cores} 芯，U0/U ${compact(declared.u0_v / 1000)}/${compact(declared.u_v / 1000)} kV` },
+          { part: 'series', field: 'rating', label: '芯数与电压', before: '—', after: `${declared.cores} 芯，U0/U ${compact(declared.u0_v / 1000)}/${compact(declared.u_v / 1000)} kV${declared.um_v ? `，Um ${compact(declared.um_v / 1000)} kV` : ''}` },
           { part: 'series', field: 'standards', label: '执行标准', before: '—', after: declared.standards.join('、') || '未声明' },
           { part: 'series', field: 'origin', label: '厂家与资料性质', before: '—', after: `${declared.manufacturer || '厂家未声明'} · ${STATE_NAMES[declared.origin ?? 'public'] ?? declared.origin}` },
           { part: 'series', field: 'columns', label: '列对应', before: '—',
             after: `${Object.keys(result.mapping).map(field => `${label(words.fields, field)} ← ${result.table.headers[field]}`).join('\n')}\n数据从第 ${result.table.first_data_row} 行起` },
           // One item to a line: the card shows them as a list, not as a paragraph.
           ...(Object.keys(declared.common).length ? [{ part: 'series', field: 'common', label: '系列统一给的尺寸', before: '—',
-            after: Object.entries(declared.common).map(([key, value]) => `${label(words.fields, key)} ${compact(value)} ${unit(words.fields, key)}${declared.common_basis[key] ? `（${brief(declared.common_basis[key])}）` : ''}`).join('\n') }] : []),
+            after: Object.entries(declared.common).map(([key, value]) => `${label(words.fields, key)} ${compact(value)} ${unit(words.fields, key)}${declared.common_basis[key] ? `（${declared.common_basis[key]}）` : ''}`).join('\n') }] : []),
           ...(Object.keys(declared.modelling).length ? [{ part: 'series', field: 'modelling', label: '计算用参数', before: '—',
-            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value}${item.unit && item.unit !== '1' ? ` ${item.unit.replace('*', '·')}` : ''}（${brief(item.reference)}）`).join('\n') }] : []),
+            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value}${item.unit && item.unit !== '1' ? ` ${item.unit.replace('*', '·')}` : ''}（${item.reference}）`).join('\n') }] : []),
           ...(declared.armour_material ? [{ part: 'series', field: 'armour', label: '铠装材料', before: '—', after: ARMOUR[declared.armour_material] ?? declared.armour_material }] : []),
-          { part: 'series', field: 'source', label: '来源', before: '—', after: `${result.file.file} · 工作表“${params.sheet}”` },
+          // What is saved with every specification as where it came from is what the person decides on; the uploaded file is named when it is not already that.
+          { part: 'series', field: 'source', label: '来源', before: '—', after: savedSource === measuredSource ? savedSource : `${savedSource}\n（上传文件 ${measuredSource}）` },
         ];
         return { title: '导入系列', changes };
       },

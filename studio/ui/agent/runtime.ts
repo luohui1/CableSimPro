@@ -65,7 +65,8 @@ export function useAgentRuntime(sessionId: string | undefined) {
       if (reply.session === sessionId) return;
       // A new conversation: load it once so its first message is on the page when the address changes.
       await queryClient.fetchQuery({ ...chatQuery(reply.session), staleTime: 0 });
-      void navigate({ to: '/chat/$sessionId', params: { sessionId: reply.session } });
+      // Awaited: the send stays pending until the address has changed, so a second message cannot slip in between and start another conversation.
+      await navigate({ to: '/chat/$sessionId', params: { sessionId: reply.session } });
     },
     onError: reportFailure,
   });

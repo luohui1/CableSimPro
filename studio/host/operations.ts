@@ -20,11 +20,14 @@ export interface Plan { changes: Change[]; parts: Partial<Parts> }
 /** What a person is shown before accepting an agent's write: the changes with their old and new values, and where they lead. */
 export interface Review {
   title: string; project?: string; changes: Change[]; preview?: Preview | null; issue?: Issue | null;
-  /** The project revision the person looked at; a change is not made on a project that has moved on since. */
-  revision?: number;
   /** The specification version the person looked at; the change is made on that version. */
   version?: number;
+  /** Asked once more when the person has accepted: what the card showed may have gone out of date while it waited. Gives the reason when it has. */
+  stale?: () => string | null;
 }
+
+const PROJECT_MOVED = '审阅期间这个工程被改动过，已经接受的改动没有执行。请按现在的状态重新提出。';
+const MODEL_MOVED = '型号在审阅期间有了新版本，已经接受的改动没有执行。请按现在的状态重新提出。';
 
 export interface Operation {
   id: string;
@@ -169,19 +172,32 @@ export class Studio {
 
   /** What a person is asked to accept for an agent's write. A write nobody can describe is not run. */
   async reviewFor(operation: Operation, params: any): Promise<Review> {
+    // What the change is made on is noted before the review is worked out: a change made while it is being worked out counts as made after.
+    const project: string | undefined = typeof params?.project === 'string' ? params.project : undefined;
+    const before = project === undefined ? undefined : this.#projectState(project);
     const review = await this.#review(operation, params);
-    if (review.project && review.revision === undefined) review.revision = this.store.meta(review.project).revision;
+    if (project !== undefined && before !== undefined && review.project === project) {
+      const own = review.stale;
+      review.stale = () => own?.() ?? (this.#projectState(project) === before ? null : PROJECT_MOVED);
+    }
     return review;
+  }
+
+  /** What a change to a project is made on: its name and its inputs. A run saved in the meantime does not count, an edit does. */
+  #projectState(id: string): string {
+    return `${this.store.meta(id).name}\n${inputsDigest(this.store.parts(id))}`;
   }
 
   async #review(operation: Operation, params: any): Promise<Review> {
     if (operation.review) return operation.review(params);
     if (operation.plan) {
-      const revision = this.store.meta(params.project).revision;
       const plan = await operation.plan(params);
       const parts = { ...this.store.parts(params.project), ...plan.parts };
       const { preview, issue } = await this.preview(this.store.meta(params.project).name, parts);
-      return { title: operation.title, project: params.project, changes: plan.changes, preview, issue, revision };
+      // A cable is taken from the library as it is when the card is made; a newer version of it is not what was shown.
+      const cable = plan.parts.cable;
+      return { title: operation.title, project: params.project, changes: plan.changes, preview, issue,
+        ...(cable ? { stale: () => (this.library.entry(cable.id).version === cable.version ? null : MODEL_MOVED) } : {}) };
     }
     throw new StudioError({ code: 'REVIEW_UNAVAILABLE', message: `${operation.title}没有可供审阅的改动说明，Agent 不能执行。` }, 409);
   }
@@ -225,43 +241,49 @@ export class Studio {
       return { cable, ...(await core.call<Pick<Parts, 'installation' | 'conditions'>>('cable.defaults', { cable })) };
     };
     const header = (record: RunRecord) => ({ run: record.id, sequence: record.sequence, title: record.title, status: record.status, tier: record.tier });
+    // Words from the calculation, told to the model without the calculation's own identifiers (cable/c1-a, circuit/c2): a name where one is known, else a plain word.
+    const plain = (text: string | undefined, names?: Map<string, string>): string | undefined =>
+      text?.replace(/\b(cable|circuit)\/[\w-]+/g, id => names?.get(id) ?? (id.startsWith('cable') ? '某根电缆' : '某回路'));
+    const issueOf = (issue: Issue | undefined, names?: Map<string, string>) => (issue ? { ...issue, message: plain(issue.message, names) } : undefined);
     const briefRun = (record: RunRecord): unknown => {
       const base = { ...header(record), kind: record.kind, method: record.method_card?.plugin, tier_basis: record.method_card?.tier.basis };
       if (record.kind === 'sweep') {
         return { ...base, variable: record.sweep!.label, unit: record.sweep!.unit,
-                 points: record.sweep!.points.map(point => ({ value: point.value, ampacity_a: point.ampacity_a, hottest_conductor_c: point.hottest_conductor_c, error: point.error?.message })) };
+                 points: record.sweep!.points.map(point => ({ value: point.value, ampacity_a: point.ampacity_a, hottest_conductor_c: point.hottest_conductor_c, error: plain(point.error?.message) })) };
       }
       if (record.kind === 'selection') {
         return { ...base, target_current_a: record.selection!.target_current_a, chosen: record.selection!.chosen, rule: record.selection!.rule,
                  reason: record.selection!.reason,
                  candidates: record.selection!.candidates.map(row => ({ model_id: row.model_id, name: row.name, area_mm2: row.area_mm2,
                    ampacity_a: row.ampacity_a, meets_target: row.meets_target, conductor_at_target_c: row.conductor_at_target_c,
-                   error: (row.error ?? row.at_target_error)?.message })) };
+                   error: plain((row.error ?? row.at_target_error)?.message) })) };
       }
       const summary = record.summary!;
-      if (summary.status !== 'succeeded') return { ...base, error: summary.error };
+      if (summary.status !== 'succeeded') return { ...base, error: issueOf(summary.error) };
       // A cable is told to the model by a name it can say to an engineer, never by the calculation's own identifier: a model copies what it reads.
-      const cables = summary.operating?.cables ?? [];
+      // The names come from the cables at the saved load or, when the load could not be held, from the cables at the rated current.
+      const operating = summary.operating?.cables ?? [];
+      const listed = operating.length ? operating : summary.rated?.cables ?? [];
+      const names = new Map<string, string>(summary.circuits?.map(circuit => [circuit.id, circuit.label]) ?? []);
+      listed.forEach((cable, index) => {
+        const phase = PHASE_NAMES[cable.phase] ?? cable.phase;
+        const circuit = summary.circuits?.find(item => item.id === cable.circuit)?.label;
+        names.set(cable.id, listed.length === 1 ? phase : circuit ? `${circuit} · ${phase}` : `第 ${index + 1} 根 · ${phase}`);
+      });
       const unlisted = new Map<string, string>();
-      const named = (id: string | undefined): string | undefined => {
-        if (id === undefined) return undefined;
-        const index = cables.findIndex(cable => cable.id === id);
-        // A cable the result does not list still gets a name of its own, so two of them are never taken for one.
-        if (index < 0) return unlisted.get(id) ?? unlisted.set(id, `未列出的电缆 ${unlisted.size + 1}`).get(id);
-        const phase = PHASE_NAMES[cables[index].phase] ?? cables[index].phase;
-        if (cables.length === 1) return phase;
-        const circuit = summary.circuits?.find(item => item.id === cables[index].circuit)?.label;
-        return circuit ? `${circuit} · ${phase}` : `第 ${index + 1} 根 · ${phase}`;
-      };
+      // A cable the result does not list still gets a name of its own, so two of them are never taken for one.
+      const named = (id: string | undefined): string | undefined => (id === undefined ? undefined
+        : names.get(id) ?? unlisted.get(id) ?? unlisted.set(id, `未列出的电缆 ${unlisted.size + 1}`).get(id));
       return { ...base, ampacity_a: summary.ampacity?.value_a, basis: summary.ampacity?.basis_name, limiting_cable: named(summary.ampacity?.limiting_cable),
                circuits: summary.circuits?.map(circuit => ({ label: circuit.label, ampacity_a: circuit.ampacity_a, limiting_cable: named(circuit.limiting_cable),
-                 load_a: circuit.load_a, margin_a: circuit.margin_a, error: circuit.error,
+                 load_a: circuit.load_a, margin_a: circuit.margin_a, error: issueOf(circuit.error, names),
                  held_currents_a: Object.fromEntries(Object.entries((circuit as { held_currents_a?: Record<string, number> }).held_currents_a ?? {}).map(([id, amps]) => [named(id), amps])) })),
                ambient_c: summary.ambient_c, verification_passed: summary.verification?.passed,
-               operating: cables.map(cable => ({ cable: named(cable.id), current_a: cable.current_a,
+               operating: operating.map(cable => ({ cable: named(cable.id), current_a: cable.current_a,
                  conductor_c: cable.conductor_c, limit_c: cable.limit_c, sheath_c: cable.sheath_c, surface_c: cable.surface_c,
                  losses_w_m: cable.losses_w_m, thermal_k_m_w: cable.thermal_k_m_w, lambda1: cable.lambda1 })),
-               warnings: summary.warnings?.map(warning => warning.message) };
+               operating_error: plain(summary.operating?.error?.message, names),
+               warnings: summary.warnings?.map(warning => plain(warning.message, names)) };
     };
     const briefView = (view: ProjectView) => ({
       project: view.meta.id, name: view.meta.name,
@@ -362,7 +384,8 @@ export class Studio {
             ...describeStart('conditions', defaults.conditions, this.layoutLabel),
           ];
           const { preview, issue } = await this.preview(name, { ...defaults, method: { method: 'iec60287.steady', parameters: {} } });
-          return { title: '新建工程', changes, preview, issue };
+          const cable = defaults.cable;
+          return { title: '新建工程', changes, preview, issue, stale: () => (this.library.entry(cable.id).version === cable.version ? null : MODEL_MOVED) };
         },
         execute: async (params: { name: string; model_id?: string }) => {
           const defaults = await starting(params.model_id ?? DEFAULT_MODEL);

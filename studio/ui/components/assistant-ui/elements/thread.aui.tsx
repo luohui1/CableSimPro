@@ -58,7 +58,8 @@ export const Thread: FC<{ welcome: ReactNode; step: ToolCallMessagePartComponent
             </ThreadPrimitive.Messages>
           </div>
           <ThreadPrimitive.ViewportFooter
-            className={cn("bg-background flex flex-col gap-4 overflow-visible pb-5", !isEmpty && "sticky bottom-0 mt-auto")}
+            // A positioned box either way: the button beside the composer is placed against it, not against the page.
+            className={cn("bg-background flex flex-col gap-4 overflow-visible pb-5", isEmpty ? "relative" : "sticky bottom-0 mt-auto")}
           >
             <ThreadPrimitive.ScrollToBottom
               render={

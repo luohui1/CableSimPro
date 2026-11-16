@@ -35,6 +35,9 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       await page.waitForTimeout(700);
       await page.screenshot({ path: join(out, `${width}-agent-${label}.png`) });
       for (const issue of await page.evaluate(probe)) problems.push(`${width} agent ${label}: ${issue}`);
+      // The conversation never scrolls sideways: a control placed outside the column can make it (it did, on the empty page, at 1280 and wider).
+      const sideways = await page.locator('[data-slot="aui_thread-viewport"]').evaluate(el => el.scrollWidth - el.clientWidth).catch(() => 0);
+      if (sideways > 0) problems.push(`${width} agent ${label}: the conversation scrolls sideways by ${sideways}px`);
     };
 
     try {

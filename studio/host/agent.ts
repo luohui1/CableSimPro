@@ -11,7 +11,7 @@ import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completio
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
 import type { AgentSession, ExtensionFactory, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
 import type { AgentStatus, ChatAttachment, ChatSummary, ChatView, Proposal } from '../shared/types.ts';
-import { operationTools, skillReader } from './agent-tools.ts';
+import { failureText, operationTools, skillReader } from './agent-tools.ts';
 import { attachmentNote, chatMessages, plainText, titleOf, type PiMessage } from './chat-view.ts';
 import { StudioError } from './core.ts';
 import type { Operation, Studio } from './operations.ts';
@@ -299,7 +299,7 @@ export class AgentService {
         try {
           review = await studio.reviewFor(operation, input);
         } catch (error) {
-          return { block: true, reason: error instanceof Error ? error.message : String(error) };
+          return { block: true, reason: failureText(error, [studio.home]) };
         }
         // A stop that came while the review was worked out has nobody left to ask.
         if (ctx.signal?.aborted) return { block: true, reason: '任务已停止，没有执行。' };
@@ -324,13 +324,13 @@ export class AgentService {
         studio.emit({ type: 'proposal', proposal });
         this.#changed(conversation, true);
         if (!decision.accept) return { block: true, reason: `工程师拒绝了这项改动${decision.note ? '：' + decision.note : ''}。不要重复提出同样的改动；换一种做法，或说明情况后结束。` };
-        // Accepted means accepted as it was shown: a project that moved on while the card waited gets nothing written.
+        // Accepted means accepted as it was shown: what the card was about (the project's inputs, the library's version of a model) may
+        // have moved on while it waited, and then nothing is written.
         try {
-          if (review.project && review.revision !== undefined && studio.store.meta(review.project).revision !== review.revision) {
-            return { block: true, reason: '审阅期间这个工程被改动过，已经接受的改动没有执行。请按现在的状态重新提出。' };
-          }
+          const moved = review.stale?.();
+          if (moved) return { block: true, reason: moved };
         } catch (error) {
-          return { block: true, reason: error instanceof Error ? error.message : String(error) };
+          return { block: true, reason: failureText(error, [studio.home]) };
         }
         return undefined;
       });
