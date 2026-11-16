@@ -1,7 +1,10 @@
 // The gallery's sections: the theme, the base controls, and every kit part in each of its states, with real data.
 import { useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, ButtonLink } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,7 +28,7 @@ import { EmptyState, Given, PremiseStrip } from '@/kit/workbench/premise';
 import { compact, fixed } from '@shared/format';
 import { useTheme } from '@/state/theme';
 import { CableSection, SectionThumb, fieldStops } from './figures';
-import { WORKSPACE } from './library-data';
+import { LIBRARY, WORKSPACE } from './library-data';
 import {
   CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
   RATING_STEPS, REFUSED_IMPORT, REFUSED_RATING, SHEET, STARTERS, STEPS_FAILED, STEPS_RECOVERED, STEPS_STOPPED, STEPS_WAITING, THINNER,
@@ -111,9 +114,8 @@ export function ThemeSection() {
 
 export function ControlsSection() {
   return <>
-    <Specimen title="按钮" rule="胶囊形。铜色是一屏唯一的主按钮；墨色给发送这类强动作；其余是描边和无底。">
+    <Specimen title="按钮" rule="胶囊形。铜色是一屏唯一的主按钮，对话页里有内容时的发送就是它；其余是描边、浅底和无底。">
       <State label="主按钮"><Button><Icon name="run/run" data-icon="inline-start" />运行校核</Button></State>
-      <State label="墨色"><Button variant="ink">发送</Button></State>
       <State label="描边"><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button></State>
       <State label="浅底"><Button variant="secondary">次要</Button></State>
       <State label="无底"><Button variant="ghost">取消</Button></State>
@@ -121,6 +123,7 @@ export function ControlsSection() {
       <State label="紧凑 32"><Button size="sm" variant="outline">计算书</Button></State>
       <State label="不可用"><Button disabled>运行校核</Button></State>
       <State label="图标"><Button variant="ghost" size="icon-sm" aria-label="更多"><Icon name="action/more" /></Button></State>
+      <State label="链接（按钮的样子）"><ButtonLink variant="outline" href="#controls"><Icon name="action/export" data-icon="inline-start" />下载 PDF</ButtonLink></State>
     </Specimen>
     <Specimen title="标记" rule="一个事实一个词加图标：可信分档、审核状态、核对结论。颜色不单独表达意思。">
       <State label="可信分档"><div className="flex gap-2"><TierMark tier="deliverable" /><TierMark tier="reference" /><TierMark tier="exploratory" /></div></State>
@@ -134,6 +137,19 @@ export function ControlsSection() {
       <State label="出错"><Input defaultValue="-1" aria-invalid className="w-56" /></State>
       <State label="不可用"><Input defaultValue="0.0754" disabled className="w-56" /></State>
       <State label="带图标"><InputGroup className="w-64"><InputGroupAddon><Icon name="action/search" /></InputGroupAddon><InputGroupInput placeholder="搜索型号、规格或制造商" /></InputGroup></State>
+      <State label="下拉（与字段同高）"><Select value="both_ends" items={[{ value: 'both_ends', label: '两端接地' }, { value: 'single_point', label: '单点接地' }]}>
+        <SelectTrigger className="w-56" aria-label="护套接地"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectItem value="both_ends">两端接地</SelectItem><SelectItem value="single_point">单点接地</SelectItem></SelectContent>
+      </Select></State>
+    </Specimen>
+    <Specimen title="勾选与进度" rule="勾选是 16 px 方框，选中是铜色；点击范围包括旁边的字。进度条 8 px，墨色，名称和计数在上面。">
+      <State label="未勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox />只导入可用的行</label></State>
+      <State label="已勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox defaultChecked />只导入可用的行</label></State>
+      <State label="不可用"><label className="flex items-center gap-2 text-sm text-ink-2"><Checkbox disabled />只导入可用的行</label></State>
+      <State label="进行中，还没有计数" className="w-72"><Progress value={null}><ProgressLabel>计算全系列</ProgressLabel></Progress></State>
+      <State label="完成" className="w-72"><Progress value={LIBRARY[0].specs.length} max={LIBRARY[0].specs.length}>
+        <ProgressLabel>计算全系列</ProgressLabel><ProgressValue>{() => `${LIBRARY[0].specs.length} / ${LIBRARY[0].specs.length} 个规格`}</ProgressValue>
+      </Progress></State>
     </Specimen>
     <Specimen title="页签与分段" rule="分段是凹槽加白片（同一视图的几种状态）；页签是平字加下划线（同一位置的不同内容）。">
       <State label="分段"><ToggleGroup defaultValue={['overview']} className="rounded-lg border border-line bg-surface p-1"><ToggleGroupItem value="cluster">电缆簇</ToggleGroupItem><ToggleGroupItem value="overview">全景</ToggleGroupItem></ToggleGroup></State>
@@ -253,7 +269,7 @@ export function AgentSection() {
         <RefusalCard kind="error" title="运行校核 · YJV22-8.7/15 3×240 直埋载流量校核" reason={HOST_DOWN} actions={<CardAction icon="action/refresh">重试</CardAction>} />
       </div>
     </Specimen>
-    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右（墨色）；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
+    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右：有内容时是铜色，和工作台的主按钮一样；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
       <div className="grid max-w-thread grid-cols-1 gap-4">
         <State label="空"><ComposerFrame><ComposerInput placeholder="交办一件事，或把 Excel、CSV 结构表拖到这里" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend disabled />} /></ComposerFrame></State>
         <State label="带附件"><ComposerFrame>

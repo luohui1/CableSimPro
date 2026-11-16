@@ -287,6 +287,26 @@
 @utility fade-end {
   mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
 }
+/* The workbench's 3D viewport (.cad-viewport of components/product-cad) filling the box it sits in. */
+@utility cad-fill {
+  & .cad-viewport {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  & .cad-viewport canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+/* A drawing at the right edge of a tile fades in from the left, into the tile's ground. */
+@utility fade-start {
+  mask-image: linear-gradient(to right, transparent 0, #000 64px);
+}
 
 /* ---- Layout patterns the scale cannot spell ---- */
 
@@ -294,9 +314,16 @@
 @utility grid-cols-property {
   grid-template-columns: minmax(0, 1fr) auto 3.5rem;
 }
-/* A label column and a content column. */
+/* The same, with where each value came from after its unit. */
+@utility grid-cols-property-source {
+  grid-template-columns: minmax(0, 1fr) auto 3.5rem auto;
+}
+/* A label column and a content column; the wide one for long names (钢带相对磁导率). */
 @utility grid-cols-label {
   grid-template-columns: 7rem minmax(0, 1fr);
+}
+@utility grid-cols-label-wide {
+  grid-template-columns: 12rem minmax(0, 1fr);
 }
 /* Item, before, arrow, after: the values sit next to their name, not at the far edge. */
 @utility grid-cols-change {
@@ -313,6 +340,58 @@
 @utility screen-half {
   width: 683px;
   height: 384px;
+}
+
+/* A header and its body; a media row above them (the alert dialog). An icon column and its text (the alert). */
+@utility grid-rows-header {
+  grid-template-rows: auto 1fr;
+}
+@utility grid-rows-media-header {
+  grid-template-rows: auto auto 1fr;
+}
+@utility grid-cols-icon {
+  grid-template-columns: auto 1fr;
+}
+/* A list in a popup: no taller than eighteen rows, nor than the room under its anchor. */
+@utility max-h-popup {
+  max-height: min(calc(--spacing(72) - --spacing(9)), calc(var(--available-height) - --spacing(9)));
+}
+
+/* recharts drawn in the theme: ticks in the secondary text, grid and reference lines on the line colour, no outlines. */
+@utility chart-theme {
+  & .recharts-cartesian-axis-tick text {
+    fill: var(--text-secondary);
+  }
+  & .recharts-cartesian-grid line[stroke='#ccc'],
+  & .recharts-polar-grid [stroke='#ccc'],
+  & .recharts-reference-line [stroke='#ccc'],
+  & .recharts-curve.recharts-tooltip-cursor {
+    stroke: var(--line);
+  }
+  & .recharts-dot[stroke='#fff'],
+  & .recharts-sector[stroke='#fff'] {
+    stroke: transparent;
+  }
+  & .recharts-radial-bar-background-sector,
+  & .recharts-rectangle.recharts-tooltip-cursor {
+    fill: var(--fill);
+  }
+  & .recharts-layer,
+  & .recharts-sector,
+  & .recharts-surface {
+    outline: none;
+  }
+}
+
+/* ---- Libraries that style themselves through variables ---- */
+
+/* sonner: the toast takes the panel, the text and the line of the theme, and the card radius. */
+[data-sonner-toaster][data-sonner-theme] {
+  --normal-bg: var(--panel);
+  --normal-text: var(--text);
+  --normal-border: var(--line);
+  --border-radius: var(--radius-surface);
+  --font-family: var(--font-ui);
 }
 
 /* ---- Base ---- */

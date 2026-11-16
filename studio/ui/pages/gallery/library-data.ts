@@ -1,5 +1,7 @@
 // The product library as the 8210 host holds it on 2026-11-16 (library.series, library.series.get for each series) and the
-// workspace of YJV22-8.7/15 kV 3×240 version 1 (library.spec.get s-3382c86d.3x240), copied unchanged.
+// workspace of YJV22-8.7/15 kV 3×240 version 3 as this branch's host (8212) holds it (library.spec.get
+// s-89150e51.3x240), copied unchanged except its review, which follows the host since (submitted by 工程师, approved by
+// 审核员): the same structure as version 1, which the versions page shows published.
 
 export interface LibrarySpec {
   id: string; key: string; area: number; version: number; review: 'draft' | 'submitted' | 'reviewed' | 'published';
@@ -1314,10 +1316,10 @@ export const WORKSPACE = {
  "name": "YJV22-8.7/15 kV 3×240",
  "series": "人民电缆集团 YJV22-8.7/15 kV 三芯",
  "version": {
-  "number": 1,
-  "review": "draft",
-  "note": "由结构表 人民电缆 8.7-15kV 结构表（公开手册）.xlsx 导入",
-  "created": "2026-11-16T02:28:28.173Z"
+  "number": 3,
+  "review": "reviewed",
+  "note": "减薄后核对不过，恢复 4.5 mm",
+  "created": "2026-11-16T06:05:54.260Z"
  },
  "structure": [
   {
@@ -1439,91 +1441,126 @@ export const WORKSPACE = {
    "title": "芯 1 · 导体 R₂₀",
    "value": 7.539999999999999e-05,
    "unit": "Ω/m",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.1.2",
+   "reason": "设计输入、实测值和声明上限分别保留；标准限值不作为实测电阻。"
   },
   {
    "id": "core/1:dc",
    "title": "芯 1 · 工作温度直流电阻",
    "value": 9.614254e-05,
    "unit": "Ω/m",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.1.2；附录 A",
+   "reason": "需明确工作温度、R20 长度基准及三芯成缆绞入系数。"
   },
   {
    "id": "core/1:ys",
    "title": "芯 1 · 集肤因数 yₛ",
    "value": 0.008858652301969005,
    "unit": "1",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.1.3"
   },
   {
    "id": "core/1:yp",
    "title": "芯 1 · 邻近因数 yₚ",
    "value": 0.013730302624318307,
    "unit": "1",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.1.5.1",
+   "reason": "需明确相间中心距和系数来源；型号不内置敷设间距。"
   },
   {
    "id": "core/1:ac",
    "title": "芯 1 · 交流电阻",
    "value": 9.831429950255876e-05,
    "unit": "Ω/m",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.1.1，式 (7)；附录 A"
   },
   {
    "id": "core/1:capacitance",
    "title": "芯 1 · 每相电容",
    "value": 3.7480971404266427e-10,
    "unit": "F/m",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.2；附录 A",
+   "reason": "需完整圆柱屏蔽构造、介电常数和长度修正；非屏蔽多芯电容不套用此式。"
   },
   {
    "id": "core/1:charging",
    "title": "芯 1 · 每相充电电流 / 长度",
    "value": 0.001024424516393557,
    "unit": "A/m",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.2（由 I=ωCU 导出）",
+   "reason": "使用明确的运行相电压，不把型号 U₀ 当运行电压。"
   },
   {
    "id": "core/1:dielectric",
    "title": "芯 1 · 每相介质损耗",
    "value": 0.035649973170495786,
    "unit": "W/m",
-   "status": "available"
+   "status": "available",
+   "standard": "IEC 60287-1-1:2023",
+   "clause": "5.2"
   },
   {
    "id": "core/1:geometric-inductance",
    "title": "芯 1 · 导体几何电感（不含金属回路）",
    "value": null,
    "unit": "H/m",
-   "status": "uncovered"
+   "status": "uncovered",
+   "standard": "IEC 60287-1-3:2023",
+   "clause": "4.2，式 (9)，表 1（等距平衡回路导出）",
+   "reason": "仅等距单芯圆实心 / 紧压导体的几何项；不包含护套电流或大地返回，不能当作完整型号电感。"
   },
   {
    "id": "core/1:geometric-reactance",
    "title": "芯 1 · 导体几何感抗（不含金属回路）",
    "value": null,
    "unit": "Ω/m",
-   "status": "uncovered"
+   "status": "uncovered",
+   "standard": "IEC 60287-1-3:2023",
+   "clause": "4.2，式 (9)"
   },
   {
    "id": "common:inductance",
    "title": "完整回路正序电感（自感与互感）",
    "value": null,
    "unit": "H/m",
-   "status": "missing"
+   "status": "missing",
+   "standard": "IEC 60287-1-3:2023",
+   "clause": "4.2 式 (9)；4.3 阻抗矩阵",
+   "reason": "缺字段：频率、相间几何或护层连接及来源；填写后重算。"
   },
   {
    "id": "common:positive-sequence",
    "title": "正序阻抗 Z₁",
    "value": null,
    "unit": "Ω/m",
-   "status": "missing"
+   "status": "missing",
+   "standard": "IEC 60287-1-3:2023",
+   "clause": "4.2 式 (9)；4.3 阻抗矩阵",
+   "reason": "缺字段：频率、相间几何或护层连接及来源；填写后重算。"
   },
   {
    "id": "common:zero-sequence",
    "title": "零序阻抗 Z₀",
    "value": null,
    "unit": "Ω/m",
-   "status": "missing"
+   "status": "missing",
+   "standard": "IEC 60287-1-3:2023",
+   "clause": "4.2 式 (9)；4.3 阻抗矩阵",
+   "reason": "缺字段：频率、相间几何或护层连接及来源；填写后重算。"
   }
  ],
  "check": [
@@ -1946,11 +1983,148 @@ export const WORKSPACE = {
    "reason": "t_n 为规定标称厚度；已知的标准标称要求不因较薄设计而降低。"
   }
  ],
+ "short_circuit": [
+  {
+   "id": "core/1:conductor-adiabatic",
+   "title": "芯 1 · 导体绝热允许短路电流",
+   "value": 34340.04159876265,
+   "unit": "A",
+   "status": "available",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "按输入初末温度及已查询材料依据计算单个组件容量；缺依据时重新查询，不补默认常数。"
+  },
+  {
+   "id": "core/1:conductor-factor",
+   "title": "芯 1 · 导体非绝热修正因数",
+   "value": 1.0133930067841814,
+   "unit": "1",
+   "status": "available",
+   "standard": "IEC 60949:1988",
+   "clause": "5.2",
+   "reason": "只覆盖已查询铜 / 铝导体与 XLPE 的表 III 组合。"
+  },
+  {
+   "id": "core/1:conductor-nonadiabatic",
+   "title": "芯 1 · 导体非绝热允许短路电流",
+   "value": 34799.95800886395,
+   "unit": "A",
+   "status": "available",
+   "standard": "IEC 60949:1988",
+   "clause": "3"
+  },
+  {
+   "id": "core/1:metallic_screen-adiabatic",
+   "title": "芯 1 · 金属组件绝热允许电流",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "缺字段：金属屏蔽或护套实际截面及来源。"
+  },
+  {
+   "id": "core/1:metallic_screen-factor",
+   "title": "金属组件非绝热修正因数",
+   "value": null,
+   "unit": "1",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "6.1",
+   "reason": "需金属组件厚度、相邻两侧介质热参数和接触因数的来源。"
+  },
+  {
+   "id": "core/1:metallic_screen-nonadiabatic",
+   "title": "金属组件非绝热允许电流",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "需金属组件厚度、相邻两侧介质热参数和接触因数的来源。"
+  },
+  {
+   "id": "core/1:metallic_screen-fault-check",
+   "title": "芯 1 · 金属组件故障电流校核",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "需工程输入：容量口径、此组件故障电流、保护清除时间、初温与允许终温；不将导体温限替代金属部件温限。"
+  },
+  {
+   "id": "common:armour-adiabatic",
+   "title": "金属组件绝热允许电流",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "缺字段：金属材料标准类别；请在材料属性中明确铜、铝或铅。"
+  },
+  {
+   "id": "common:armour-factor",
+   "title": "金属组件非绝热修正因数",
+   "value": null,
+   "unit": "1",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "6.1",
+   "reason": "需金属组件厚度、相邻两侧介质热参数和接触因数的来源。"
+  },
+  {
+   "id": "common:armour-nonadiabatic",
+   "title": "金属组件非绝热允许电流",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "需金属组件厚度、相邻两侧介质热参数和接触因数的来源。"
+  },
+  {
+   "id": "common:armour-fault-check",
+   "title": "金属组件故障电流校核",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988",
+   "clause": "3",
+   "reason": "需工程输入：容量口径、此组件故障电流、保护清除时间、初温与允许终温；不将导体温限替代金属部件温限。"
+  },
+  {
+   "id": "common:parallel-fault-sharing",
+   "title": "金属回路故障分流校核",
+   "value": null,
+   "unit": "A",
+   "status": "missing",
+   "standard": "IEC 60949:1988/AMD1:2008",
+   "clause": "4 amendment",
+   "reason": "需工程输入：接地连接、故障回流路径、故障电流，以及每个并联部件的电阻、初温、终温和来源；不默认各组件同温。"
+  }
+ ],
+ "short_circuit_conditions": {
+  "values": {
+   "duration_s": 1,
+   "initial_temperature_k": 363.15,
+   "final_temperature_k": 523.15
+  },
+  "sources": {
+   "duration_s": "短路持续时间 1 s（规格书口径）",
+   "initial_temperature_k": "短路前导体处于最高连续工作温度",
+   "final_temperature_k": "XLPE 绝缘导体短路允许最高温度 250 °C（GB/T 12706.2—2020）"
+  }
+ },
  "check_method": {
   "plugin_id": "cablesim.standard-check",
   "plugin_version": "1.6.1"
  },
  "electrical_method": {
+  "plugin_id": "cablesim.type-electrical",
+  "plugin_version": "1.1.1"
+ },
+ "short_circuit_method": {
   "plugin_id": "cablesim.type-electrical",
   "plugin_version": "1.1.1"
  }

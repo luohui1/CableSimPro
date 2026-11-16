@@ -44,13 +44,32 @@ export function SectionThumb({ width = 176, height = 132 }: { width?: number; he
   </svg>;
 }
 
-/** The cable alone, filling its box: the structure view of a type. */
-export function CableSection({ size = 240 }: { size?: number }) {
+/** The cable alone, filling its box: the structure view of a type. `highlight` outlines every ring of one layer (by role). */
+export function CableSection({ size = 240, highlight }: { size?: number; highlight?: string }) {
   const scale = (size * 0.46) / scene.shape.radius;
+  const rings = highlight ? scene.shape.rings.filter(ring => ring.role === highlight) : [];
   return <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full" role="img" aria-label="YJV22-8.7/15 kV 3×240 结构断面">
     <CableGlyph shape={scene.shape} x={size / 2} y={size / 2} scale={scale} />
+    {rings.map(ring => {
+      const cx = size / 2 + ring.cx * scale, cy = size / 2 - ring.cz * scale, outer = ring.outer * scale, inner = ring.inner * scale;
+      // The ring itself filled in the selection colour, its two edges drawn: it reads apart from the copper screen tape.
+      const circle = (r: number) => `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0 Z`;
+      return <g key={ring.id}>
+        <path d={circle(outer) + (inner > 0 ? ' ' + circle(inner) : '')} fill="var(--copper)" fillOpacity={0.45} fillRule="evenodd" />
+        <path d={circle(outer) + (inner > 0 ? ' ' + circle(inner) : '')} fill="none" stroke="var(--copper)" strokeWidth={2} />
+      </g>;
+    })}
   </svg>;
 }
+
+/** The rings of one layer in the drawing: how many there are, for the label beside the selection. */
+export const ringsOf = (role: string) => scene.shape.rings.filter(ring => ring.role === role).length;
+/** The drawing's rings by place: how many cores, how many rings each, how many shared. */
+export const RING_COUNTS = (() => {
+  const cores = Map.groupBy(scene.shape.rings.filter(ring => ring.core), ring => ring.core as string);
+  const perCore = [...cores.values()][0]?.length ?? 0;
+  return { cores: cores.size, perCore, common: scene.shape.rings.filter(ring => !ring.core).length, total: scene.shape.rings.length };
+})();
 
 /** The laying from the ground down: the soil coloured by its temperature, isotherms every 5 K, the depth, the cable. */
 export function SectionField() {

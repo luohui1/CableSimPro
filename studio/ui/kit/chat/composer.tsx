@@ -1,6 +1,6 @@
 // The composer: one rounded field that floats above the conversation (the only shadow on the page), attachments above
-// the text, attach on the left, send or stop on the right. Send is ink, not copper: the copper button on a screen belongs
-// to the decision that waits there (接受), not to typing. Every part takes any props, so assistant-ui's ComposerPrimitive
+// the text, attach on the left, send or stop on the right. Send is the screen's copper button once there is something to
+// send, and grey while it cannot send. Every part takes any props, so assistant-ui's ComposerPrimitive
 // can render them (render={<ComposerSend />}); `composerInputClass` styles ComposerPrimitive.Input directly.
 import type { ComponentProps, ReactNode } from 'react';
 import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentMedia, AttachmentTitle } from '@/components/ui/attachment';
@@ -32,7 +32,7 @@ export function ComposerAttach(props: ComponentProps<typeof Button>) {
 }
 
 export function ComposerSend(props: ComponentProps<typeof Button>) {
-  return <Button variant="ink" size="icon-sm" aria-label="发送" {...props}><Icon name="action/arrow-up" /></Button>;
+  return <Button variant={props.disabled ? 'secondary' : 'default'} size="icon-sm" aria-label="发送" {...props}><Icon name="action/arrow-up" /></Button>;
 }
 
 export function ComposerStop(props: ComponentProps<typeof Button>) {

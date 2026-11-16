@@ -28,6 +28,11 @@ export function CanvasFrame({ tools, view, legend, status, children, className }
   </div>;
 }
 
+/** A note floating on the drawing, in the legend's place: what is selected on it and its size. */
+export function CanvasNote({ children }: { children: ReactNode }) {
+  return <div className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink shadow-menu">{children}</div>;
+}
+
 /** A floating group of tools (Base UI Toolbar: one tab stop, arrow keys between tools). */
 export function CanvasToolbar({ label, children }: { label: string; children: ReactNode }) {
   return <Toolbar.Root aria-label={label} className="flex items-center gap-1 rounded-lg border border-line bg-surface p-1 shadow-menu">{children}</Toolbar.Root>;
