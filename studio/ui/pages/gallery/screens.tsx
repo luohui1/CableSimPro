@@ -44,7 +44,7 @@ function AgentEmptyScreen() {
     <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto py-12">
       <AgentEmpty
         title="今天要处理哪款电缆？"
-        lead="导入结构表、按国标核对、算载流量、出规格书和计算书，交给我做，改动由你审。"
+        lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。"
         composer={<Composer />}
         groups={[
           { label: '电缆型号', icon: 'nav/cable-type', tasks: STARTERS.types.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },

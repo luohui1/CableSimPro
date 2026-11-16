@@ -40,7 +40,7 @@ const LINES = [30, 35];
 
 /** The laying from the ground down: the soil coloured by its temperature, isotherms every 5 K, the depth, the cable. */
 export function SectionField() {
-  useTheme(state => state.theme);
+  const theme = useTheme(state => state.theme);
   const host = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -52,11 +52,11 @@ export function SectionField() {
   }, []);
   const { width, height } = size;
   return <div ref={host} className="absolute inset-0">
-    {width > 0 && <FieldDrawing width={width} height={height} />}
+    {width > 0 && <FieldDrawing width={width} height={height} dark={theme === 'dark'} />}
   </div>;
 }
 
-function FieldDrawing({ width, height }: { width: number; height: number }) {
+function FieldDrawing({ width, height, dark }: { width: number; height: number; dark: boolean }) {
   const ramp = readRamp();
   const cable = scene.cables[0];
   // The overview, one unit per pixel: the ground below the floating tools, the cable at its depth, the field around it.
@@ -77,8 +77,11 @@ function FieldDrawing({ width, height }: { width: number; height: number }) {
   };
   return <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block" role="img"
     aria-label="敷设断面：三芯电缆直埋 1.2 m，土壤温度场与等温线">
-    <rect x={0} y={ground} width={width} height={height - ground} fill={ramp.field(0)} />
-    {LEVELS.map(level => <polygon key={level} points={outline(level)} fill={ramp.field(rampPosition(level, AMBIENT, LIMIT))} />)}
+    {/* The ramp tokens are the same in both themes; on the dark ground the soil is drawn at a third of its strength. */}
+    <g opacity={dark ? 0.3 : 1}>
+      <rect x={0} y={ground} width={width} height={height - ground} fill={ramp.field(0)} />
+      {LEVELS.map(level => <polygon key={level} points={outline(level)} fill={ramp.field(rampPosition(level, AMBIENT, LIMIT))} />)}
+    </g>
     {LINES.map(level => <polygon key={`line-${level}`} points={outline(level)} fill="none" stroke="var(--text-secondary)" strokeWidth={0.75} strokeOpacity={0.6} />)}
     {LINES.map(label)}
     <line x1={0} x2={width} y1={ground} y2={ground} stroke="var(--text)" strokeWidth={1.25} />

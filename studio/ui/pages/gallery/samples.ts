@@ -125,3 +125,30 @@ export const REFUSED_IMPORT = {
   reason: '缺绝缘屏蔽厚度：结构表和系列声明里都没有。11 行都没有导入。',
   missing: [{ label: '绝缘屏蔽厚度', detail: '在系列声明里补上，或在结构表里加一列' }],
 };
+
+// ---- Step states the conversations above did not reach ----
+
+/** Conversation 01a1e240 while it waited for the engineer to accept the new project (its fourth step). */
+export const STEPS_WAITING: Step[] = [
+  ...RATING_STEPS.slice(0, 3),
+  { id: 's4', label: '新建工程', target: PROJECT, state: 'waiting' },
+];
+/** The agent asked to read the repository's own conventions and was refused (tests/agent.test.ts, 'only skill files'). */
+export const STEPS_RECOVERED: Step[] = [
+  { id: 'r1', label: '读取技能', target: '技能「载流量校核与选型」', state: 'done', seconds: 0.001 },
+  { id: 'r2', label: '读取技能', state: 'failed', reason: '只能读取技能文件。' },
+  { id: 'r3', label: '读取技能', target: '技能「型号改版」', state: 'done', seconds: 0.001 },
+];
+/** A run the method refuses ends the task there: the refusal of 3×50 (see REFUSED_RATING) as the last step. */
+export const STEPS_FAILED: Step[] = [
+  { id: 'f1', label: '读取技能', target: '技能「载流量校核与选型」', state: 'done', seconds: 0.001 },
+  { id: 'f2', label: '读取规格', target: 'YJV22-8.7/15 kV 3×50', state: 'done', seconds: 0.006 },
+  { id: 'f3', label: '运行校核', target: 'YJV22-8.7/15 kV 3×50 · 三芯直埋', state: 'failed', reason: '填充与内衬厚度/芯外径须在(0,0.15]，图6范围外改用数值传热方法。' },
+];
+/** Conversation 01a1e248 stopped by the engineer while the solid was being built. */
+export const STEPS_STOPPED: Step[] = [
+  ...MODEL_STEPS_RUNNING.slice(0, 3),
+  { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'interrupted' },
+];
+/** What the CAD plugin answers for a construction it does not cover (studio/skills/cable-3d-model/SKILL.md). */
+export const MODEL_REFUSAL = '缺单丝参数：插件没有覆盖这种构造，补上构造参数后再建模。';

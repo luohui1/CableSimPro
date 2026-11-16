@@ -59,7 +59,9 @@ function StepLine({ step }: { step: Step }) {
 /** One line for the whole task, from the steps' states: working, waiting for a person, failed, or done. */
 function summary(steps: Step[]): { icon: ReactNode; title: ReactNode; detail: string; status: (typeof LINE)[StepState]; reason?: string } {
   const at = (step: Step) => `第 ${steps.indexOf(step) + 1} 步`;
-  const failed = steps.find(step => step.state === 'failed' || step.state === 'rejected');
+  // A step that failed ends the task only when nothing was done after it; otherwise the task went on and the line says so.
+  const last = steps[steps.length - 1];
+  const failed = last && (last.state === 'failed' || last.state === 'rejected') ? last : undefined;
   if (failed) return { icon: ICON[failed.state](), title: `${failed.label}${failed.state === 'rejected' ? '被拒绝' : '没有完成'}`, detail: at(failed), status: 'error', reason: failed.reason };
   const waiting = steps.find(step => step.state === 'waiting');
   if (waiting) return { icon: ICON.waiting(), title: `等你审阅：${waiting.label}`, detail: at(waiting), status: 'waiting' };
@@ -68,7 +70,9 @@ function summary(steps: Step[]): { icon: ReactNode; title: ReactNode; detail: st
   const stopped = steps.find(step => step.state === 'interrupted');
   if (stopped) return { icon: ICON.interrupted(), title: '已中止', detail: at(stopped), status: 'pending' };
   const total = steps.reduce((sum, step) => sum + (step.seconds ?? 0), 0);
-  return { icon: ICON.done(), title: `完成 ${steps.length} 步`, detail: duration(total), status: undefined };
+  const missed = steps.filter(step => step.state === 'failed' || step.state === 'rejected').length;
+  const done = steps.length - missed;
+  return { icon: ICON.done(), title: missed ? `完成 ${done} 步，${missed} 步没有完成` : `完成 ${done} 步`, detail: duration(total), status: undefined };
 }
 
 export function StepTrace({ steps, defaultOpen = false, className }: { steps: Step[]; defaultOpen?: boolean; className?: string }) {

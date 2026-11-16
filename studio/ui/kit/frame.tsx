@@ -1,5 +1,6 @@
 // The application frame, the same in both modes: a top bar and a side column on the grey ground, and the screen itself on
 // one white sheet inset beside them. The mode switch stays in the same place on every screen.
+import { SunIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -64,7 +65,7 @@ export function ThemeToggle({ theme, onToggle, ...props }: { theme: 'light' | 'd
   const label = theme === 'light' ? '换成深色' : '换成浅色';
   return <Tooltip>
     <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} onClick={onToggle} {...props} />}>
-      <Icon name={theme === 'light' ? 'nav/theme' : 'status/current'} />
+      {theme === 'light' ? <Icon name="nav/theme" /> : <SunIcon strokeWidth={1.5} />}
     </TooltipTrigger>
     <TooltipContent side="bottom">{label}</TooltipContent>
   </Tooltip>;

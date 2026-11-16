@@ -277,12 +277,21 @@
 @utility grid-cols-label {
   grid-template-columns: 7rem minmax(0, 1fr);
 }
-/* Item, before, arrow, after. */
+/* Item, before, arrow, after: the values sit next to their name, not at the far edge. */
 @utility grid-cols-change {
-  grid-template-columns: minmax(0, 1fr) minmax(5rem, auto) 1rem minmax(5rem, auto);
+  grid-template-columns: 8rem max-content 1rem max-content;
 }
 @utility grid-cols-gallery {
-  grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-columns: 13rem minmax(0, 1fr);
+}
+/* The gallery shows each screen at 1366 × 768, scaled to half. */
+@utility screen-frame {
+  width: 1366px;
+  height: 768px;
+}
+@utility screen-half {
+  width: 683px;
+  height: 384px;
 }
 
 /* ---- Base ---- */

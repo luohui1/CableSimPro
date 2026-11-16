@@ -199,7 +199,7 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
         </>
         : <>
           <Input value={note ?? ''} onChange={event => onNoteChange?.(event.target.value)} placeholder="拒绝的原因，Agent 会照此调整（可不写）"
-            aria-label="拒绝的原因" className="h-9 max-w-sm flex-1" autoFocus />
+            aria-label="拒绝的原因" className="h-9 max-w-sm flex-1" />
           <Button variant="outline" onClick={onConfirmReject} disabled={busy}>确认拒绝</Button>
           <Button variant="ghost" onClick={onCancelReject}>取消</Button>
         </>}
@@ -212,9 +212,9 @@ function ChangeList({ changes }: { changes: Change[] }) {
   return <dl className={cn('m-0 grid items-baseline gap-x-3 gap-y-2', edits ? 'grid-cols-change' : 'grid-cols-label')}>
     {changes.map(change => <div key={change.label} className="contents">
       <dt className="min-w-0 truncate text-sm text-ink-2">{change.label}</dt>
-      {edits && <dd className="m-0 text-right text-sm text-ink-2 tabular-nums line-through decoration-ink-3">{change.before ?? '—'}</dd>}
-      {edits && <dd className="m-0 text-ink-3" aria-hidden="true"><Icon name="action/arrow-right" /></dd>}
-      <dd className={cn('m-0 min-w-0 text-sm font-medium text-ink tabular-nums', edits && 'text-right')}>{change.after}</dd>
+      {edits && <dd className="m-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3">{change.before ?? '—'}</dd>}
+      {edits && <dd className="m-0 flex items-center self-center text-ink-3" aria-hidden="true"><Icon name="action/arrow-right" /></dd>}
+      <dd className="m-0 min-w-0 text-sm font-medium text-ink tabular-nums">{change.after}</dd>
     </div>)}
   </dl>;
 }

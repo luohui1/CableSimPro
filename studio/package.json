@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/ui-lint.ts && tsc --noEmit && vite build",
+    "lint:ui": "node scripts/ui-lint.ts",
     "start": "node host/server.ts",
     "test": "node --test --test-concurrency=1 \"tests/*.test.ts\"",
     "walk": "node tests/walk.ts"

@@ -18,7 +18,7 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
     <div className="flex flex-col items-center gap-3 text-center">
       <ProductMark className="size-10" />
       <h1 className="m-0 text-display text-ink">{title}</h1>
-      <p className="m-0 max-w-prose text-prose text-ink-2">{lead}</p>
+      <p className="m-0 text-prose text-balance text-ink-2">{lead}</p>
     </div>
     <div className="flex flex-col gap-3">
       {notice}

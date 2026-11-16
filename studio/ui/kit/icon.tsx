@@ -1,5 +1,5 @@
 // The repository's own icons (design/icons/<group>/<name>.svg): a 24 px grid, 1.5 px stroke, drawn in the text colour.
-// Every icon on a kit part comes from here; lucide-react is used only inside components/ui.
+// Every icon on a kit part comes from here; lucide-react only fills a gap the set has (the sun of the theme switch).
 import type { SVGProps } from 'react';
 import { cn } from '@/lib/utils';
 
