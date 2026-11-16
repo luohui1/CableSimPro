@@ -55,7 +55,7 @@ export function FormRow({ label, hint, changed, htmlFor, wide, children, classNa
   className?: string;
 }) {
   return <Field orientation="horizontal" className={cn('grid items-start gap-x-4 gap-y-1', wide ? 'grid-cols-label-wide' : 'grid-cols-label', className)}>
-    <FieldLabel htmlFor={htmlFor} className="min-h-8 min-w-0 items-center font-normal text-ink-2">
+    <FieldLabel htmlFor={htmlFor} className="min-h-8 w-full min-w-0 items-center font-normal text-ink-2">
       <span className="truncate">{label}</span>
       {changed && <Dot tone="attention" />}
     </FieldLabel>

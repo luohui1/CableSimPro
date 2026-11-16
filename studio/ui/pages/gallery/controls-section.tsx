@@ -14,7 +14,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { NumberField, NumberFieldAddon, NumberFieldDecrement, NumberFieldGroup, NumberFieldIncrement, NumberFieldInput } from '@/components/ui/number-field';
 import { Icon } from '@/kit/icon';
-import { PROJECT_NAMES, PROPOSAL, RUN_INPUTS } from './host-records';
+import { PROJECT_LIST, PROPOSAL, RUN_INPUTS } from './host-records';
 import { LIBRARY } from './library-data';
 import { EXPORT_ANSWER, HOST_DOWN, REFUSED_RATING, SHEET } from './samples';
 import { Specimen, State } from './sections';
@@ -34,7 +34,8 @@ export function SourcedControlsSection() {
             {SPECS.slice(7, 10).map(name => <CommandItem key={name}><Icon name="nav/cable-type" />{name}</CommandItem>)}
           </CommandGroup>
           <CommandGroup heading="工程">
-            {PROJECT_NAMES.map(name => <CommandItem key={name}><Icon name="object/study" />{name}</CommandItem>)}
+            {PROJECT_LIST.map(project => <CommandItem key={project.id} value={project.id} keywords={[project.name]}><Icon name="object/study" />{project.name}
+              <CommandShortcut>{project.runs.find(run => run.kind === 'rating')?.title.split(' · ').at(-1)}</CommandShortcut></CommandItem>)}
           </CommandGroup>
           <CommandGroup heading="标准">
             <CommandItem><Icon name="source/from-standard" />{INSULATION.basis}<CommandShortcut>Enter</CommandShortcut></CommandItem>

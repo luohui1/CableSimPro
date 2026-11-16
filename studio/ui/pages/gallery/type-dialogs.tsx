@@ -23,7 +23,7 @@ const TICKED = LIBRARY[0].specs.filter(spec => ['3×185', '3×240', '3×300'].in
 
 export function LibraryBatchScreenBody() {
   const [ticked, setTicked] = useState(TICKED);
-  return <LibraryScreenBody ticked={ticked} onTick={setTicked} toolbar={<SelectionBar count={ticked.length} unit="个规格" onClear={() => setTicked([])}>
+  return <LibraryScreenBody ticked={ticked} onTick={setTicked} toolbar={ticked.length === 0 ? undefined : <SelectionBar count={ticked.length} unit="个规格" onClear={() => setTicked([])}>
     <Button variant="outline" size="sm"><Icon name="run/run" data-icon="inline-start" />计算与核对</Button>
     <Button variant="outline" size="sm"><Icon name="agent/approve" data-icon="inline-start" />提交审核</Button>
     <Button variant="outline" size="sm"><Icon name="action/check" data-icon="inline-start" />审核通过</Button>
@@ -62,7 +62,7 @@ function EditDialog() {
   </Dialog>;
 }
 
-export const SeriesEditScreenBody = () => <><SeriesScreenBody /><EditDialog /></>;
+export const SeriesEditScreenBody = () => <><SeriesScreenBody dialog /><EditDialog /></>;
 
 // ---- 审核 ----
 
@@ -97,7 +97,7 @@ function ReviewDialog() {
   </Dialog>;
 }
 
-export const SeriesReviewScreenBody = () => <><SeriesScreenBody review="submitted" /><ReviewDialog /></>;
+export const SeriesReviewScreenBody = () => <><SeriesScreenBody review="submitted" dialog /><ReviewDialog /></>;
 
 // ---- 规格书 ----
 
@@ -123,4 +123,4 @@ function SheetDialog() {
   </Dialog>;
 }
 
-export const SeriesSheetScreenBody = () => <><SeriesScreenBody /><SheetDialog /></>;
+export const SeriesSheetScreenBody = () => <><SeriesScreenBody dialog /><SheetDialog /></>;

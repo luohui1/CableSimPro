@@ -79,7 +79,7 @@ export function TaskStarter({ icon, title, result, className, ...props }: { icon
 
 /** A notice in the conversation column: no model configured, a run that cannot start. */
 export function ChatNotice({ tone = 'attention', children }: { tone?: 'attention' | 'error'; children: ReactNode }) {
-  return <Alert variant={tone === 'error' ? 'destructive' : 'attention'} className={cn('px-3 py-2', tone === 'error' && 'border-error bg-error-fill')}>
+  return <Alert variant={tone === 'error' ? 'error' : 'attention'} className={cn('px-3 py-2', tone === 'error' && 'border-error bg-error-fill')}>
     <Icon name={tone === 'error' ? 'status/error' : 'status/warning'} />
     <AlertDescription className="text-ink">{children}</AlertDescription>
   </Alert>;

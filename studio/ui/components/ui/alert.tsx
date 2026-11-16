@@ -10,6 +10,7 @@ const alertVariants = cva(
         default: "bg-surface text-ink",
         note: "border-line bg-subtle text-ink *:[svg]:text-ink-2",
         attention: "border-attention bg-attention-fill text-ink *:[svg]:text-attention-ink",
+        error: "border-line bg-surface text-ink *:[svg]:text-error",
         destructive:
           "bg-surface text-error *:data-[slot=alert-description]:text-error *:[svg]:text-current",
       },

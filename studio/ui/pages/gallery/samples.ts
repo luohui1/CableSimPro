@@ -198,10 +198,12 @@ export const STREAMING_LINE = '允许电流 458.7 A；保存负荷 300 A 时导�
 export const MODEL_REFUSAL = '圆绞合支持 1+6+12…完整同心绞层，请核对根数';
 
 /**
- * The GB 50217 correction of the plugin's own hand check (cablesim.gb50217-correction, as studio core tests/test_gb50217.py
- * runs it): soil at 30 °C against a 25 °C baseline (D.0.1, page 72) and three cables 100 mm apart (D.0.4, page 73) on a
- * synthetic 400 A baseline, 400 × 0.96 × 0.85 = 326.4 A. The condition texts, clauses and scope are the method's strings
- * (correction.py). No host here holds a correction record yet; the baseline says in its own words that it is not a rating.
+ * The GB 50217 correction of the plugin's own hand check, as studio-build's branch (claude/cable-studio-two-modes-45a9bc)
+ * runs it in studio/core/tests/test_gb50217.py: soil at 30 °C against a 25 °C baseline (D.0.1, page 72) and three cables
+ * 100 mm apart (D.0.4, page 73) on the test's synthetic 400 A baseline, 400 × 0.96 × 0.85 = 326.4 A. The baseline's words are
+ * that test's BASELINE source; the condition texts, the clauses and the scope are the method's strings
+ * (plugins/cablesim.gb50217-correction correction.py), and "工程师" is its headline's "基准出处已由工程师核对". No host here
+ * holds a correction record yet.
  */
 export const CORRECTION_EXAMPLE = {
   corrected: '326.4',

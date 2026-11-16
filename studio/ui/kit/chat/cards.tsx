@@ -81,7 +81,7 @@ export interface RatingCardProps {
 export function RatingCard({ title, tier, current, basis, limiting, figure, actions }: RatingCardProps) {
   return <CardFrame icon="calc/ampacity" title={title} aside={<TierMark tier={tier} />} actions={actions} data-card="rating">
     <div className="flex items-stretch gap-6">
-      {figure && <div className="w-44 shrink-0 self-start overflow-hidden rounded-lg border border-line">{figure}</div>}
+      {figure && <div className="flex w-44 shrink-0 justify-center self-start overflow-hidden rounded-lg border border-line">{figure}</div>}
       <div className="grid min-w-0 flex-1 grid-cols-2 items-start gap-6 py-1">
         <Metric label="允许电流" value={current} unit="A" detail={basis} />
         <div className="flex min-w-0 flex-col gap-3">
@@ -305,7 +305,7 @@ export function RefusalCard({ kind, title, reason, missing, actions }: {
 }) {
   return <CardFrame icon={kind === 'refused' ? 'status/warning' : 'status/error'} title={title} actions={actions} data-card="refusal" data-kind={kind}
     aside={<Badge variant={kind === 'refused' ? 'attention' : 'error'}>{kind === 'refused' ? '没有算' : '出错'}</Badge>}>
-    <Alert variant={kind === 'error' ? 'destructive' : 'default'}>
+    <Alert variant={kind === 'error' ? 'error' : 'default'}>
       <Icon name={kind === 'refused' ? 'status/warning' : 'status/error'} />
       <AlertTitle className="font-normal">{reason}</AlertTitle>
       {missing && missing.length > 0 && <AlertDescription>
@@ -385,7 +385,7 @@ export function StandardProposalCard({ title, method, cable, dimensions, missing
     <div className="flex flex-col gap-4">
       <p className="m-0 text-sm text-ink">{cable}</p>
       <PropertyList rows={rows} />
-      {missing.length > 0 && <Alert variant="attention">
+      {missing.length > 0 && <Alert role="note" variant="attention">
         <Icon name="status/warning" />
         <AlertTitle>还缺 {missing.length} 项，要工程师给</AlertTitle>
         <AlertDescription className="text-ink">
@@ -428,7 +428,7 @@ export function CorrectionCard({ title, tier, corrected, product, coefficients, 
         { key: 'factor', header: '值', numeric: true, width: 'w-20', cell: row => <span className="font-medium">{row.factor}</span> },
         { key: 'place', header: '依据', width: 'w-56', cell: row => <SourceTag kind="standard" place={row.place} /> },
       ]} />
-      <Alert variant="note">
+      <Alert role="note" variant="note">
         <Icon name="source/locked" />
         <AlertTitle>基准 {baseline.current} A，由{baseline.confirmedBy}核对</AlertTitle>
         <AlertDescription className="text-ink">{baseline.source}</AlertDescription>

@@ -107,7 +107,7 @@ export function SpecSwitch({ value, specs, onValueChange }: {
     <Button variant="ghost" size="icon-sm" aria-label="上一个规格" disabled={at <= 0} onClick={() => onValueChange?.(specs[at - 1].key)}><Icon name="action/chevron-left" /></Button>
     <Combobox items={specs.map(spec => spec.key)} value={value} onValueChange={next => next && onValueChange?.(next as string)}>
       <ComboboxInput aria-label="规格" className="w-32" />
-      <ComboboxContent>
+      <ComboboxContent className="w-auto">
         <ComboboxEmpty>这个系列没有这个规格</ComboboxEmpty>
         <ComboboxList>{(key: string) => <ComboboxItem key={key} value={key}>
           <span className="flex min-w-36 items-center justify-between gap-3">{key}<ReviewMark state={review[key]} quiet /></span>

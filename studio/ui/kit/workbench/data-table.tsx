@@ -62,6 +62,8 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
     return <TableRow key={key} data-state={key === selected ? 'selected' : undefined} aria-selected={onSelect ? key === selected : undefined}
       tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined} onDoubleClick={onOpen ? () => onOpen(row) : undefined}
       onKeyDown={onSelect ? event => {
+        // Keys pressed on a control in the row (its tick box) belong to that control.
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' && onOpen && key === selected) { event.preventDefault(); onOpen(row); return; }
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row); }
       } : undefined}
@@ -78,7 +80,8 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
   });
   const ticking = Boolean(onCheckedChange);
   const ticked = new Set(checked ?? []);
-  const keys = (groups ? groups.flatMap(group => group.rows) : rows ?? []).map(rowKey);
+  // The box for all ticks the rows in view (open groups); ticks outside them stay as they are.
+  const keys = (groups ? groups.filter(group => group.open).flatMap(group => group.rows) : rows ?? []).map(rowKey);
   const all = keys.length > 0 && keys.every(key => ticked.has(key));
   const some = !all && keys.some(key => ticked.has(key));
   const count = groups ? groups.reduce((sum, group) => sum + group.rows.length, 0) : rows?.length ?? 0;
@@ -89,7 +92,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {ticking && <TableHead className="sticky top-0 z-1 w-10">
-            <Checkbox aria-label="选中全部" checked={all} indeterminate={some} onCheckedChange={on => onCheckedChange?.(on ? keys : [])} />
+            <Checkbox aria-label="选中全部" checked={all} indeterminate={some} onCheckedChange={on => onCheckedChange?.(on ? [...new Set([...ticked, ...keys])] : [...ticked].filter(key => !keys.includes(key)))} />
           </TableHead>}
           {columns.map(column => <TableHead key={column.key} numeric={column.numeric} className={cn('sticky top-0 z-1', column.width)}
             aria-sort={sort?.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined}>

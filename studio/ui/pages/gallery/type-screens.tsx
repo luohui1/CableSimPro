@@ -22,7 +22,7 @@ import { ReviewActions, ReviewTrack } from '@/kit/workbench/review';
 import { compact, fixed } from '@shared/format';
 import { CableSection } from './figures';
 import { WORKSPACE } from './library-data';
-import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS, methodLabel, methodText } from './host-records';
+import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS, methodLabel, methodText, methodsNamed } from './host-records';
 import { PLACED, SeriesShell, residualText } from './workbench-screens';
 
 /** A host time as the screen writes times: date and minute, in the reader's zone. */
@@ -106,7 +106,7 @@ function ImportContent({ at }: { at: ImportStep }) {
       </MetricGroup>
       <DataTable framed rows={IMPORT.rows} rowKey={row => row.key} columns={PREVIEW_COLUMNS} />
       {IMPORT.skipped.map(row => <FormNote key={row.row} title={`第 ${row.row} 行不导入`}>{row.text}</FormNote>)}
-      <FormNote title="尺寸怎么来的">{WORKSPACE.derivation}{PLACED_IN_PREVIEW && ` 表列外径比各层合计多出的部分计入${PLACED_IN_PREVIEW}。`}</FormNote>
+      <FormNote title="尺寸怎么来的">{methodsNamed(WORKSPACE.derivation)}{PLACED_IN_PREVIEW && ` 表列外径比各层合计多出的部分计入${PLACED_IN_PREVIEW}。`}</FormNote>
     </FormSection>
   </div>;
   return <div className="flex max-w-3xl flex-col gap-10">
@@ -238,9 +238,9 @@ const PROPOSAL_COLUMNS: Column<Dimension>[] = [
 
 // The words of the proposal's inputs (structure.propose's own values).
 const CORE_OPTIONS = [{ value: '1', label: '单芯' }, { value: '3', label: '三芯' }];
-const CORE_WORD: Record<number, string> = { 1: '单芯', 3: '三芯' };
-const CONDUCTOR_WORD: Record<string, string> = { copper: '铜', aluminium: '铝' };
-const ARMOUR_WORD: Record<string, string> = { none: '无铠装', steel_tape: '双钢带铠装' };
+export const CORE_WORD: Record<number, string> = { 1: '单芯', 3: '三芯' };
+export const CONDUCTOR_WORD: Record<string, string> = { copper: '铜', aluminium: '铝' };
+export const ARMOUR_WORD: Record<string, string> = { none: '无铠装', steel_tape: '双钢带铠装' };
 const STAGES = PROPOSAL.calculation.map((stage, index) => ({ ...stage, step: index + 1 }));
 const STAGE_COLUMNS: Column<(typeof STAGES)[number]>[] = [
   { key: 'stage', header: '阶段', width: 'w-56', cell: stage => `${stage.step}. ${stage.stage}` },

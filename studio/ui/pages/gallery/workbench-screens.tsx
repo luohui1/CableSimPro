@@ -17,10 +17,10 @@ import { ChoiceSelect } from '@/kit/workbench/form';
 import { VersionSelect, SpecSwitch } from '@/kit/workbench/review';
 import { CableSection, RING_COUNTS, ringsOf } from './figures';
 import { LIBRARY, WORKSPACE, type LibrarySeries, type LibrarySpec } from './library-data';
-import { PROJECT_NAMES, RATING_TABLE, VERSIONS, SERIES_SPECS } from './host-records';
+import { PROJECT_LIST, RATING_TABLE, VERSIONS, SERIES_SPECS } from './host-records';
 import { compact, fixed } from '@shared/format';
 
-export const PROJECTS = PROJECT_NAMES;
+export const PROJECTS = PROJECT_LIST.map(project => ({ id: project.id, name: project.name }));
 
 /** Where the host put the outer diameter's residual (closure.placed_in): the layer that takes it. */
 export const PLACED: Record<string, string> = { filler: '填充', binder: '包带' };
@@ -38,7 +38,7 @@ export function WorkbenchSide({ at }: { at: 'library' | 'series' | 'projects' | 
     </NavSection>
     <NavSection icon="calc/ampacity" label="载流量计算">
       <NavItem icon="object/study" label="全部工程" count={PROJECTS.length} active={at === 'projects'} />
-      {PROJECTS.map((name, index) => <NavItem key={name} label={name} nested active={at === 'project' && index === 0} />)}
+      {PROJECTS.map((project, index) => <NavItem key={project.id} label={project.name} nested active={at === 'project' && index === 0} />)}
     </NavSection>
   </WorkbenchNav>;
 }
@@ -235,11 +235,11 @@ export function SeriesShell({ page, version, review, primary, actions, children 
   </>;
 }
 
-export function SeriesScreenBody({ review }: { review?: Review } = {}) {
+export function SeriesScreenBody({ review, dialog }: { review?: Review; dialog?: boolean } = {}) {
   const selectedLayer = WORKSPACE.structure.find(row => row.key === SELECTED_LAYER);
   return <SeriesShell page="structure" version={WORKSPACE.version.number} review={review}
     actions={<><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button><Button variant="outline"><Icon name="run/run" data-icon="inline-start" />计算</Button></>}
-    primary={<Button><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>}>
+    primary={<Button variant={dialog ? 'outline' : 'default'}><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>}>
     <Split panes={[
       { id: 'section', size: 34, min: 24, children: <Panel title="结构断面" tools={<ToggleGroup defaultValue={['section']} size="sm" aria-label="视图"><ToggleGroupItem value="section">断面</ToggleGroupItem><ToggleGroupItem value="solid">三维</ToggleGroupItem></ToggleGroup>}
           bodyClassName="flex">

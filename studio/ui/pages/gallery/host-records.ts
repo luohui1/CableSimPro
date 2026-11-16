@@ -1302,23 +1302,26 @@ export const RUN_METHOD = {
  "card": "IEC 60287 稳态载流量"
 };
 
-// The projects as the 8210 host lists them (/api/projects), by name: the navigation of the workbench screens.
-export const PROJECT_NAMES = [
- "YJV22-8.7/15 3×240 直埋载流量校核",
- "YJV22-8.7/15 3×240 直埋载流量示例"
-];
-
 // The methods by name, as their plugins' manifests give them (plugins/<id>/plugin.json: name, and capabilities[].title for
 // one capability). A screen writes a method as its name and version; the plugin id goes only into the sources page of a
 // report or a datasheet.
 export const METHOD_NAMES: Record<string, string> = {
  "cablesim.iec60287": "IEC 60287 载流量",
+ "cablesim.iec60287/model-completion": "三芯工程参数与标准推导",
  "cablesim.standard-check": "产品标准尺寸核对",
  "cablesim.standard-check/structure-proposal": "XLPE 标准结构提案",
  "cablesim.type-electrical": "型号电气参数与短路容量"
 };
 /** A method as the screens write it: its name and version. `id` is a plugin id, or plugin/capability. */
 export const methodLabel = (id: string, version: string) => `${METHOD_NAMES[id] ?? '方法未登记'} ${version}`;
+/**
+ * A sentence of the host that names a method by plugin id ("由 cablesim.iec60287 1.2.0 model-completion 推导"), with the
+ * method's name in the id's place: 由 三芯工程参数与标准推导（IEC 60287 载流量 1.2.0）推导.
+ */
+export const methodsNamed = (text: string) => text.replace(/cablesim\.([\w-]+) ([\d.]+)(?: ([a-z][\w-]*))?/g, (_, id: string, version: string, capability?: string) => {
+  const name = capability && METHOD_NAMES[`cablesim.${id}/${capability}`];
+  return name ? `${name}（${methodLabel(`cablesim.${id}`, version)}）` : methodLabel(`cablesim.${id}`, version) + (capability ? ` ${capability}` : '');
+});
 /** The same from the "plugin version" string a record keeps (the rating table's method). */
 export const methodText = (method: string) => methodLabel(method.split(' ')[0], method.split(' ')[1] ?? '');
 

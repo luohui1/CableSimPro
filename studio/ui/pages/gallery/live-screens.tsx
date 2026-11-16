@@ -2,7 +2,7 @@
 // settings reads /api/status, and the 3D card asks the host for the solid with library.geometry (the host builds it once
 // with the sealed CAD plugin and keeps it). Neither the configured endpoint nor the mesh is copied into the repository.
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ProductCad } from '@shared/cad';
 import type { AgentStatus } from '@shared/types';
 import { compact } from '@shared/format';
@@ -26,11 +26,13 @@ export function LiveSectionThumb() {
   const projects = useProjects();
   const project = projects.data?.[0]?.id;
   const view = useQuery({ queryKey: ['project', project], queryFn: () => api.project(project as string), enabled: Boolean(project) });
-  const header = view.data?.runs.filter(run => run.kind === 'rating' && run.status === 'succeeded').at(-1);
+  // Runs come newest first: the first rating run that succeeded is the latest.
+  const header = view.data?.runs.find(run => run.kind === 'rating' && run.status === 'succeeded');
   const run = useRun(project ?? '', header?.id);
+  const thumb = useMemo(() => run.data && thumbOf(run.data), [run.data]);
   if (projects.isError || view.isError || run.isError) return <FormNote tone="attention">宿主没有回话，这张缩略图没有画。</FormNote>;
+  if (projects.data && !project) return <FormNote>宿主上还没有载流量工程。</FormNote>;
   if (view.data && !header) return <FormNote>宿主上还没有算成的载流量运行。</FormNote>;
-  const thumb = run.data && thumbOf(run.data);
   if (!run.data) return <Skeleton className="aspect-4/3 w-full" />;
   if (!thumb) return <FormNote>这条运行没有断面文档，画不出缩略图。</FormNote>;
   return <SectionThumb {...thumb} label={`敷设断面：${run.data.title}`} />;

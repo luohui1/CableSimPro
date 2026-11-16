@@ -37,6 +37,7 @@ import {
   SHORT_CIRCUIT, THINNER_FAILURES, THINNER_NOTE, UNCHECKED, CORRECTION_EXAMPLE,
 } from './samples';
 import { PROPOSAL, RATING_TABLE, RUN_METHOD_CARD, methodLabel } from './host-records';
+import { ARMOUR_WORD, CONDUCTOR_WORD, CORE_WORD } from './type-screens';
 
 /** One part: its name, the rule it follows, and its states side by side, each named. */
 export function Specimen({ title, rule, children, wide }: { title: string; rule: string; children: ReactNode; wide?: boolean }) {
@@ -206,7 +207,7 @@ const ASKED = PROPOSAL.inputs;
 const PROPOSAL_CARD = {
   title: `按标准生成的结构 · ${PROPOSAL.standard}`,
   method: methodLabel(`${PROPOSAL.method.plugin_id}/${PROPOSAL.method.capability}`, PROPOSAL.method.method_version),
-  cable: `${compact(ASKED.u0_v / 1000)}/${compact(ASKED.u_v / 1000)} kV ${ASKED.cores === 3 ? '三芯' : `${ASKED.cores} 芯`}，${ASKED.conductor === 'copper' ? '铜' : '铝'}导体 ${ASKED.area_mm2} mm²，${ASKED.insulation} 绝缘，${ASKED.armour === 'steel_tape' ? '钢带铠装' : '铠装'}，有金属屏蔽`,
+  cable: `${compact(ASKED.u0_v / 1000)}/${compact(ASKED.u_v / 1000)} kV ${CORE_WORD[ASKED.cores] ?? `${ASKED.cores} 芯`}，${CONDUCTOR_WORD[ASKED.conductor] ?? ASKED.conductor}导体 ${ASKED.area_mm2} mm²，${ASKED.insulation} 绝缘，${ARMOUR_WORD[ASKED.armour] ?? ASKED.armour}，${ASKED.screened ? '有' : '无'}半导电屏蔽`,
   dimensions: PROPOSAL.complete.dimensions.map(item => ({ label: item.label, value: compact(item.value), unit: item.unit,
     source: { kind: item.kind, place: item.clause ? `${PROPOSAL.standard} ${item.clause} 第 ${item.printed_page} 页` : undefined } })),
   missing: PROPOSAL.complete.missing.map(item => ({ label: item.label, reason: item.reason })),
@@ -286,7 +287,7 @@ export function AgentSection() {
       <State label="还有规格没核对" className="max-w-thread"><CheckCard title={UNCHECKED.title} counts={{}} failures={[]} unchecked={UNCHECKED.unchecked} actions={<OpenInWorkbench />} /></State>
     </Specimen>
     <Specimen title="载流量表卡" rule="一个版本上的载流量表，读法和工作区的载流量表页一样：变化的条件一列在左，每种敷设一列，单位在表头，大家共用的条件在表上写一句；方法拒算的格子写“拒算”，悬停看方法的原话。">
-      <State label="第 1 版的表（12 个条件）" className="max-w-thread"><RatingTableCard {...TABLE_CARD} actions={<OpenInWorkbench />} /></State>
+      <State label="第 1 版的表（6 档土壤热阻率 × 2 种敷设）" className="max-w-thread"><RatingTableCard {...TABLE_CARD} actions={<OpenInWorkbench />} /></State>
     </Specimen>
     <Specimen title="标准提案卡" rule="标准给出的初始结构：每个尺寸带出处（标准的表和页、附录推算、工程师给定）；标准不规定、要工程师给的，照方法的原话列在下面。">
       <State label="完整结构（8.7/15 kV 三芯 240）" className="max-w-thread"><StandardProposalCard {...PROPOSAL_CARD} actions={<CardAction icon="action/external">在工作台补齐并建成</CardAction>} /></State>
