@@ -15,6 +15,7 @@ import { renderReport } from './report.ts';
 import { inputsDigest, type Store } from './store.ts';
 import { attachTypeCards } from './type-cards.ts';
 import { typeOperations } from './type-operations.ts';
+import { ratingOperations } from './rating-operations.ts';
 
 /** Who runs an operation. For the agent, task_id is the conversation and signal ends a long wait when the person stops it. */
 export interface Context { by: 'human' | 'agent'; task_id?: string; signal?: AbortSignal }
@@ -104,6 +105,7 @@ export class Studio {
     for (const operation of this.agentOperations()) {
       if (operation.kind === 'write' && !operation.review && !operation.plan) throw new Error(`操作 ${operation.id} 是写操作，但没有审阅说明。`);
     }
+    for (const operation of ratingOperations(this)) this.operations.set(operation.id, operation);
   }
 
   /** An empty product library starts with the structures that come with the software. */

@@ -1,7 +1,7 @@
 // The host is the single source of truth. These hooks read it; the event stream tells them when to read again.
 import { keepPreviousData, QueryClient, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { ChatSummary, ChatView, LibraryJob, LibraryVocabulary, RunRecord, SeriesSummary, SeriesView, SpecificationReport, SpecView, StudioEvent } from '@shared/types';
+import type { ChatSummary, ChatView, LibraryJob, LibraryVocabulary, SeriesSummary, SeriesView, SpecificationReport, SpecView, StudioEvent } from '@shared/types';
 import { api, subscribe } from './api';
 
 export const queryClient = new QueryClient({
@@ -25,16 +25,6 @@ export const useLibraryJob = () => useQuery({ queryKey: ['library', 'job'], quer
   refetchInterval: query => query.state.data?.state === 'running' ? 1000 : false });
 export const useSpecificationReports = (spec: string) => useQuery({ queryKey: ['library', 'documents', spec],
   queryFn: () => api.op<SpecificationReport[]>('library.documents', { spec }) });
-
-/** The result for the project's present inputs, computed by the host without writing a record. */
-export const useDraft = (project: string, digest: string | undefined, enabled: boolean) => useQuery({
-  queryKey: ['draft', project, digest],
-  queryFn: () => api.op<RunRecord>('draft.rate', { project }),
-  enabled: enabled && Boolean(digest),
-  staleTime: Infinity,
-  retry: false,
-  placeholderData: keepPreviousData,
-});
 
 /** Run records never change once written, so a loaded record stays fresh. */
 export const useRun = (project: string, run: string | undefined) =>

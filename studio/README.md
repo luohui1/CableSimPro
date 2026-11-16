@@ -34,7 +34,7 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机；首页是 Agent 
 | `host/` | Node 宿主（TypeScript，由 Node 直接运行）：`store.ts` 工程文件夹；`operations.ts` 操作层；`products.ts` 产品库的操作；`agent.ts` Agent 服务（pi 会话层、写操作的审阅关口、对话落盘）；`agent-tools.ts` 把操作变成工具、只能读技能文件的 `read`；`chat-view.ts` 把会话文件还原成对话页要显示的消息；`report.ts` 计算书；`server.ts` HTTP 与界面 |
 | `skills/` | Agent 的技能，每类工作一份 `skills/<名称>/SKILL.md`：载流量校核与选型、型号导入与标准核对、新建型号、按标准生成初始结构、型号改版、载流量表、GB 50217 校正、规格书与计算书、电缆三维结构建模 |
 | `shared/` | 宿主与界面共用的类型、数值写法和绘图几何 |
-| `ui/` | React 界面：`shell/` 外壳与两种模式的切换；`agent/` Agent 模式的对话页（assistant-ui 的原语加 kit 部件）、运行时和结果卡；`kit/` 设计会话定稿的部件（顶栏、外框、侧栏、对话、卡片、输入框、页头、数据表、标记、属性），`components/ui/` 基础控件；`types/` 型号库、型号工作区、导入和新建型号（`types/routes.tsx` 挂载这几条路由）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`state/` 读取宿主与视图状态；`pages/gallery` 部件陈列（`/gallery`） |
+| `ui/` | React 界面：`shell/` 外壳与两种模式的切换；`agent/` Agent 模式的对话页（assistant-ui 的原语加 kit 部件）、运行时和结果卡；`kit/` 设计会话定稿的部件（顶栏、外框、侧栏、对话、卡片、输入框、页头、数据表、标记、属性），`components/ui/` 基础控件；`types/` 型号库、型号工作区、导入和新建型号（`types/routes.tsx` 挂载这几条路由）；`rating/` 载流量计算工作台（`rating/routes.tsx` 挂载 `/workbench` 和 `/p/<工程>`）；`canvas/` 真实断面；`state/` 读取宿主与视图状态；`pages/gallery` 部件陈列（`/gallery`） |
 | `core/tests/`、`tests/` | 真实流程测试与界面走查 |
 
 计算核心直接引用仓库里的 `cablesim_sdk/` 和 `plugins/cablesim.iec60287/`，不复制、不改算法。厂家公开结构表读自 `backend/kernel/model_series_data/`。
@@ -51,7 +51,7 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机；首页是 Agent 
 - 工程数据只在宿主里。界面用 TanStack Query 读取，用事件流得知何时重读；界面自己的状态只有选中、工况切换、图层和相机。
 - 其余：React 19.3 加 React Compiler（不手写记忆化）、TypeScript 7、Vite 8、Motion、TanStack Router（代码式路由）。
 
-断面工作台覆盖：查看四个前提、断面与温度场、结论与归因、对象数值、方法卡、切换运行记录、运行校核、导出计算书；可修改埋深、间距与负荷，查看草算、撤销并存为记录。发起参数扫描和选型已有宿主接口，尚未接入完整工作台入口（Agent 模式里已经能用）。产品库的导入、修改、计算、审核与规格书流程见下节。
+载流量计算的工作台（`ui/rating/`）覆盖：新建工程（从型号库选一款型号、选敷设方式、填工况）、查看“求什么、已知什么”并逐项修改、断面与温度场、结论（允许电流、先到温限的电缆、各部位温度、损耗、热阻、算法与可信度）、运行校核、扫描一个条件、按目标电流选截面、切换运行记录、导出计算书。运行是显式的：每次“运行校核”存一条不可改的记录，条件改过后记录标“已过期”，已知项上挂“已改”点；撤销和重做（Ctrl+Z、Ctrl+Y）作用于条件的修改。`/workbench?model=<型号库标识>` 带着型号进入新建工程（标识是型号库列表里的 `id`）；`/p/<工程>?run=<记录>` 按记录当时的条件和结果打开校核、扫描或选型。产品库的导入、修改、计算、审核与规格书流程见下节。
 
 ## 数据
 

@@ -1,0 +1,66 @@
+// What the conclusion reads from a rating record: the answer, the cable it is about and the numbers under it. Every number
+// is the method's own, as saved in the record; nothing here computes one, and nothing here overrules what the method says
+// (which cable reaches its limit first, whether the saved load is within the limit).
+import type { CableState, HeatContribution, Issue, RunRecord, Summary } from '@shared/types';
+
+export interface Rating {
+  summary: Summary;
+  /** Every cable at the saved load; empty when the method has no steady state there (thermal runaway). */
+  operating: CableState[];
+  /** The same cables at the current the method allows. */
+  rated: CableState[];
+  /** The cables the numbers under the answer are about: those at the saved load, or at the allowed current when there are none. */
+  states: CableState[];
+  moment: 'load' | 'rated';
+  /** The cable the numbers under the answer are about: the selected one, else the one the method says reaches its limit first. */
+  focus: CableState;
+  /** The cable the method says reaches its limit first, and its state. */
+  limiting: string;
+  limitingState: CableState;
+  /** The hottest cable at the saved load, as the method names it. */
+  hottest: CableState | null;
+  withinLimit: boolean | null;
+  /** Why there is no steady state at the saved load. */
+  operatingError?: Issue;
+  ambient: number;
+  ampacity: number;
+  /** How the allowed current is meant: for one circuit, for each circuit with the others held, or for all circuits together. */
+  basis: string;
+  /** The saved load of every circuit. */
+  loads: number[];
+  /** What is left of the allowed current at the limiting circuit's load; only when the allowed current is that circuit's own. */
+  margin: number | null;
+  /** False when every cable is equally hot at the saved load, so "the hottest" would name one at random. */
+  distinct: boolean;
+  /** Shares of the focus cable's surface rise; known at the saved load only. */
+  contributions: HeatContribution[] | null;
+}
+
+export function ratingOf(record: RunRecord | undefined, selected: string | null): Rating | null {
+  const summary = record?.kind === 'rating' ? record.summary : undefined;
+  if (!summary || summary.status !== 'succeeded' || !summary.ampacity || summary.ambient_c === undefined) return null;
+  const operating = summary.operating?.cables ?? [];
+  const rated = summary.rated?.cables ?? [];
+  const states = operating.length ? operating : rated;
+  const limiting = summary.ampacity.limiting_cable;
+  const limitingState = states.find(state => state.id === limiting) ?? states[0];
+  if (!limitingState) return null;
+  const focus = states.find(state => state.id === selected) ?? limitingState;
+  const circuits = summary.circuits ?? [];
+  const circuit = circuits.find(item => item.id === summary.ampacity?.limiting_circuit);
+  const temperatures = operating.map(state => state.conductor_c);
+  const basis = summary.ampacity.basis;
+  return {
+    summary, operating, rated, states, focus, limiting, limitingState, basis,
+    moment: operating.length ? 'load' : 'rated',
+    hottest: operating.find(state => state.id === summary.operating?.hottest_cable) ?? null,
+    withinLimit: summary.operating?.within_limit ?? null,
+    operatingError: summary.operating?.error,
+    ambient: summary.ambient_c,
+    ampacity: summary.ampacity.value_a,
+    loads: circuits.flatMap(item => (typeof item.load_a === 'number' ? [item.load_a] : [])),
+    margin: basis === 'common' ? null : circuit?.margin_a ?? null,
+    distinct: temperatures.length > 0 && Math.max(...temperatures) - Math.min(...temperatures) > 0.05,
+    contributions: operating.length ? summary.heat_contributions?.filter(item => item.target === focus.id) ?? null : null,
+  };
+}
