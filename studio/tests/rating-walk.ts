@@ -357,10 +357,13 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('button', { name: '导出计算书' }).waitFor();
     await check('canvas-drag');
 
-    // Undo takes both changes back; nothing is left marked and the record is still the current answer.
+    // Undo takes the changes back one step at a time: the spacing, the second depth (the first stays), the first depth; nothing is
+    // left marked and the record is still the current answer.
     await page.locator('[data-gpu]').click({ position: { x: 300, y: 250 } });
     await page.keyboard.press('Control+Z');
     await page.getByRole('button', { name: /改了 1 项，还没应用/ }).waitFor();
+    await page.keyboard.press('Control+Z');
+    await page.getByText(`中心埋深 ${typedFirst} m`).waitFor();
     await page.keyboard.press('Control+Z');
     await waitFor('nothing is left waiting', async () => (await waiting().count()) === 0);
     assert.equal((await view(row)).inputs_sha256, original.inputs_sha256);
