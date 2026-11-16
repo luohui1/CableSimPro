@@ -1,6 +1,7 @@
 // The product library as the 8210 host holds it on 2026-11-16 (library.series, library.series.get for each series) and the
 // workspace of YJV22-8.7/15 kV 3×240 version 3 as this branch's host (8212) holds it (library.spec.get
-// s-89150e51.3x240), copied unchanged: the same structure as version 1, which round two's versions page shows published.
+// s-89150e51.3x240), copied unchanged except its review, which follows the host since (submitted by 工程师, approved by
+// 审核员): the same structure as version 1, which the versions page shows published.
 
 export interface LibrarySpec {
   id: string; key: string; area: number; version: number; review: 'draft' | 'submitted' | 'reviewed' | 'published';
@@ -1316,7 +1317,7 @@ export const WORKSPACE = {
  "series": "人民电缆集团 YJV22-8.7/15 kV 三芯",
  "version": {
   "number": 3,
-  "review": "draft",
+  "review": "reviewed",
   "note": "减薄后核对不过，恢复 4.5 mm",
   "created": "2026-11-16T06:05:54.260Z"
  },

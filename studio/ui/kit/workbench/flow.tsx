@@ -1,11 +1,15 @@
 // A task done in steps on one screen (import a table, create a type from a standard): the steps down the left with what
 // each settled, the current step's work on the right, and the way forward at the bottom.
 import type { ReactNode } from 'react';
+import type { StepStatus } from '@stepperize/react';
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
 
 export type FlowStepStatus = 'done' | 'current' | 'upcoming' | 'error';
 export interface FlowStep { title: string; status: FlowStepStatus; /** What the step settled, once done: 表3 YJV22. */ detail?: ReactNode }
+
+/** A step's place as stepperize gives it (useStepper().status(id)), as the stepper draws it. A failed step is the page's to say. */
+export const flowStatus = (status: StepStatus): FlowStepStatus => ({ previous: 'done', active: 'current', upcoming: 'upcoming' } as const)[status];
 
 export function Stepper({ steps, label }: { steps: FlowStep[]; label: string }) {
   return <ol aria-label={label} className="m-0 flex list-none flex-col p-0">
@@ -20,7 +24,9 @@ export function Stepper({ steps, label }: { steps: FlowStep[]; label: string }) 
         {step.status === 'done' ? <Icon name="action/check" className="size-3.5" /> : step.status === 'error' ? <Icon name="status/error" className="size-3.5" /> : index + 1}
       </span>
       <span className="flex min-w-0 flex-col">
-        <span className={cn('text-sm', step.status === 'current' ? 'font-semibold text-ink' : step.status === 'upcoming' ? 'text-ink-2' : 'text-ink')}>{step.title}</span>
+        <span className={cn('text-sm', step.status === 'current' ? 'font-semibold text-ink' : step.status === 'upcoming' ? 'text-ink-2' : 'text-ink')}>
+          {step.title}<span className="sr-only">（{{ done: '已完成', current: '当前步', upcoming: '未开始', error: '出错' }[step.status]}）</span>
+        </span>
         {step.detail && <span className="truncate text-sm text-ink-2">{step.detail}</span>}
       </span>
     </li>)}

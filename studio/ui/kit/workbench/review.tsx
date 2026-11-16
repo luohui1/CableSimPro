@@ -1,5 +1,7 @@
-// Where a version stands in review, and the one step a person can take from there. The four states run left to right; the
-// ones reached carry who and when, and what was said. Review is a person's act: the Agent never gets these buttons.
+// Where a version stands in review, and the one step a person can take from there. The four states run down a column; the
+// ones reached carry who and when, and what was said. Review is a person's act: the Agent never gets these buttons. The
+// steps follow the host's table: submit from a draft, return from submitted or reviewed, approve from submitted, publish
+// from reviewed; a published version is not changed, a change makes the next version.
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -49,7 +51,7 @@ export function ReviewTrack({ state, created, stamps, when }: {
 }
 
 /** The step a person can take from a state: one primary, and the way back when there is one. */
-export function ReviewActions({ state, onSubmit, onApprove, onReturn, onPublish, onRevise, extra }: {
+export function ReviewActions({ state, onSubmit, onApprove, onReturn, onPublish, onRevise, extra, busy }: {
   state: Review;
   onSubmit?: () => void;
   onApprove?: () => void;
@@ -57,14 +59,17 @@ export function ReviewActions({ state, onSubmit, onApprove, onReturn, onPublish,
   onPublish?: () => void;
   /** A published version is not changed: a change makes the next version. */
   onRevise?: () => void;
+  /** Before the buttons: a note field when the step takes one. */
   extra?: ReactNode;
+  /** A step is on its way to the host: the buttons wait for it. */
+  busy?: boolean;
 }) {
   return <div className="flex flex-wrap items-center gap-2">
     {extra}
-    {state === 'draft' && <Button onClick={onSubmit}><Icon name="agent/checkpoint" data-icon="inline-start" />提交审核</Button>}
-    {state === 'submitted' && <><Button variant="outline" onClick={onReturn}>退回修改</Button><Button onClick={onApprove}><Icon name="agent/approve" data-icon="inline-start" />审核通过</Button></>}
-    {state === 'reviewed' && <><Button variant="outline" onClick={onReturn}>退回修改</Button><Button onClick={onPublish}><Icon name="action/publish" data-icon="inline-start" />发布</Button></>}
-    {state === 'published' && <Button variant="outline" onClick={onRevise}><Icon name="action/edit" data-icon="inline-start" />出新版本</Button>}
+    {state === 'draft' && <Button onClick={onSubmit} disabled={busy}><Icon name="agent/checkpoint" data-icon="inline-start" />提交审核</Button>}
+    {state === 'submitted' && <><Button variant="outline" onClick={onReturn} disabled={busy}>退回修改</Button><Button onClick={onApprove} disabled={busy}><Icon name="agent/approve" data-icon="inline-start" />审核通过</Button></>}
+    {state === 'reviewed' && <><Button variant="outline" onClick={onReturn} disabled={busy}>退回修改</Button><Button onClick={onPublish} disabled={busy}><Icon name="action/publish" data-icon="inline-start" />发布</Button></>}
+    {state === 'published' && <Button variant="outline" onClick={onRevise} disabled={busy}><Icon name="action/edit" data-icon="inline-start" />出新版本</Button>}
   </div>;
 }
 

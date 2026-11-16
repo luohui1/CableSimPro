@@ -1,9 +1,12 @@
 // Round two's examples, computed on this branch's own host (8212, user label 工程师) on 2026-11-16 and copied unchanged:
 // the public sample workbook inspected and previewed, a project on YJV22-8.7/15 kV 3×240 (version 3, the same structure as
 // version 1) rated, swept over the soil resistivity and asked to select a size for 400 A, version 1 submitted, approved,
-// published and exported, and the stored ampacity table and short-circuit results of version 1.
+// published and exported, version 3 submitted by 工程师 and approved by 审核员 (the host run under each label in turn),
+// and the stored ampacity table and short-circuit results of version 1.
 
 export const IMPORT = {
+ "ready": 11,
+ "failed": 0,
  "file": "人民电缆 8.7-15kV 结构表（公开手册）.xlsx",
  "sheets": [
   {
@@ -250,90 +253,134 @@ export const IMPORT = {
   {
    "row": 5,
    "key": "3×25",
+   "ok": true,
    "od": 52.00000000000001,
    "listed": 49.846489906178235,
    "residual": 1.0767550469108835,
-   "tolerance": 1.02
+   "tolerance": 1.02,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 6,
    "key": "3×35",
+   "ok": true,
    "od": 54,
    "listed": 52.20119044455749,
    "residual": 0.8994047777212549,
-   "tolerance": 1.04
+   "tolerance": 1.04,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 7,
    "key": "3×50",
+   "ok": true,
    "od": 58,
    "listed": 54.97136103677466,
    "residual": 1.51431948161267,
-   "tolerance": 1.08
+   "tolerance": 1.08,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 8,
    "key": "3×70",
+   "ok": true,
    "od": 62,
    "listed": 59.449822005857314,
    "residual": 1.2750889970713428,
-   "tolerance": 1.1199999999999999
+   "tolerance": 1.1199999999999999,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 9,
    "key": "3×95",
+   "ok": true,
    "od": 66,
    "listed": 63.09734286726411,
    "residual": 1.4513285663679474,
-   "tolerance": 1.16
+   "tolerance": 1.16,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 10,
    "key": "3×120",
+   "ok": true,
    "od": 69,
    "listed": 66.51392362099506,
    "residual": 1.2430381895024711,
-   "tolerance": 1.1900000000000002
+   "tolerance": 1.1900000000000002,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 11,
    "key": "3×150",
+   "ok": true,
    "od": 72.00000000000001,
    "listed": 69.93050437472601,
    "residual": 1.034747812636995,
-   "tolerance": 1.2200000000000002
+   "tolerance": 1.2200000000000002,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 12,
    "key": "3×185",
+   "ok": true,
    "od": 76,
    "listed": 73.79349528997075,
    "residual": 1.103252355014621,
-   "tolerance": 1.26
+   "tolerance": 1.26,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 13,
    "key": "3×240",
+   "ok": true,
    "od": 82,
    "listed": 79.56477658208095,
    "residual": 1.2176117089595233,
-   "tolerance": 1.32
+   "tolerance": 1.32,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 14,
    "key": "3×300",
+   "ok": true,
    "od": 88,
    "listed": 86.1051177665153,
    "residual": 0.9474411167423452,
-   "tolerance": 1.38
+   "tolerance": 1.38,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   },
   {
    "row": 15,
    "key": "3×400",
+   "ok": true,
    "od": 95,
    "listed": 92.72280922013928,
    "residual": 1.138595389930358,
-   "tolerance": 1.45
+   "tolerance": 1.45,
+   "placedIn": "filler",
+   "warnings": [],
+   "error": null
   }
  ],
  "skipped": [
@@ -456,7 +503,7 @@ export const CANDIDATES = [
   "name": "YJV22-8.7/15 kV 3×240",
   "family": "人民电缆集团 YJV22-8.7/15 kV 三芯",
   "state": "public",
-  "review": "draft"
+  "review": "reviewed"
  },
  {
   "id": "s-89150e51.3x300",
@@ -478,37 +525,58 @@ export const SWEEP = {
   {
    "value": 0.8,
    "ampacity": 491.0435199737549,
-   "conductor": 46.31955102448391
+   "conductor": 46.31955102448391,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   },
   {
    "value": 1,
    "ampacity": 458.7102770805359,
-   "conductor": 49.69344964107793
+   "conductor": 49.69344964107793,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   },
   {
    "value": 1.2,
    "ampacity": 432.0136785507202,
-   "conductor": 53.14069060270054
+   "conductor": 53.14069060270054,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   },
   {
    "value": 1.5,
    "ampacity": 399.4638830423355,
-   "conductor": 58.45467212228249
+   "conductor": 58.45467212228249,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   },
   {
    "value": 2,
    "ampacity": 358.4557235240936,
-   "conductor": 67.71583673049797
+   "conductor": 67.71583673049797,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   },
   {
    "value": 2.5,
    "ampacity": 327.9097080230713,
-   "conductor": 77.52326765565273
+   "conductor": 77.52326765565273,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   },
   {
    "value": 3,
    "ampacity": 304.01864647865295,
-   "conductor": 87.92917579401428
+   "conductor": 87.92917579401428,
+   "status": "succeeded",
+   "withinLimit": true,
+   "error": null
   }
  ]
 };
@@ -527,7 +595,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -263.38643431663513,
    "conductorAtTarget": null,
-   "error": null
+   "error": null,
+   "atTargetError": "该负荷下无有效稳态解；减小负荷或使用数值模型。",
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x35",
@@ -537,7 +608,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -236.47475838661194,
    "conductorAtTarget": null,
-   "error": null
+   "error": null,
+   "atTargetError": "该负荷下无有效稳态解；减小负荷或使用数值模型。",
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x50",
@@ -547,7 +621,10 @@ export const SELECTION = {
    "meets": null,
    "margin": null,
    "conductorAtTarget": null,
-   "error": "填充与内衬厚度/芯外径须在(0,0.15]，图6范围外改用数值传热方法。"
+   "error": "填充与内衬厚度/芯外径须在(0,0.15]，图6范围外改用数值传热方法。",
+   "atTargetError": null,
+   "tier": null,
+   "basis": null
   },
   {
    "id": "s-89150e51.3x70",
@@ -557,7 +634,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -166.95351004600525,
    "conductorAtTarget": 394.2837506600098,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x95",
@@ -567,7 +647,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -122.50177264213562,
    "conductorAtTarget": 208.53154523930442,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x120",
@@ -577,7 +660,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -84.68113541603088,
    "conductorAtTarget": 147.72173418652588,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x150",
@@ -587,7 +673,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -46.23154401779175,
    "conductorAtTarget": 114.01836326210065,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x185",
@@ -597,7 +686,10 @@ export const SELECTION = {
    "meets": false,
    "margin": -1.4669239521026611,
    "conductorAtTarget": 90.5922626279106,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x240",
@@ -607,7 +699,10 @@ export const SELECTION = {
    "meets": true,
    "margin": 58.71027708053589,
    "conductorAtTarget": 71.91701770204517,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x300",
@@ -617,7 +712,10 @@ export const SELECTION = {
    "meets": true,
    "margin": 117.50136017799377,
    "conductorAtTarget": 60.79149900397919,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   },
   {
    "id": "s-89150e51.3x400",
@@ -627,14 +725,19 @@ export const SELECTION = {
    "meets": true,
    "margin": 180.82383275032043,
    "conductorAtTarget": 52.98958471126316,
-   "error": null
+   "error": null,
+   "atTargetError": null,
+   "tier": "reference",
+   "basis": "单回路能力"
   }
  ]
 };
 
 export const RATING_TABLE = {
  "tierMeaning": "本敷设形式只有手算或解析自洽检查，没有公开算例的整链对照；结果供比较与初判，交付前应另行核对。",
- "tierBasis": ["三芯分支：六种直埋 / 排管手算核对，TB 880 算例 2 的热阻与钢丝损耗、算例 10 的钢带损耗只对照了组件，没有整链公开算例。"],
+ "tierBasis": [
+  "三芯分支：六种直埋 / 排管手算核对，TB 880 算例 2 的热阻与钢丝损耗、算例 10 的钢带损耗只对照了组件，没有整链公开算例。"
+ ],
  "warning": "平衡圆形三芯独立金属屏蔽；每芯环流按SL分支，公共磁性钢带/钢丝铠装按对应条款。",
  "created": "2026-11-16T03:57:50.269Z",
  "method": "cablesim.iec60287 1.2.0",
@@ -648,7 +751,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 1,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_buried_single@1.2",
@@ -659,7 +763,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 1.2,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_buried_single@1.5",
@@ -670,7 +775,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 1.5,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_buried_single@2",
@@ -681,7 +787,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 2,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_buried_single@2.5",
@@ -692,7 +799,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 2.5,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_buried_single@3",
@@ -703,7 +811,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 3,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_ducts_horizontal@1",
@@ -714,7 +823,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 1,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_ducts_horizontal@1.2",
@@ -725,7 +835,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 1.2,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_ducts_horizontal@1.5",
@@ -736,7 +847,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 1.5,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_ducts_horizontal@2",
@@ -747,7 +859,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 2,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_ducts_horizontal@2.5",
@@ -758,7 +871,8 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 2.5,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   },
   {
    "id": "three_core_ducts_horizontal@3",
@@ -769,9 +883,12 @@ export const RATING_TABLE = {
    "depth": 0.7,
    "soil": 3,
    "ambient": 25,
-   "tier": "参考"
+   "tier": "参考",
+   "tierKey": "reference"
   }
- ]
+ ],
+ "version": 1,
+ "tierKey": "reference"
 };
 export const SHORT_CIRCUIT = {
  "conditions": {
@@ -801,9 +918,19 @@ export const SHORT_CIRCUIT = {
 export const VERSIONS = [
  {
   "number": 3,
-  "review": "draft",
+  "review": "reviewed",
   "note": "减薄后核对不过，恢复 4.5 mm",
   "created": "2026-11-16T06:05:54.260Z",
+  "submitted": {
+   "at": "2026-11-16T07:53:15.632Z",
+   "by": "工程师",
+   "note": "减薄方案不用，恢复 4.5 mm 后提交审核"
+  },
+  "reviewed": {
+   "at": "2026-11-16T07:54:36.021Z",
+   "by": "审核员",
+   "note": "结构与第 1 版相同，核对结果一致"
+  },
   "check": {
    "passed": 13,
    "missing": 21,
@@ -829,11 +956,13 @@ export const VERSIONS = [
   "created": "2026-11-16T03:56:36.744Z",
   "submitted": {
    "at": "2026-11-16T06:04:00.306Z",
-   "by": "工程师"
+   "by": "工程师",
+   "note": "公开手册转录，提交审核"
   },
   "reviewed": {
    "at": "2026-11-16T06:04:00.361Z",
-   "by": "工程师"
+   "by": "工程师",
+   "note": "结构尺寸与手册表 3 核对一致"
   },
   "published": {
    "at": "2026-11-16T06:04:00.410Z",
@@ -846,10 +975,6 @@ export const VERSIONS = [
   }
  }
 ];
-export const REVIEW_NOTES = {
- "approve": "结构尺寸与手册表 3 核对一致",
- "submit": "公开手册转录，提交审核"
-};
 export const DOCUMENTS = [
  {
   "title": "YJV22-8.7/15 kV 3×240 · 第 1 版",
@@ -1121,6 +1246,17 @@ export const PROPOSAL = {
  }
 };
 
+/** What the types test hands library.series.create and library.spec.create with this proposal. */
+export const STANDARD_SERIES = {
+ name: '按标准生成：YJV22-8.7/15 kV 三芯',
+ common: [
+  { field: 'binder_thickness', value: 0.2, basis: '取同电压等级公开结构表的包带厚度' },
+  { field: 'armour_tape_width', value: 50, basis: '钢带损耗按间隙率计，结果与带宽无关' },
+ ],
+ /** The basis a dimension taken from the proposal is written with, as the created version shows it. */
+ basisExample: '人工填写；GB/T 12706.2—2020 表 7（印刷第 7 页，PDF 第 15 页）',
+};
+
 export const PRINTED: Record<string, number> = {
  "area": 240,
  "conductor_diameter": 18.4,
@@ -1138,4 +1274,36 @@ export const RUNS = [
  { id: 'run-08e19314', sequence: 1, kind: 'rating', title: '校核 · 458.7 A', created: '2026-11-16T06:06:06.896Z' },
  { id: 'run-3a790cf5', sequence: 2, kind: 'sweep', title: '扫描 · 土壤热阻率 0.8–3 K·m/W', created: '2026-11-16T06:06:10.071Z' },
  { id: 'run-77b9dd47', sequence: 3, kind: 'selection', title: '选型 · 400 A → YJV22-8.7/15 kV 3×240', created: '2026-11-16T06:06:15.551Z' },
+];
+
+// The inputs the three runs were made with (one digest for all three) and the method that made them.
+export const RUN_INPUTS = {
+ "installation": {
+  "layout": "three_core_buried_single",
+  "depth_m": 1.2,
+  "spacing_m": null,
+  "duct": null,
+  "backfill": null,
+  "bonding": "both_ends"
+ },
+ "conditions": {
+  "soil_thermal_resistivity": 1,
+  "ambient_temperature_c": 25,
+  "frequency_hz": 50,
+  "system_voltage_v": 15000,
+  "currents_a": [
+   300
+  ]
+ }
+};
+export const RUN_METHOD = {
+ "plugin": "cablesim.iec60287",
+ "version": "1.2.0",
+ "card": "IEC 60287 稳态载流量"
+};
+
+// The projects as the 8210 host lists them (/api/projects), by name: the navigation of the workbench screens.
+export const PROJECT_NAMES = [
+ "YJV22-8.7/15 3×240 直埋载流量校核",
+ "YJV22-8.7/15 3×240 直埋载流量示例"
 ];

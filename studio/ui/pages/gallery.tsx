@@ -2,7 +2,10 @@
 // its parts from here; a part that is not here does not exist. /gallery#screen=<id> opens one screen at full size.
 import { useEffect, useRef, useState } from 'react';
 import { ButtonLink } from '@/components/ui/button';
+import { Toaster } from '@/components/ui/sonner';
+import { EmptyState } from '@/kit/workbench/premise';
 import { Icon } from '@/kit/icon';
+import { SourcedControlsSection } from './gallery/controls-section';
 import { FlowSection } from './gallery/flow-section';
 import { AgentSection, ControlsSection, SectionTitle, ThemeSection, WorkbenchSection } from './gallery/sections';
 import { GROUPS, SCREENS, type ScreenSpec } from './gallery/screens';
@@ -44,8 +47,9 @@ export function Gallery() {
         </section>)}
         <SectionTitle id="theme" title="主题" lead="design/tokens.css 的白灰底加铜色，补全成 ui/styles/theme.css：颜色、字号、圆角、阴影、间距、动效，深浅两套。" />
         <ThemeSection />
-        <SectionTitle id="controls" title="基础控件" lead="ui/components/ui：shadcn/ui（Base UI）的控件按主题改过。页面不直接写原生按钮、输入框、下拉和表格。" />
+        <SectionTitle id="controls" title="基础控件" lead="ui/components/ui：shadcn/ui（Base UI）的控件按主题改过，另有 cmdk 的命令面板和 sonner 的轻提示。页面不直接写原生按钮、输入框、下拉和表格。" />
         <ControlsSection />
+        <SourcedControlsSection />
         <SectionTitle id="agent" title="Agent 部件" lead="ui/kit/chat：对话页的全部部件，每个摆出全部状态。数据取自 8210 的真实对话和运行记录。" />
         <AgentSection />
         <SectionTitle id="workbench" title="工作台部件" lead="ui/kit/workbench：工作台的外壳、页头、数据表、面板、标记和断面画布外框。" />
@@ -54,6 +58,7 @@ export function Gallery() {
         <FlowSection />
       </main>
     </div>
+    <Toaster position="bottom-right" />
   </div>;
 }
 
@@ -78,7 +83,9 @@ function ScreenPreview({ item }: { item: ScreenSpec }) {
       <ButtonLink variant="outline" size="sm" href={`#screen=${item.id}`}><Icon name="action/external" data-icon="inline-start" />全屏看</ButtonLink>
     </header>
     <div ref={frame} className="screen-half overflow-hidden rounded-card border border-line bg-canvas" inert>
-      {near && <div className="screen-frame origin-top-left scale-50">{item.render()}</div>}
+      {near && (item.heavy
+        ? <EmptyState icon="tool/view-3d" title="全屏打开时才向宿主要" description="这屏要宿主现建三维实体，陈列页的缩略图不替它开工。" className="h-full" />
+        : <div className="screen-frame origin-top-left scale-50">{item.render()}</div>)}
     </div>
   </section>;
 }

@@ -27,26 +27,33 @@ export interface RowGroup<Row> {
   onToggle?: () => void;
 }
 
-export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, footer, sort, onSort, empty, className }: {
+export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, onOpen, footer, sort, onSort, empty, framed, className }: {
   columns: Column<Row>[];
   rows?: Row[];
   groups?: RowGroup<Row>[];
   rowKey: (row: Row) => string;
   selected?: string;
   onSelect?: (row: Row) => void;
+  /** Open a row: double click, or Enter on the selected row. */
+  onOpen?: (row: Row) => void;
   footer?: { label: string; cells: Partial<Record<string, ReactNode>> };
   sort?: { key: string; direction: 'asc' | 'desc' };
   onSort?: (key: string) => void;
   /** What an empty table says; an EmptyState usually. */
   empty?: ReactNode;
+  /** Inside a form or a section rather than a panel: the table draws its own rounded border. */
+  framed?: boolean;
   className?: string;
 }) {
   const body = (list: Row[]) => list.map(row => {
     const key = rowKey(row);
     // A row that can be selected takes focus and answers Enter and Space, like the click.
     return <TableRow key={key} data-state={key === selected ? 'selected' : undefined} aria-selected={onSelect ? key === selected : undefined}
-      tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined}
-      onKeyDown={onSelect ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row); } } : undefined}
+      tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined} onDoubleClick={onOpen ? () => onOpen(row) : undefined}
+      onKeyDown={onSelect ? event => {
+        if (event.key === 'Enter' && onOpen && key === selected) { event.preventDefault(); onOpen(row); return; }
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row); }
+      } : undefined}
       className={cn(onSelect && 'cursor-pointer outline-none focus-visible:bg-subtle focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset')}>
       {columns.map(column => <TableCell key={column.key} numeric={column.numeric} className={column.width}>{column.cell(row)}</TableCell>)}
       {filler && <TableCell aria-hidden="true" />}
@@ -56,7 +63,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
   // When every column has a width, what is left over goes to an empty column at the end, not between the columns.
   const filler = columns.every(column => column.width);
   const span = columns.length + (filler ? 1 : 0);
-  return <Table containerClassName={cn('min-h-0', className)}>
+  return <Table containerClassName={cn('min-h-0', framed && 'rounded-card border border-line', className)}>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {columns.map(column => <TableHead key={column.key} numeric={column.numeric} className={cn('sticky top-0 z-1', column.width)}

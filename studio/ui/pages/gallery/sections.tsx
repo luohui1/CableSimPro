@@ -28,7 +28,7 @@ import { EmptyState, Given, PremiseStrip } from '@/kit/workbench/premise';
 import { compact, fixed } from '@shared/format';
 import { useTheme } from '@/state/theme';
 import { CableSection, SectionThumb, fieldStops } from './figures';
-import { WORKSPACE } from './library-data';
+import { LIBRARY, WORKSPACE } from './library-data';
 import {
   CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
   RATING_STEPS, REFUSED_IMPORT, REFUSED_RATING, SHEET, STARTERS, STEPS_FAILED, STEPS_RECOVERED, STEPS_STOPPED, STEPS_WAITING, THINNER,
@@ -114,9 +114,8 @@ export function ThemeSection() {
 
 export function ControlsSection() {
   return <>
-    <Specimen title="按钮" rule="胶囊形。铜色是一屏唯一的主按钮；墨色给发送这类强动作；其余是描边和无底。">
+    <Specimen title="按钮" rule="胶囊形。铜色是一屏唯一的主按钮，对话页里有内容时的发送就是它；其余是描边、浅底和无底。">
       <State label="主按钮"><Button><Icon name="run/run" data-icon="inline-start" />运行校核</Button></State>
-      <State label="墨色"><Button variant="ink">发送</Button></State>
       <State label="描边"><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button></State>
       <State label="浅底"><Button variant="secondary">次要</Button></State>
       <State label="无底"><Button variant="ghost">取消</Button></State>
@@ -147,8 +146,9 @@ export function ControlsSection() {
       <State label="未勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox />只导入可用的行</label></State>
       <State label="已勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox defaultChecked />只导入可用的行</label></State>
       <State label="不可用"><label className="flex items-center gap-2 text-sm text-ink-2"><Checkbox disabled />只导入可用的行</label></State>
-      <State label="进度" className="w-72"><Progress value={3} max={11} format={{ maximumFractionDigits: 0 }}>
-        <ProgressLabel>计算全系列</ProgressLabel><ProgressValue>{() => '3 / 11 个规格'}</ProgressValue>
+      <State label="进行中，还没有计数" className="w-72"><Progress value={null}><ProgressLabel>计算全系列</ProgressLabel></Progress></State>
+      <State label="完成" className="w-72"><Progress value={LIBRARY[0].specs.length} max={LIBRARY[0].specs.length}>
+        <ProgressLabel>计算全系列</ProgressLabel><ProgressValue>{() => `${LIBRARY[0].specs.length} / ${LIBRARY[0].specs.length} 个规格`}</ProgressValue>
       </Progress></State>
     </Specimen>
     <Specimen title="页签与分段" rule="分段是凹槽加白片（同一视图的几种状态）；页签是平字加下划线（同一位置的不同内容）。">
@@ -269,7 +269,7 @@ export function AgentSection() {
         <RefusalCard kind="error" title="运行校核 · YJV22-8.7/15 3×240 直埋载流量校核" reason={HOST_DOWN} actions={<CardAction icon="action/refresh">重试</CardAction>} />
       </div>
     </Specimen>
-    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右（墨色）；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
+    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右：有内容时是铜色，和工作台的主按钮一样；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
       <div className="grid max-w-thread grid-cols-1 gap-4">
         <State label="空"><ComposerFrame><ComposerInput placeholder="交办一件事，或把 Excel、CSV 结构表拖到这里" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend disabled />} /></ComposerFrame></State>
         <State label="带附件"><ComposerFrame>

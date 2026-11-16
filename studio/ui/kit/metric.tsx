@@ -31,6 +31,11 @@ export function Metric({ label, value, unit, size = 'lg', detail, tone, classNam
   </div>;
 }
 
+/** A few numbers that belong together (可导入, 不能导入, 跳过), side by side in one frame. */
+export function MetricGroup({ children, columns = 'grid-cols-3', className }: { children: ReactNode; columns?: 'grid-cols-2' | 'grid-cols-3' | 'grid-cols-4'; className?: string }) {
+  return <div className={cn('grid gap-4 rounded-card border border-line px-4 py-4', columns, className)}>{children}</div>;
+}
+
 /**
  * A value on its way to a limit: conductor 49.7 °C of 90 °C, from the ambient 25 °C. The bar is ink while the value is
  * inside the limit and the error colour past it; the limit is the end of the track.
