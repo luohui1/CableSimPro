@@ -19,28 +19,21 @@ const CONTROLS = ['ui/components/ui/', 'ui/kit/'];
  * line must go); when it owes less, lower the number. The list and the numbers only shrink.
  */
 const EXEMPT: { path: string; owes: number; owner: string; until: string }[] = [
-  { path: 'ui/pages/library.tsx', owes: 19, owner: 'studio-build', until: '工作台型号库重做' },
-  { path: 'ui/pages/import.tsx', owes: 60, owner: 'studio-build', until: '工作台型号库重做' },
-  { path: 'ui/pages/series.tsx', owes: 18, owner: 'studio-build', until: '工作台型号工作区重做' },
-  { path: 'ui/series/', owes: 109, owner: 'studio-build', until: '工作台型号工作区重做' },
-  { path: 'ui/components/product-', owes: 25, owner: 'studio-build', until: '工作台型号库重做' },
+  { path: 'ui/components/product-cad.tsx', owes: 14, owner: 'studio-build', until: 'Agent 的三维模型卡改用设计部件时重写（型号工作区的三维视图也用它）；材料色要改读主题' },
   { path: 'ui/workbench/', owes: 21, owner: 'studio-build', until: '工作台载流量计算重做' },
   { path: 'ui/canvas/', owes: 17, owner: 'studio-build', until: '工作台载流量计算重做（断面绘图保留，外框换成 kit 的画布外框）' },
   { path: 'ui/results/', owes: 65, owner: 'studio-build', until: '工作台载流量计算重做' },
   { path: 'ui/styles/product.css', owes: 31, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/styles/workspace.css', owes: 63, owner: 'studio-build', until: '旧页面删除' },
-  { path: 'ui/main.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除（Mantine 样式表随之移除）' },
   { path: 'ui/components/icon.tsx', owes: 1, owner: 'studio-build', until: '旧页面删除（换用 kit/icon）' },
   { path: 'ui/components/button.tsx', owes: 6, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/marks.tsx', owes: 8, owner: 'studio-build', until: '旧页面删除（换用 kit 的标记）' },
   { path: 'ui/components/notice.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/number-field.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/popover.tsx', owes: 6, owner: 'studio-build', until: '旧页面删除' },
-  { path: 'ui/components/search-field.tsx', owes: 1, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/segmented.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/tabs.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/tooltip.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
-  { path: 'ui/components/library-header.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除' },
 ];
 
 interface Rule { id: string; text: string; applies: (file: string) => boolean; find: (source: string, file: string) => string[] }

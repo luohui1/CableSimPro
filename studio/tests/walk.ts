@@ -1,4 +1,4 @@
-// Hands-on walk: the real host, computing core and clicks on desktop, plus the product library at 390×844.
+// Hands-on walk: the real host, computing core and clicks on desktop: the type library and its workspaces first, then the workbench.
 // Every step saves a screenshot and runs a layout probe: no label on the drawing may overlap another label or a tool,
 // and no text may be cut off unless it ends in an ellipsis on purpose.
 //
@@ -154,4 +154,4 @@ if (problems.length) {
   console.error(`${problems.length} problem(s):\n${problems.join('\n')}`);
   process.exit(1);
 }
-console.log('layout probe: 0 problems at 1366×768 and 1920×1080 (workbench, Agent mode); product library also checked at 390×844');
+console.log('layout probe: 0 problems at 1366×768 and 1920×1080');

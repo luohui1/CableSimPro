@@ -34,7 +34,7 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机；首页是 Agent 
 | `host/` | Node 宿主（TypeScript，由 Node 直接运行）：`store.ts` 工程文件夹；`operations.ts` 操作层；`products.ts` 产品库的操作；`agent.ts` Agent 服务（pi 会话层、写操作的审阅关口、对话落盘）；`agent-tools.ts` 把操作变成工具、只能读技能文件的 `read`；`chat-view.ts` 把会话文件还原成对话页要显示的消息；`report.ts` 计算书；`server.ts` HTTP 与界面 |
 | `skills/` | Agent 的技能，每类工作一份 `skills/<名称>/SKILL.md`：载流量校核与选型、型号导入与标准核对、新建型号、按标准生成初始结构、型号改版、载流量表、GB 50217 校正、规格书与计算书、电缆三维结构建模 |
 | `shared/` | 宿主与界面共用的类型、数值写法和绘图几何 |
-| `ui/` | React 界面：`shell/` 外壳与两种模式的切换；`agent/` Agent 模式的对话页（assistant-ui 的原语加 kit 部件）、运行时和结果卡；`kit/` 设计会话交付的部件（顶栏、对话、卡片、输入框、侧栏），`components/ui/` shadcn/ui 通用控件；`pages/` 产品库与导入（工作台模式，第 2 轮重做）；`components/product-controls.tsx` Mantine 业务控件；`series/` 系列工作区（结构浏览器、断面与三维视图、属性面板、规格对比表）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`state/` 读取宿主与视图状态；`pages/gallery.tsx` 工作台组件陈列（`/gallery`） |
+| `ui/` | React 界面：`shell/` 外壳与两种模式的切换；`agent/` Agent 模式的对话页（assistant-ui 的原语加 kit 部件）、运行时和结果卡；`kit/` 设计会话定稿的部件（顶栏、外框、侧栏、对话、卡片、输入框、页头、数据表、标记、属性），`components/ui/` 基础控件；`types/` 型号库、型号工作区、导入和新建型号（`types/routes.tsx` 挂载这几条路由）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`state/` 读取宿主与视图状态；`pages/gallery` 部件陈列（`/gallery`） |
 | `core/tests/`、`tests/` | 真实流程测试与界面走查 |
 
 计算核心直接引用仓库里的 `cablesim_sdk/` 和 `plugins/cablesim.iec60287/`，不复制、不改算法。厂家公开结构表读自 `backend/kernel/model_series_data/`。
@@ -43,10 +43,9 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机；首页是 Agent 
 
 - 外壳：顶栏固定放品牌、模式切换（Agent、工作台）、模型名和主题按钮；`/` 是 Agent 模式（`/chat/<对话>` 打开一段对话），`/library`、`/workbench`、`/p/<工程>` 是工作台模式。切换时回到该模式上次停留的地方。
 - Agent 模式（`ui/agent/`）：左侧对话列表（按今天、昨天、近 7 天、更早分组，可搜索），中间对话，底部输入框。页面只用 assistant-ui 的原语（滚动、输入框、起始任务、复制与重试、附件、会话列表）和 `ui/kit/` 的部件拼成，页面里没有自己的样式。输入框可以中止；任务进行中再发消息会在当前一步做完后插话；可把 Excel 或 CSV 结构表拖进去。空对话给出六个可以直接点的起始任务。打开一段已有的对话停在它的末尾；离开末尾时出现“回到最新”。回答正文按 Markdown 显示（表格、公式、代码）。对话里每个操作是一行（操作中文名、对象、状态，点开看要点，没有原始 JSON），写操作停在待审卡（每项改前、改后和单位，接受或拒绝），结果以卡片呈现：载流量结果卡（允许电流、先到温限的电缆、可信分档、断面缩略图；扫描和选型是表）、载流量表卡（一个规格在几种埋深和土壤热阻率下的允许电流）、标准提案卡（按标准生成的尺寸，每个数带条款和页码，以及还缺哪些）、GB 50217 校正卡（基准电流、各系数、校正后的值）、标准核对卡（通过、不通过、缺项的数量和不通过项清单）、文件卡（规格书、计算书的预览和下载）、三维模型卡（复用工作台的三维查看部件），每张卡带“在工作台打开”；同一段回答里两个指向同一对象的单独“在工作台打开”只留第一个（卡片自带的按钮不参与去重）。卡片只拿引用，数字由界面向宿主读取，不经过模型。
-- 组件底座见 [ROADMAP.md](ROADMAP.md) 的“组件”一节：Tailwind 4、shadcn/ui（Base UI 版）、assistant-ui。shadcn 的语义色、圆角、字号变量在 `ui/styles/app.css` 里全部指向 `design/tokens.css`，没有第二套颜色。
-- `design/tokens.css` 保存工程配色与字体，`ui/styles/app.css` 映射为 Tailwind CSS 4 工具类。产品库的布局和 Mantine 主题适配集中在 `ui/styles/product.css`，主题同时覆盖浮层；Tailwind 默认的字号等级（`text-xs` 到 `text-xl`）和圆角等级（`rounded-sm` 到 `rounded-4xl`）被重新指向设计令牌，供控件库使用，工作台页面用自己的尺寸名（`text-13`、`rounded-card` 等）。
-- 产品库使用 Mantine 9 的按钮、表单、复选框、导航、步骤条、拖放上传、标签页和弹窗；统一主题在 `product-provider.tsx`。系列工作区的对象视图和规格对比表为自研组件，规则集中在 `ui/styles/workspace.css`：面板贴边平铺，一种强调色只用于选中，三种状态色，材料色只用于图纸；数字和拉丁字母用 Inter，中文用 Noto Sans SC；图标采用 Lucide。工程工作台沿用 Base UI 控件和 `design/icons/`；断面按保存的工程尺寸绘制。
-- 产品库、导入、规格表和断面工作台按路由分别加载；首页不预加载规格表和三维绘图模块。
+- `design/tokens.css` 保存工程配色与字体，`ui/styles/theme.css` 映射为 Tailwind CSS 4 工具类，Tailwind 自带色板和阴影已关闭。界面长什么样以 `studio/DESIGN.md` 和陈列页 `/gallery` 为准。
+- 型号库、型号工作区、导入和新建型号（`ui/types/`）只拼 `ui/kit` 与 `ui/components/ui` 的部件，不写自己的样式；`npm run lint:ui`（`npm run build` 先跑它）拦截颜色值、方括号尺寸、行内样式、原生控件和 Mantine，清单里的旧页面只减不增。型号工作区是断面（自有绘图 `canvas/cable-glyph`）、分层结构和四个页签（参数、标准核对、载流量表、版本与文件）；改结构、审核、规格书在对话框里做，审核只能由人点。图标用 `design/icons/`。
+- 产品库、导入、新建型号、型号工作区和断面工作台按路由分别加载；首页不预加载型号工作区和三维绘图模块。
 - 断面画布按真实比例绘制，不折断坐标。三层共用一个相机：GPU 层画土壤、网格、温度场和等温线（three 的 WebGPU 渲染器，没有 WebGPU 时用 WebGL 2）；SVG 层画电缆的真实结构层、尺寸和等温线数值；HTML 层放电缆标签和工具。标签逐个占位，后放的避开先放的。
 - 温度场：方法只在一张粗的显示网格上发布温度场，并声明了它的模型（镜像线热源，取各电缆保存负荷下的总损耗）。显示层按这个模型逐像素计算，显示前先与方法发布的每个节点比较，差值超过 1e-6 K 就改为只用发布的节点线性插值。温度场只在保存负荷下显示。
 - 工程数据只在宿主里。界面用 TanStack Query 读取，用事件流得知何时重读；界面自己的状态只有选中、工况切换、图层和相机。

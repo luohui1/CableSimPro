@@ -21,7 +21,9 @@ function meshGeometry(prototype: CadPrototype) {
 }
 const MATERIAL_COLORS: Record<string, string> = { conductor: '#c7884b', conductor_screen: '#3b4651', insulation: '#eee8db', insulation_screen: '#3b4651', metallic_screen: '#b5784f', filler: '#d0d6d2', binder: '#9aaba7', bedding: '#7e929b', armour: '#8797a6', oversheath: '#243548' };
 
-export function CadViewport({ data, cutaway, selected, background = '#e8edf3' }: { data: ProductCad; cutaway: boolean; selected: string; background?: string }) {
+/** `background` is the colour the view is cleared to; without it the view is transparent and the surface behind it shows.
+ *  `className` replaces the default frame (`cad-viewport`, a fixed-height box) when the caller sizes the view itself. */
+export function CadViewport({ data, cutaway, selected, background, className = 'cad-viewport' }: { data: ProductCad; cutaway: boolean; selected: string; background?: string; className?: string }) {
   const container = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -34,9 +36,9 @@ export function CadViewport({ data, cutaway, selected, background = '#e8edf3' }:
     const materials: THREE.Material[] = [];
     try {
       if (data.model.schema !== 'cablesim.cad-model/1' || data.model.axis !== '+Z' || !data.model.layers.length) throw new Error('几何工件版本或坐标轴不受支持。');
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: background === undefined });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-      renderer.setClearColor(background);
+      if (background === undefined) renderer.setClearColor(0, 0); else renderer.setClearColor(background);
       renderer.localClippingEnabled = true;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       element.appendChild(renderer.domElement);
@@ -101,7 +103,7 @@ export function CadViewport({ data, cutaway, selected, background = '#e8edf3' }:
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     return () => { observer?.disconnect(); controls?.dispose(); geometries.forEach(item => item.dispose()); materials.forEach(item => item.dispose()); renderer?.dispose(); renderer?.domElement.remove(); };
   }, [data, cutaway, selected, background]);
-  return <><div className="cad-viewport" ref={container} role="img" aria-label="CadQuery 生成的电缆 CAD 实体" />{error && <p role="alert" className="cad-viewport-error">三维显示不可用：{error}仍可下载原始 STEP 文件。</p>}</>;
+  return <><div className={className} ref={container} role="img" aria-label="CadQuery 生成的电缆 CAD 实体" />{error && <p role="alert" className="absolute inset-x-3 top-3 z-10 m-0 rounded-nav bg-error-fill px-3 py-2 text-sm text-error">三维显示不可用：{error}仍可下载原始 STEP 文件。</p>}</>;
 }
 
 export function download(text: string, filename: string, mime: string) {
