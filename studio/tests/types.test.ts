@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { type App, createApp } from '../host/server.ts';
-import type { RatingTable, RatingTableCondition, SeriesCreated, SpecCreated } from '../shared/model-types.ts';
+import type { RatingTable, RatingTableCondition, SeriesCreated, SpecCreated, StructureProposal } from '../shared/model-types.ts';
 import type {
   CheckRow, LibraryJob, ProjectView, RatingRow, RunRecord, SeriesDeclaration, SeriesView, SpecificationReport, SpecView, TableInspection, ValueRow,
 } from '../shared/types.ts';
@@ -238,4 +238,67 @@ test('an ampacity table is kept on a specification version, each number is a run
   const refusedText = pdfText((await op<SpecificationReport>('library.export', { spec: outside.id, version: 1 })).id).replace(/\s+/g, ' ');
   assert.match(refusedText, /有 1 个条件被方法拒算/);
   assert.ok(refusedText.includes(refused.rows[0].run.run));
+});
+
+test('the initial structure a standard gives becomes a draft specification whose thickness checks do not fail', async () => {
+  const { declaration, view } = published.get('表3 YJV22')!;
+  const imported = await op<SpecView>('library.spec.get', { spec: view.specs.find(spec => spec.key === '3×240')!.id });
+  const printed = structureValues(imported);
+  const inputs = { standard: 'GB/T 12706.2-2020', u0_v: 8700, u_v: 15000, cores: 3, conductor: 'copper', area_mm2: 240, insulation: 'XLPE', armour: 'steel_tape' };
+  const screens = { screened: true, conductor_screen_thickness_mm: 0.8, insulation_screen_thickness_mm: 0.7, screen_tape_thickness_mm: 0.1, screen_tape_width_mm: 40 };
+
+  // Only the six things the standard needs: the insulation, from its table, with the pages; everything else is listed as still to give.
+  const first = await op<StructureProposal>('structure.propose', inputs);
+  assert.equal(first.scope, 'insulation');
+  assert.deepEqual(first.values, { insulation_thickness: printed.insulation_thickness });  // the number the published table prints
+  assert.deepEqual(first.dimensions[0].source, { ...first.dimensions[0].source, kind: 'standard', standard: 'GB/T 12706.2—2020', clause: '表 7', printed_page: 7, pdf_page: 15 });
+  assert.ok(first.missing.some(item => item.field === 'oversheath_thickness'));
+  const wrong = await call('structure.propose', { ...inputs, standard: 'GB/T 12706.3-2020' });
+  assert.deepEqual([wrong.status, wrong.body.error?.code], [422, 'STANDARD_MISMATCH']);
+  const other = await call('structure.propose', { ...inputs, insulation: 'PVC' });
+  assert.deepEqual([other.status, other.body.error?.code, other.body.error?.path], [422, 'INPUT_INVALID', '/insulation']);
+
+  // With the screens the engineer states, the standard's annex gives the bedding, the armour tape and the oversheath.
+  const proposal = await op<StructureProposal>('structure.propose', { ...inputs, ...screens });
+  assert.equal(proposal.scope, 'complete');
+  for (const field of ['insulation_thickness', 'bedding_thickness', 'armour_tape_thickness', 'oversheath_thickness']) {
+    const source = proposal.dimensions.find(item => item.field === field)!.source;
+    assert.ok(source.standard === 'GB/T 12706.2—2020' && source.clause && source.printed_page && source.pdf_page, field);
+  }
+  assert.deepEqual(proposal.missing.map(item => item.field), ['conductor_diameter', 'outer_diameter']);
+
+  // The conductor and the finished outer diameter are the engineer's: here the published table's. The rest is the proposal's, with its sources.
+  const created = await op<SeriesCreated>('library.series.create', { name: '按标准生成：YJV22-8.7/15 kV 三芯', designation: declaration.designation, cores: 3,
+    u0_v: 8700, u_v: 15000, standards: declaration.standards, common: { binder_thickness: 0.2, armour_tape_width: 50 },
+    common_basis: { binder_thickness: '取同电压等级公开结构表的包带厚度', armour_tape_width: '钢带损耗按间隙率计，结果与带宽无关' }, modelling: declaration.modelling });
+  const typed = await op<SpecCreated>('library.spec.create', { series: created.series, basis: proposal.basis,
+    values: { area: 240, conductor_diameter: printed.conductor_diameter, outer_diameter: printed.outer_diameter, ...proposal.values } });
+  const thickness = typed.view.structure.find(item => item.key === 'insulation_thickness')!;
+  assert.deepEqual([thickness.value, thickness.basis], [4.5, '人工填写；GB/T 12706.2—2020 表 7（印刷第 7 页，PDF 第 15 页）']);
+
+  // The check of the standard: no thickness requirement fails for the structure the standard itself gave.
+  assert.equal((await finished(await op<LibraryJob>('library.compute', { series: created.series, kinds: ['check'] }))).state, 'done');
+  const checked = (await op<SpecView>('library.spec.get', { spec: typed.spec })).results.check!;
+  assert.ok(!checked.error && checked.current);
+  const rows = checked.rows as CheckRow[];
+  const thicknesses = rows.filter(row => /nominal$/.test(row.id));
+  assert.ok(thicknesses.length >= 5, rows.map(row => row.id).join(', '));
+  // Every thickness the check can judge passes. The three that follow from the annex's diameter chain (bedding, armour tape, oversheath)
+  // are left unjudged for any three-core structure that has a filler wrapping, imported or typed alike: not failed, but not passed either.
+  const judged = thicknesses.filter(row => row.verdict !== 'uncovered');
+  assert.ok(judged.length >= 4);
+  assert.deepEqual(judged.filter(row => row.verdict !== 'passed').map(row => `${row.id}:${row.verdict}`), []);
+  assert.deepEqual(thicknesses.filter(row => row.verdict === 'uncovered').map(row => row.id.split(':')[1]), ['bedding-nominal', 'armour-tape-nominal', 'oversheath-nominal']);
+  assert.ok(!rows.some(row => row.verdict === 'failed'));
+  assert.deepEqual(checked.summary!.count, (await op<SpecView>('library.spec.get', { spec: view.specs.find(spec => spec.key === '3×240')!.id })).results.check!.summary!.count);
+
+  // The tools an agent gets: every new operation has a name, a title and a sentence, and takes the project its call carries.
+  const added = ['library.series.create', 'library.spec.create', 'library.rating.table', 'library.rating.tables', 'structure.propose']
+    .map(id => app.studio.operations.get(id)!);
+  const tools = [...app.studio.operations.values()].map(item => item.tool).filter(Boolean);
+  assert.equal(new Set(tools).size, tools.length);
+  for (const item of added) {
+    assert.ok(item.tool && /^[a-z][a-z0-9_]*$/.test(item.tool) && /[一-鿿]/.test(item.title) && /[一-鿿]/.test(item.description), item.id);
+    assert.ok('project' in (item.parameters.properties as object), item.id);
+  }
 });

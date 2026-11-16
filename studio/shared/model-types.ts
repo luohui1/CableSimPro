@@ -81,3 +81,55 @@ export interface RatingTable {
   by: string;
   rows: RatingTableRow[];
 }
+
+// ---- The initial structure a product standard gives ----
+
+/** Where one dimension of a proposal comes from. A `standard` or `derived` value carries the clause and the pages. */
+export interface DimensionSource {
+  kind: 'standard' | 'derived' | 'given';
+  /** Standard and edition as the check writes them, e.g. "GB/T 12706.2—2020". */
+  standard?: string;
+  /** Table or clause, e.g. "表 7". */
+  clause?: string | null;
+  printed_page?: number | null;
+  pdf_page?: number | null;
+  citation?: string | null;
+  record_id?: string;
+  record_sha256?: string;
+  source_sha256?: string;
+  /** The steps of an annex calculation, as the method reported them. */
+  calculation?: unknown[];
+  /** For `given`: who stated the value. */
+  note?: string;
+}
+
+export interface ProposedDimension {
+  /** Field of the structure table, so the value can be handed to `library.spec.create` as it is. */
+  field: string;
+  label: string;
+  /** In the table's own unit, mm. */
+  value: number;
+  unit: string;
+  source: DimensionSource;
+}
+
+export interface MissingDimension { field: string; label: string; unit: string; reason: string }
+
+export interface StructureProposal {
+  /** `insulation`: the insulation thickness only; `complete`: also bedding, armour and oversheath, from the standard's annex. */
+  scope: 'insulation' | 'complete';
+  standard: string;
+  inputs: Record<string, unknown>;
+  dimensions: ProposedDimension[];
+  /** field → value, in table units: what `library.spec.create` takes as `values`. */
+  values: Record<string, number>;
+  /** field → the clause and pages in words: what `library.spec.create` takes as `basis`. */
+  basis: Record<string, string>;
+  /** What a specification still needs from the engineer before it can be created. */
+  missing: MissingDimension[];
+  limitations: string[];
+  method: {
+    plugin_id: string; plugin_version: string; capability: string; method_version: string; manifest_sha256: string; request_sha256: string;
+    run_id: string; steps: number;
+  };
+}
