@@ -150,7 +150,8 @@ export function LibraryScreen() {
     { key: 'r20', header: 'R₂₀', unit: 'Ω/km', numeric: true, width: 'w-24', cell: row => compact(row.r20_ohm_km) },
     { key: 'check', header: '标准核对', width: 'w-52', cell: row => <CheckCell check={row.check} /> },
     { key: 'open', header: '', width: 'w-20', cell: row => row.id === selected?.id
-      ? <Button variant="ghost" size="sm" aria-label={`打开 ${row.key}`} onClick={() => open(row)}>打开<Icon name="action/arrow-right" data-icon="inline-end" /></Button> : null },
+      // The row answers Space and Enter itself; the button keeps its own, or Space on it would only select the row again.
+      ? <Button variant="ghost" size="sm" aria-label={`打开 ${row.key}`} onClick={() => open(row)} onKeyDown={event => event.stopPropagation()}>打开<Icon name="action/arrow-right" data-icon="inline-end" /></Button> : null },
   ];
 
   let body;

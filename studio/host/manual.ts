@@ -86,24 +86,36 @@ export function manualOperations(studio: Studio): Reviewable[] {
   /** One typed row built by the same builder as an imported one: nothing is written. `ahead` is the declaration of a series not made yet. */
   const prepared = async (params: SpecParams, context: Context, ahead?: SeriesDeclaration) => {
     const declaration = ahead ?? library.declaration(params.series);
-    const known = new Set((await core.call<{ fields: { key: string }[] }>('structure.vocabulary')).fields.map(field => field.key));
-    const unknown = Object.keys(params.values).find(key => !known.has(key));
+    // The fields by name, so a refusal can say which one in the words the table uses.
+    const labels = new Map((await core.call<{ fields: { key: string; label: string }[] }>('structure.vocabulary')).fields.map(field => [field.key, field.label]));
+    const named = (key: string) => labels.get(key) ?? key;
+    const unknown = Object.keys(params.values).find(key => !labels.has(key));
     if (unknown) throw new StudioError({ code: 'INPUT_INVALID', message: `“${unknown}”不是结构表字段，字段见这个操作的说明。`, path: `/values/${unknown}` });
     const stray = Object.keys(params.basis ?? {}).find(key => !(key in params.values));
-    if (stray) throw new StudioError({ code: 'INPUT_INVALID', message: `依据里的“${stray}”没有对应的数值。`, path: `/basis/${stray}` });
+    if (stray) throw new StudioError({ code: 'INPUT_INVALID', message: `依据里的“${named(stray)}”没有对应的数值。`, path: `/basis/${stray}` });
     const by = actor(context);
     const at = new Date().toISOString();
     const how = entered(context);
     // A value keeps the standard's citation only while it is the standard's value: the numbers of a proposal are not to be changed under it.
     const proposal = params.proposal ? loadProposal(studio.home, params.proposal) : undefined;
+    // A proposal was made for a voltage and a number of cores: its sizes do not go into a series declared for another.
+    if (proposal) {
+      const asked = { cores: Number(proposal.inputs.cores), u0_v: Number(proposal.inputs.u0_v), u_v: Number(proposal.inputs.u_v) };
+      const words = (item: { cores: number; u0_v: number; u_v: number | null }) =>
+        `${compact(item.u0_v / 1000)}/${item.u_v === null ? '—' : compact(item.u_v / 1000)} kV、${item.cores === 1 ? '单芯' : item.cores === 3 ? '三芯' : `${item.cores} 芯`}`;
+      if (declaration.cores !== asked.cores || declaration.u0_v !== asked.u0_v || declaration.u_v !== asked.u_v) {
+        throw new StudioError({ code: 'PROPOSAL_SERIES_MISMATCH', path: '/proposal',
+          message: `这份提案是按 ${words(asked)} 做的，系列“${declaration.name}”是 ${words(declaration)}，尺寸放不进去；请换一个系列，或按这个系列的条件重新生成提案。` });
+      }
+    }
     const taken = proposal ? Object.keys(proposal.values).filter(field => field in params.values) : [];
     for (const field of taken) {
       if (params.values[field] !== proposal!.values[field]) {
         throw new StudioError({ code: 'PROPOSAL_VALUE_CHANGED', path: `/values/${field}`,
-          message: `“${field}”是 ${params.values[field]}，提案 ${proposal!.id} 里是 ${proposal!.values[field]}；依据属于提案的数，要改这个数就不要引用提案。` });
+          message: `“${named(field)}”是 ${params.values[field]}，提案 ${proposal!.id} 里是 ${proposal!.values[field]}；依据属于提案的数，要改这个数就不要引用提案。` });
       }
       if (params.basis && field in params.basis) {
-        throw new StudioError({ code: 'PROPOSAL_BASIS_GIVEN', path: `/basis/${field}`, message: `“${field}”的依据由提案 ${proposal!.id} 给出，不能另写。` });
+        throw new StudioError({ code: 'PROPOSAL_BASIS_GIVEN', path: `/basis/${field}`, message: `“${named(field)}”的依据由提案 ${proposal!.id} 给出，不能另写。` });
       }
     }
     const basisOf = (key: string): string | undefined => (taken.includes(key) ? proposal!.basis[key] : params.basis?.[key]);

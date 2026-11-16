@@ -131,7 +131,7 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
       title={view?.spec.name ?? '读取规格…'}
       marks={view ? <>
         <VersionSelect value={view.version.number} versions={view.versions.map(item => ({ number: item.number, review: item.review }))}
-          onValueChange={number => openSpec(activeId, number === view.versions[0].number ? undefined : number)} />
+          onValueChange={number => { if (settled) openSpec(activeId, number === view.versions[0].number ? undefined : number); }} />
         <ReviewMark state={view.version.review} />
         <Badge variant="secondary">{ORIGIN_NAMES[originOf(view.series.origin)]}</Badge>
       </> : undefined}

@@ -1,5 +1,7 @@
 // 参数: what the electrical and the short-circuit methods gave for one saved version, which clause each number stands on, and
-// what they could not give. A value a method refused is listed as refused with the method's own words, never as zero.
+// what they could not give. A value a method refused is listed as refused with the method's own words, never as zero. What
+// the saved structure says about itself (data warnings, where its sizes came from, the conditions the methods ran under) is
+// under the numbers whether or not they have been calculated.
 import { compact, fixed, STATE_NAMES } from '@shared/format';
 import { dateTime, resultValue } from '@shared/products';
 import type { ProductResult, SpecView, ValueRow } from '@shared/types';
@@ -10,7 +12,7 @@ import { Metric } from '@/kit/metric';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { Panel, Split } from '@/kit/workbench/page';
 import { ResultGate } from './gate';
-import { conditionLabel, methodName, withoutHashes } from './model';
+import { conditionLabel, conditionValue, methodName, readable } from './model';
 
 /** One quantity as the page lists it: three cores that agree read once, cores that differ read one by one. */
 interface Quantity { key: string; label: string; value: string; unit: string; basis: string }
@@ -66,22 +68,35 @@ function Missing({ rows }: { rows: Open[] }) {
   </ul>;
 }
 
-/** The conditions the short-circuit method was run under, each with where it comes from. */
+/** The conditions of a result: the value in the units an engineer reads, and where it comes from. */
+function conditionsOf(result: ProductResult | undefined) {
+  const conditions = result?.current && result.conditions && !Array.isArray(result.conditions) ? result.conditions : null;
+  return Object.keys(conditions?.sources ?? {}).concat(Object.keys(conditions?.values ?? {}).filter(key => !(key in (conditions?.sources ?? {})))).map(key => {
+    const raw = conditions!.values[key];
+    return { key, label: conditionLabel(key), value: raw === undefined ? '' : conditionValue(key, raw), source: conditions!.sources[key] ?? '' };
+  });
+}
+
+/** The conditions the short-circuit method was run under, each with where it comes from; the value too when the source does not say it. */
 function Conditions({ result }: { result: ProductResult }) {
-  const conditions = result.conditions && !Array.isArray(result.conditions) ? result.conditions : null;
-  const keys = Object.keys(conditions?.sources ?? {});
-  if (!conditions || keys.length === 0) return null;
+  const rows = conditionsOf(result);
+  if (rows.length === 0) return null;
   return <dl className="m-0 flex flex-col gap-2 border-b border-line px-4 py-4 text-sm">
-    {keys.map(key => <div key={key} className="grid grid-cols-label gap-x-4">
-      <dt className="text-ink-2">{conditionLabel(key)}</dt>
-      <dd className="m-0 text-ink">{conditions.sources[key]}</dd>
+    {rows.map(row => <div key={row.key} className="grid grid-cols-label gap-x-4">
+      <dt className="text-ink-2">{row.label}</dt>
+      <dd className="m-0 text-ink">
+        {row.value && !row.source.includes(row.value) && <span className="mr-2 font-medium tabular-nums">{row.value}</span>}
+        {row.source}
+      </dd>
     </div>)}
   </dl>;
 }
 
-/** What the saved structure and the engineers said about this version, kept shut under the numbers: warnings first. */
+/** What the saved structure and the methods said about themselves, kept shut under the numbers: the warnings first, and always there. */
 function Provenance({ view, results }: { view: SpecView; results: (ProductResult | undefined)[] }) {
   const method = results.find(result => result?.current && result.method);
+  const seen = new Set<string>();
+  const conditions = results.flatMap(conditionsOf).filter(row => !seen.has(row.key) && seen.add(row.key));
   return <>
     {view.warnings.length > 0 && <Disclosure title={`资料提示 ${view.warnings.length} 条`} defaultOpen>
       <ul className="m-0 flex list-none flex-col gap-2 px-4 pb-4">
@@ -90,11 +105,22 @@ function Provenance({ view, results }: { view: SpecView; results: (ProductResult
         </li>)}
       </ul>
     </Disclosure>}
+    {conditions.length > 0 && <Disclosure title="计算条件">
+      <dl className="m-0 grid grid-cols-label gap-x-3 gap-y-2 px-4 pb-4 text-sm">
+        {conditions.map(row => <div key={row.key} className="contents">
+          <dt className="text-ink-2">{row.label}</dt>
+          <dd className="m-0 text-ink">{row.value}{row.source && <span className="ml-2 text-ink-2">{row.source}</span>}</dd>
+        </div>)}
+        {method?.method && <>
+          <dt className="text-ink-2">方法</dt>
+          <dd className="m-0 text-ink">{methodName(method.method)}<span className="ml-2 text-ink-2">{dateTime(method.created)} · {method.by}</span></dd>
+        </>}
+      </dl>
+    </Disclosure>}
     <Disclosure title="尺寸来源">
       <div className="flex flex-col gap-2 px-4 pb-4 text-sm">
-        <span className="flex items-center gap-2 text-ink"><Badge variant="outline">{STATE_NAMES[view.series.origin] ?? view.series.origin}</Badge>{view.derivation.note}</span>
-        <span className="text-ink-2">{withoutHashes(view.entry.source)}</span>
-        {method?.method && <span className="text-ink-2">{methodName(method.method)} · {dateTime(method.created)} · {method.by}</span>}
+        <span className="flex items-center gap-2 text-ink"><Badge variant="outline">{STATE_NAMES[view.series.origin] ?? view.series.origin}</Badge>{readable(view.derivation.note)}</span>
+        <span className="text-ink-2">{readable(view.entry.source)}</span>
       </div>
     </Disclosure>
   </>;
@@ -120,8 +146,8 @@ export function ParamsPage({ view, onCompute, busy }: { view: SpecView; onComput
       <ResultGate result={electrical} name="电气参数" onCompute={onCompute} busy={busy}>
         <DataTable rows={electricalRows?.given ?? []} rowKey={row => row.key} columns={COLUMNS} />
         {(electricalRows?.open.length ?? 0) > 0 && <Disclosure title={`没有给出的 ${electricalRows!.open.length} 项`} defaultOpen><Missing rows={electricalRows!.open} /></Disclosure>}
-        <Provenance view={view} results={[electrical, shortCircuit]} />
       </ResultGate>
+      <Provenance view={view} results={[electrical, shortCircuit]} />
     </Panel> },
     { id: 'short', size: 44, min: 32, children: <Panel title="短路电流" tools={shortCircuit?.current && shortCircuit.method ? <Badge variant="outline">{methodName(shortCircuit.method)}</Badge> : undefined}>
       <ResultGate result={shortCircuit} name="短路电流" onCompute={onCompute} busy={busy}>

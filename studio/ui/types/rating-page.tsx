@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
-import { compact, fixed } from '@shared/format';
+import { compact, fixed, REVIEW_NAMES } from '@shared/format';
 import type { RatingTable, RatingTableRow } from '@shared/model-types';
 import type { RatingCondition, RatingRow, SpecView } from '@shared/types';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,12 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/kit/icon';
 import { TierMark, type Tier } from '@/kit/marks';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
-import { ChoiceSelect } from '@/kit/workbench/form';
+import { ChoiceSelect, FormNote } from '@/kit/workbench/form';
 import { Panel } from '@/kit/workbench/page';
 import { EmptyState, Given, PremiseStrip } from '@/kit/workbench/premise';
 import { api } from '@/state/api';
 import { ResultGate } from './gate';
-import { methodName, shortTime } from './model';
+import { fullTime, methodName, shortTime } from './model';
 
 /** One condition of a table and what the method gave for it: the same whether the table is the reference or one written by an engineer. */
 interface GridRow {
@@ -39,6 +39,7 @@ interface Grid {
   id: string;
   title: string;
   created: string;
+  by: string | null;
   rows: GridRow[];
   tier: { key: Tier; meaning: string | null; basis: string[] } | null;
   method: string;
@@ -61,9 +62,11 @@ function referenceGrid(view: SpecView): Grid | null {
   if (!result?.current || result.error) return null;
   const conditions = result.conditions as RatingCondition[];
   const rows = result.rows as RatingRow[];
-  const tier = rows.find(row => row.tier)?.tier;
+  // A table is only as good as its weakest row.
+  const tiers = rows.flatMap(row => (row.tier ? [row.tier] : []));
+  const tier = TIER_ORDER.map(key => tiers.find(item => item.tier === key)).find(Boolean);
   return {
-    id: 'reference', title: '基准载流量', created: result.created, project: null, method: methodName(result.method),
+    id: 'reference', title: '基准载流量', created: result.created, by: result.by, project: null, method: methodName(result.method),
     rows: conditions.map(item => {
       const row = rows.find(entry => entry.id === item.id);
       return { key: item.id, name: row?.layout_label ?? '载流量', layout: item.layout, label: row?.layout_label ?? '载流量', basis: row?.basis_name ?? null,
@@ -79,7 +82,7 @@ function savedGrid(table: RatingTable): Grid {
   const described = table.rows.find(row => row.tier === lowest && row.tier_meaning);
   const run = table.rows[0]?.run;
   return {
-    id: table.id, title: table.title, created: table.created, project: table.project, method: run ? methodName(run) : '', warnings: [],
+    id: table.id, title: table.title, created: table.created, by: table.by, project: table.project, method: run ? methodName(run) : '', warnings: [],
     rows: table.rows.map(row => ({ key: row.id, name: rowName(row), layout: row.layout, label: row.layout_label, basis: row.basis_name, depth: row.depth_m,
       soil: row.soil_thermal_resistivity, ambient: row.ambient_temperature_c, ampacity: row.ampacity_a, error: row.error?.message })),
     tier: lowest ? { key: lowest, meaning: described?.tier_meaning ?? null, basis: described?.tier_basis ?? [] } : null,
@@ -113,11 +116,21 @@ const LIST_COLUMNS: Column<GridRow>[] = [
   { key: 'ampacity', header: '载流量', unit: 'A', numeric: true, width: 'w-24', cell: row => (row.ampacity !== null ? fixed(row.ampacity, 1) : refused(row)) },
 ];
 
-/** The table as a file an engineer can open in a spreadsheet: units in the header, a refusal written out where a number would be. */
-function csvOf(grid: Grid): string {
+const TIER_WORDS: Record<Tier, string> = { deliverable: '可交付', reference: '参考', exploratory: '探索' };
+
+/**
+ * The table as a file an engineer can open in a spreadsheet: units in the header, a refusal written out where a number would be.
+ * What the numbers stand on goes first, so a file passed on still says which size and version, which method and for what conditions.
+ */
+function csvOf(grid: Grid, view: SpecView): string {
   const text = (value: string) => (/[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
   const value = (row: GridRow | undefined) => (!row ? '' : row.ampacity !== null ? String(row.ampacity) : `拒算：${row.error ?? ''}`);
-  const lines: string[][] = [];
+  const same = (key: 'depth' | 'ambient') => [...new Set(grid.rows.map(row => row[key]))].join('、');
+  const lines: string[][] = [
+    ['规格', view.spec.name], ['版本', `第 ${view.version.number} 版（${REVIEW_NAMES[view.version.review]}）`], ['表', grid.title], ['方法', grid.method],
+    ...(grid.tier ? [['可信分档', TIER_WORDS[grid.tier.key]]] : []), ['算于', fullTime(grid.created)], ...(grid.by ? [['算的人', grid.by]] : []),
+    ...(regular(grid.rows) ? [['埋深 (m)', same('depth')], ['环境温度 (°C)', same('ambient')]] : []), [],
+  ];
   if (regular(grid.rows)) {
     const layouts = [...new Map(grid.rows.map(row => [row.layout, row])).values()];
     lines.push(['土壤热阻率 (K·m/W)', ...layouts.map(first => `${first.label}${first.basis ? `（${first.basis}）` : ''} (A)`)]);
@@ -161,6 +174,11 @@ export function RatingPage({ view, onCompute, busy }: { view: SpecView; onComput
   const soils = new Set(grid.rows.map(row => row.soil)).size;
   const grouped = regular(grid.rows);
   const only = (key: 'depth' | 'ambient') => [...new Set(grid.rows.map(row => row[key]))].map(item => compact(item)).join('、');
+  // The method's own words for each condition it refused, once for the layings that share them.
+  const refusals = [...Map.groupBy(grid.rows.filter(row => row.error), row => row.error!)].map(([message, rows]) => ({ message, layouts: [...new Set(rows.map(row => row.label))].join('、') }));
+  // Why the reference table is not offered beside the tables an engineer wrote: it is out of date or the method gave nothing.
+  const reference = view.results.rating;
+  const absent = reference && !tables.some(item => item.id === 'reference') ? (!reference.current ? '库按固定条件算的基准表需要重算，所以这里没有列它。' : reference.error ? `库按固定条件算的基准表没有算出来：${reference.error.message}` : null) : null;
 
   return <>
     <PremiseStrip asked="允许持续载流量">
@@ -180,8 +198,8 @@ export function RatingPage({ view, onCompute, busy }: { view: SpecView; onComput
           options={tables.map(item => ({ value: item.id, label: item.id === 'reference' ? `${item.title}（库按固定条件算）` : item.title }))} /></div>
         : grid.title}
         tools={<>
-          <span className="mr-2 text-sm text-ink-2 tabular-nums">算于 {shortTime(grid.created)}</span>
-          <Button variant="ghost" size="sm" onClick={() => save(`${view.spec.name} ${grid.title}.csv`, csvOf(grid))}><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button>
+          <span className="mr-2 text-sm text-ink-2 tabular-nums">算于 {shortTime(grid.created)}{grid.by ? ` · ${grid.by}` : ''}</span>
+          <Button variant="ghost" size="sm" onClick={() => save(`${view.spec.name} ${grid.title}.csv`, csvOf(grid, view))}><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button>
         </>}>
         {grouped ? <Matrix rows={grid.rows} /> : <DataTable rows={grid.rows} rowKey={row => row.key} columns={LIST_COLUMNS} />}
       </Panel>
@@ -194,6 +212,15 @@ export function RatingPage({ view, onCompute, busy }: { view: SpecView; onComput
           <span className="text-ink">{grid.method || '—'}</span>
           {grid.warnings.map(text => <span key={text} className="text-ink-2">{text}</span>)}
         </div>
+        {refusals.length > 0 && <div className="flex flex-col gap-2 border-t border-line pt-4">
+          <span className="text-ink-2">方法拒算的条件</span>
+          {refusals.map(item => <p key={item.message} className="m-0 flex gap-2 text-ink">
+            <span className="flex h-5 shrink-0 items-center"><Icon name="status/error" className="text-error" /></span>
+            <span><b className="font-medium">{item.layouts}</b>：{item.message}</span>
+          </p>)}
+        </div>}
+        {saved.error && <FormNote tone="attention" title="读不到写进这一版的载流量表"><span role="alert">{saved.error.message}</span></FormNote>}
+        {absent && <FormNote tone="attention">{absent}</FormNote>}
         {grid.project
           ? <div><Button variant="outline" size="sm" onClick={() => void navigate({ to: '/p/$projectId', params: { projectId: grid.project! }, search: {} })}>
             <Icon name="object/study" data-icon="inline-start" />看每个数的运行记录</Button></div>

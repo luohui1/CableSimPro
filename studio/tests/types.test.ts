@@ -376,6 +376,13 @@ test('the initial structure a standard gives becomes a draft specification whose
   assert.deepEqual([reworded.status, reworded.body.error?.code], [422, 'PROPOSAL_BASIS_GIVEN']);
   const missingProposal = await call('library.spec.create', { series: created.series, proposal: 'prop-000000000000', values });
   assert.deepEqual([missingProposal.status, missingProposal.body.error?.code], [404, 'PROPOSAL_UNKNOWN']);
+  // A proposal made for one voltage and number of cores does not go into a series declared for another: the sizes would not fit it.
+  const elsewhere = await op<SeriesCreated>('library.series.create', { name: '按标准生成：另一个电压的系列', designation: declaration.designation, cores: 1,
+    u0_v: 12000, u_v: 20000, outer_diameter_precision_mm: 0.1 });
+  const misplaced = await call('library.spec.create', { series: elsewhere.series, proposal: proposal.id, values });
+  assert.deepEqual([misplaced.status, misplaced.body.error?.code], [422, 'PROPOSAL_SERIES_MISMATCH']);
+  assert.match(misplaced.body.error!.message, /8\.7\/15 kV、三芯.*12\/20 kV、单芯/);
+  assert.equal((await op<SeriesView>('library.series.get', { series: elsewhere.series })).specs.length, 0);
   assert.equal((await op<SeriesView>('library.series.get', { series: created.series })).specs.length, 0);
 
   const typed = await op<SpecCreated>('library.spec.create', { series: created.series, proposal: proposal.id, values });

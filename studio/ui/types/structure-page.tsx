@@ -15,7 +15,7 @@ import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { Panel, Split } from '@/kit/workbench/page';
 import { EmptyState } from '@/kit/workbench/premise';
 import { ChecksTab } from './checks-tab';
-import { closureText, ORIGIN_MARK, roleOfField } from './model';
+import { closureText, ORIGIN_MARK, readable, roleOfField } from './model';
 import { ringCounts, ringsOf, SectionFigure } from './section-figure';
 
 const SolidView = lazy(() => import('./solid').then(module => ({ default: module.SolidView })));
@@ -68,7 +68,6 @@ export function StructurePage({ view, index, total, previous, next, onStep, onCo
     const at = row?.parentElement ? [...row.parentElement.children].indexOf(row) : -1;
     setPointed(layers[at]?.key ?? null);
   };
-  const weight = view?.structure.find(item => item.key === 'weight');
 
   return <Split panes={[
     { id: 'section', size: 34, min: 24, children: <Panel title="结构断面" bodyClassName="flex flex-col overflow-hidden"
@@ -102,7 +101,6 @@ export function StructurePage({ view, index, total, previous, next, onStep, onCo
             </CanvasNote>}
             status={<>
               <span>外径 {fixed(view.entry.summary.outer_diameter_m * 1000, 1)} mm</span>
-              {weight && <span>重量 {compact(weight.value, 6)} kg/km</span>}
               <span>断面 {counts.total} 层：{counts.cores > 1 ? `${counts.cores} 芯各 ${counts.perCore} 层` : `线芯 ${counts.perCore} 层`}，共用 {counts.common} 层</span>
             </>}>
             <div className="absolute inset-8"><SectionFigure shape={drawing.shape} label={`${view.spec.key} 实际尺寸断面`} role={role} zoom={ZOOMS[zoomAt]} /></div>
@@ -111,7 +109,7 @@ export function StructurePage({ view, index, total, previous, next, onStep, onCo
     </Panel> },
     { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={view?.closure ? <span className="text-sm text-ink-2 tabular-nums">{closureText(view.closure)}</span> : undefined}>
       {!view ? <Skeleton className="m-4 h-64" />
-        : layers.length === 0 ? <EmptyState icon="object/section" title="没有分层尺寸" description={view.derivation.note} />
+        : layers.length === 0 ? <EmptyState icon="object/section" title="没有分层尺寸" description={readable(view.derivation.note)} />
           : <div className="contents" onMouseOver={point} onMouseLeave={() => setPointed(null)} onFocus={point} onBlur={() => setPointed(null)}>
             <DataTable rowKey={row => row.key} rows={layers} columns={LAYER_COLUMNS} selected={own ?? layerKey}
               onSelect={row => setPicked({ version: view.version.id, key: row.key })} />

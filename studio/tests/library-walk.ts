@@ -90,8 +90,8 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('radio', { name: /^表3 YJV22/ }).click();
     // A file that is not a structure table is turned away in words.
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
-    await page.locator('input[type="file"]').setInputFiles({ name: '说明.txt', mimeType: 'text/plain', buffer: Buffer.from('not a table') });
-    await page.getByText(/不能读“说明\.txt”/).waitFor();
+    await page.locator('input[type="file"]').setInputFiles({ name: '说明.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not a table') });
+    await page.getByText(/不能读“说明\.pdf”/).waitFor();
     await page.getByRole('button', { name: '用公开样例', exact: true }).click();
     await page.getByRole('heading', { name: '选一张工作表' }).waitFor();
     for (const sheet of ['表1 YJV', '表2 YJV', '表3 YJV22']) {
@@ -365,8 +365,8 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const typedName = '走查：手工填写 YJV22-8.7/15 kV 三芯';
     await page.getByRole('textbox', { name: '系列名称', exact: true }).fill(typedName);
     await page.getByRole('textbox', { name: '型号', exact: true }).fill(declaration.designation);
-    await page.getByRole('spinbutton', { name: '额定相电压 kV', exact: true }).fill(String(declaration.u0_v / 1000));
-    await page.getByRole('spinbutton', { name: '额定线电压 kV', exact: true }).fill(String(declaration.u_v / 1000));
+    await page.getByRole('textbox', { name: '额定相电压 kV', exact: true }).fill(String(declaration.u0_v / 1000));
+    await page.getByRole('textbox', { name: '额定线电压 kV', exact: true }).fill(String(declaration.u_v / 1000));
     for (const standard of declaration.standards) {
       await page.getByRole('textbox', { name: '添加执行标准', exact: true }).fill(standard);
       await page.getByRole('button', { name: '添加', exact: true }).click();
@@ -383,6 +383,8 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     // The first size: the table-given values of the imported 3×300, the section drawn from them as they are typed.
     for (const item of target300.structure.filter(entry => entry.origin === 'table')) await page.locator(`#value-${item.key}`).fill(String(item.value));
     await page.getByRole('img', { name: '填写中的结构断面' }).waitFor({ timeout: 60_000 });
+    // The numbers have room in their fields: the box of a layer's value is wider than the unit written in it.
+    for (const key of ['conductor_diameter', 'outer_diameter']) assert.ok((await page.locator(`#value-${key}`).boundingBox())!.width > 40, `${key} has room for its number`);
     await capture('new-scratch');
     const nothingYet = (await op<SeriesSummary[]>('library.series')).some(item => item.name === typedName);
     assert.equal(nothingYet, false, 'the preview saved nothing');
@@ -398,12 +400,12 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const target240 = await op<SpecView>('library.spec.get', { spec: spec('3×240').id, version: 1 });
     const given = (key: string) => String(target240.structure.find(item => item.key === key)!.value);
     await page.goto(`${base}/library/new?from=standard`);
-    await page.getByRole('spinbutton', { name: '标称截面', exact: true }).fill('240');
+    await page.getByRole('textbox', { name: '标称截面', exact: true }).fill('240');
     await page.getByRole('group', { name: '铠装形式' }).getByRole('button', { name: '双钢带铠装', exact: true }).click();
-    await page.getByRole('spinbutton', { name: '导体屏蔽厚度', exact: true }).fill(given('conductor_screen_thickness'));
-    await page.getByRole('spinbutton', { name: '绝缘屏蔽厚度', exact: true }).fill(given('insulation_screen_thickness'));
-    await page.getByRole('spinbutton', { name: '铜带厚度', exact: true }).fill(given('screen_tape_thickness'));
-    await page.getByRole('spinbutton', { name: '铜带宽度', exact: true }).fill(given('screen_tape_width'));
+    await page.getByRole('textbox', { name: '导体屏蔽厚度', exact: true }).fill(given('conductor_screen_thickness'));
+    await page.getByRole('textbox', { name: '绝缘屏蔽厚度', exact: true }).fill(given('insulation_screen_thickness'));
+    await page.getByRole('textbox', { name: '铜带厚度', exact: true }).fill(given('screen_tape_thickness'));
+    await page.getByRole('textbox', { name: '铜带宽度', exact: true }).fill('40');  // the width of the screen tape is the engineer's: the table does not list it
     await capture('new-standard-conditions');
     await page.getByRole('button', { name: '生成提案', exact: true }).click();
     await page.getByText(/表 7/).first().waitFor({ timeout: 120_000 });

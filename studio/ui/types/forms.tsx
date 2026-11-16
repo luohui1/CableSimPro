@@ -27,8 +27,14 @@ export function Pick({ label, value, options, onValueChange, size }: {
     onValueChange={next => onValueChange(next === NONE ? '' : next)} />;
 }
 
-/** A number the person typed, as the number it is; an empty box is no number. */
-export const numberOf = (text: string): number | undefined => (text.trim() === '' || !Number.isFinite(Number(text)) ? undefined : Number(text));
+/** What a declaration still lacks before anything can be built from it: the basis of each size it states, the reference of each parameter it gives. */
+export function lacking(declaration: SeriesDeclaration, vocabulary: LibraryVocabulary | undefined): string[] {
+  const named = (key: string, list: { key: string; label: string }[] | undefined) => list?.find(item => item.key === key)?.label ?? key;
+  return [
+    ...Object.keys(declaration.common).filter(key => !declaration.common_basis[key]?.trim()).map(key => named(key, vocabulary?.fields)),
+    ...Object.entries(declaration.modelling).filter(([, item]) => !String(item.reference ?? '').trim()).map(([key]) => named(key, vocabulary?.modelling)),
+  ];
+}
 
 /** A voltage in kV in a field whose value the form keeps in volts. */
 export function KilovoltInput({ label, prefix, volts, onChange }: { label: string; prefix: string; volts: number | null | undefined; onChange: (volts: number) => void }) {
@@ -52,7 +58,7 @@ function Standards({ value, onChange }: { value: string[]; onChange: (value: str
       {value.length === 0 && <span className="text-sm text-ink-2">还没有写执行标准</span>}
     </div>
     <div className="flex gap-2">
-      <Input aria-label="添加执行标准" placeholder="写到年号，如 GB/T 12706.2-2020" value={draft} onChange={event => setDraft(event.target.value)}
+      <Input aria-label="添加执行标准" placeholder="写到年号，如 GB/T 12706.2-2020" value={draft} onChange={event => setDraft(event.target.value)} onBlur={add}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); add(); } }} />
       <Button type="button" variant="outline" disabled={!draft.trim()} onClick={add}><Icon name="action/add" data-icon="inline-start" />添加</Button>
     </div>
@@ -167,10 +173,10 @@ export function StructureFields({ vocabulary, values, basis, onValues, onBasis, 
   return <>
     {fields.map(field => <FormRow key={field.key} label={field.label} htmlFor={`value-${field.key}`} wide>
       <div className="flex items-center gap-3">
-        <UnitInput id={`value-${field.key}`} aria-label={`填写${field.label}`} unit={field.unit} className="w-40" min={0} placeholder={taken?.has(field.key) ? '取系列声明' : undefined}
+        <UnitInput id={`value-${field.key}`} aria-label={`填写${field.label}`} unit={field.unit} className="w-36 shrink-0" min={0} placeholder={taken?.has(field.key) ? '取系列声明' : undefined}
           value={values[field.key] ?? null} onValueChange={number => onValues({ ...values, [field.key]: number })} />
-        <SourceTag kind="manual" />
-        <Input aria-label={`${field.label}依据`} placeholder="依据（可选），如图纸号、标准条款" value={basis[field.key] ?? ''} onChange={event => onBasis({ ...basis, [field.key]: event.target.value })} />
+        <SourceTag kind="manual" className="shrink-0" />
+        <Input aria-label={`${field.label}（本规格）依据`} placeholder="依据（可选）" className="min-w-0 flex-1" value={basis[field.key] ?? ''} onChange={event => onBasis({ ...basis, [field.key]: event.target.value })} />
       </div>
     </FormRow>)}
   </>;

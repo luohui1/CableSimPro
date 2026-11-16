@@ -22,7 +22,7 @@ import { PageHeader, Panel, Split } from '@/kit/workbench/page';
 import { EmptyState } from '@/kit/workbench/premise';
 import { api } from '@/state/api';
 import { queryClient, useProductLibrary, useVocabulary } from '@/state/queries';
-import { CommonSizes, EMPTY_DECLARATION, KilovoltInput, Pick, SeriesFields, StructureFields } from './forms';
+import { CommonSizes, EMPTY_DECLARATION, KilovoltInput, lacking, Pick, SeriesFields, StructureFields } from './forms';
 import { TypeFrame } from './frame';
 import { closureText, methodName } from './model';
 import { SectionFigure } from './section-figure';
@@ -48,6 +48,8 @@ const seriesParams = (declaration: SeriesDeclaration, precision: number | null) 
 
 const numbers = (values: Record<string, number | null>) => Object.fromEntries(Object.entries(values).flatMap(([key, value]) => (value ? [[key, value]] : [])));
 const texts = (basis: Record<string, string>) => Object.fromEntries(Object.entries(basis).filter(([, text]) => text.trim()).map(([key, text]) => [key, text.trim()]));
+/** The basis of the values that are there: the basis a cleared value left behind is not sent with it. */
+const basisOfValues = (values: Record<string, number>, basis: Record<string, string>) => Object.fromEntries(Object.entries(texts(basis)).filter(([key]) => key in values));
 
 /** Makes the series when the person is making one, then the size in it; the page then shows the size. A series made by a
  *  try that failed on the size is kept, so trying again does not make a second one. */
@@ -68,7 +70,9 @@ function useCreate() {
       void navigate({ to: '/library/$seriesId', params: { seriesId: result.view.series.id }, search: { spec: result.spec } });
     },
   });
-  return { ...create, created };
+  /** New conditions start over: a series an earlier try made is not the place for a size made for other conditions. */
+  const forget = () => { setCreated(undefined); create.reset(); };
+  return { ...create, created, forget };
 }
 
 function Fail({ error }: { error: Error | null }) {
@@ -150,13 +154,14 @@ function FromScratch({ fixedSeries, onWay }: { fixedSeries: string | undefined; 
   const create = useCreate();
   const making = target === NEW_SERIES;
   const locked = Boolean(create.created);
-  const missingBasis = making && !locked ? Object.keys(declaration.common).filter(key => !declaration.common_basis[key]?.trim()) : [];
+  const missingBasis = making && !locked ? lacking(declaration, vocabulary.data) : [];
   const given = new Set(Object.keys(making ? declaration.common : series.data?.declaration.common ?? {}));
   const declared = declaration.name.trim() && declaration.designation.trim() && declaration.u0_v > 0 && declaration.u_v > 0 && precision;
   // The section can be drawn once the size is named by its cross-section and the series it goes into is known.
+  const sent = numbers(values) as Record<string, number>;
   const request = values.area && missingBasis.length === 0 && (making ? declared : !series.isPending && !series.isError)
-    ? { ...(making && !locked ? { new_series: seriesParams(declaration, precision) } : { series: locked ? create.created : target }), values: numbers(values), basis: texts(basis) } : null;
-  const submit = () => create.mutate({ ...(making ? { declaration, precision } : { series: target }), values: numbers(values) as Record<string, number>, basis: texts(basis) });
+    ? { ...(making && !locked ? { new_series: seriesParams(declaration, precision) } : { series: locked ? create.created : target }), values: sent, basis: basisOfValues(sent, basis) } : null;
+  const submit = () => create.mutate({ ...(making ? { declaration, precision } : { series: target }), values: sent, basis: basisOfValues(sent, basis) });
 
   return <>
     <NewHeader way="manual" onWay={onWay} fixedSeries={fixedSeries}
@@ -177,7 +182,7 @@ function FromScratch({ fixedSeries, onWay }: { fixedSeries: string | undefined; 
           <FormSection title="分层结构" description="从导体往外逐层填，单位 mm。每个值记作人工填写，可以写上依据。">
             <StructureFields vocabulary={vocabulary.data} values={values} basis={basis} onValues={setValues} onBasis={setBasis} taken={given} />
           </FormSection>
-          {missingBasis.length > 0 && <FormNote tone="attention" title="请补充取值依据">{missingBasis.map(key => vocabulary.data?.fields.find(field => field.key === key)?.label ?? key).join('、')}</FormNote>}
+          {missingBasis.length > 0 && <FormNote tone="attention" title="请补充取值依据">{missingBasis.join('、')}</FormNote>}
           <Fail error={create.error} />
         </div>
       </div> },
@@ -328,6 +333,7 @@ function FromStandard({ fixedSeries, onWay }: { fixedSeries: string | undefined;
       ...(form.tapeWidth ? { screen_tape_width_mm: form.tapeWidth } : {}),
     }),
     onSuccess: made => {
+      create.forget();
       setProposal(made); setFilled({}); setBasis({}); setStep(1);
       setDeclaration({ ...EMPTY_DECLARATION, standards: [made.standard], cores: made.inputs.cores === 1 ? 1 : 3, u0_v: Number(made.inputs.u0_v ?? 0), u_v: Number(made.inputs.u_v ?? 0) });
     },
@@ -336,15 +342,16 @@ function FromStandard({ fixedSeries, onWay }: { fixedSeries: string | undefined;
   const making = target === NEW_SERIES;
   const locked = Boolean(create.created);
   const pending = proposal ? proposal.missing.filter(item => !filled[item.field]) : [];
-  const missingBasis = making && !fixedSeries && !locked ? Object.keys(declaration.common).filter(key => !declaration.common_basis[key]?.trim()) : [];
+  const missingBasis = making && !fixedSeries && !locked ? lacking(declaration, vocabulary.data) : [];
   const declared = Boolean(declaration.name.trim() && declaration.designation.trim() && declaration.u0_v > 0 && declaration.u_v > 0 && precision);
   const ready = proposal !== null && pending.length === 0 && missingBasis.length === 0 && (!making || locked || fixedSeries || declared);
   // The size is the one the proposal was made for, whatever the form says now.
   const submit = () => {
     if (!proposal) return;
     // The basis of what the standard gave comes from the proposal itself; only what the engineer gave carries a basis of their own.
-    const values = { area: Number(proposal.inputs.area_mm2), ...proposal.values, ...numbers(filled) } as Record<string, number>;
-    create.mutate({ ...(making ? { declaration, precision } : { series: target }), values, basis: texts(basis), proposal: proposal.id });
+    const given = numbers(filled) as Record<string, number>;
+    const values = { area: Number(proposal.inputs.area_mm2), ...proposal.values, ...given };
+    create.mutate({ ...(making ? { declaration, precision } : { series: target }), values, basis: basisOfValues(given, basis), proposal: proposal.id });
   };
   const settled = [`${form.standard} · ${form.cores}×${form.area ?? '—'}`, proposal ? `${proposal.dimensions.length} 个尺寸，还缺 ${proposal.missing.length} 项` : '', ''];
   const steps: FlowStep[] = FLOW.map((title, index) => ({ title, status: index < step ? 'done' : index === step ? 'current' : 'upcoming', detail: index < step ? settled[index] : undefined }));
@@ -373,7 +380,7 @@ function FromStandard({ fixedSeries, onWay }: { fixedSeries: string | undefined;
         </FormSection>}
         <FormSection title="放进哪个系列" description="新建一个系列，这个规格是它的第 1 版草稿；或放进已有的系列。">
           <SeriesChoice fixedSeries={fixedSeries} target={target} onTarget={setTarget} locked={locked} name={declaration.name}
-            options={(library.data ?? []).filter(item => item.cores === declaration.cores)} />
+            options={(library.data ?? []).filter(item => item.cores === declaration.cores && item.u0_v === declaration.u0_v && item.u_v === declaration.u_v)} />
           {making && !fixedSeries && !locked && <>
             <SeriesFields value={declaration} onChange={setDeclaration} idPrefix="declare" />
             <Precision value={precision} onChange={setPrecision} />
@@ -383,7 +390,7 @@ function FromStandard({ fixedSeries, onWay }: { fixedSeries: string | undefined;
         <FormNote title="提案里的尺寸照原样写入">
           <p className="m-0">标准给出的值不能在这里改：改了就不再是标准给的值，软件会拒绝。每个尺寸的依据记成标准条款原文，版本里记下取用的标准提案和方法版本。</p>
         </FormNote>
-        {missingBasis.length > 0 && <FormNote tone="attention" title="请补充取值依据">{missingBasis.map(key => vocabulary.data?.fields.find(field => field.key === key)?.label ?? key).join('、')}</FormNote>}
+        {missingBasis.length > 0 && <FormNote tone="attention" title="请补充取值依据">{missingBasis.join('、')}</FormNote>}
         <Fail error={create.error} />
       </div>}
     </FlowLayout>

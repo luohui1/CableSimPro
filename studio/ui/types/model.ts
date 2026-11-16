@@ -1,7 +1,7 @@
 // What the type workspace shows, derived from the saved version: which table fields belong to which part of the construction,
 // and how the standard check reads for a version. Nothing here computes a result.
 import { compact, fixed } from '@shared/format';
-import type { CheckRow, Closure, ProductResult, ResultKind, ReviewState, SpecView } from '@shared/types';
+import type { CheckRow, Closure, ProductResult, ResultKind, SpecView } from '@shared/types';
 import { RESULT_KINDS } from '@shared/types';
 
 /** Table fields of each part, so a layer picked in the table finds its rings in the drawing. */
@@ -69,10 +69,9 @@ export function rememberOpened(spec: string) {
   try { localStorage.setItem(LAST_OPENED, spec); } catch { /* private browsing */ }
 }
 
-/** The steps of review a person can take, and the states each one starts from. */
+/** The steps of review a person can take: the buttons of a version's page, and what the review dialog calls them. */
 export type ReviewAction = 'submit' | 'approve' | 'publish' | 'return';
 export const REVIEW_ACTIONS: Record<ReviewAction, string> = { submit: '提交审核', approve: '审核通过', publish: '发布', return: '退回修改' };
-export const NEXT_STEPS: Record<ReviewState, ReviewAction[]> = { draft: ['submit'], submitted: ['approve', 'return'], reviewed: ['publish', 'return'], published: [] };
 
 /** What a person did to a version or a series, as the trail words it. */
 const EVENT_LABELS: Record<string, string> = {
@@ -99,7 +98,18 @@ export function conditionValue(key: string, value: number | string): string {
 }
 
 /** A line of source text without file digests: those are for the files and the API, not for reading. */
-export const withoutHashes = (text: string) => text.replace(/[\s，,；;（(]*(?:SHA-?256)?[:：\s]*[0-9a-f]{40,}[）)]?/gi, '').trim();
+const withoutHashes = (text: string) => text.replace(/[\s，,；;（(]*(?:SHA-?256)?[:：\s]*[0-9a-f]{40,}[）)]?/gi, '').trim();
+
+/** The plugins by what they do. Their identifiers belong to the specification sheet's source page; on screen a method is its name and version. */
+const PLUGINS: Record<string, string> = {
+  'cablesim.iec60287': 'IEC 60287 稳态载流量', 'cablesim.standard-check': '尺寸与标准核对', 'cablesim.type-electrical': '电气参数', 'cablesim.cable-geometry': '三维实体',
+};
+const withoutIdentifiers = (text: string) => text
+  .replace(/(cablesim\.[a-z0-9-]+)\s+(\d+(?:\.\d+)*)(?:\s+[a-z]+(?:-[a-z]+)+)?/g, (_match, id: string, version: string) => `${PLUGINS[id] ?? '计算方法'} ${version}`)
+  .replace(/cablesim\.[a-z0-9-]+/g, '计算方法');
+
+/** A line the host wrote about where a number came from, as an engineer reads it: no digests, no plugin identifiers. */
+export const readable = (text: string) => withoutIdentifiers(withoutHashes(text));
 
 /** Date and time as a table cell holds them: 11/15 13:45. */
 export const shortTime = (value: string) => new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });

@@ -14,14 +14,14 @@ import { Icon, Spinner } from '@/kit/icon';
 import { Metric, MetricGroup } from '@/kit/metric';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { FlowLayout, Stepper, type FlowStep } from '@/kit/workbench/flow';
-import { ChoiceCards, DropZone, FormNote, FormRow, FormSection, UnitInput } from '@/kit/workbench/form';
+import { ChoiceCards, DropZone, FormNote, FormRow, FormSection, TABLE_FILES, UnitInput } from '@/kit/workbench/form';
 import { PageHeader } from '@/kit/workbench/page';
 import { EmptyState } from '@/kit/workbench/premise';
 import { api } from '@/state/api';
 import { queryClient, useVocabulary } from '@/state/queries';
-import { CommonSizes, EMPTY_DECLARATION, Pick, SeriesFields } from './forms';
+import { CommonSizes, EMPTY_DECLARATION, lacking, Pick, SeriesFields } from './forms';
 import { TypeFrame } from './frame';
-import { PLACED } from './model';
+import { PLACED, readable } from './model';
 
 const STEPS = ['上传文件', '选工作表', '列对应', '系列声明', '预览与导入'];
 const KEPT = 'studio.import-draft';
@@ -68,7 +68,7 @@ export function ImportScreen() {
   const fields = vocabulary.data?.fields ?? [];
   useEffect(() => { try { localStorage.setItem(KEPT, JSON.stringify({ ...draft, step: Math.min(draft.step, 3) })); } catch { /* private browsing */ } }, [draft]);
   const update = (values: Partial<Draft>) => { setDraft(current => ({ ...current, ...values })); setError(''); };
-  const declare = (declaration: SeriesDeclaration) => update({ declaration });
+  const declare = (declaration: SeriesDeclaration) => { update({ declaration }); setConfirmed(false); };
   async function run(action: () => Promise<void>) {
     setBusy(true); setError('');
     try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setBusy(false); }
@@ -99,10 +99,13 @@ export function ImportScreen() {
     });
   }
   const tableParams = () => ({ upload: draft.upload, sheet: draft.sheet, first_data_row: draft.first, mapping: draft.mapping, series: draft.declaration });
-  const missingBasis = Object.keys(draft.declaration.common).filter(key => !draft.declaration.common_basis[key]?.trim());
+  const missingBasis = lacking(draft.declaration, vocabulary.data);
   const restart = () => { update(initial()); setPreview(null); setCommitted(null); setConfirmed(false); };
   const declared = draft.declaration;
-  const declarable = Boolean(declared.name.trim() && declared.designation.trim() && declared.u0_v > 0 && declared.u_v > 0 && declared.standards.length > 0);
+  // What the host cannot do without, in the words of the form, so a button that waits says what it waits for.
+  const undeclared = [!declared.name.trim() && '系列名称', !declared.designation.trim() && '型号', !(declared.u0_v > 0) && '额定相电压', !(declared.u_v > 0) && '额定线电压',
+    declared.standards.length === 0 && '执行标准（写好后点“添加”）'].filter(Boolean) as string[];
+  const declarable = undeclared.length === 0;
 
   const mappingColumns: Column<TableColumn>[] = [
     { key: 'letter', header: '列', width: 'w-12', cell: column => <span className="font-medium">{column.letter}</span> },
@@ -124,8 +127,8 @@ export function ImportScreen() {
   } else if (draft.step === 0) {
     body = <div className="flex max-w-3xl flex-col gap-10">
       <FormSection title="上传结构表" description="读取每张工作表的表头、数据起始行和各列建议对应的字段。">
-        <DropZone title="把结构表拖到这里" formats={busy ? '正在读取文件…' : draft.file || '支持 .xlsx、.xls 和 .csv 的结构表'} onFiles={files => upload(files[0])}
-          onRejected={names => setError(`不能读“${names.join('、')}”：结构表是 .xlsx、.xls 或 .csv 文件。`)} />
+        <DropZone title="把结构表拖到这里" formats={busy ? '正在读取文件…' : draft.file || '支持 .xlsx、.xls、.csv 和 .tsv 的结构表'} accept={{ ...TABLE_FILES, 'text/tab-separated-values': ['.tsv'] }}
+          onFiles={files => upload(files[0])} onRejected={names => setError(`不能读“${names.join('、')}”：结构表是 .xlsx、.xls、.csv 或 .tsv 文件。`)} />
       </FormSection>
       <FormSection title="手边没有结构表" description="用一份公开厂家手册（人民电缆 8.7/15 kV 结构表）试导入，它附带每张表所需的系列声明。">
         <div><Button variant="outline" disabled={busy} onClick={() => void run(async () => {
@@ -164,12 +167,13 @@ export function ImportScreen() {
       <CommonSizes value={declared} onChange={declare} vocabulary={vocabulary.data} taken={new Set(Object.keys(draft.mapping))} />
       <div className="flex flex-col gap-3">
         <Confirm checked={confirmed} onChange={setConfirmed}>我已核对系列声明、缺失尺寸及计算参数的来源。</Confirm>
-        {missingBasis.length > 0 && <FormNote tone="attention" title="请补充取值依据">{missingBasis.map(key => fields.find(field => field.key === key)?.label ?? key).join('、')}</FormNote>}
+        {undeclared.length > 0 && <FormNote tone="attention" title="系列声明还缺">{undeclared.join('、')}</FormNote>}
+        {missingBasis.length > 0 && <FormNote tone="attention" title="请补充取值依据">{missingBasis.join('、')}</FormNote>}
       </div>
     </div>;
   } else if (preview) {
     const placed = [...new Set(preview.rows.map(row => row.closure?.placed_in).filter(Boolean))].map(key => PLACED[key!] ?? key).join('、');
-    const note = preview.rows.find(row => row.ok && row.derivation)?.derivation?.note;
+    const note = readable(preview.rows.find(row => row.ok && row.derivation)?.derivation?.note ?? '');
     body = <div className="flex max-w-4xl flex-col gap-6">
       <FormSection title="每一行生成的规格" description="按系列声明和列对应生成，还没有保存。">
         <MetricGroup>
@@ -189,7 +193,7 @@ export function ImportScreen() {
   const current = committed ? STEPS.length : draft.step;
   const steps: FlowStep[] = STEPS.map((title, index) => ({ title, status: index < current ? 'done' : index === current ? 'current' : 'upcoming',
     detail: index < current ? [draft.file, draft.sheet, `${Object.keys(draft.mapping).length} 列对上字段`, declared.name, ''][index] : undefined }));
-  const back = (to: number) => <Button variant="outline" disabled={busy} onClick={() => update({ step: to })}><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>;
+  const back = (to: number) => <Button variant="outline" disabled={busy} onClick={() => { update({ step: to }); if (to === 3) setConfirmed(false); }}><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>;
   const footer = committed ? <>
     <Button variant="outline" onClick={() => { setCommitted(null); update({ step: 1 }); setPreview(null); setSkipFailed(false); }}>继续导入此文件的其他工作表</Button>
     <Button onClick={() => void navigate({ to: '/library/$seriesId', params: { seriesId: committed.series }, search: {} })}>打开系列，计算与核对<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
