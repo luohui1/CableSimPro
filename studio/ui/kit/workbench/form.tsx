@@ -110,15 +110,17 @@ export function SourceTag({ kind, place, className }: { kind: SourceKind; place?
 }
 
 /** One of a fixed list of values (a laying template, the bonding of the sheaths) in a field of the form's width. */
-export function ChoiceSelect({ value, options, onValueChange, label, id }: {
+export function ChoiceSelect({ value, options, onValueChange, label, id, size }: {
   value: string;
   options: { value: string; label: string }[];
   onValueChange?: (value: string) => void;
   label: string;
   id?: string;
+  /** `sm` inside a table row. */
+  size?: 'sm' | 'default';
 }) {
   return <Select value={value} items={options} onValueChange={next => onValueChange?.(next as string)}>
-    <SelectTrigger id={id} aria-label={label} className="w-full"><SelectValue /></SelectTrigger>
+    <SelectTrigger id={id} aria-label={label} size={size} className="w-full"><SelectValue /></SelectTrigger>
     <SelectContent>{options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
   </Select>;
 }

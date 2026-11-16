@@ -1121,6 +1121,17 @@ export const PROPOSAL = {
  }
 };
 
+/** What the types test hands library.series.create and library.spec.create with this proposal. */
+export const STANDARD_SERIES = {
+ name: '按标准生成：YJV22-8.7/15 kV 三芯',
+ common: [
+  { field: 'binder_thickness', value: 0.2, basis: '取同电压等级公开结构表的包带厚度' },
+  { field: 'armour_tape_width', value: 50, basis: '钢带损耗按间隙率计，结果与带宽无关' },
+ ],
+ /** The basis a dimension taken from the proposal is written with, as the created version shows it. */
+ basisExample: '人工填写；GB/T 12706.2—2020 表 7（印刷第 7 页，PDF 第 15 页）',
+};
+
 export const PRINTED: Record<string, number> = {
  "area": 240,
  "conductor_diameter": 18.4,

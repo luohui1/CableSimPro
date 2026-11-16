@@ -14,14 +14,14 @@ import { ReviewMark, TierMark, VerdictBar, type Review } from '@/kit/marks';
 import { Metric } from '@/kit/metric';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { FlowLayout, Stepper, type FlowStep } from '@/kit/workbench/flow';
-import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, FormSection, SourceTag, UnitInput, type SourceKind } from '@/kit/workbench/form';
+import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, FormSection, ReadonlyValue, SourceTag, UnitInput, type SourceKind } from '@/kit/workbench/form';
 import { PageHeader, Panel, Split } from '@/kit/workbench/page';
 import { Given, PremiseStrip } from '@/kit/workbench/premise';
 import { ReviewActions, ReviewTrack } from '@/kit/workbench/review';
 import { compact, fixed } from '@shared/format';
 import { CableSection } from './figures';
 import { WORKSPACE } from './library-data';
-import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, REVIEW_NOTES, VERSIONS } from './round2-data';
+import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, REVIEW_NOTES, STANDARD_SERIES, VERSIONS } from './round2-data';
 import { SeriesShell } from './workbench-screens';
 
 /** A host time as the screen writes times: date and minute, in the reader's zone. */
@@ -59,7 +59,7 @@ const COLUMN_COLUMNS: Column<Column3>[] = [
   { key: 'letter', header: '列', width: 'w-12', cell: column => <span className="font-medium">{column.letter}</span> },
   { key: 'header', header: '表头', cell: column => <span className={column.field ? 'text-ink' : 'text-ink-2'}>{column.header}</span> },
   { key: 'sample', header: '前三行', width: 'w-40', cell: column => <span className="text-ink-2 tabular-nums">{column.sample.join('，')}</span> },
-  { key: 'field', header: '对应到', width: 'w-60', cell: column => <ChoiceSelect label={`${column.letter} 列对应到`} value={column.field ?? 'none'} options={FIELD_OPTIONS} /> },
+  { key: 'field', header: '对应到', width: 'w-60', cell: column => <ChoiceSelect size="sm" label={`${column.letter} 列对应到`} value={column.field ?? 'none'} options={FIELD_OPTIONS} /> },
 ];
 
 type PreviewRow = (typeof IMPORT.rows)[number];
@@ -241,21 +241,98 @@ const PROPOSAL_COLUMNS: Column<Dimension>[] = [
   { key: 'delta', header: '提案比手册', numeric: true, width: 'w-28', cell: difference },
 ];
 
-function TypeNewStandardBody() {
+export type StandardStep = 'conditions' | 'proposal' | 'create';
+const STANDARD_STEPS: { key: StandardStep; title: string }[] = [
+  { key: 'conditions', title: '条件' }, { key: 'proposal', title: '提案与对照' }, { key: 'create', title: '补齐并建成草稿' },
+];
+
+const Segments = ({ label, value, options }: { label: string; value: string; options: [string, string][] }) =>
+  <ToggleGroup value={[value]} aria-label={label} className="rounded-lg border border-line bg-surface p-1">
+    {options.map(([key, word]) => <ToggleGroupItem key={key} value={key}>{word}</ToggleGroupItem>)}
+  </ToggleGroup>;
+
+/** Step 1: the cable as the standard asks for it, and the screens the engineer gives so the annex can run. */
+function StandardConditions() {
+  const inputs = PROPOSAL.inputs;
+  return <div className="flex max-w-3xl flex-col gap-10">
+    <FormSection title="按哪份标准、什么样的电缆" description="执行标准写到年号，要与电压等级对应的标准一致；对不上、表外的电压或截面都会被拒绝。">
+      <FormRow label="执行标准" htmlFor="std-standard"><Input id="std-standard" defaultValue={inputs.standard} className="w-64" /></FormRow>
+      <FormRow label="电压">
+        <div className="grid w-80 grid-cols-2 gap-2">
+          <UnitInput aria-label="U₀" prefix="U₀" unit="kV" defaultValue={compact(inputs.u0_v / 1000)} />
+          <UnitInput aria-label="U" prefix="U" unit="kV" defaultValue={compact(inputs.u_v / 1000)} />
+        </div>
+      </FormRow>
+      <FormRow label="芯数"><Segments label="芯数" value={String(inputs.cores)} options={[['1', '单芯'], ['3', '三芯']]} /></FormRow>
+      <FormRow label="导体"><Segments label="导体材料" value={inputs.conductor} options={[['copper', '铜'], ['aluminium', '铝']]} /></FormRow>
+      <FormRow label="截面" htmlFor="std-area"><UnitInput id="std-area" unit="mm²" defaultValue={inputs.area_mm2} className="w-48" /></FormRow>
+      <FormRow label="绝缘" hint="目前只有 XLPE 的标准结构提案"><ReadonlyValue className="w-64">XLPE（交联聚乙烯）</ReadonlyValue></FormRow>
+      <FormRow label="铠装"><Segments label="铠装" value={inputs.armour} options={[['none', '无铠装'], ['steel_tape', '双钢带铠装']]} /></FormRow>
+    </FormSection>
+    <FormSection title="屏蔽（由你给定）" description="要连内衬、钢带和外护套一起算，须给出屏蔽层的厚度；标准只规定铜带的最小标称厚度，实际厚度由工程师定。">
+      <FormRow label="半导电屏蔽"><Segments label="半导电屏蔽" value={inputs.screened ? 'yes' : 'no'} options={[['yes', '有'], ['no', '无']]} /></FormRow>
+      <FormRow label="导体屏蔽厚度" htmlFor="std-cs"><UnitInput id="std-cs" unit="mm" defaultValue={inputs.conductor_screen_thickness_mm} className="w-48" /></FormRow>
+      <FormRow label="绝缘屏蔽厚度" htmlFor="std-is"><UnitInput id="std-is" unit="mm" defaultValue={inputs.insulation_screen_thickness_mm} className="w-48" /></FormRow>
+      <FormRow label="铜带厚度" htmlFor="std-tt"><UnitInput id="std-tt" unit="mm" defaultValue={inputs.screen_tape_thickness_mm} className="w-48" /></FormRow>
+      <FormRow label="铜带宽度" htmlFor="std-tw"><UnitInput id="std-tw" unit="mm" defaultValue={inputs.screen_tape_width_mm} className="w-48" /></FormRow>
+    </FormSection>
+  </div>;
+}
+
+/** Step 3: what the standard does not give, and the series the draft goes into. The proposal's values are not edited here. */
+function StandardCreate() {
+  const proposal = PROPOSAL.complete;
+  return <div className="flex max-w-3xl flex-col gap-10">
+    <FormSection title="标准不规定的两项" description="按实际值填写；成品外径用来做外径闭合核对。">
+      {proposal.missing.map(item => <FormRow key={item.field} label={item.label} htmlFor={`std-${item.field}`} hint={item.reason}>
+        <UnitInput id={`std-${item.field}`} unit={item.unit} defaultValue={PRINTED[item.field]} className="w-48" />
+      </FormRow>)}
+    </FormSection>
+    <FormSection title="放进哪个系列" description="新建一个系列，这个规格是它的第 1 版草稿。">
+      <FormRow label="系列名称" htmlFor="std-series"><Input id="std-series" defaultValue={STANDARD_SERIES.name} /></FormRow>
+      <FormRow label="型号" htmlFor="std-designation" hint={IMPORT.designation.description}><Input id="std-designation" defaultValue={DECLARATION.designation} className="w-48" /></FormRow>
+      <FormRow label="执行标准">
+        <div className="flex min-h-9 flex-wrap items-center gap-2">{DECLARATION.standards.map(standard => <Badge key={standard} variant="outline">{standard}</Badge>)}</div>
+      </FormRow>
+      {STANDARD_SERIES.common.map(item => {
+        const field = IMPORT.fields[item.field as keyof typeof IMPORT.fields];
+        return <FormRow key={item.field} label={field.label}>
+          <div className="flex flex-col gap-2">
+            <UnitInput aria-label={field.label} unit={field.unit} defaultValue={item.value} className="w-48" />
+            <Input aria-label={`${field.label}的依据`} defaultValue={item.basis} />
+          </div>
+        </FormRow>;
+      })}
+    </FormSection>
+    <FormNote title="提案里的尺寸照原样写入">
+      <p className="m-0">标准给出的值不能在这里改：改了就不再是标准给的值，宿主会拒绝。每个尺寸的依据记成“{STANDARD_SERIES.basisExample}”这样的原文，版本里记下取用的标准提案和方法版本。</p>
+    </FormNote>
+  </div>;
+}
+
+function TypeNewStandardBody({ at = 'proposal' }: { at?: StandardStep }) {
   const inputs = PROPOSAL.inputs;
   const proposal = PROPOSAL.complete;
-  const steps: FlowStep[] = [
-    { title: '条件', status: 'done', detail: `${PROPOSAL.standard} · 3×${inputs.area_mm2}` },
-    { title: '提案与对照', status: 'current' },
-    { title: '补齐并建成草稿', status: 'upcoming' },
-  ];
+  const index = STANDARD_STEPS.findIndex(step => step.key === at);
+  const settled: Record<StandardStep, string> = {
+    conditions: `${PROPOSAL.standard} · 3×${inputs.area_mm2}`,
+    proposal: `${proposal.dimensions.length} 个尺寸，还缺 ${proposal.missing.length} 项`,
+    create: '',
+  };
+  const steps: FlowStep[] = STANDARD_STEPS.map((step, position) => ({
+    title: step.title, status: position < index ? 'done' : position === index ? 'current' : 'upcoming', detail: position < index ? settled[step.key] : undefined,
+  }));
+  const footer = at === 'conditions'
+    ? <Button><Icon name="run/run" data-icon="inline-start" />生成提案</Button>
+    : at === 'proposal'
+      ? <><Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />改条件</Button>
+        <Button>下一步：补齐并建成<Icon name="action/arrow-right" data-icon="inline-end" /></Button></>
+      : <><Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>
+        <Button><Icon name="action/save" data-icon="inline-start" />建成草稿</Button></>;
   return <>
     <NewTypeHeader way="standard" />
-    <FlowLayout steps={<Stepper label="按标准生成的步骤" steps={steps} />} footer={<>
-      <Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />改条件</Button>
-      <Button>下一步：补齐并建成<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
-    </>}>
-      <div className="flex max-w-4xl flex-col gap-8">
+    <FlowLayout steps={<Stepper label="按标准生成的步骤" steps={steps} />} footer={footer}>
+      {at === 'conditions' ? <StandardConditions /> : at === 'create' ? <StandardCreate /> : <div className="flex max-w-4xl flex-col gap-8">
         <FormSection title="标准给出的尺寸"
           description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · 三芯 · 铜 ${inputs.area_mm2} mm² · XLPE 绝缘 · 钢带铠装 · 有金属屏蔽`}
           aside={<Badge variant="outline">{PROPOSAL.method.plugin_id} {PROPOSAL.method.plugin_version}</Badge>}>
@@ -283,7 +360,7 @@ function TypeNewStandardBody() {
         <FormNote title="这份提案不说明什么">
           <ul className="m-0 flex list-disc flex-col gap-1 pl-4">{proposal.limitations.map(text => <li key={text}>{text}</li>)}</ul>
         </FormNote>
-      </div>
+      </div>}
     </FlowLayout>
   </>;
 }
@@ -418,13 +495,12 @@ function SeriesVersionsBody() {
             <h3 className="m-0 text-h3 text-ink">文件</h3>
             {DOCUMENTS.filter(document => document.version === shown.number).map(document => <Item key={document.title} variant="outline">
               <ItemMedia variant="tile"><Icon name="object/file" /></ItemMedia>
-              <ItemContent>
-                <ItemTitle>{document.title}</ItemTitle>
-                <ItemDescription>规格书 · PDF · {when(document.created)}</ItemDescription>
+              <ItemContent className="min-w-0">
+                <ItemTitle className="w-full truncate">{document.title}</ItemTitle>
+                <ItemDescription className="flex min-w-0 items-center gap-2"><ReviewMark state={document.review as Review} /><span className="truncate">规格书 · PDF · {when(document.created)}</span></ItemDescription>
               </ItemContent>
               <ItemActions>
-                <ReviewMark state={document.review as Review} />
-                <Button variant="ghost" size="icon-sm" aria-label="下载"><Icon name="action/export" /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label="下载规格书"><Icon name="action/export" /></Button>
               </ItemActions>
             </Item>)}
           </section>
