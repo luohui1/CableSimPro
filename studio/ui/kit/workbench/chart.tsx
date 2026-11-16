@@ -25,9 +25,9 @@ export function CurveChart<Row extends Record<string, number | null>>({ data, x,
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 16, right: 24, bottom: 28, left: 8 }}>
         <CartesianGrid stroke="var(--line)" vertical={false} />
-        <XAxis dataKey={x.key} type="number" domain={['dataMin', 'dataMax']} tick={TICK} tickFormatter={fx} stroke="var(--control-border)"
+        <XAxis dataKey={x.key} type="number" domain={["dataMin", "dataMax"]} tick={TICK} tickFormatter={fx} axisLine={false} tickLine={false} tickMargin={8}
           ticks={data.map(row => row[x.key] as number)} label={{ value: `${x.label}（${x.unit}）`, position: 'insideBottom', offset: -20, fontSize: 13, fill: 'var(--text-secondary)' }} />
-        <YAxis tick={TICK} stroke="var(--control-border)" width={56} domain={['auto', 'auto']}
+        <YAxis tick={TICK} axisLine={false} tickLine={false} tickMargin={8} width={56} domain={['auto', 'auto']}
           label={{ value: y.unit, position: 'insideTopLeft', offset: 0, dy: -12, fontSize: 13, fill: 'var(--text-secondary)' }} />
         {limit && <ReferenceLine y={limit.value} ifOverflow="extendDomain" stroke="var(--attention)" strokeDasharray="4 4"
           label={{ value: limit.label, position: 'insideBottomLeft', fontSize: 13, fill: 'var(--attention)' }} />}
