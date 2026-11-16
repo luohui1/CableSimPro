@@ -24,7 +24,7 @@ import { WORKSPACE } from './library-data';
 import { AgentModelCard, SettingsModelBody, useHostStatus } from './live-screens';
 import {
   ACTIVE_CHAT, CHATS, EXPORT_ASK, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_STEPS_DONE, MODEL_STEPS_RUNNING, NEW_PROJECT, NOT_CONFIGURED, RATING, RATING_ASK, RATING_STEPS, REFUSED_ASK,
-  REFUSED_RATING, SHEET, STARTERS, STEPS_CUT, STEPS_FAILED, STEPS_WAITING, STREAMED, STREAMING_LINE, UPLOADING,
+  REFUSED_RATING, SHEET, STARTERS, STEPS_CUT, STEPS_FAILED, STEPS_WAITING, STREAMED, STREAMING_LINE, UPLOADING, RATING_ANSWER, EXPORT_ANSWER,
 } from './samples';
 
 export type ScreenGroup = 'agent' | 'types' | 'rating' | 'settings';
@@ -206,21 +206,15 @@ function AgentChatScreen() {
           <RatingCard {...RATING} figure={<SectionThumb />}
             actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} />
           <Prose>
-            <p>已选 <strong>YJV22-8.7/15 kV 3×240</strong>（人民电缆公开结构表，钢带铠装），按三芯直埋单回、埋深 1.2 m、土壤热阻率 1 K·m/W、环境 25 °C 算了一条运行记录。</p>
-            <ul>
-              <li>允许电流 <strong>458.7 A</strong>；保存负荷 300 A 时导体 49.7 °C（限值 90 °C），离允许电流还差 158.7 A。</li>
-              <li>只敷设了一个回路，先到温限的就是这根三芯电缆本身。</li>
-              <li>可信分档为<strong>参考</strong>：三芯分支只有组件级手算对照，交付前请另行核对。</li>
-            </ul>
+            <p>{RATING_ANSWER.lead}</p>
+            <ul>{RATING_ANSWER.points.map(point => <li key={point}>{point}</li>)}</ul>
           </Prose>
         </AssistantMessage>
         <div data-turn-start><UserMessage>{EXPORT_ASK}</UserMessage></div>
         <AssistantMessage>
           <StepTrace steps={EXPORT_STEPS} />
           <FileCard {...SHEET} />
-          <Prose>
-            <p>规格书已导出：YJV22-8.7/15 kV 3×240 第 1 版，含结构表、电气参数和标准核对结论（通过 13 项、不通过 0 项、缺项 21 项）。这一版还没审核，文件上标着“草稿”，能否对外由你决定。</p>
-          </Prose>
+          <Prose><p>{EXPORT_ANSWER}</p></Prose>
         </AssistantMessage>
         <TurnSpacer />
       </ThreadColumn>

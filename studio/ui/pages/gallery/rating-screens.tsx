@@ -199,7 +199,7 @@ function SweepBody() {
   const columns: Column<SweepPoint>[] = [
     { key: 'value', header: SWEEP.label, unit: SWEEP.unit, numeric: true, cell: point => fixed(point.value, 1) },
     { key: 'ampacity', header: '允许电流', unit: 'A', numeric: true, width: 'w-28', cell: point => point.status === 'succeeded' ? fixed(point.ampacity, 1)
-      : <Tooltip><TooltipTrigger render={<span className="text-error">没有解</span>} /><TooltipContent>{point.error ?? '方法没有给出结果'}</TooltipContent></Tooltip> },
+      : <span className="text-error">拒算</span> },
     { key: 'conductor', header: `${SWEEP.load} A 时导体`, unit: '°C', numeric: true, width: 'w-32', cell: point => point.status === 'succeeded' ? fixed(point.conductor, 1) : '—' },
   ];
   return <RatingShell active={SWEPT.id} asked={`允许电流随${SWEEP.label}的变化`}
@@ -212,9 +212,9 @@ function SweepBody() {
           </ToggleGroup>}
           bodyClassName="flex px-4 pt-4 pb-2">
           {shown === 'ampacity'
-            ? <CurveChart className="h-full min-h-64" data={points} x={SOIL} y={{ key: 'ampacity', label: '允许电流', unit: 'A', format: value => fixed(value, 1) }}
+            ? <CurveChart className="h-full min-h-64" data={points} reasonKey="error" x={SOIL} y={{ key: 'ampacity', label: '允许电流', unit: 'A', format: value => fixed(value, 1) }}
               at={at} limit={{ value: SWEEP.load, label: `保存负荷 ${SWEEP.load} A` }} />
-            : <CurveChart className="h-full min-h-64" data={points} x={SOIL} y={{ key: 'conductor', label: '导体温度', unit: '°C', format: value => fixed(value, 1) }}
+            : <CurveChart className="h-full min-h-64" data={points} reasonKey="error" x={SOIL} y={{ key: 'conductor', label: '导体温度', unit: '°C', format: value => fixed(value, 1) }}
               at={at} limit={{ value: SWEEP.limit, label: `限值 ${SWEEP.limit} °C` }} />}
         </Panel> },
       { id: 'numbers', size: 38, min: 28, children: <Panel title="各点数值" tools={<Button variant="ghost" size="sm"><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button>}>
@@ -223,6 +223,14 @@ function SweepBody() {
             <Metric size="md" label={`${SWEEP.load} A 时最高导体温度`} value={fixed(hottest?.conductor, 1)} unit="°C" detail={`限值 ${SWEEP.limit} °C`} />
           </div>
           <DataTable rows={points} rowKey={point => String(point.value)} selected={String(conditions.soil_thermal_resistivity)} onSelect={() => undefined} columns={columns} />
+          {points.some(point => point.status !== 'succeeded') && <Disclosure title={`方法拒算 ${points.filter(point => point.status !== 'succeeded').length} 个点`} defaultOpen>
+            <ul className="m-0 flex list-none flex-col gap-2 px-4 pb-4 text-sm">
+              {points.filter(point => point.status !== 'succeeded').map(point => <li key={point.value} className="flex flex-col gap-1">
+                <span className="font-medium text-ink">{SWEEP.label} {fixed(point.value, 1)} {SWEEP.unit}</span>
+                <span className="text-ink">{point.error ?? '方法没有给出结果'}</span>
+              </li>)}
+            </ul>
+          </Disclosure>}
         </Panel> },
     ]} />
   </RatingShell>;
@@ -249,10 +257,10 @@ const SELECTION_COLUMNS: Column<Candidate>[] = [
     : `${candidate.margin >= 0 ? '+' : '−'}${fixed(Math.abs(candidate.margin), 1)}` },
   { key: 'conductor', header: `${SELECTION.target} A 时导体`, unit: '°C', numeric: true, width: 'w-36', cell: candidate => candidate.conductorAtTarget !== null
     ? <span className={candidate.conductorAtTarget > LIMIT_C ? 'text-error' : undefined}>{fixed(candidate.conductorAtTarget, 1)}</span>
-    : candidate.atTargetError ? <Tooltip><TooltipTrigger render={<span className="text-ink-2">无稳态解</span>} /><TooltipContent>{candidate.atTargetError}</TooltipContent></Tooltip> : '—' },
+    : candidate.atTargetError ? <Tooltip><TooltipTrigger render={<span tabIndex={0} className="text-ink-2">无稳态解</span>} /><TooltipContent>{candidate.atTargetError}</TooltipContent></Tooltip> : '—' },
   { key: 'verdict', header: '结论', width: 'w-24', cell: candidate => {
     const mark = verdict(candidate);
-    const badge = <Badge variant={mark.tone}>{mark.word}</Badge>;
+    const badge = <Badge variant={mark.tone} tabIndex={candidate.error ? 0 : undefined}>{mark.word}</Badge>;
     return candidate.error ? <Tooltip><TooltipTrigger render={badge} /><TooltipContent>{candidate.error}</TooltipContent></Tooltip> : badge;
   } },
 ];

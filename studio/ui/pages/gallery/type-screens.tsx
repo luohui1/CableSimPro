@@ -74,7 +74,7 @@ const PREVIEW_COLUMNS: Column<PreviewRow>[] = [
     const badge = !row.ok ? <Badge variant="error"><Icon name="status/error" data-icon="inline-start" />不能导入</Badge>
       : notes.length ? <Badge variant="attention"><Icon name="status/warning" data-icon="inline-start" />可导入</Badge>
         : <Badge variant="success"><Icon name="action/check" data-icon="inline-start" />可导入</Badge>;
-    return notes.length ? <Tooltip><TooltipTrigger render={badge} /><TooltipContent>{notes.join('；')}</TooltipContent></Tooltip> : badge;
+    return notes.length ? <Tooltip><TooltipTrigger render={<span tabIndex={0}>{badge}</span>} /><TooltipContent>{notes.join('；')}</TooltipContent></Tooltip> : badge;
   } },
 ];
 const PLACED_IN_PREVIEW = [...new Set(IMPORT.rows.map(row => row.placedIn).filter(Boolean))].map(key => PLACED[key] ?? key).join('、');
@@ -344,7 +344,7 @@ function TypeNewStandardBody({ at = 'proposal' }: { at?: StandardStep }) {
     <FlowLayout steps={<Stepper label="按标准生成的步骤" steps={steps} />} footer={footer}>
       {at === 'conditions' ? <StandardConditions /> : at === 'create' ? <StandardCreate /> : <div className="flex max-w-4xl flex-col gap-8">
         <FormSection title="标准给出的尺寸"
-          description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · ${CORE_WORD[inputs.cores]} · ${CONDUCTOR_WORD[inputs.conductor]} ${inputs.area_mm2} mm² · ${inputs.insulation} 绝缘 · ${ARMOUR_WORD[inputs.armour]} · ${inputs.screened ? '有' : '无'}半导电屏蔽`}
+          description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · ${CORE_WORD[inputs.cores] ?? `${inputs.cores} 芯`} · ${CONDUCTOR_WORD[inputs.conductor] ?? inputs.conductor} ${inputs.area_mm2} mm² · ${inputs.insulation} 绝缘 · ${ARMOUR_WORD[inputs.armour] ?? inputs.armour} · ${inputs.screened ? '有' : '无'}半导电屏蔽`}
           aside={<Badge variant="outline">{PROPOSAL.method.plugin_id} {PROPOSAL.method.plugin_version}</Badge>}>
           <DataTable framed rows={proposal.dimensions} rowKey={dimension => dimension.field} columns={PROPOSAL_COLUMNS} />
           <Disclosure title={`内衬、钢带和外护套怎么来的（附录 A 假设直径，${STAGES.length} 步）`}>

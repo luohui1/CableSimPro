@@ -80,7 +80,7 @@ function ScreenPreview({ item }: { item: ScreenSpec }) {
     </header>
     <div ref={frame} className="screen-half overflow-hidden rounded-card border border-line bg-canvas" inert>
       {near && (item.heavy
-        ? <EmptyState icon="tool/view-3d" title="全屏打开时才向宿主要" description="这屏要宿主现建三维实体（首次约半分钟），陈列页的缩略图不替它开工。" className="h-full" />
+        ? <EmptyState icon="tool/view-3d" title="全屏打开时才向宿主要" description="这屏要宿主现建三维实体，陈列页的缩略图不替它开工。" className="h-full" />
         : <div className="screen-frame origin-top-left scale-50">{item.render()}</div>)}
     </div>
   </section>;

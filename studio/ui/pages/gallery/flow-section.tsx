@@ -93,10 +93,10 @@ export function FlowSection() {
     </Specimen>
     <Specimen title="运行记录" rule="一个工程的运行记录排成一行，旧的在前，新的接在后面；多了横向滚动。选中的是浅底描边；Agent 算的带 Agent 色的点，输入改过之后的带提醒点并在悬停时说明。" wide>
       <State label="人算的三条" className="w-full"><div className="rounded-card border border-line bg-surface"><RunRail runs={RUNS} active={RUNS[2].id} /></div></State>
-      <State label="Agent 算的" className="w-full"><div className="rounded-card border border-line bg-surface"><RunRail runs={[{ id: 'run-agent', sequence: 1, title: '校核 · 458.7 A', by: 'agent' }]} active="run-agent" /></div></State>
+      <State label="Agent 算的" className="w-full"><div className="rounded-card border border-line bg-surface"><RunRail runs={[{ id: 'run-9dd64e85', sequence: 1, title: '校核 · 458.7 A', by: 'agent' }]} active="run-9dd64e85" /></div></State>
     </Specimen>
     <Specimen title="版本与审核" rule="审核是人的事：草稿提交审核，待审核可退回或通过，已审核可退回或发布，已发布不再改、改就出新版本。每个到过的状态记下谁、何时、说了什么。" wide>
-      <State label="版本切换"><VersionSelect value={3} versions={VERSIONS.map(version => ({ number: version.number, review: version.review as Review }))} /></State>
+      <State label="版本切换"><VersionSelect value={VERSIONS[0].number} versions={VERSIONS.map(version => ({ number: version.number, review: version.review as Review }))} /></State>
       <div className="grid w-full grid-cols-4 gap-6">
         {REVIEW_STATES.map(item => <State key={item.state} label={item.label}>
           <div className="flex flex-col gap-4">

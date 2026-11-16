@@ -13,6 +13,7 @@ import { useThemeColor } from '@/kit/theme-color';
 import { ConnectionCheck, FormNote, FormRow, FormSection, ReadonlyValue } from '@/kit/workbench/form';
 import { PageHeader } from '@/kit/workbench/page';
 import { api } from '@/state/api';
+import { useLibrary, useStatus } from '@/state/queries';
 
 /** The solid of one version, from the host: building, built, or refused with the plugin's own words. */
 export function ModelCardLive({ spec, version, title }: { spec: string; version: number; title: string }) {
@@ -51,7 +52,7 @@ export function SettingsModelBody({ status, error }: { status?: AgentStatus; err
           <FormRow label="密钥" hint="只从环境变量读取，不写入磁盘；这里只说有没有">
             <ReadonlyValue empty={!status}>{configured ? '已配置' : '未配置'}</ReadonlyValue>
           </FormRow>
-          <FormRow label="连通性"><ConnectionCheck state="idle" disabled /></FormRow>
+          <FormRow label="连通性" hint="宿主还没有检查连通的操作；接上之后这里给出结果"><ConnectionCheck state="idle" disabled /></FormRow>
           {status?.hint && <FormNote tone="attention" title="怎么配置">{status.hint}</FormNote>}
         </FormSection>
       </div>
@@ -64,7 +65,7 @@ export function SettingsModelBody({ status, error }: { status?: AgentStatus; err
  * which every host has. Its latest version is the one the card asks for.
  */
 function useSampleSpec() {
-  const library = useQuery({ queryKey: ['library'], queryFn: api.library, staleTime: Infinity, retry: false });
+  const library = useLibrary();
   const entries = library.data ?? [];
   const entry = entries.find(item => item.name === 'YJV22-8.7/15 kV 3×240' && item.family.startsWith('人民电缆集团'))
     ?? entries.find(item => item.id === 'huayuan.yjv22-15kv-240');
@@ -81,6 +82,6 @@ export function AgentModelCard() {
 
 /** What the serving host says about its model: for the top bar and the settings alike. */
 export function useHostStatus() {
-  const status = useQuery({ queryKey: ['status'], queryFn: api.status, retry: false });
+  const status = useStatus();
   return { agent: status.data?.agent, error: status.error?.message };
 }

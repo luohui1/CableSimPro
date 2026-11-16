@@ -23,7 +23,7 @@ export function PremiseStrip({ asked, children, className }: { asked: ReactNode;
 
 /** One given: its name and value. A button: it opens the editor for that value. */
 export function Given({ label, value, changed, active, className, ...props }: { label: string; value: ReactNode; changed?: boolean; active?: boolean } & ComponentProps<'button'>) {
-  return <button type="button" aria-expanded={active || undefined} data-active={active || undefined}
+  return <button type="button" aria-expanded={Boolean(active)} data-active={active || undefined}
     className={cn('flex h-8 shrink-0 items-center gap-2 rounded-field px-2 text-sm whitespace-nowrap outline-none transition-colors duration-fast hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring data-active:bg-subtle data-active:ring-1 data-active:ring-line-strong data-active:ring-inset', className)}
     {...props}>
     <span className="text-ink-2">{label}</span>

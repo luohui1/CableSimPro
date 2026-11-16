@@ -41,8 +41,9 @@ export function RunRail({ runs, active, onOpen, end, className }: {
     if (!node) return;
     const update = () => setMore(node.scrollLeft + node.clientWidth < node.scrollWidth - 1);
     const current = node.querySelector<HTMLElement>('[aria-current="true"]');
-    if (current) node.scrollLeft = Math.max(0, current.offsetLeft + current.offsetWidth - node.clientWidth);
-    else node.scrollLeft = node.scrollWidth;
+    if (!current) node.scrollLeft = node.scrollWidth;
+    else if (current.offsetLeft < node.scrollLeft) node.scrollLeft = current.offsetLeft;
+    else if (current.offsetLeft + current.offsetWidth > node.scrollLeft + node.clientWidth) node.scrollLeft = current.offsetLeft + current.offsetWidth - node.clientWidth;
     update();
     node.addEventListener('scroll', update, { passive: true });
     const observer = new ResizeObserver(update);
@@ -51,10 +52,11 @@ export function RunRail({ runs, active, onOpen, end, className }: {
   }, [active, runs.length]);
   return <nav aria-label="运行记录" className={cn('flex h-12 shrink-0 items-center gap-3 border-b border-line px-6', className)}>
     <span className="shrink-0 text-sm text-ink-2">运行记录</span>
-    <ol ref={list} className={cn('m-0 flex min-w-0 flex-1 list-none items-center gap-1 overflow-x-auto p-0 scrollbar-none', more && 'fade-end')}>
+    <ol ref={list} className={cn('relative m-0 flex min-w-0 flex-1 list-none items-center gap-1 overflow-x-auto p-0 scrollbar-none', more && 'fade-end')}>
       {ordered.map(run => {
         const { kind, what } = split(run.title);
         const current = run.id === active;
+        const notes = [run.status === 'failed' && '方法没有给出结果', run.by === 'agent' && 'Agent 算的', run.stale && '算这条记录之后输入改过，它不代表现在的工程'].filter(Boolean);
         const chip = <button type="button" onClick={() => onOpen?.(run.id)} aria-current={current ? 'true' : undefined}
           className={cn('flex h-8 max-w-80 shrink-0 items-center gap-2 rounded-field px-3 text-sm whitespace-nowrap outline-none transition-colors duration-fast hover:bg-hover focus-visible:ring-3 focus-visible:ring-ring',
             current ? 'bg-subtle text-ink ring-1 ring-line-strong ring-inset' : 'text-ink-2')}>
@@ -64,8 +66,8 @@ export function RunRail({ runs, active, onOpen, end, className }: {
           {run.status === 'failed' && <Dot tone="error" />}
           {run.by === 'agent' && <Dot tone="agent" />}
           {run.stale && <Dot tone="attention" />}
+          {notes.length > 0 && <span className="sr-only">（{notes.join('；')}）</span>}
         </button>;
-        const notes = [run.status === 'failed' && '方法没有给出结果', run.by === 'agent' && 'Agent 算的', run.stale && '算这条记录之后输入改过，它不代表现在的工程'].filter(Boolean);
         return <li key={run.id} className="shrink-0">
           {notes.length
             ? <Tooltip>

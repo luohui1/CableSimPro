@@ -94,11 +94,10 @@ export const MODEL_STEPS_RUNNING: Step[] = [
   { id: 'm3', label: '读取规格', target: 'YJV22-8.7/15 kV 3×240', state: 'done', seconds: 0.005 },
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'running' },
 ];
-/** The same conversation once the solid was built: the step's notes as the host writes them (library.geometry of
- *  YJV22-8.7/15 kV 3×240: outer diameter 0.082 m, 19 layers). */
+/** The same conversation once the solid was built; what was built is on the card, read from the host. */
 export const MODEL_STEPS_DONE: Step[] = [
   ...MODEL_STEPS_RUNNING.slice(0, 3),
-  { ...MODEL_STEPS_RUNNING[3], state: 'done', notes: ['外径 82 mm', '19 层，STEP 文件已生成'] },
+  { ...MODEL_STEPS_RUNNING[3], state: 'done' },
 ];
 /** What the host says when no model is configured: NOT_CONFIGURED of studio/host/agent.ts, word for word. */
 export const NOT_CONFIGURED = '设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
@@ -179,6 +178,17 @@ export const STEPS_CUT: Step[] = [
   ...EXPORT_STEPS.slice(0, 4),
   { ...EXPORT_STEPS[4], state: 'interrupted', seconds: undefined, notes: undefined },
 ];
+/** Conversation 01a1e240's answer, as it was written (8210): the lead, then the points. */
+export const RATING_ANSWER = {
+  lead: '已选 YJV22-8.7/15 kV 3×240（人民电缆公开结构表，钢带铠装），按三芯直埋单回、埋深 1.2 m、土壤热阻率 1 K·m/W、环境 25 °C 算了一条运行记录。',
+  points: [
+    '允许电流 458.7 A；保存负荷 300 A 时导体 49.7 °C（限值 90 °C），离允许电流还差 158.7 A。',
+    '只敷设了一个回路，先到温限的就是这根三芯电缆本身。',
+    '可信分档为参考：三芯分支只有组件级手算对照，交付前请另行核对。',
+  ],
+};
+/** Conversation 01a1e22e's answer to the export (8210, where version 1 was still a draft). */
+export const EXPORT_ANSWER = '规格书已导出：YJV22-8.7/15 kV 3×240 第 1 版，含结构表、电气参数和标准核对结论（通过 13 项、不通过 0 项、缺项 21 项）。这一版还没审核，文件上标着“草稿”，能否对外由你决定。';
 /** The text of conversation 01a1e240's answer up to the point it had reached while it was still being written. */
 export const STREAMED = '已选 YJV22-8.7/15 kV 3×240（人民电缆公开结构表，钢带铠装），按三芯直埋单回、埋深 1.2 m、土壤热阻率 1 K·m/W、环境 25 °C 算了一条运行记录。';
 export const STREAMING_LINE = '允许电流 458.7 A；保存负荷 300 A 时导体 49.7 °C（限值 90 °C），离允许电流还差';
