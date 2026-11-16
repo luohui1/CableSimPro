@@ -7,7 +7,7 @@ export const STARTERS: { label: string; icon: string; tasks: Starter[] }[] = [
     label: '电缆型号', icon: 'nav/cable-type',
     tasks: [
       { icon: 'action/import', title: '导入公开结构表示例并核对', result: '算参数，按国标列出不通过项', prompt: '导入公开结构表示例，算参数并按国标核对，列出不通过项。' },
-      { icon: 'module/standard-check', title: '按标准生成一款的初始结构', result: '每个尺寸带标准条款，建成草稿规格',
+      { icon: 'module/standard-check', title: '按标准生成一款的初始结构', result: '每个尺寸带标准条款，补齐缺的尺寸后建成草稿',
         prompt: '按 GB/T 12706.2-2020 生成一款 8.7/15 kV 三芯 240 mm² 铜芯 XLPE 钢带铠装电缆的初始结构，再建成草稿规格。' },
       { icon: 'object/file', title: '导出一份规格书', result: '挑一个规格，生成 PDF', prompt: '挑一个规格，导出一份规格书。' },
       { icon: 'tool/view-3d', title: '建一个电缆三维结构模型', result: '看清每一层', prompt: '挑一个三芯铠装规格，建三维结构模型，让我看各层。' },

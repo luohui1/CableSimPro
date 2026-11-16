@@ -46,7 +46,7 @@ export function Thread({ notice }: { notice?: ReactNode }) {
               className="absolute -top-12 left-1/2 z-10 -translate-x-1/2 rounded-full shadow-menu disabled:invisible xl:top-auto xl:bottom-1 xl:left-full xl:ml-3 xl:translate-x-0" />}>
               <Icon name="action/arrow-down" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer />
+            <Composer placeholder="接着交办，或追问这条结果" />
           </ThreadColumn>
         </div>
       </>}
@@ -69,13 +69,13 @@ function Starter() {
 
 // ---- The composer ----
 
-function Composer() {
+function Composer({ placeholder = '交办一件事，或把 Excel、CSV 结构表拖到这里' }: { placeholder?: string }) {
   return <ComposerPrimitive.Root>
     <ComposerPrimitive.AttachmentDropzone render={<ComposerFrame />}>
       <div className="flex w-full flex-row flex-wrap items-center gap-2 px-1 empty:hidden">
         <ComposerPrimitive.Attachments>{() => <ComposerChip />}</ComposerPrimitive.Attachments>
       </div>
-      <ComposerPrimitive.Input className={composerInputClass} placeholder="交办一件事，或把 Excel、CSV 结构表拖到这里" rows={1} autoFocus enterKeyHint="send" aria-label="给 Agent 的消息" />
+      <ComposerPrimitive.Input className={composerInputClass} placeholder={placeholder} rows={1} autoFocus enterKeyHint="send" aria-label="给 Agent 的消息" />
       <ComposerBar
         start={<ComposerPrimitive.AddAttachment render={<ComposerAttach />} />}
         end={<>
