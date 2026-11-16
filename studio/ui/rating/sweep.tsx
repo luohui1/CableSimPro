@@ -140,25 +140,28 @@ export function SweepScreen({ record }: { record: RunRecord }) {
   const hottest = hot.reduce<Row | null>((top, row) => (top === null || (row.conductor as number) > (top.conductor as number) ? row : top), null);
   const stood = STOOD_AT[sweep.variable]?.(record.inputs) ?? null;
   const at = stood === null ? undefined : { value: stood, label: `工程取值 ${compact(stood)}` };
-  const x: Axis = { key: 'value', label: sweep.label, unit: sweep.unit, format: value => compact(value) };
+  // The swept condition's values are written with one number of decimals, so a column reads 1.0, 1.2, 2.0 and not 1, 1.2, 2.
+  const places = Math.min(3, Math.max(0, ...rows.map(row => (compact(row.value).split('.')[1] ?? '').length)));
+  const written = (value: number) => fixed(value, places);
+  const x: Axis = { key: 'value', label: sweep.label, unit: sweep.unit, format: written };
   // What the conductor's temperature is the temperature at: the saved load, or at each point the load that point sweeps.
   const [atLoad, conductor] = load === null
     ? (swept ? ['该负荷下', '该负荷下导体'] : ['保存负荷下', '保存负荷下导体'])
-    : [`保存负荷 ${compact(load)} A 时`, `${compact(load)} A 时导体`];
+    : [`${compact(load)} A 时`, `${compact(load)} A 时导体`];
   // What each point says when it has no number: the method's words.
   const refused = rows.filter(row => row.error);
   const runaways = rows.filter(row => row.runaway && !row.error);
   const reasons = (list: Row[], words: (row: Row) => string | undefined) => (
     <ul className="m-0 flex list-none flex-col gap-2 px-4 pb-4 text-sm">
       {list.map(row => <li key={row.value} className="flex flex-col gap-1">
-        <span className="font-medium text-ink">{sweep.label} {compact(row.value)} {sweep.unit}</span>
+        <span className="font-medium text-ink">{sweep.label} {written(row.value)} {sweep.unit}</span>
         <span className="text-ink">{words(row) ?? '方法没有给出结果'}</span>
       </li>)}
     </ul>
   );
 
   const columns: Column<Row>[] = [
-    { key: 'value', header: sweep.label, unit: sweep.unit, numeric: true, cell: row => compact(row.value) },
+    { key: 'value', header: sweep.label, unit: sweep.unit, numeric: true, cell: row => written(row.value) },
     { key: 'ampacity', header: '允许电流', unit: 'A', numeric: true, width: 'w-28', cell: row => (row.ampacity === null
       ? <Tooltip><TooltipTrigger render={<span tabIndex={0} className="text-error">拒算</span>} /><TooltipContent>{row.error ?? '方法没有给出结果'}</TooltipContent></Tooltip>
       : fixed(row.ampacity)) },
@@ -193,7 +196,7 @@ export function SweepScreen({ record }: { record: RunRecord }) {
       </Panel> },
     { id: 'numbers', size: 38, min: 28, children: <Panel title="各点数值" tools={<Button variant="ghost" size="sm" onClick={save}><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button>}>
         <div className="grid grid-cols-2 gap-4 border-b border-line px-4 py-4">
-          <Metric size="md" label="范围内最低允许电流" value={fixed(lowest?.ampacity)} unit="A" detail={lowest ? `${sweep.label} ${compact(lowest.value)} ${sweep.unit} 时` : undefined} />
+          <Metric size="md" label="范围内最低允许电流" value={fixed(lowest?.ampacity)} unit="A" detail={lowest ? `${sweep.label} ${written(lowest.value)} ${sweep.unit} 时` : undefined} />
           <Metric size="md" label={`${atLoad}最高导体温度`} value={fixed(hottest?.conductor)} unit="°C" detail={limit === null ? undefined : `限值 ${fixed(limit, 0)} °C`} />
         </div>
         <DataTable rows={rows} rowKey={row => String(row.value)} selected={stood === null ? undefined : String(stood)} columns={columns} />
