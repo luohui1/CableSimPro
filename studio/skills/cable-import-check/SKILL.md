@@ -21,7 +21,7 @@ description: 型号导入、计算与标准核对：把厂家结构表（Excel �
 6. `import_series(upload, sheet)`，一张表一个系列。它会交工程师审阅，审阅卡里写明新系列、规格数、跳过的行数。
 7. `compute_series(series, kinds:['check'])`。只要标准核对就只传 check；要电气参数再加 electrical。载流量表（rating）最慢，没被要求不要算。你调用时它会等到算完才返回。
 8. `list_check_failures(series)`：得到通过、不通过、缺项的数量和不通过项清单。
-9. 回答：每个系列导入了几个规格，核对结果各多少项；不通过的项按“规格、核对项、标准条款、限值与实测值”列出；项很多时按核对项归并。最后 `open_in_workbench(target:'series', series)`。
+9. 每个系列 `open_in_workbench(target:'series', series)`。核对卡里已有通过、不通过、缺项的数目和不通过的明细，回答里不重复。回答只写：导入了几个系列、共几个规格；有几项不通过（有的话点出最要紧的一两项）；缺项很多时说一句“缺项是缺实测值或依据，不等于不通过”。
 
 ## 容易错的地方
 

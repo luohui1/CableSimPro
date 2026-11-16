@@ -16,7 +16,7 @@ description: 型号改版：修改某个规格的结构尺寸（导体直径、�
 3. `revise_spec(spec, values, note)`，values 是“字段键 → 新值”。它会交审，审阅卡里逐项写改前和改后（带单位）。接受后生成新的草稿版本，原版本和它的结果原样保留。
 4. `compute_series(series, specs:[spec], kinds:['check'])` 只对这个规格重新核对新草稿。
 5. `list_check_failures(series, specs:[spec])` 或 `get_spec(spec)` 看新版的核对结论，和改版前对比：哪些项通过变成不通过，哪些项变化不大。
-6. 回答：改了什么、新版本号、核对结论的变化。再 `open_in_workbench(target:'spec', spec, version)`。
+6. `open_in_workbench(target:'spec', spec, version)`。回答只写：改了什么、新版本号、核对结论有没有变化。
 
 ## 容易错的地方
 

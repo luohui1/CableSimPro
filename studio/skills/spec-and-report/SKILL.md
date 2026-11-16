@@ -16,7 +16,7 @@ description: 规格书与计算书：导出某个规格某个版本的规格书�
 2. 缺核对结果就先 `compute_series(series, specs:[spec], kinds:['check','electrical'])`。仍然缺的项会在规格书里明确列出，不会被填上。
 3. 已经导出过的版本先 `list_documents(spec)` 看一眼，别重复导出。
 4. `export_specification(spec, version)` 生成不可覆盖的 PDF 和来源快照。界面里会显示文件卡，可预览和下载。
-5. 回答：文件名、版本、审核状态；版本没审核就说明“文件上标为草稿”。
+5. 文件在卡片里，回答只写：哪个规格、哪个版本、审核状态；版本没审核就说一句“文件上标为草稿”。
 
 ## 步骤：计算书
 
