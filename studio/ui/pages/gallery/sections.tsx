@@ -22,13 +22,14 @@ import { DataTable } from '@/kit/workbench/data-table';
 import { NavItem, NavSection, WorkbenchNav } from '@/kit/workbench/nav';
 import { PageHeader } from '@/kit/workbench/page';
 import { EmptyState, Given, PremiseStrip } from '@/kit/workbench/premise';
+import { compact, fixed } from '@shared/format';
 import { useTheme } from '@/state/theme';
-import { CableSection, SectionThumb } from './figures';
+import { CableSection, SectionThumb, fieldStops } from './figures';
 import { WORKSPACE } from './library-data';
 import {
   CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
   RATING_STEPS, REFUSED_IMPORT, REFUSED_RATING, SHEET, STARTERS, STEPS_FAILED, STEPS_RECOVERED, STEPS_STOPPED, STEPS_WAITING, THINNER,
-  THINNER_FAILURES, THINNER_NOTE, UNCHECKED,
+  SHORT_CIRCUIT, THINNER_FAILURES, THINNER_NOTE, UNCHECKED,
 } from './samples';
 
 /** One part: its name, the rule it follows, and its states side by side, each named. */
@@ -303,7 +304,7 @@ export function WorkbenchSection() {
             { key: 'value', header: '厚度 / 直径', unit: 'mm', numeric: true, width: 'w-36', cell: row => row.value },
             { key: 'origin', header: '来源', width: 'w-24', cell: row => <span className="text-ink-2">{{ table: '表列', series: '系列', standard: '标准' }[row.origin]}</span> },
           ]}
-          footer={{ label: '外径闭合', cells: { value: '1.22 / 1.32' } }} />
+          footer={{ label: '外径闭合', cells: { value: `${fixed(WORKSPACE.closure.residual_mm, 2)} / ${fixed(WORKSPACE.closure.tolerance_mm, 2)}` } }} />
       </div>
       <State label="空表">
         <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -319,7 +320,7 @@ export function WorkbenchSection() {
       </div>
       <div className="flex w-80 flex-col gap-6 rounded-card border border-line bg-surface p-4">
         <Metric label="允许电流" value="458.7" unit="A" detail={<><TierMark tier="reference" />单回路能力</>} />
-        <Metric label="短路电流 1 s" value="34.34" unit="kA" size="md" />
+        <Metric label="短路电流 1 s" value={compact(SHORT_CIRCUIT.value)} unit={SHORT_CIRCUIT.unit} size="md" />
         <LimitMeter label="导体温度" value={49.7} limit={90} from={25} unit="°C" caption="保存负荷 300 A，余量 158.7 A" />
       </div>
     </Specimen>
@@ -340,7 +341,7 @@ export function WorkbenchSection() {
         <CanvasToolbarSeparator />
         <CanvasTool icon="tool/zoom-out" label="缩小" /><CanvasTool icon="tool/fit" label="回到全貌" /><CanvasTool icon="tool/zoom-in" label="放大" />
       </CanvasToolbar></State>
-      <State label="温度图例"><TemperatureLegend title="颜色是土壤温度" ambient={25} limit={90} lines={5} /></State>
+      <State label="温度图例"><TemperatureLegend title="颜色是土壤温度" ambient={25} limit={90} stops={fieldStops()} lines={5} /></State>
     </Specimen>
   </>;
 }

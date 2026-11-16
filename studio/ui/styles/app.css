@@ -36,6 +36,9 @@
   --text-20--line-height: 28px;
   --text-28: var(--text-value);
   --text-28--line-height: 34px;
+
+  /* thread.aui.tsx draws its composer with shadow-sm; the theme's composer shadow until the kit's composer replaces it. */
+  --shadow-sm: var(--shadow-composer);
 }
 
 @utility duration-slow {

@@ -1,7 +1,7 @@
 // The frame around the section drawing: tools float at the top left, the view switch at the top right, the temperature
 // scale at the bottom left, and a status line under the drawing. The drawing itself is the canvas's own (ui/canvas).
 import { Toolbar } from '@base-ui/react/toolbar';
-import type { ComponentProps, ReactNode } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -56,16 +56,20 @@ export function CanvasLayer({ icon, label, pressed, onPressedChange }: { icon: s
 }
 
 /**
- * The temperature scale: the ramp from the ambient to the conductor limit (the --temperature-* tokens), its two ends and
- * the middle, and what the colour is on.
+ * The temperature scale from the ambient to the conductor limit, its two ends and the middle, and what the colour is on.
+ * `stops` are the colours the drawing itself uses (ui/lib/ramp: `field` for soil, `css` for conductors), evenly spaced;
+ * `strength` is the opacity the drawing paints them at, so a colour on the drawing can be read off the scale.
  */
-export function TemperatureLegend({ title, ambient, limit, lines }: {
+export function TemperatureLegend({ title, ambient, limit, stops, strength = 1, lines }: {
   title: string;
   ambient: number;
   limit: number;
+  stops: string[];
+  strength?: number;
   /** The isotherm step, when isotherms are drawn. */
   lines?: number;
 }) {
+  const gradient = useId();
   const ticks = [ambient, (ambient + limit) / 2, limit];
   return <div className="flex w-56 flex-col gap-2 rounded-lg border border-line bg-surface px-3 py-2 shadow-menu">
     <div className="flex items-baseline justify-between text-xs">
@@ -74,13 +78,14 @@ export function TemperatureLegend({ title, ambient, limit, lines }: {
     </div>
     <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="h-2 w-full overflow-visible" aria-hidden="true">
       <defs>
-        <linearGradient id="temperature-ramp">
-          {[1, 2, 3, 4, 5, 6].map((index, at) => <stop key={index} offset={at / 5} stopColor={`var(--temperature-${index})`} />)}
+        <linearGradient id={gradient}>
+          {stops.map((colour, index) => <stop key={index} offset={index / Math.max(1, stops.length - 1)} stopColor={colour} />)}
         </linearGradient>
       </defs>
-      <rect width="100" height="8" rx="4" fill="url(#temperature-ramp)" stroke="var(--line)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+      <rect width="100" height="8" rx="4" fill={`url(#${gradient})`} opacity={strength} />
+      <rect width="100" height="8" rx="4" fill="none" stroke="var(--line)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
     </svg>
-    <div className="flex justify-between text-xs text-ink-2 tabular-nums">{ticks.map(value => <span key={value}>{Number(value.toFixed(1))}</span>)}</div>
+    <div className="flex justify-between text-xs text-ink-2 tabular-nums">{ticks.map((value, index) => <span key={index}>{Number(value.toFixed(1))}</span>)}</div>
     {lines && <div className="flex items-center gap-2 border-t border-line pt-2 text-xs text-ink-2"><span className="h-px w-5 bg-ink-2" />等温线每 {lines} °C 一条</div>}
   </div>;
 }

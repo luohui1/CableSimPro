@@ -51,7 +51,7 @@ function StepLine({ step }: { step: Step }) {
     <TraceCollapsibleTrigger>{head}</TraceCollapsibleTrigger>
     {reason}
     <TraceCollapsibleContent>
-      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">{step.notes.map(note => <li key={note}>{note}</li>)}</ul>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">{step.notes.map((note, index) => <li key={index}>{note}</li>)}</ul>
     </TraceCollapsibleContent>
   </TraceCollapsible>;
 }

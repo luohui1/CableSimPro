@@ -113,3 +113,9 @@ function FieldDrawing({ width, height, dark }: { width: number; height: number; 
 }
 
 export const FIELD_RANGE = { ambient: AMBIENT, limit: LIMIT };
+
+/** The soil colours of the drawing at six even steps from the ambient to the limit, for the legend. */
+export const fieldStops = () => {
+  const ramp = readRamp();
+  return Array.from({ length: 6 }, (_, index) => ramp.field(index / 5));
+};

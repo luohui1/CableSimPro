@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Disclosure, DisclosureMore, DisclosurePanel, DisclosureRoot } from '@/kit/disclosure';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -15,10 +15,11 @@ import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { NavItem, NavSection, WorkbenchNav } from '@/kit/workbench/nav';
 import { PageHeader, Panel, Split, Toolbar } from '@/kit/workbench/page';
 import { Given, PremiseStrip } from '@/kit/workbench/premise';
-import { CableSection, FIELD_RANGE, SectionField } from './figures';
+import { CableSection, FIELD_RANGE, SectionField, fieldStops } from './figures';
 import { LIBRARY, WORKSPACE, type LibrarySeries, type LibrarySpec } from './library-data';
-import { RATING } from './samples';
-import { RUN_CABLE } from './run-document';
+import { MODEL_FACTS, RATING } from './samples';
+import { RUN_CABLE, RUN_SOLVER } from './run-document';
+import { useTheme } from '@/state/theme';
 import { compact, fixed } from '@shared/format';
 
 const PROJECTS = ['YJV22-8.7/15 3×240 直埋载流量校核', 'YJV22-8.7/15 3×240 直埋载流量示例'];
@@ -156,25 +157,16 @@ function CheckList() {
   const section = (verdict: Verdict, open: boolean) => {
     const list = items.filter(item => item.verdict === verdict);
     if (!list.length) return null;
-    const first = list.slice(0, 6);
     const rest = list.slice(6);
-    return <Collapsible defaultOpen={open} className="border-b border-line last:border-b-0">
-      <CollapsibleTrigger className="group flex h-11 w-full items-center gap-2 px-4 text-left outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring">
-        <VerdictMark verdict={verdict} count={counts[verdict] ?? 0} className="flex-1" />
-        <Icon name="action/chevron-right" className="text-ink-2 transition-transform duration-std group-data-panel-open:rotate-90" />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
-        <ul className="m-0 flex list-none flex-col px-2 pb-3">
-          {first.map(row)}
-          {rest.length > 0 && <Collapsible>
-            <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">{rest.map(row)}</CollapsibleContent>
-            <CollapsibleTrigger className="group/more mt-1 flex h-8 items-center gap-1 rounded-nav px-2 text-sm text-ink-2 outline-none hover:bg-subtle hover:text-ink focus-visible:ring-3 focus-visible:ring-ring">
-              <span className="group-data-panel-open/more:hidden">其余 {rest.length} 项</span><span className="hidden group-data-panel-open/more:inline">收起</span>
-            </CollapsibleTrigger>
-          </Collapsible>}
-        </ul>
-      </CollapsibleContent>
-    </Collapsible>;
+    return <Disclosure defaultOpen={open} title={<VerdictMark verdict={verdict} count={counts[verdict] ?? 0} />}>
+      <ul className="m-0 flex list-none flex-col px-2 pb-3">
+        {list.slice(0, 6).map(row)}
+        {rest.length > 0 && <DisclosureRoot>
+          <DisclosurePanel>{rest.map(row)}</DisclosurePanel>
+          <DisclosureMore more={rest.length} />
+        </DisclosureRoot>}
+      </ul>
+    </Disclosure>;
   };
   return <>
     <dl className="m-0 grid grid-cols-3 gap-4 border-b border-line px-4 py-4">
@@ -201,9 +193,9 @@ function SeriesScreenBody() {
       { id: 'section', size: 34, min: 24, children: <Panel title="结构断面" tools={<ToggleGroup defaultValue={['section']} size="sm" aria-label="视图"><ToggleGroupItem value="section">断面</ToggleGroupItem><ToggleGroupItem value="solid">三维</ToggleGroupItem></ToggleGroup>}
           bodyClassName="relative bg-canvas">
           <div className="absolute inset-6"><CableSection /></div>
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1 text-xs text-ink-2 shadow-menu">外径 <span className="font-medium text-ink tabular-nums">82 mm</span><span aria-hidden="true">·</span>19 层</div>
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1 text-xs text-ink-2 shadow-menu">{MODEL_FACTS.map((fact, index) => <span key={fact.label} className="flex items-center gap-1">{index > 0 && <span aria-hidden="true">·</span>}{fact.label}<span className="font-medium text-ink tabular-nums">{fact.value}</span></span>)}</div>
         </Panel> },
-      { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={<span className="text-sm text-ink-2">外径闭合 1.22 / 1.32 mm</span>}>
+      { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={<span className="text-sm text-ink-2">外径闭合 {fixed(WORKSPACE.closure.residual_mm, 2)} / {fixed(WORKSPACE.closure.tolerance_mm, 2)} mm</span>}>
           <DataTable rowKey={row => row.key} rows={LAYERS} selected="insulation_thickness" onSelect={() => undefined} columns={[
             { key: 'label', header: '层', cell: row => row.label },
             { key: 'value', header: '厚度 / 直径', unit: 'mm', numeric: true, width: 'w-32', cell: row => row.value },
@@ -230,15 +222,7 @@ function Conclusion() {
   const cable = RUN_CABLE;
   const losses = cable.losses_w_m;
   const thermal = cable.thermal_k_m_w;
-  const group = (title: string, open: boolean, children: ReactNode) => <Collapsible defaultOpen={open} className="border-b border-line">
-    <CollapsibleTrigger className="group flex h-11 w-full items-center gap-2 px-4 text-left text-h3 text-ink outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring">
-      <span className="flex-1">{title}</span>
-      <Icon name="action/chevron-right" className="text-ink-2 transition-transform duration-std group-data-panel-open:rotate-90" />
-    </CollapsibleTrigger>
-    <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
-      <div className="px-4 pb-4">{children}</div>
-    </CollapsibleContent>
-  </Collapsible>;
+  const group = (title: string, open: boolean, children: ReactNode) => <Disclosure title={title} defaultOpen={open}><div className="px-4 pb-4">{children}</div></Disclosure>;
   return <Panel title="结论" tools={<TierMark tier={RATING.tier} />} className="w-80 flex-none border-l border-line">
     <div className="flex flex-col gap-4 border-b border-line px-4 py-4">
       <Metric label="允许电流" value={RATING.current} unit="A" detail={RATING.basis} />
@@ -272,6 +256,7 @@ function Conclusion() {
 
 function RatingScreenBody() {
   const [layers, setLayers] = useState({ field: true, isotherms: true, dimensions: true });
+  const dark = useTheme(state => state.theme) === 'dark';
   return <>
     <PageHeader trail={[{ label: '载流量计算' }]} title="YJV22-8.7/15 3×240 直埋载流量校核"
       marks={<Badge variant="outline">运行记录 1</Badge>}
@@ -302,11 +287,11 @@ function RatingScreenBody() {
           <ToggleGroupItem value="cluster">电缆簇</ToggleGroupItem>
           <ToggleGroupItem value="overview">全景</ToggleGroupItem>
         </ToggleGroup>}
-        legend={<TemperatureLegend title="颜色是土壤温度" ambient={FIELD_RANGE.ambient} limit={FIELD_RANGE.limit} lines={5} />}
+        legend={<TemperatureLegend title="颜色是土壤温度" ambient={FIELD_RANGE.ambient} limit={FIELD_RANGE.limit} stops={fieldStops()} strength={dark ? 0.24 : 1} lines={5} />}
         status={<>
           <span>视图：全景</span>
           <span>IEC 60287 稳态载流量 · cablesim.iec60287 1.2.0</span>
-          <span className="ml-auto">迭代 33 次收敛</span>
+          <span className="ml-auto">迭代 {RUN_SOLVER.iterations} 次收敛</span>
         </>}>
         <SectionField />
       </CanvasFrame>

@@ -1,6 +1,6 @@
 // The top of a workbench screen and the flat panels under it. A screen has one header with one primary button (the next
 // step); under it, panels tile edge to edge and are separated by lines, never boxed inside one another.
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { cn } from '@/lib/utils';
@@ -21,10 +21,10 @@ export function PageHeader({ trail, title, marks, primary, actions, className }:
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       {trail && trail.length > 0 && <Breadcrumb>
         <BreadcrumbList>
-          {trail.map((step, index) => <span key={step.label} className="contents">
+          {trail.map((step, index) => <Fragment key={index}>
             {index > 0 && <BreadcrumbSeparator />}
             <BreadcrumbItem><BreadcrumbLink render={<button type="button" onClick={step.onClick} />}>{step.label}</BreadcrumbLink></BreadcrumbItem>
-          </span>)}
+          </Fragment>)}
         </BreadcrumbList>
       </Breadcrumb>}
       <div className="flex min-w-0 items-center gap-3">
@@ -60,10 +60,10 @@ export function Split({ panes, direction = 'horizontal', className }: {
   className?: string;
 }) {
   return <ResizablePanelGroup orientation={direction} className={cn('min-h-0 flex-1', className)}>
-    {panes.map((pane, index) => <span key={pane.id} className="contents">
+    {panes.map((pane, index) => <Fragment key={pane.id}>
       {index > 0 && <ResizableHandle />}
       <ResizablePanel id={pane.id} defaultSize={`${pane.size}%`} minSize={pane.min ? `${pane.min}%` : undefined} className="flex min-h-0 min-w-0 flex-col">{pane.children}</ResizablePanel>
-    </span>)}
+    </Fragment>)}
   </ResizablePanelGroup>;
 }
 

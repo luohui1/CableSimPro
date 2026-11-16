@@ -43,8 +43,11 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
 }) {
   const body = (list: Row[]) => list.map(row => {
     const key = rowKey(row);
-    return <TableRow key={key} data-state={key === selected ? 'selected' : undefined} onClick={onSelect ? () => onSelect(row) : undefined}
-      className={cn(onSelect && 'cursor-pointer')}>
+    // A row that can be selected takes focus and answers Enter and Space, like the click.
+    return <TableRow key={key} data-state={key === selected ? 'selected' : undefined} aria-selected={onSelect ? key === selected : undefined}
+      tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined}
+      onKeyDown={onSelect ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row); } } : undefined}
+      className={cn(onSelect && 'cursor-pointer outline-none focus-visible:bg-subtle focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset')}>
       {columns.map(column => <TableCell key={column.key} numeric={column.numeric} className={column.width}>{column.cell(row)}</TableCell>)}
       {filler && <TableCell aria-hidden="true" />}
     </TableRow>;
@@ -53,11 +56,10 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
   // When every column has a width, what is left over goes to an empty column at the end, not between the columns.
   const filler = columns.every(column => column.width);
   const span = columns.length + (filler ? 1 : 0);
-  return <div className={cn('min-h-0 overflow-auto', className)}>
-    <Table>
+  return <Table containerClassName={cn('min-h-0', className)}>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          {columns.map(column => <TableHead key={column.key} numeric={column.numeric} className={column.width}
+          {columns.map(column => <TableHead key={column.key} numeric={column.numeric} className={cn('sticky top-0 z-1', column.width)}
             aria-sort={sort?.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined}>
             {onSort
               ? <button type="button" onClick={() => onSort(column.key)}
@@ -67,7 +69,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
               </button>
               : <HeadText column={column} />}
           </TableHead>)}
-          {filler && <TableHead aria-hidden="true" />}
+          {filler && <TableHead aria-hidden="true" className="sticky top-0 z-1" />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -84,8 +86,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
           {filler && <TableCell aria-hidden="true" />}
         </TableRow>
       </TableFooter>}
-    </Table>
-  </div>;
+  </Table>;
 }
 
 const HeadText = <Row,>({ column }: { column: Column<Row> }) =>

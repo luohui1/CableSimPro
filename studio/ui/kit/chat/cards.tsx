@@ -128,7 +128,7 @@ export function CheckCard({ title, counts, failures, more = 0, unchecked = 0, ac
       {unchecked > 0 && <p className="m-0 flex items-center gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name={VERDICT.missing.icon} className="text-attention" />{unchecked} 个规格还没有核对结果，先计算再核对。</p>}
       {failures.length > 0
         ? <ul className="m-0 flex list-none flex-col divide-y divide-line rounded-lg border border-line p-0">
-          {failures.map(item => <li key={`${item.title}/${item.scope}`} className="flex min-w-0 items-center gap-3 px-3 py-2">
+          {failures.map((item, index) => <li key={index} className="flex min-w-0 items-center gap-3 px-3 py-2">
             <Icon name={VERDICT.failed.icon} className="text-error" />
             <span className="min-w-0 flex-1 truncate text-sm">
               <span className="font-medium text-ink">{item.title}</span>
@@ -147,8 +147,10 @@ export function CheckCard({ title, counts, failures, more = 0, unchecked = 0, ac
 // ---- 待审卡 ----
 
 export interface Change {
+  /** A stable key: the host's part/field. The label is used when there is none. */
+  id?: string;
   label: string;
-  /** Absent for a new object: then the card lists what will be created. */
+  /** Absent (or the host's '—') for a new object: then the card lists what will be created. */
   before?: string;
   after: string;
 }
@@ -216,9 +218,9 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
 }
 
 function ChangeList({ changes }: { changes: Change[] }) {
-  const edits = changes.some(change => change.before !== undefined);
+  const edits = changes.some(change => change.before !== undefined && change.before !== '—');
   return <dl className={cn('m-0 grid items-baseline gap-x-3 gap-y-2', edits ? 'grid-cols-change' : 'grid-cols-label')}>
-    {changes.map(change => <div key={change.label} className="contents">
+    {changes.map((change, index) => <div key={change.id ?? `${index}/${change.label}`} className="contents">
       <dt className="min-w-0 truncate text-sm text-ink-2">{change.label}</dt>
       {edits && <dd className="m-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3">{change.before ?? '—'}</dd>}
       {edits && <dd className="m-0 flex items-center self-center text-ink-3" aria-hidden="true"><Icon name="action/arrow-right" /></dd>}

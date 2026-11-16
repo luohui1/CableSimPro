@@ -1,13 +1,13 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-// A dense engineering table: 36 px rows, 13 px headers that stay put while the body scrolls, numbers right-aligned in
-// tabular figures. The selected row takes the copper fill.
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+// A dense engineering table: 36 px rows, 13 px headers, numbers right-aligned in tabular figures, the selected row in
+// the copper fill. The kit's DataTable makes the header stay while the body scrolls.
+function Table({ className, containerClassName, ...props }: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-auto"
+      className={cn("relative w-full overflow-auto", containerClassName)}
     >
       <table
         data-slot="table"
@@ -74,7 +74,7 @@ function TableHead({
       data-slot="table-head"
       data-numeric={numeric || undefined}
       className={cn(
-        "sticky top-0 z-10 h-9 border-b border-line bg-surface px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-ink-2 data-numeric:text-right [&:has([role=checkbox])]:pr-0",
+        "h-9 border-b border-line bg-surface px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-ink-2 data-numeric:text-right [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

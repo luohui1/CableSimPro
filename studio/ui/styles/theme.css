@@ -19,6 +19,9 @@
   --attention-fill: color-mix(in oklab, var(--attention) 10%, var(--panel));
   --error-fill: color-mix(in oklab, var(--error) 8%, var(--panel));
   --focus: color-mix(in oklab, var(--copper) 55%, transparent);
+  /* Text on a tinted fill (a tag): the hue darkened until it reads at 4.5:1 or better on its fill. */
+  --attention-ink: color-mix(in oklab, var(--attention) 78%, #000);
+  --agent-ink: color-mix(in oklab, var(--agent) 78%, #000);
   --soil: color-mix(in oklab, var(--cad-soil) 22%, var(--panel));
   --soil-line: color-mix(in oklab, var(--cad-soil) 55%, var(--panel));
   /* Floating things only: the composer, menus, dialogs. Surfaces lie flat and are drawn with lines. */
@@ -35,6 +38,8 @@
   --success-fill: color-mix(in oklab, var(--success) 14%, var(--panel));
   --attention-fill: color-mix(in oklab, var(--attention) 14%, var(--panel));
   --error-fill: color-mix(in oklab, var(--error) 14%, var(--panel));
+  --attention-ink: var(--attention);
+  --agent-ink: var(--agent);
   --soil: color-mix(in oklab, var(--cad-soil) 16%, var(--panel));
   --soil-line: color-mix(in oklab, var(--cad-soil) 40%, var(--panel));
   --shadow-composer: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
@@ -74,11 +79,13 @@
   --color-success-fill: var(--success-fill);
   --color-attention: var(--attention);
   --color-attention-fill: var(--attention-fill);
+  --color-attention-ink: var(--attention-ink);
   --color-error: var(--error);
   --color-error-fill: var(--error-fill);
   /* What the Agent proposes, until a person decides. */
   --color-agent: var(--agent);
   --color-agent-fill: var(--agent-fill);
+  --color-agent-ink: var(--agent-ink);
   /* Drawing colours, for drawings only. */
   --color-conductor: var(--conductor);
   --color-semi: var(--material-semi);
@@ -185,10 +192,10 @@
   --radius-3xl: 24px;
   --radius-4xl: 999px;
   --radius-chip: 6px;
-  --radius-field: 8px;
-  --radius-nav: 10px;
-  --radius-card: 12px;
-  --radius-sheet: 16px;
+  --radius-field: var(--radius-input);
+  --radius-nav: var(--radius-item);
+  --radius-card: var(--radius-surface);
+  --radius-sheet: var(--radius-panel);
   --radius-composer: 24px;
 
   --shadow-composer: var(--shadow-composer);

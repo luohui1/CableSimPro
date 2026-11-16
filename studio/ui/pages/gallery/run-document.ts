@@ -258,6 +258,9 @@ export const RUN_DOCUMENT = {
   "load_cases": []
 } as unknown as DomainDocument;
 
+/** The solver of the same run: summary.operating.iterations. */
+export const RUN_SOLVER = { iterations: 33 };
+
 export const RUN_CABLE = {
   "id": "cable/c1",
   "circuit": "circuit/c1",

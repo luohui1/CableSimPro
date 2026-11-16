@@ -94,6 +94,7 @@ export const MODEL_STEPS_RUNNING: Step[] = [
   { id: 'm3', label: '读取规格', target: 'YJV22-8.7/15 kV 3×240', state: 'done', seconds: 0.005 },
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'running' },
 ];
+/** From the step's notes: 外径 82 mm, 19 层，STEP 文件已生成. */
 export const MODEL_FACTS = [{ label: '外径', value: '82 mm' }, { label: '层数', value: '19' }];
 
 // ---- States 8210 had no case of, produced on this branch's own host (8212) with the same cable and the same steps as
@@ -109,6 +110,10 @@ export const THINNER_FAILURES: CheckFailure[] = [
 ];
 /** Version 1 as it stands (8210 and 8212 alike): 13 passed, 21 missing, 4 not covered. */
 export const CHECK_V1 = { passed: 13, failed: 0, missing: 21, uncovered: 4 };
+
+/** The 1 s short-circuit current of 3×240 version 1: short_circuit_ka 34.340041598762646 in library.series.get on
+ *  8212 (the same table computed by tests/library.test.ts, which asserts 34.34 ± 0.05). */
+export const SHORT_CIRCUIT = { value: 34.340041598762646, unit: 'kA' };
 
 /** A series whose sizes were never computed (8210 library.check.failures s-huayuan-yjv22-15kv: not_checked 10). */
 export const UNCHECKED = { title: '标准核对 · YJV22-8.7/15 kV 三芯（华远公开表）', unchecked: 10 };
@@ -138,10 +143,11 @@ export const STEPS_WAITING: Step[] = [
   ...RATING_STEPS.slice(0, 3),
   { id: 's4', label: '新建工程', target: PROJECT, state: 'waiting' },
 ];
-/** The agent asked to read the repository's own conventions and was refused (tests/agent.test.ts, 'only skill files'). */
+/** The agent asked to read the repository's own conventions and was refused: the message of studio/host/agent-tools.ts
+ *  skillReader with this branch's five skills (tests/agent.test.ts, 'only skill files'). */
 export const STEPS_RECOVERED: Step[] = [
   { id: 'r1', label: '读取技能', target: '技能「载流量校核与选型」', state: 'done', seconds: 0.001 },
-  { id: 'r2', label: '读取技能', state: 'failed', reason: '只能读取技能文件。' },
+  { id: 'r2', label: '读取技能', state: 'failed', reason: '只能读取技能文件：ampacity-rating、cable-3d-model、cable-import-check、cable-revision、spec-and-report。' },
   { id: 'r3', label: '读取技能', target: '技能「型号改版」', state: 'done', seconds: 0.001 },
 ];
 /** A run the method refuses ends the task there: the refusal of 3×50 (see REFUSED_RATING) as the last step. */
@@ -155,5 +161,6 @@ export const STEPS_STOPPED: Step[] = [
   ...MODEL_STEPS_RUNNING.slice(0, 3),
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'interrupted' },
 ];
-/** What the CAD plugin answers for a construction it does not cover (studio/skills/cable-3d-model/SKILL.md). */
-export const MODEL_REFUSAL = '缺单丝参数：插件没有覆盖这种构造，补上构造参数后再建模。';
+/** What the CAD plugin answers for a stranding it does not build: the message of
+ *  plugins/cablesim.cable-geometry/src/cablesim_cable_geometry/main.py, word for word. */
+export const MODEL_REFUSAL = '圆绞合支持 1+6+12…完整同心绞层，请核对根数';

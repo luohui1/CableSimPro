@@ -1,6 +1,8 @@
 // The conversation list of Agent mode: a new conversation, a search, and the conversations grouped by when they were last
 // used (今天, 昨天, 近 7 天, 更早). Parts take any props, so assistant-ui's list primitives can render them.
-import type { ComponentProps, ReactNode } from 'react';
+import { mergeProps } from '@base-ui/react/merge-props';
+import { useRender } from '@base-ui/react/use-render';
+import { Children, type ComponentProps, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { cn } from '@/lib/utils';
@@ -29,21 +31,28 @@ export function ChatSearch({ className, ...props }: ComponentProps<'input'>) {
 export function ChatGroup({ label, children }: { label: string; children: ReactNode }) {
   return <section className="flex flex-col gap-1" aria-label={label}>
     <h2 className="m-0 px-3 py-1 text-xs font-medium text-ink-2">{label}</h2>
-    <ul className="m-0 flex list-none flex-col gap-1 p-0">{children}</ul>
+    <ul className="m-0 flex list-none flex-col gap-1 p-0">{Children.map(children, child => <li className="list-none">{child}</li>)}</ul>
   </section>;
 }
 
 /** No conversation yet: where they will appear. */
 export const ChatListEmpty = () => <p className="m-0 px-3 py-2 text-sm text-ink-2">还没有对话。交办第一件事后，它会出现在这里。</p>;
 
-/** One conversation. The open one takes the selection fill (copper, faint). Running: a spinner at the end. */
-export function ChatItem({ title, active, running, className, ...props }: { title: string; active?: boolean; running?: boolean } & ComponentProps<'button'>) {
-  return <li className="list-none">
-    <button type="button" data-active={active || undefined} aria-current={active ? 'page' : undefined} title={title}
-      className={cn('flex h-9 w-full min-w-0 items-center gap-2 rounded-nav px-3 text-left text-sm text-ink transition-colors duration-fast outline-none hover:bg-hover focus-visible:ring-3 focus-visible:ring-ring data-active:bg-copper-fill data-active:font-medium', className)}
-      {...props}>
-      <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap fade-end">{title}</span>
-      {running && <Spinner className="text-ink-2" />}
-    </button>
-  </li>;
+/** One conversation: a button, or a link through `render`. The open one takes the selection fill (copper, faint);
+ *  running, a spinner at the end; a long title fades out at the end of its line, the whole of it in the tooltip. */
+export function ChatItem({ title, active, running, className, render, ...props }: { title: string; active?: boolean; running?: boolean } & useRender.ComponentProps<'button'>) {
+  return useRender({
+    defaultTagName: 'button',
+    render,
+    props: mergeProps<'button'>({
+      type: render ? undefined : 'button',
+      title,
+      'aria-current': active ? 'page' : undefined,
+      className: cn('flex h-9 w-full min-w-0 items-center gap-2 rounded-nav px-3 text-left text-sm text-ink no-underline transition-colors duration-fast outline-none hover:bg-hover focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-copper-fill aria-[current=page]:font-medium', className),
+      children: <>
+        <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap fade-end">{title}</span>
+        {running && <Spinner className="text-ink-2" />}
+      </>,
+    }, props),
+  });
 }
