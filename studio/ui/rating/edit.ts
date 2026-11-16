@@ -39,25 +39,35 @@ async function send(project: string, step: Step): Promise<ProjectView> {
 /** The host's own words for a failed action. */
 export const messageOf = (error: unknown): string => (error instanceof ApiError ? error.issue.message : error instanceof Error ? error.message : '操作没有完成。');
 
+// Changes are made one after another in the order they were asked for: a second Ctrl+Z pressed while the first is on its way
+// waits for it and undoes the step before, instead of being dropped.
+let queue: Promise<unknown> = Promise.resolve();
+let waiting = 0;
+
 /** One change at a time; `quiet` leaves the message to the caller instead of the notice at the foot of the screen. */
-async function guarded(work: () => Promise<void>, quiet: boolean): Promise<string | null> {
-  if (useHistory.getState().busy) return '上一项改动还没做完，请稍等。';
+function guarded(work: () => Promise<void>, quiet: boolean): Promise<string | null> {
+  waiting += 1;
   useHistory.setState({ busy: true });
-  try {
-    await work();
-    return null;
-  } catch (error) {
-    if (!quiet) reportFailure(error);
-    return messageOf(error);
-  } finally {
-    useHistory.setState({ busy: false });
-  }
+  const run = queue.then(async () => {
+    try {
+      await work();
+      return null;
+    } catch (error) {
+      if (!quiet) reportFailure(error);
+      return messageOf(error);
+    } finally {
+      waiting -= 1;
+      if (waiting === 0) useHistory.setState({ busy: false });
+    }
+  });
+  queue = run;
+  return run;
 }
 
 /** Change inputs of a project through one write operation. */
 export const change = (project: string, op: WriteOp, params: Record<string, unknown>, quiet = false) => guarded(async () => {
-  const before = queryClient.getQueryData<ProjectView>(['project', project]);
-  if (!before) return;
+  // What the inputs were is read from the host when this screen has not got it: a change is never dropped silently.
+  const before: ProjectView = queryClient.getQueryData<ProjectView>(['project', project]) ?? await queryClient.fetchQuery<ProjectView>({ queryKey: ['project', project], queryFn: () => api.project(project) });
   const after = await send(project, { op, params });
   if (after.inputs_sha256 === before.inputs_sha256) return;
   useHistory.setState(state => ({

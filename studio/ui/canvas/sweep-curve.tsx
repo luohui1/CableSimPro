@@ -41,6 +41,8 @@ export function SweepCurve({ points, xLabel, load, active }: {
   const xTicks = niceTicks(Math.min(...xs), Math.max(...xs), 6);
   const reach = (Math.max(...xs) - Math.min(...xs)) * 0.04 || 1;
   const marked = active === undefined ? undefined : points[active];
+  // The name of the load sits at the end of the dashed line where the curve is far from it.
+  const loadAt = drawn[0].y >= drawn[drawn.length - 1].y ? 'insideBottomLeft' : 'insideBottomRight';
   return <div role="img" aria-label={`${xLabel}变化时的允许电流曲线`} className="absolute inset-0">
     <span className="absolute top-4 left-6 text-sm text-ink">允许电流 A</span>
     <span className="absolute inset-x-0 bottom-4 text-center text-sm text-ink">{xLabel}</span>
@@ -52,7 +54,7 @@ export function SweepCurve({ points, xLabel, load, active }: {
             tickFormatter={value => compact(value)} />
           <YAxis type="number" domain={[low, high]} ticks={yTicks} tick={TICK} tickLine={false} axisLine={AXIS} width={56} tickFormatter={value => compact(value)} />
           {load !== undefined && <ReferenceLine y={load} stroke="var(--text-secondary)" strokeDasharray="6 4"
-            label={{ value: `保存负荷 ${compact(load)} A`, position: 'insideBottomRight', fill: 'var(--text-secondary)', fontSize: 13 }} />}
+            label={{ value: `保存负荷 ${compact(load)} A`, position: loadAt, fill: 'var(--text-secondary)', fontSize: 13 }} />}
           <Tooltip cursor={{ stroke: 'var(--control-border)' }} content={({ active: hovered, payload }) => {
             const point = payload?.[0]?.payload as { x: number; y: number | null } | undefined;
             if (!hovered || !point || point.y === null) return null;
