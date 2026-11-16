@@ -124,7 +124,7 @@ export function LibraryScreenBody({ ticked, onTick, toolbar }: { ticked?: string
         <ToggleGroupItem value="public">公开资料</ToggleGroupItem>
         <ToggleGroupItem value="demo">演示结构</ToggleGroupItem>
       </ToggleGroup>
-      <ChoiceSelect label="审核状态" size="sm" value="all" options={REVIEW_FILTER} />
+      <ChoiceSelect label="审核状态" size="sm" value="all" options={REVIEW_FILTER} className="ml-2 w-40" />
     </Toolbar>}
     <div className="flex min-h-0 flex-1">
     <DataTable className="flex-1" columns={SPEC_COLUMNS} rowKey={spec => spec.id} selected={SELECTED_SPEC} onSelect={() => undefined} onOpen={() => undefined}

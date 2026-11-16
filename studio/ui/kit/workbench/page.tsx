@@ -1,6 +1,6 @@
 // The top of a workbench screen and the flat panels under it. A screen has one header with one primary button (the next
 // step); under it, panels tile edge to edge and are separated by lines, never boxed inside one another.
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type ReactElement, type ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function PageHeader({ trail, title, marks, primary, actions, className }: {
-  /** Where the object sits: 型号库 / 人民电缆集团 YJV22-8.7/15 kV 三芯. The title follows under it. */
-  trail?: { label: string; onClick?: () => void }[];
+  /**
+   * Where the object sits: 型号库 / 人民电缆集团 YJV22-8.7/15 kV 三芯. The title follows under it. A step is a link when it
+   * has somewhere to go (`href`, `onClick`, or `render` for a router link); the workspace name alone is plain text.
+   */
+  trail?: { label: string; href?: string; onClick?: () => void; render?: ReactElement }[];
   title: ReactNode;
   /** Marks beside the title: version, review state, trust. */
   marks?: ReactNode;
@@ -25,7 +28,9 @@ export function PageHeader({ trail, title, marks, primary, actions, className }:
         <BreadcrumbList>
           {trail.map((step, index) => <Fragment key={index}>
             {index > 0 && <BreadcrumbSeparator />}
-            <BreadcrumbItem><BreadcrumbLink render={<button type="button" onClick={step.onClick} />}>{step.label}</BreadcrumbLink></BreadcrumbItem>
+            <BreadcrumbItem>{step.href || step.onClick || step.render
+              ? <BreadcrumbLink href={step.href} render={step.render ?? (step.onClick ? <button type="button" onClick={step.onClick} /> : undefined)}>{step.label}</BreadcrumbLink>
+              : <span className="text-ink-2">{step.label}</span>}</BreadcrumbItem>
           </Fragment>)}
         </BreadcrumbList>
       </Breadcrumb>}
