@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils';
 import { Icon, Spinner } from '../icon';
 
 export function ComposerFrame({ dragging, className, ...props }: { dragging?: boolean } & ComponentProps<'div'>) {
-  return <div data-dragging={dragging || undefined}
-    className={cn('flex w-full cursor-text flex-col gap-2 rounded-composer border border-line-strong bg-surface p-2 shadow-composer transition-field focus-within:border-ink-3 data-dragging:border-dashed data-dragging:border-copper data-dragging:bg-copper-fill', className)}
+  return <div data-dragging={dragging ? 'true' : undefined}
+    className={cn('flex w-full cursor-text flex-col gap-2 rounded-composer border border-line-strong bg-surface p-2 shadow-composer transition-field focus-within:border-ink-3 data-[dragging=true]:border-dashed data-[dragging=true]:border-copper data-[dragging=true]:bg-copper-fill', className)}
     {...props} />;
 }
 

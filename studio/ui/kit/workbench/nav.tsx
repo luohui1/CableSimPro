@@ -40,7 +40,7 @@ export function NavItem({ icon, label, count, active, nested, className, render,
       className: cn('flex min-h-8 w-full min-w-0 items-center gap-2 rounded-nav px-3 py-1 text-left text-sm text-ink no-underline transition-colors duration-fast outline-none hover:bg-hover focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-copper-fill aria-[current=page]:font-medium', nested && 'pl-9', className),
       children: <>
         {icon && <Icon name={icon} className="text-ink-2" />}
-        <span className="line-clamp-2 min-w-0 flex-1">{label}</span>
+        <span className="line-clamp-2 min-w-0 flex-1 text-balance">{label}</span>
         {count !== undefined && <span className="text-xs text-ink-2 tabular-nums">{count}</span>}
       </>,
     }, props),

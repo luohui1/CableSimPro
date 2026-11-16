@@ -158,7 +158,8 @@ function CheckList() {
     const list = items.filter(item => item.verdict === verdict);
     if (!list.length) return null;
     const rest = list.slice(6);
-    return <Disclosure defaultOpen={open} title={<VerdictMark verdict={verdict} count={counts[verdict] ?? 0} />}>
+    return <Disclosure defaultOpen={open} title={<VerdictMark verdict={verdict} count={counts[verdict] ?? 0} />}
+      aside={<span className="text-sm font-normal text-ink-2">{list.length} 条要求</span>}>
       <ul className="m-0 flex list-none flex-col px-2 pb-3">
         {list.slice(0, 6).map(row)}
         {rest.length > 0 && <DisclosureRoot>
