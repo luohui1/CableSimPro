@@ -56,7 +56,11 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await op<RunRecord>('run.sweep', { project: sweepOnly, variable: 'soil_thermal_resistivity', values: [1, 1.5, 2] });
     const page: Page = await browser.newPage({ viewport: { width, height }, acceptDownloads: true });
     page.on('pageerror', error => problems.push(`${width} page error: ${error.message}`));
-    page.on('console', message => { if (message.type() === 'error') problems.push(`${width} console error: ${message.text()}`); });
+    // The browser logs a refused request as an error: the one step that makes the host refuse a write expects it.
+    let refusing = false;
+    page.on('console', message => {
+      if (message.type() === 'error' && !(refusing && /status of 400/.test(message.text()))) problems.push(`${width} console error: ${message.text()}`);
+    });
     const check = async (label: string) => {
       await page.waitForTimeout(650);
       await page.screenshot({ path: join(out, `${width}-${label}.png`) });
@@ -452,6 +456,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('button', { name: '导出计算书' }).waitFor();
     const beforeRefusal = await view(row);
     let refused = 0;
+    refusing = true;
     await page.route('**/api/ops/installation.set', async route => {
       refused += 1;
       await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: { code: 'INPUT_INVALID', message: '走查：宿主拒绝了这次敷设改动。' } }) });
@@ -472,6 +477,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     assert.equal(afterRefusal.runs.length, beforeRefusal.runs.length, 'no check was run');
     await editor().getByText('改了 2 项').waitFor();
     await page.unroute('**/api/ops/installation.set');
+    refusing = false;
     await editor().getByRole('button', { name: '放弃' }).click();
     await page.close();
   }
