@@ -1,7 +1,7 @@
 // A sweep of one condition: the dialog that sets it up, and the screen that reads it: the curve of the allowed current (or of
 // the conductor's temperature) against the condition, and the numbers of every point. A point the method could not compute stays
 // in its place and says why, in the method's words.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -50,6 +50,8 @@ export function SweepDialog({ view, onClose, onDone }: { view: ProjectView; onCl
   const [to, setTo] = useState<number | null>(start(variable)[1]);
   const [count, setCount] = useState<number | null>(options[0].points);
   const [busy, setBusy] = useState(false);
+  // One run per press, also when the form is sent twice before the screen shows it working.
+  const running = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const option = SWEEPS.find(item => item.key === variable)!;
 
@@ -64,12 +66,15 @@ export function SweepDialog({ view, onClose, onDone }: { view: ProjectView; onCl
   const planned = values();
   const submit = async () => {
     if (typeof planned === 'string') return setError(planned);
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setError(null);
     try {
       await onDone(await api.op<RunRecord>('run.sweep', { project: view.meta.id, variable, values: planned }));
     } catch (failure) {
       setError(messageOf(failure));
+      running.current = false;
       setBusy(false);
     }
   };

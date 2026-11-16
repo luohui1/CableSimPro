@@ -1,7 +1,7 @@
 // The choice of a section for a target current: the dialog that asks for the target, and the screen that reads the answer: every
 // size of the series against the target in one table, and at the side the one the rule chose. A size the method refused, or
 // could not find a steady state for at the target, says so in the method's words.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -23,15 +23,20 @@ import { limitOf } from './rating';
 export function SelectionDialog({ view, onClose, onDone }: { view: ProjectView; onClose: () => void; onDone: (record: RunRecord) => void | Promise<void> }) {
   const [target, setTarget] = useState<number | null>(view.parts.conditions.currents_a[0] ?? null);
   const [busy, setBusy] = useState(false);
+  // One run per press, also when the form is sent twice before the screen shows it working.
+  const running = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async () => {
     if (target === null || !Number.isFinite(target) || target <= 0) return setError('目标电流要填大于 0 的数。');
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setError(null);
     try {
       await onDone(await api.op<RunRecord>('run.select', { project: view.meta.id, target_current_a: target }));
     } catch (failure) {
       setError(messageOf(failure));
+      running.current = false;
       setBusy(false);
     }
   };

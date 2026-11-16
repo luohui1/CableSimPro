@@ -4,7 +4,7 @@
 // the new record. The copper button says what comes next: the check, the sheet, or applying the changes.
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fieldModel } from '@/canvas/field-model';
 import { buildScene } from '@/canvas/scene';
 import { SectionCanvas, type SectionEdit } from '@/canvas/section-canvas';
@@ -61,6 +61,8 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   const [asks, setAsks] = useState<{ key: GivenKey; at: number } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  // One apply at a time: a second press before the screen has redrawn with the first one working does nothing.
+  const applyingNow = useRef(false);
   const [panel, setPanel] = useState<'sweep' | 'select' | null>(null);
   useEffect(() => useView.getState().select(null), [projectId, shown?.id]);
 
@@ -126,10 +128,11 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
    * writes, the ones before it are taken back, the changes stay in the editor, and the host's words say why.
    */
   const apply = async () => {
-    if (!view || applying) return;
+    if (!view || applyingNow.current) return;
     const plan = writesOf(view, pending.staged);
     if ('problem' in plan) return setProblem(plan.problem);
     setProblem(null);
+    applyingNow.current = true;
     setApplying(true);
     const done: typeof plan.writes = [];
     try {
@@ -151,6 +154,7 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
       // What was refused is said in the host's words; when taking back what was written failed too, that is said as well.
       await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
       setProblem(undone ? `没有应用，工程还是原来的条件：${messageOf(failure)}` : `没有应用，而且前面写进工程的没能全部撤回，请核对已知条件：${messageOf(failure)}`);
+      applyingNow.current = false;
       setApplying(false);
       return;
     }
@@ -168,6 +172,7 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
       setEditing(false);
       await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
     } finally {
+      applyingNow.current = false;
       setApplying(false);
     }
   };
