@@ -1,11 +1,15 @@
 // A task done in steps on one screen (import a table, create a type from a standard): the steps down the left with what
 // each settled, the current step's work on the right, and the way forward at the bottom.
 import type { ReactNode } from 'react';
+import type { StepStatus } from '@stepperize/react';
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
 
 export type FlowStepStatus = 'done' | 'current' | 'upcoming' | 'error';
 export interface FlowStep { title: string; status: FlowStepStatus; /** What the step settled, once done: 表3 YJV22. */ detail?: ReactNode }
+
+/** A step's place as stepperize gives it (useStepper().status(id)), as the stepper draws it. A failed step is the page's to say. */
+export const flowStatus = (status: StepStatus): FlowStepStatus => ({ previous: 'done', active: 'current', upcoming: 'upcoming' } as const)[status];
 
 export function Stepper({ steps, label }: { steps: FlowStep[]; label: string }) {
   return <ol aria-label={label} className="m-0 flex list-none flex-col p-0">

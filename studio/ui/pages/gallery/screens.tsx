@@ -90,7 +90,7 @@ function AgentEmptyScreen() {
         className="2xl:max-w-4xl"
         composer={<div className="flex flex-col gap-2">
           <Composer />
-          <DropZone compact title="把厂家结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv" accept=".xlsx,.xls,.csv" />
+          <DropZone compact title="把厂家结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv" />
         </div>}
         groups={[
           { label: '电缆型号', icon: 'nav/cable-type', figure: <div className="absolute -right-4 -bottom-10 size-40"><CableSection size={160} /></div>,

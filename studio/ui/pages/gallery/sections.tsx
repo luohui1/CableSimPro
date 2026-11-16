@@ -114,9 +114,8 @@ export function ThemeSection() {
 
 export function ControlsSection() {
   return <>
-    <Specimen title="按钮" rule="胶囊形。铜色是一屏唯一的主按钮；墨色给发送这类强动作；其余是描边和无底。">
+    <Specimen title="按钮" rule="胶囊形。铜色是一屏唯一的主按钮，对话页里有内容时的发送就是它；其余是描边、浅底和无底。">
       <State label="主按钮"><Button><Icon name="run/run" data-icon="inline-start" />运行校核</Button></State>
-      <State label="墨色"><Button variant="ink">发送</Button></State>
       <State label="描边"><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button></State>
       <State label="浅底"><Button variant="secondary">次要</Button></State>
       <State label="无底"><Button variant="ghost">取消</Button></State>

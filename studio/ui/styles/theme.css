@@ -342,6 +342,58 @@
   height: 384px;
 }
 
+/* A header and its body; a media row above them (the alert dialog). An icon column and its text (the alert). */
+@utility grid-rows-header {
+  grid-template-rows: auto 1fr;
+}
+@utility grid-rows-media-header {
+  grid-template-rows: auto auto 1fr;
+}
+@utility grid-cols-icon {
+  grid-template-columns: auto 1fr;
+}
+/* A list in a popup: no taller than eighteen rows, nor than the room under its anchor. */
+@utility max-h-popup {
+  max-height: min(calc(--spacing(72) - --spacing(9)), calc(var(--available-height) - --spacing(9)));
+}
+
+/* recharts drawn in the theme: ticks in the secondary text, grid and reference lines on the line colour, no outlines. */
+@utility chart-theme {
+  & .recharts-cartesian-axis-tick text {
+    fill: var(--text-secondary);
+  }
+  & .recharts-cartesian-grid line[stroke='#ccc'],
+  & .recharts-polar-grid [stroke='#ccc'],
+  & .recharts-reference-line [stroke='#ccc'],
+  & .recharts-curve.recharts-tooltip-cursor {
+    stroke: var(--line);
+  }
+  & .recharts-dot[stroke='#fff'],
+  & .recharts-sector[stroke='#fff'] {
+    stroke: transparent;
+  }
+  & .recharts-radial-bar-background-sector,
+  & .recharts-rectangle.recharts-tooltip-cursor {
+    fill: var(--fill);
+  }
+  & .recharts-layer,
+  & .recharts-sector,
+  & .recharts-surface {
+    outline: none;
+  }
+}
+
+/* ---- Libraries that style themselves through variables ---- */
+
+/* sonner: the toast takes the panel, the text and the line of the theme, and the card radius. */
+[data-sonner-toaster][data-sonner-theme] {
+  --normal-bg: var(--panel);
+  --normal-text: var(--text);
+  --normal-border: var(--line);
+  --border-radius: var(--radius-surface);
+  --font-family: var(--font-ui);
+}
+
 /* ---- Base ---- */
 
 @layer base {

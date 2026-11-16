@@ -13,7 +13,8 @@ import { Icon } from '@/kit/icon';
 import { ReviewMark, TierMark, VerdictBar, type Review, type Tier } from '@/kit/marks';
 import { Metric, MetricGroup } from '@/kit/metric';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
-import { FlowLayout, Stepper, type FlowStep } from '@/kit/workbench/flow';
+import { defineStepper } from '@stepperize/react';
+import { FlowLayout, Stepper, flowStatus, type FlowStep } from '@/kit/workbench/flow';
 import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, FormSection, ReadonlyValue, Segmented, SourceTag, UnitInput } from '@/kit/workbench/form';
 import { PageHeader, Panel, Split } from '@/kit/workbench/page';
 import { Given, PremiseStrip } from '@/kit/workbench/premise';
@@ -30,10 +31,10 @@ export const when = (iso: string) => new Intl.DateTimeFormat('zh-CN', { year: 'n
 
 // ---- 导入结构表: one screen, five steps ----
 
-export type ImportStep = 'upload' | 'sheet' | 'columns' | 'preview' | 'commit';
-const IMPORT_STEPS: { key: ImportStep; title: string }[] = [
-  { key: 'upload', title: '上传文件' }, { key: 'sheet', title: '选工作表' }, { key: 'columns', title: '列对应' }, { key: 'preview', title: '预览' }, { key: 'commit', title: '导入' },
-];
+const importFlow = defineStepper([
+  { id: 'upload', title: '上传文件' }, { id: 'sheet', title: '选工作表' }, { id: 'columns', title: '列对应' }, { id: 'preview', title: '预览' }, { id: 'commit', title: '导入' },
+] as const);
+export type ImportStep = (typeof importFlow.steps)[number]['id'];
 const MAPPED = IMPORT.columns.filter(column => column.field).length;
 const SHEET = IMPORT.sheets.find(sheet => sheet.name === IMPORT.sheet)!;
 const DECLARATION = IMPORT.declaration;
@@ -42,17 +43,10 @@ const FIELD_OPTIONS = [
   { value: 'none', label: '不导入' },
 ];
 
-function importSteps(at: ImportStep): FlowStep[] {
-  const index = IMPORT_STEPS.findIndex(step => step.key === at);
-  const settled: Record<ImportStep, string> = {
-    upload: IMPORT.file, sheet: IMPORT.sheet, columns: `${MAPPED} 列对上字段`, preview: `${IMPORT.ready} 行可导入`, commit: '',
-  };
-  return IMPORT_STEPS.map((step, position) => ({
-    title: step.title,
-    status: position < index ? 'done' : position === index ? 'current' : 'upcoming',
-    detail: position < index ? settled[step.key] : undefined,
-  }));
-}
+/** What each step settled, written under it once it is done. */
+const IMPORT_SETTLED: Record<ImportStep, string> = {
+  upload: IMPORT.file, sheet: IMPORT.sheet, columns: `${MAPPED} 列对上字段`, preview: `${IMPORT.ready} 行可导入`, commit: '',
+};
 
 type Column3 = (typeof IMPORT.columns)[number];
 const COLUMN_COLUMNS: Column<Column3>[] = [
@@ -150,18 +144,22 @@ function ImportContent({ at }: { at: ImportStep }) {
 }
 
 function ImportBody({ at }: { at: ImportStep }) {
-  const index = IMPORT_STEPS.findIndex(step => step.key === at);
-  const next = IMPORT_STEPS[index + 1];
+  const flow = importFlow.useStepper({ defaultStep: at });
+  const step = flow.current.id;
+  const next = importFlow.steps[importFlow.steps.findIndex(item => item.id === step) + 1];
+  const steps: FlowStep[] = importFlow.steps.map(item => ({
+    title: item.title, status: flowStatus(flow.status(item.id)), detail: flow.status(item.id) === 'previous' ? IMPORT_SETTLED[item.id] : undefined,
+  }));
   return <>
-    <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }]} title="导入结构表" marks={index > 0 ? <Badge variant="outline"><Icon name="object/file" data-icon="inline-start" />{IMPORT.file}</Badge> : undefined} />
-    <FlowLayout steps={<Stepper label="导入步骤" steps={importSteps(at)} />} footer={<>
+    <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }]} title="导入结构表" marks={!flow.isFirst ? <Badge variant="outline"><Icon name="object/file" data-icon="inline-start" />{IMPORT.file}</Badge> : undefined} />
+    <FlowLayout steps={<Stepper label="导入步骤" steps={steps} />} footer={<>
       <Button variant="ghost" className="mr-auto">取消</Button>
-      {index > 0 && <Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>}
-      {at === 'upload' ? null
-        : next ? <Button>下一步：{next.title}<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
+      {!flow.isFirst && <Button variant="outline" onClick={() => void flow.prev()}><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>}
+      {flow.isFirst ? null
+        : next ? <Button onClick={() => void flow.next()}>下一步：{next.title}<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
         : <Button><Icon name="action/import" data-icon="inline-start" />导入 {IMPORT.ready} 个规格</Button>}
     </>}>
-      <ImportContent at={at} />
+      <ImportContent at={step} />
     </FlowLayout>
   </>;
 }
@@ -255,10 +253,10 @@ const MISSING_COLUMNS: Column<Missing>[] = [
   { key: 'reason', header: '为什么由你给', cell: item => <span className="whitespace-normal">{item.reason}</span> },
 ];
 
-export type StandardStep = 'conditions' | 'proposal' | 'create';
-const STANDARD_STEPS: { key: StandardStep; title: string }[] = [
-  { key: 'conditions', title: '条件' }, { key: 'proposal', title: '提案与对照' }, { key: 'create', title: '补齐并建成草稿' },
-];
+const standardFlow = defineStepper([
+  { id: 'conditions', title: '条件' }, { id: 'proposal', title: '提案与对照' }, { id: 'create', title: '补齐并建成草稿' },
+] as const);
+export type StandardStep = (typeof standardFlow.steps)[number]['id'];
 
 
 /** Step 1: the cable as the standard asks for it, and the screens the engineer gives so the annex can run. */
@@ -323,26 +321,27 @@ function StandardCreate() {
 function TypeNewStandardBody({ at = 'proposal' }: { at?: StandardStep }) {
   const inputs = PROPOSAL.inputs;
   const proposal = PROPOSAL.complete;
-  const index = STANDARD_STEPS.findIndex(step => step.key === at);
+  const flow = standardFlow.useStepper({ defaultStep: at });
+  const step = flow.current.id;
   const settled: Record<StandardStep, string> = {
     conditions: `${PROPOSAL.standard} · ${inputs.cores}×${inputs.area_mm2}`,
     proposal: `${proposal.dimensions.length} 个尺寸，还缺 ${proposal.missing.length} 项`,
     create: '',
   };
-  const steps: FlowStep[] = STANDARD_STEPS.map((step, position) => ({
-    title: step.title, status: position < index ? 'done' : position === index ? 'current' : 'upcoming', detail: position < index ? settled[step.key] : undefined,
+  const steps: FlowStep[] = standardFlow.steps.map(item => ({
+    title: item.title, status: flowStatus(flow.status(item.id)), detail: flow.status(item.id) === 'previous' ? settled[item.id] : undefined,
   }));
-  const footer = at === 'conditions'
-    ? <Button><Icon name="run/run" data-icon="inline-start" />生成提案</Button>
-    : at === 'proposal'
-      ? <><Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />改条件</Button>
-        <Button>下一步：补齐并建成<Icon name="action/arrow-right" data-icon="inline-end" /></Button></>
-      : <><Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>
+  const footer = step === 'conditions'
+    ? <Button onClick={() => void flow.next()}><Icon name="run/run" data-icon="inline-start" />生成提案</Button>
+    : step === 'proposal'
+      ? <><Button variant="outline" onClick={() => void flow.prev()}><Icon name="action/arrow-left" data-icon="inline-start" />改条件</Button>
+        <Button onClick={() => void flow.next()}>下一步：补齐并建成<Icon name="action/arrow-right" data-icon="inline-end" /></Button></>
+      : <><Button variant="outline" onClick={() => void flow.prev()}><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>
         <Button><Icon name="action/save" data-icon="inline-start" />建成草稿</Button></>;
   return <>
     <NewTypeHeader way="standard" />
     <FlowLayout steps={<Stepper label="按标准生成的步骤" steps={steps} />} footer={footer}>
-      {at === 'conditions' ? <StandardConditions /> : at === 'create' ? <StandardCreate /> : <div className="flex max-w-4xl flex-col gap-8">
+      {step === 'conditions' ? <StandardConditions /> : step === 'create' ? <StandardCreate /> : <div className="flex max-w-4xl flex-col gap-8">
         <FormSection title="标准给出的尺寸"
           description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · ${CORE_WORD[inputs.cores] ?? `${inputs.cores} 芯`} · ${CONDUCTOR_WORD[inputs.conductor] ?? inputs.conductor} ${inputs.area_mm2} mm² · ${inputs.insulation} 绝缘 · ${ARMOUR_WORD[inputs.armour] ?? inputs.armour} · ${inputs.screened ? '有' : '无'}半导电屏蔽`}
           aside={<Badge variant="outline">{PROPOSAL.method.plugin_id} {PROPOSAL.method.plugin_version}</Badge>}>

@@ -1,7 +1,8 @@
-// Charts of results, drawn with recharts (MIT) in the theme's colours: a curve of one result against one varied condition,
-// with the condition the project stands at and a limit as reference lines. And a bar that sets a value against a target,
-// for a table cell.
-import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+// Charts of results, on shadcn/ui's chart container (recharts, MIT, in the theme's colours: components/ui/chart): a curve of
+// one result against one varied condition, with the condition the project stands at and a limit as reference lines. And a
+// bar that sets a value against a target, for a table cell.
+import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from 'recharts';
+import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
 export interface Axis { key: string; label: string; unit: string; format?: (value: number) => string }
@@ -33,10 +34,11 @@ export function CurveChart<Row extends object>({ data, x, y, at, limit, reasonKe
   const refused = shown.filter(row => num(row, y.key) === null);
   const reason = (row: object) => reasonKey ? (row as Record<string, unknown>)[reasonKey] as string | undefined : undefined;
   const point = at && shown.find(row => num(row, x.key) === at.value && num(row, y.key) !== null);
+  const config = { [y.key]: { label: y.label, color: 'var(--text)' } } satisfies ChartConfig;
   return <div className={cn('h-80 w-full', className)} role="img" aria-label={`${y.label}随${x.label}变化的曲线`}>
-    <ResponsiveContainer width="100%" height="100%">
+    <ChartContainer config={config} className="aspect-auto size-full text-sm">
       <LineChart data={shown} margin={{ top: 16, right: 24, bottom: 28, left: 8 }}>
-        <CartesianGrid stroke="var(--line)" vertical={false} />
+        <CartesianGrid vertical={false} />
         <XAxis dataKey={x.key} type="number" domain={["dataMin", "dataMax"]} tick={TICK} tickFormatter={fx} axisLine={false} tickLine={false} tickMargin={8}
           ticks={shown.map(row => num(row, x.key) as number)} label={{ value: `${x.label}（${x.unit}）`, position: 'insideBottom', offset: -20, fontSize: 13, fill: 'var(--text-secondary)' }} />
         <YAxis tick={TICK} axisLine={false} tickLine={false} tickMargin={8} width={56} domain={['auto', 'auto']}
@@ -47,7 +49,7 @@ export function CurveChart<Row extends object>({ data, x, y, at, limit, reasonKe
           label={{ value: '拒算', position: 'insideTop', fontSize: 13, fill: 'var(--error)' }} />)}
         {at && <ReferenceLine x={at.value} ifOverflow="extendDomain" stroke="var(--copper)" strokeDasharray="2 3"
           label={{ value: at.label, position: 'insideTopLeft', fontSize: 13, fill: 'var(--copper)' }} />}
-        <Tooltip cursor={{ stroke: 'var(--control-border)' }} content={({ active, payload }) => {
+        <ChartTooltip cursor={{ stroke: 'var(--control-border)' }} content={({ active, payload }) => {
           if (!active || !payload?.length) return null;
           const row = payload[0].payload as Row;
           return <div className="flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm shadow-menu">
@@ -57,11 +59,11 @@ export function CurveChart<Row extends object>({ data, x, y, at, limit, reasonKe
               : <span className="font-semibold text-ink tabular-nums">{y.label} {fy(num(row, y.key) as number)} {y.unit}</span>}
           </div>;
         }} />
-        <Line type="monotone" connectNulls={false} dataKey={y.key} stroke="var(--text)" strokeWidth={2} dot={{ r: 3, fill: 'var(--panel)', stroke: 'var(--text)', strokeWidth: 1.5 }}
+        <Line type="monotone" connectNulls={false} dataKey={y.key} stroke={`var(--color-${y.key})`} strokeWidth={2} dot={{ r: 3, fill: 'var(--panel)', stroke: 'var(--text)', strokeWidth: 1.5 }}
           activeDot={{ r: 5, fill: 'var(--text)' }} isAnimationActive={false} />
         {at && point && <ReferenceDot ifOverflow="extendDomain" x={at.value} y={num(point, y.key) as number} r={5} fill="var(--copper)" stroke="var(--panel)" strokeWidth={2} />}
       </LineChart>
-    </ResponsiveContainer>
+    </ChartContainer>
   </div>;
 }
 
