@@ -33,6 +33,9 @@ export function ChatGroup({ label, children }: { label: string; children: ReactN
   </section>;
 }
 
+/** No conversation yet: where they will appear. */
+export const ChatListEmpty = () => <p className="m-0 px-3 py-2 text-sm text-ink-2">还没有对话。交办第一件事后，它会出现在这里。</p>;
+
 /** One conversation. The open one takes the selection fill (copper, faint). Running: a spinner at the end. */
 export function ChatItem({ title, active, running, className, ...props }: { title: string; active?: boolean; running?: boolean } & ComponentProps<'button'>) {
   return <li className="list-none">

@@ -110,6 +110,11 @@ export const THINNER_FAILURES: CheckFailure[] = [
 /** Version 1 as it stands (8210 and 8212 alike): 13 passed, 21 missing, 4 not covered. */
 export const CHECK_V1 = { passed: 13, failed: 0, missing: 21, uncovered: 4 };
 
+/** A series whose sizes were never computed (8210 library.check.failures s-huayuan-yjv22-15kv: not_checked 10). */
+export const UNCHECKED = { title: '标准核对 · YJV22-8.7/15 kV 三芯（华远公开表）', unchecked: 10 };
+/** The host cannot be reached (studio/ui/state/api.ts, code HOST_UNREACHABLE). */
+export const HOST_DOWN = '连不上本机服务，请确认 Cable Studio 仍在运行。';
+
 /** The method refuses 3×50 (rating rows of library.spec.get, code SL_FILLER_GEOMETRY_RANGE). */
 export const REFUSED_RATING = {
   title: '载流量 · YJV22-8.7/15 kV 3×50',

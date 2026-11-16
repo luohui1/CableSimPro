@@ -34,6 +34,11 @@ export function CardFrame({ icon, title, aside, children, actions, className, ..
   </section>;
 }
 
+/** A card whose content is still being read from the host: its frame and title, the body as a grey block. */
+export function CardLoading({ icon, title, height = 'h-24' }: { icon: string; title: string; height?: 'h-24' | 'h-40' | 'h-72' }) {
+  return <CardFrame icon={icon} title={title} aria-busy="true"><Skeleton className={cn('w-full rounded-lg', height)} /></CardFrame>;
+}
+
 /** A quiet action in a card's footer: 计算书, 在工作台打开, 下载 STEP. */
 export function CardAction({ icon, children, ...props }: { icon: string; children: ReactNode } & ComponentProps<typeof Button>) {
   return <Button variant="ghost" size="sm" {...props}><Icon name={icon} data-icon="inline-start" />{children}</Button>;
@@ -101,12 +106,14 @@ export interface CheckFailure {
   clause: string;
 }
 
-export function CheckCard({ title, counts, failures, more = 0, actions }: {
+export function CheckCard({ title, counts, failures, more = 0, unchecked = 0, actions }: {
   title: string;
   counts: Partial<Record<Verdict, number>>;
   failures: CheckFailure[];
   /** Failures not listed on the card. */
   more?: number;
+  /** Sizes of the series with no check result yet. */
+  unchecked?: number;
   actions?: ReactNode;
 }) {
   const shown: Verdict[] = ['passed', 'failed', 'missing'];
@@ -118,6 +125,7 @@ export function CheckCard({ title, counts, failures, more = 0, actions }: {
           <dd className={cn('m-0 text-metric-sm tabular-nums', verdict === 'failed' && (counts.failed ?? 0) > 0 ? 'text-error' : 'text-ink')}>{counts[verdict] ?? 0}</dd>
         </div>)}
       </dl>
+      {unchecked > 0 && <p className="m-0 flex items-center gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name={VERDICT.missing.icon} className="text-attention" />{unchecked} 个规格还没有核对结果，先计算再核对。</p>}
       {failures.length > 0
         ? <ul className="m-0 flex list-none flex-col divide-y divide-line rounded-lg border border-line p-0">
           {failures.map(item => <li key={`${item.title}/${item.scope}`} className="flex min-w-0 items-center gap-3 px-3 py-2">
@@ -131,7 +139,7 @@ export function CheckCard({ title, counts, failures, more = 0, actions }: {
           </li>)}
           {more > 0 && <li className="px-3 py-2 text-sm text-ink-2">另有 {more} 项不通过，在工作台逐项查看</li>}
         </ul>
-        : <p className="m-0 flex items-center gap-2 text-sm text-ink"><Icon name={VERDICT.passed.icon} className="text-success" />没有不通过的项。缺项是缺实测值或依据，补齐后再核对。</p>}
+        : unchecked === 0 && <p className="m-0 flex items-center gap-2 text-sm text-ink"><Icon name={VERDICT.passed.icon} className="text-success" />没有不通过的项。缺项是缺实测值或依据，补齐后再核对。</p>}
     </div>
   </CardFrame>;
 }

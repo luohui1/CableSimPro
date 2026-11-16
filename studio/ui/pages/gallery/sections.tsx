@@ -6,11 +6,11 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CardAction, CheckCard, FileCard, ModelCard, OpenInWorkbench, ProposalCard, RatingCard, RefusalCard, type ProposalPhase } from '@/kit/chat/cards';
+import { CardAction, CardLoading, CheckCard, FileCard, ModelCard, OpenInWorkbench, ProposalCard, RatingCard, RefusalCard, type ProposalPhase } from '@/kit/chat/cards';
 import { ComposerAttach, ComposerBar, ComposerFrame, ComposerInput, ComposerSend, ComposerStop, FileChip } from '@/kit/chat/composer';
 import { ChatNotice, TaskStarter } from '@/kit/chat/empty';
-import { AssistantMessage, Prose, UserMessage } from '@/kit/chat/messages';
-import { ChatGroup, ChatItem, ChatSearch, ChatSidebar, NewChatButton } from '@/kit/chat/sidebar';
+import { AssistantMessage, Prose, Typing, UserMessage } from '@/kit/chat/messages';
+import { ChatGroup, ChatItem, ChatListEmpty, ChatSearch, ChatSidebar, NewChatButton } from '@/kit/chat/sidebar';
 import { StepTrace } from '@/kit/chat/steps';
 import { ModeSwitch, ModelBadge, ThemeToggle } from '@/kit/frame';
 import { Icon } from '@/kit/icon';
@@ -26,9 +26,9 @@ import { useTheme } from '@/state/theme';
 import { CableSection, SectionThumb } from './figures';
 import { WORKSPACE } from './library-data';
 import {
-  CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
+  CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
   RATING_STEPS, REFUSED_IMPORT, REFUSED_RATING, SHEET, STARTERS, STEPS_FAILED, STEPS_RECOVERED, STEPS_STOPPED, STEPS_WAITING, THINNER,
-  THINNER_FAILURES, THINNER_NOTE,
+  THINNER_FAILURES, THINNER_NOTE, UNCHECKED,
 } from './samples';
 
 /** One part: its name, the rule it follows, and its states side by side, each named. */
@@ -178,14 +178,17 @@ export function AgentSection() {
       <State label="模型未配置"><ModelBadge name={null} /></State>
       <State label="深浅色"><ThemeToggle theme={theme} onToggle={toggle} /></State>
     </Specimen>
-    <Specimen title="会话侧栏" rule="新对话、搜索，会话按时间分组。打开的会话是选中色；正在干活的会话有转圈。">
-      <div className="h-96 w-64 rounded-card border border-line bg-canvas pt-3">
+    <Specimen title="会话侧栏" rule="新对话、搜索，会话按时间分组。打开的会话是选中色；正在干活的会话有转圈；长标题在行尾淡出，悬停看全名。">
+      <State label="有对话"><div className="h-96 w-64 rounded-card border border-line bg-canvas pt-3">
         <ChatSidebar header={<><NewChatButton /><ChatSearch /></>}>
           <ChatGroup label="今天">
             {CHATS.slice(0, 5).map((chat, index) => <ChatItem key={chat.id} title={chat.title} active={index === 3} running={index === 0} />)}
           </ChatGroup>
         </ChatSidebar>
-      </div>
+      </div></State>
+      <State label="还没有对话"><div className="h-96 w-64 rounded-card border border-line bg-canvas pt-3">
+        <ChatSidebar header={<><NewChatButton /><ChatSearch disabled /></>}><ChatListEmpty /></ChatSidebar>
+      </div></State>
     </Specimen>
     <Specimen title="现成任务" rule="一个任务一行：图标、要做什么、交回什么。点一下就发出。">
       <div className="grid w-full max-w-thread grid-cols-2 gap-2">
@@ -196,6 +199,7 @@ export function AgentSection() {
       <div className="flex max-w-thread flex-col gap-6">
         <UserMessage>{RATING_ASK}</UserMessage>
         <UserMessage attachments={<FileChip name="人民电缆 8.7-15kV 结构表（公开手册）.xlsx" detail="4 张工作表" />}>导入这张结构表，算参数并按国标核对。</UserMessage>
+        <State label="正在回答"><AssistantMessage><StepTrace steps={MODEL_STEPS_RUNNING} /><Typing /></AssistantMessage></State>
         <AssistantMessage>
           <Prose>
             <p>已选 <strong>YJV22-8.7/15 kV 3×240</strong>，按三芯直埋单回、埋深 1.2 m 算了一条运行记录。</p>
@@ -216,11 +220,13 @@ export function AgentSection() {
       <State label="做完（展开）" className="max-w-thread"><StepTrace steps={EXPORT_STEPS} defaultOpen /></State>
     </Specimen>
     <Specimen title="载流量结果卡" rule="主数字是允许电流；旁边是先到温限的电缆和它的导体温度离限值多远；右上是可信分档。" wide>
-      <div className="max-w-thread"><RatingCard {...RATING} figure={<SectionThumb />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} /></div>
+      <State label="有结果" className="max-w-thread"><RatingCard {...RATING} figure={<SectionThumb />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} /></State>
+      <State label="读取中（卡片取数时）" className="max-w-thread"><CardLoading icon="calc/ampacity" title="YJV22-8.7/15 kV 3×240 · 三芯直埋" height="h-40" /></State>
     </Specimen>
     <Specimen title="标准核对结果卡" rule="通过、不通过、缺项三个数；不通过的项逐条列出，同一要求的三芯合成一条，写明条款。" wide>
       <State label="有不通过（第 2 版，绝缘减到 4 mm）" className="max-w-thread"><CheckCard title="标准核对 · YJV22-8.7/15 kV 3×240 · 第 2 版" counts={CHECK_V2} failures={THINNER_FAILURES} actions={<OpenInWorkbench />} /></State>
       <State label="没有不通过（第 1 版）" className="max-w-thread"><CheckCard title="标准核对 · YJV22-8.7/15 kV 3×240 · 第 1 版" counts={CHECK_V1} failures={[]} actions={<OpenInWorkbench />} /></State>
+      <State label="还有规格没核对" className="max-w-thread"><CheckCard title={UNCHECKED.title} counts={{}} failures={[]} unchecked={UNCHECKED.unchecked} actions={<OpenInWorkbench />} /></State>
     </Specimen>
     <Specimen title="待审卡" rule="改前和改后、带单位；改动会带来的后果写在下面。接受是这屏的主按钮，拒绝可写原因。审完收成一行。" wide>
       <ProposalStates />
@@ -239,10 +245,11 @@ export function AgentSection() {
         <State label="插件拒绝"><ModelCard title="三维结构 · YJV22-8.7/15 kV 3×240" state="failed" error={MODEL_REFUSAL} /></State>
       </div>
     </Specimen>
-    <Specimen title="拒算卡" rule="方法或数据说不：原因照方法的原话，缺什么、超出什么、可以怎么做逐条写明。" wide>
+    <Specimen title="拒算或出错卡" rule="方法或数据说不：原因照方法的原话，缺什么、超出什么、可以怎么做逐条写明。出错是另一回事（服务断了），给重试。" wide>
       <div className="flex max-w-thread flex-col gap-4">
         <RefusalCard kind="refused" title={REFUSED_RATING.title} reason={REFUSED_RATING.reason} missing={REFUSED_RATING.missing} actions={<OpenInWorkbench />} />
         <RefusalCard kind="refused" title={REFUSED_IMPORT.title} reason={REFUSED_IMPORT.reason} missing={REFUSED_IMPORT.missing} actions={<CardAction icon="action/edit">补系列声明</CardAction>} />
+        <RefusalCard kind="error" title="运行校核 · YJV22-8.7/15 3×240 直埋载流量校核" reason={HOST_DOWN} actions={<CardAction icon="action/refresh">重试</CardAction>} />
       </div>
     </Specimen>
     <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右（墨色）；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>

@@ -23,6 +23,13 @@ export function AssistantMessage({ children, className }: { children: ReactNode;
   return <div data-role="assistant" className={cn('flex min-w-0 flex-col gap-4', className)}>{children}</div>;
 }
 
+/** The Agent is still writing: three dots that breathe in turn, at the end of what has come so far. */
+export function Typing({ className }: { className?: string }) {
+  return <span role="status" aria-label="Agent 正在回答" className={cn('inline-flex h-6 items-center gap-1', className)}>
+    {['', 'animation-delay-150', 'animation-delay-300'].map(delay => <span key={delay} className={cn('size-1.5 animate-pulse rounded-full bg-ink-2 motion-reduce:animate-none', delay)} />)}
+  </span>;
+}
+
 /**
  * Markdown as the Agent writes it. Paragraphs and lists only; numbers in tabular figures. Wrap assistant-ui's
  * MarkdownTextPrimitive in it, or any rendered markdown.
