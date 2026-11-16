@@ -93,3 +93,27 @@ export function describeChanges(part: PartName, before: Parts[PartName], after: 
   }
   return rows;
 }
+
+/** What a new project starts from: every value that is set, written the way the review rows write a change (the old value is "—"). */
+export function describeStart(part: Exclude<PartName, 'method'>, value: Parts[Exclude<PartName, 'method'>], layoutLabel: (kind: string) => string): { part: PartName; field: string; label: string; before: string; after: string }[] {
+  const rows: { part: PartName; field: string; label: string; before: string; after: string }[] = [];
+  const add = (field: string, label: string, after: string) => rows.push({ part, field, label, before: '—', after });
+  if (part === 'cable') {
+    add('id', '型号', (value as Parts['cable']).name);
+  } else if (part === 'installation') {
+    const installation = value as Installation;
+    add('layout', '敷设方式', layoutLabel(installation.layout));
+    for (const field of INSTALLATION_FIELDS) {
+      const stored = pick(installation, field.key);
+      if (stored !== null && stored !== undefined) add(field.key, field.label, display(field, stored));
+    }
+  } else {
+    const conditions = value as Conditions;
+    for (const field of CONDITION_FIELDS) {
+      const stored = pick(conditions, field.key);
+      if (stored !== null && stored !== undefined) add(field.key, field.label, display(field, stored));
+    }
+    add('currents_a', '负荷电流', conditions.currents_a.map(v => compact(v) + ' A').join(' / '));
+  }
+  return rows;
+}

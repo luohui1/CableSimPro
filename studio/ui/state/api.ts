@@ -1,4 +1,4 @@
-import type { AgentStatus, Issue, LibraryEntry, Proposal, ProjectMeta, ProjectView, RunRecord, StudioEvent, Task } from '@shared/types';
+import type { AgentStatus, ChatAttachment, ChatSummary, ChatView, Issue, LibraryEntry, Proposal, ProjectMeta, ProjectView, RunRecord, StudioEvent } from '@shared/types';
 
 export class ApiError extends Error {
   issue: Issue;
@@ -34,10 +34,18 @@ export const api = {
   run: (project: string, run: string) => request<RunRecord>(`/api/projects/${project}/runs/${run}`),
   /** Every action of the workbench goes through the operation layer the agent also uses. */
   op: <T>(id: string, params: Record<string, unknown>) => post<T>(`/api/ops/${id}`, params),
-  agent: (project: string) => request<{ status: AgentStatus; tasks: Task[]; proposals: Proposal[] }>(`/api/projects/${project}/agent`),
-  instruct: (project: string, instruction: string, context?: string) => post<Task>(`/api/projects/${project}/agent/instruct`, { instruction, context }),
-  stop: (project: string) => post(`/api/projects/${project}/agent/stop`),
+  chats: () => request<ChatSummary[]>('/api/chat/sessions'),
+  chat: (id: string) => request<ChatView>(`/api/chat/sessions/${id}`),
+  /** Starts a conversation (no session yet), adds to one, or steers an agent that is busy. */
+  send: (text: string, session?: string, attachments?: ChatAttachment[]) =>
+    post<{ session: string; accepted: 'started' | 'steered' }>('/api/chat/messages', { session, text, attachments }),
+  stop: (session: string) => post(`/api/chat/sessions/${session}/stop`),
   decide: (proposal: string, accept: boolean, note?: string) => post<Proposal>(`/api/proposals/${proposal}/decision`, { accept, note }),
+  /** A structure table, kept on the host; the agent reads it by the identifier it gets back. */
+  upload: async (file: File) => {
+    const reply = await request<{ upload: string; file: string; size: number }>(`/api/uploads?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+    return { upload: reply.upload, file: reply.file };
+  },
 };
 
 export function subscribe(listener: (event: StudioEvent) => void): () => void {

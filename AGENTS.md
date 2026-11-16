@@ -4,11 +4,12 @@
 
 ## 项目是什么
 
-电缆行业垂直的设计 / 计算平台，核心理念是**插件式**：宿主只提供工程底座（工程与版本、研究/运行快照、来源追溯、结果工件、报告、审批），**所有计算方法都是插件**，宿主不内置算法。
+本分支的产品是 `studio/`（Cable Studio），电缆行业的专业软件：做电缆型号和载流量计算两件事，有 Agent 模式（对话页）和工作台模式（专业界面）两种用法。方向、路线和界面规矩以 `studio/ROADMAP.md` 为准，运行方法和能力边界见 `studio/README.md`。旧平台（`backend/`、`frontend/`）不再接新功能，暂不删除。
 
-- 产品需求：`docs/product/PRD.md`
-- 架构与实施细则：`docs/design/SYSTEM_ARCHITECTURE.md`、`docs/design/MODULE_DESIGN.md`
+核心理念是**插件式**：宿主只提供工程底座（工程与版本、运行快照、来源追溯、结果工件、报告、审批），**所有计算方法都是插件**，宿主不内置算法。
+
 - 插件规范：[唯一现行规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)，v2 清单 `plugins/<id>/plugin.json`；`plugins/registry.json` 仅为这些清单生成的发布索引。
+- 旧平台的资料：产品需求 `docs/product/PRD.md`，架构 `docs/design/SYSTEM_ARCHITECTURE.md`、`docs/design/MODULE_DESIGN.md`。
 
 工程底线：不产生假结果（缺数据就明确失败，不用编造公式兜底）；每个结果可追溯到输入、方法和版本；AI 与插件只提提案，不能自行批准。
 
@@ -16,13 +17,13 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| `backend/` | FastAPI 宿主；`kernel/` 保存工程、研究、快照执行、比较与交付，并提供敷设/需求/载流量表接口；`domain/` SI 事实与旧数据显式迁移；`foundation/` 几何与资源；`plugin_host/` 通用 v2 执行器与工件校验 |
-| `frontend/` | 正式 React 工程与路径路由；浏览器回归使用 `scripts/verify-*.mjs` 和型号模块测试；OCCT 源码位于 `src/features/cad/native/` |
+| `backend/` | 旧平台，不再接新功能。FastAPI 宿主；`kernel/` 保存工程、研究、快照执行、比较与交付，并提供敷设/需求/载流量表接口；`domain/` SI 事实与旧数据显式迁移；`foundation/` 几何与资源；`plugin_host/` 通用 v2 执行器与工件校验 |
+| `frontend/` | 旧平台界面，不再接新功能。React 工程与路径路由；浏览器回归使用 `scripts/verify-*.mjs` 和型号模块测试；OCCT 源码位于 `src/features/cad/native/` |
 | `design/` | 保留设计素材；`plugin-system/` 为插件页面素材，自研图标、品牌、动效放 `icons/`、`brand/`、`motion/`（规格见 `docs/design/VISUAL_ASSETS.md`）；不再承载应用运行入口 |
 | `plugins/` | 每个第一方插件一个 `plugins/<id>/src/` 与 v2 清单；IEC 标准子集、热网络交叉校核参考、原生算法及仿真插件；清单封签含静态引用的公共源码 |
 | `cablesim_sdk/` | 插件与宿主共用的领域和仿真工件契约 |
 | `plugin-spec/` | v2 插件清单与仍在使用的物理工件 JSON Schema；schema 数字版本不代表已删除的 v1 执行器 |
-| `studio/` | 电缆专业软件 Cable Studio：工作台 + Agent，直接引用 `plugins/` 与 `cablesim_sdk/`，不依赖 `backend/kernel`；说明见 `studio/README.md` |
+| `studio/` | 本分支的产品，电缆专业软件 Cable Studio：Agent 模式 + 工作台模式，直接引用 `plugins/` 与 `cablesim_sdk/`，不依赖 `backend/kernel`；方向见 `studio/ROADMAP.md`，说明见 `studio/README.md`；`studio/skills/` 是 Agent 的技能文件 |
 | `tests/` | 默认 pytest；`plugin-tests/` 需要原生环境 |
 | `scripts/` | 仍在使用的工具脚本（每个都必须被 CI、代码或本文件引用） |
 | `docs/` | `product/` 需求，`design/` 架构，`architecture/` 已实现的契约，`plugins/` 插件说明，`METHOD.md` 计算方法 |

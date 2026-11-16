@@ -4,8 +4,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { StudioEvent } from '../shared/types.ts';
-import { AgentService, modelFromEnvironment, type ModelRuntime } from './agent.ts';
+import type { ChatAttachment, StudioEvent } from '../shared/types.ts';
+import { AgentService, type ModelConfig } from './agent.ts';
 import { Core, StudioError } from './core.ts';
 import { Library } from './library.ts';
 import { Studio } from './operations.ts';
@@ -49,12 +49,12 @@ function send(response: ServerResponse, status: number, value: unknown): void {
   response.end(text);
 }
 
-export function createApp(options: { home?: string; runtime?: ModelRuntime | null; dist?: string } = {}): App {
+export function createApp(options: { home?: string; runtime?: ModelConfig | null; dist?: string } = {}): App {
   const core = new Core(REPO);
   const store = new Store(options.home ?? process.env.CABLE_STUDIO_HOME ?? join(REPO, '.data', 'studio'));
   const library = new Library(store.home);
   const studio = new Studio(core, store, library);
-  const agent = new AgentService(studio, options.runtime === undefined ? modelFromEnvironment() : options.runtime);
+  const agent = new AgentService(studio, options.runtime);
   const dist = options.dist ?? join(STUDIO, 'dist');
 
   async function api(request: IncomingMessage, response: ServerResponse, path: string[]): Promise<void> {
@@ -112,18 +112,24 @@ export function createApp(options: { home?: string; runtime?: ModelRuntime | nul
         response.end(html);
         return;
       }
-      if (section === 'agent') {
-        store.meta(id);
-        if (method === 'GET' && !item) return send(response, 200, { status: agent.status(), tasks: agent.tasks(id), proposals: agent.proposals(id) });
-        if (method === 'POST' && item === 'instruct') {
-          const request_ = await body(request);
-          if (typeof request_.instruction !== 'string' || !request_.instruction.trim()) {
-            throw new StudioError({ code: 'INPUT_INVALID', message: '请写下要交办的事。', path: '/instruction' });
-          }
-          return send(response, 200, agent.instruct(id, request_.instruction.trim(), typeof request_.context === 'string' ? request_.context : undefined));
+    }
+    if (head === 'chat') {
+      // Conversations with the agent: the list, one conversation, a message (which starts one or steers a busy agent), a stop.
+      if (method === 'GET' && id === 'sessions' && !section) return send(response, 200, await agent.list());
+      if (method === 'GET' && id === 'sessions' && section) return send(response, 200, await agent.view(section));
+      if (method === 'POST' && id === 'messages') {
+        const message = await body(request);
+        const attachments: ChatAttachment[] = Array.isArray(message.attachments) ? message.attachments : [];
+        if (attachments.some(item_ => typeof item_?.file !== 'string' || !/^u-[0-9a-f]{8}$/.test(String(item_?.upload)))) {
+          throw new StudioError({ code: 'INPUT_INVALID', message: '附件不对：需要文件名和上传标识。', path: '/attachments' });
         }
-        if (method === 'POST' && item === 'stop') { agent.stop(id); return send(response, 200, { stopped: true }); }
+        if ((typeof message.text !== 'string' || !message.text.trim()) && !attachments.length) {
+          throw new StudioError({ code: 'INPUT_INVALID', message: '请写下要交办的事。', path: '/text' });
+        }
+        if (message.session !== undefined && typeof message.session !== 'string') throw new StudioError({ code: 'INPUT_INVALID', message: '对话标识不对。', path: '/session' });
+        return send(response, 200, await agent.send(message.session, typeof message.text === 'string' ? message.text : '', attachments));
       }
+      if (method === 'POST' && id === 'sessions' && section && item === 'stop') { await agent.stop(section); return send(response, 200, { stopped: true }); }
     }
     void action;
     throw new StudioError({ code: 'NOT_FOUND', message: '没有这个接口。' }, 404);
@@ -159,6 +165,7 @@ export function createApp(options: { home?: string; runtime?: ModelRuntime | nul
     close: async () => {
       server.closeAllConnections();
       const stopped = new Promise<void>(done => server.close(() => done()));
+      await agent.close();
       await core.stop();
       library.close();
       await stopped;

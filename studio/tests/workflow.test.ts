@@ -6,21 +6,22 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall, type TranscriptContext } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { type App, createApp } from '../host/server.ts';
-import type { Proposal, ProjectView, RunRecord, StudioEvent, Task } from '../shared/types.ts';
+import type { Proposal, ProjectView, RunRecord } from '../shared/types.ts';
+import { lastText, next, scriptedModel, steps, toolResult } from './support.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'cable-studio-'));
-const faux = fauxProvider();
-const models = createModels();
-models.setProvider(faux.provider);
+let faux: Awaited<ReturnType<typeof scriptedModel>>['faux'];
 let offline: App;
 let staffed: App;
 let base: string;
 
 before(async () => {
+  const model = await scriptedModel();
+  faux = model.faux;
   offline = createApp({ home, runtime: null });
-  staffed = createApp({ home, runtime: { models, model: faux.getModel(), provider: 'scripted', thinking: 'off' } });
+  staffed = createApp({ home, runtime: model.runtime });
   await new Promise<void>(done => offline.server.listen(0, '127.0.0.1', done));
   base = `http://127.0.0.1:${(offline.server.address() as AddressInfo).port}`;
 });
@@ -41,18 +42,6 @@ const op = async <T>(id: string, params: unknown) => {
   assert.equal(reply.status, 200, JSON.stringify(reply.body));
   return reply.body as T;
 };
-
-function next<E extends StudioEvent['type']>(app: App, type: E, match: (event: Extract<StudioEvent, { type: E }>) => boolean) {
-  return new Promise<Extract<StudioEvent, { type: E }>>(done => {
-    const listen = (event: StudioEvent) => {
-      if (event.type === type && match(event as Extract<StudioEvent, { type: E }>)) {
-        app.studio.events.off('event', listen);
-        done(event as Extract<StudioEvent, { type: E }>);
-      }
-    };
-    app.studio.events.on('event', listen);
-  });
-}
 
 test('an engineer checks a 110 kV circuit, changes the laying and exports the sheet', async () => {
   const created = await op<ProjectView>('project.create', { name: '城南 110 kV 出线', model_id: 'system.yjq02-110kv-800' });
@@ -102,7 +91,7 @@ test('an engineer checks a 110 kV circuit, changes the laying and exports the sh
   // Without a model the workbench works and the agent says so.
   const status = await (await fetch(`${base}/api/status`)).json() as { agent: { configured: boolean; hint: string } };
   assert.equal(status.agent.configured, false);
-  const instruct = await post<{ error: { code: string } }>(`/api/projects/${project}/agent/instruct`, { instruction: '按 400 A 选型' });
+  const instruct = await post<{ error: { code: string } }>('/api/chat/messages', { text: '按 400 A 选型' });
   assert.equal(instruct.status, 409);
   assert.equal(instruct.body.error.code, 'MODEL_NOT_CONFIGURED');
 });
@@ -111,40 +100,40 @@ test('the agent selects for 300 A through the same operations and its change wai
   const { studio, agent } = staffed;
   const view = await studio.invoke('project.create', { name: '配电室进线', model_id: 'huayuan.yjv22-15kv-35' }, { by: 'human' }) as ProjectView;
   const project = view.meta.id;
-  const toolResult = (context: TranscriptContext) => {
-    const last = context.messages.at(-1)!;
-    assert.equal(last.role, 'toolResult');
-    return JSON.parse((last as { content: { text: string }[] }).content[0].text);
-  };
   faux.setResponses([
-    fauxAssistantMessage([fauxToolCall('get_project', {})], { stopReason: 'toolUse' }),
-    fauxAssistantMessage([fauxToolCall('run_selection', { target_current_a: 300 })], { stopReason: 'toolUse' }),
-    context => fauxAssistantMessage([fauxToolCall('set_cable', { model_id: toolResult(context).chosen })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxToolCall('get_project', { project })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxToolCall('run_selection', { project, target_current_a: 300 })], { stopReason: 'toolUse' }),
+    context => fauxAssistantMessage([fauxToolCall('set_cable', { project, model_id: toolResult(context).chosen })], { stopReason: 'toolUse' }),
     context => fauxAssistantMessage([fauxText(`已选定并换用，${toolResult(context).applied[0]}。`)]),
   ]);
   const proposed = next(staffed, 'proposal', event => event.proposal.status === 'pending');
-  const task = agent.instruct(project, '按 300 A 选型');
+  const sent = await agent.send(undefined, '按 300 A 选型');
   const proposal: Proposal = (await proposed).proposal;
 
-  // While the change waits, nothing has been written.
+  // While the change waits, nothing has been written, and the card shows old and new values with their units.
   assert.equal(studio.store.parts(project).cable.id, 'huayuan.yjv22-15kv-35');
   assert.deepEqual(proposal.changes.map(change => [change.label, change.before]), [['型号', '华远 YJV22-8.7/15 kV 3×35']]);
   assert.equal(proposal.preview?.tier.tier, 'reference');
+  assert.equal(proposal.session_id, sent.session);
+  const waiting = await agent.view(sent.session);
+  assert.equal(waiting.running, true);
+  assert.deepEqual(steps(waiting).map(step => [step.tool, step.status]), [['get_project', 'done'], ['run_selection', 'done'], ['set_cable', 'waiting_review']]);
   const selection = studio.store.run(project, studio.store.runs(project)[0].id);
   assert.equal(selection.kind, 'selection');
   assert.equal(selection.by, 'agent');
-  assert.equal(selection.task_id, task.id);
+  assert.equal(selection.task_id, sent.session, 'the record names the conversation that made it');
   const chosen = selection.selection!.candidates.find(row => row.model_id === selection.selection!.chosen)!;
   assert.ok(chosen.ampacity_a! >= 300 && proposal.changes[0].after === chosen.name);
 
   agent.decide(proposal.id, true);
-  await agent.idle(project);
-  const done: Task = agent.tasks(project)[0];
-  assert.equal(done.status, 'done');
-  assert.deepEqual(done.steps.map(step => [step.tool, step.status]), [['get_project', 'done'], ['run_selection', 'done'], ['set_cable', 'done']]);
-  assert.equal(done.steps[1].run_id, selection.id);
+  await agent.idle(sent.session);
+  const done = await agent.view(sent.session);
+  assert.equal(done.running, false);
+  assert.deepEqual(steps(done).map(step => [step.tool, step.status]), [['get_project', 'done'], ['run_selection', 'done'], ['set_cable', 'done']]);
+  assert.deepEqual(steps(done)[1].card, { kind: 'run', project, run: selection.id }, 'a card carries a reference; its numbers are read from the host');
+  assert.equal(steps(done)[2].proposal?.status, 'accepted');
   assert.equal(studio.store.parts(project).cable.id, chosen.model_id);
-  assert.ok(done.reply!.includes(chosen.name));
+  assert.ok(lastText(done).includes(chosen.name));
 });
 
 test('a sweep needs no review, and a rejected change leaves the inputs as they were', async () => {
@@ -153,8 +142,8 @@ test('a sweep needs no review, and a rejected change leaves the inputs as they w
   const project = view.meta.id;
   let told = '';
   faux.setResponses([
-    fauxAssistantMessage([fauxToolCall('run_sweep', { variable: 'soil_thermal_resistivity', values: [1, 1.2, 1.4, 1.6, 1.8, 2] })], { stopReason: 'toolUse' }),
-    fauxAssistantMessage([fauxToolCall('set_conditions', { soil_thermal_resistivity: 2 })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxToolCall('run_sweep', { project, variable: 'soil_thermal_resistivity', values: [1, 1.2, 1.4, 1.6, 1.8, 2] })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxToolCall('set_conditions', { project, soil_thermal_resistivity: 2 })], { stopReason: 'toolUse' }),
     context => {
       const last = context.messages.at(-1) as { isError: boolean; content: { text: string }[] };
       told = last.content[0].text;
@@ -163,7 +152,7 @@ test('a sweep needs no review, and a rejected change leaves the inputs as they w
     },
   ]);
   const proposed = next(staffed, 'proposal', event => event.proposal.status === 'pending');
-  agent.instruct(project, '土壤热阻率从 1.0 扫到 2.0，然后按最不利值校核');
+  const sent = await agent.send(undefined, '土壤热阻率从 1.0 扫到 2.0，然后按最不利值校核');
   const proposal = (await proposed).proposal;
   const sweep = studio.store.run(project, studio.store.runs(project)[0].id);
   assert.equal(sweep.kind, 'sweep');
@@ -173,12 +162,12 @@ test('a sweep needs no review, and a rejected change leaves the inputs as they w
   assert.deepEqual(proposal.changes, [{ part: 'conditions', field: 'soil_thermal_resistivity', label: '土壤热阻率', before: '1 K·m/W', after: '2 K·m/W' }]);
 
   agent.decide(proposal.id, false, '先不改，按现场实测值算');
-  await agent.idle(project);
+  await agent.idle(sent.session);
   assert.equal(studio.store.parts(project).conditions.soil_thermal_resistivity, 1);
   assert.ok(told.includes('拒绝') && told.includes('先不改，按现场实测值算'));
-  const done = agent.tasks(project)[0];
-  assert.deepEqual(done.steps.map(step => step.status), ['done', 'rejected']);
-  assert.equal(done.status, 'done');
+  const done = await agent.view(sent.session);
+  assert.deepEqual(steps(done).map(step => step.status), ['done', 'rejected']);
+  assert.equal(steps(done)[1].reason, '工程师拒绝：先不改，按现场实测值算');
   assert.ok(existsSync(join(home, 'projects', project, 'runs', sweep.id, 'record.json')));
 });
 

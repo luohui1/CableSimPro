@@ -180,6 +180,11 @@ export class Library {
     return { summary, declaration: parse<SeriesDeclaration>(row.declaration) };
   }
 
+  /** A specification's name; undefined for an unknown identifier. */
+  specName(spec: string): string | undefined {
+    return (this.db.prepare('select name from spec where id = ?').get(spec) as { name: string } | undefined)?.name;
+  }
+
   declaration(id: string): SeriesDeclaration {
     return this.#series(id).declaration;
   }

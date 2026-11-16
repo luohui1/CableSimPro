@@ -1,11 +1,11 @@
 // The operation layer: every action of the workbench exists once here. A button calls an
 // operation over HTTP; the agent calls the same operation as a tool.
 import { EventEmitter } from 'node:events';
-import { arr, bool, compile, nullable, num, obj, oneOf, opt, str, type Schema } from '@earendil-works/pi-schema';
-import { compact, describeChanges, fixed, KIND_NAMES } from '../shared/format.ts';
+import { arr, bool, compile, int, nullable, num, obj, oneOf, opt, str, type Schema } from '@earendil-works/pi-schema';
+import { compact, describeChanges, describeStart, fixed, KIND_NAMES, PHASE_NAMES } from '../shared/format.ts';
 import type {
-  Change, Conditions, Installation, Issue, LayoutOption, LibraryEntry, MethodChoice, PartName, Parts, Preview, ProjectView,
-  RunRecord, StudioEvent,
+  CardRef, Change, Conditions, Installation, Issue, LayoutOption, LibraryEntry, MethodChoice, PartName, Parts, Preview, ProjectMeta,
+  ProjectView, RunRecord, StudioEvent,
 } from '../shared/types.ts';
 import { userInfo } from 'node:os';
 import { type Core, StudioError } from './core.ts';
@@ -14,8 +14,11 @@ import { productOperations } from './products.ts';
 import { renderReport } from './report.ts';
 import { inputsDigest, type Store } from './store.ts';
 
-export interface Context { by: 'human' | 'agent'; task_id?: string }
+/** Who runs an operation. For the agent, task_id is the conversation and signal ends a long wait when the person stops it. */
+export interface Context { by: 'human' | 'agent'; task_id?: string; signal?: AbortSignal }
 export interface Plan { changes: Change[]; parts: Partial<Parts> }
+/** What a person is shown before accepting an agent's write: the changes with their old and new values, and where they lead. */
+export interface Review { title: string; project?: string; changes: Change[]; preview?: Preview | null; issue?: Issue | null }
 
 export interface Operation {
   id: string;
@@ -26,13 +29,23 @@ export interface Operation {
   kind: 'read' | 'write' | 'run';
   parameters: Schema;
   execute(params: any, context: Context): Promise<unknown>;
-  /** Write operations: what would change, without saving anything. */
+  /** Write operations on a project: what would change, without saving anything. */
   plan?(params: any): Promise<Plan>;
+  /** Write operations in general: what the person is asked to accept. Without a plan or a review the agent cannot run a write. */
+  review?(params: any): Promise<Review>;
   /** What the agent is told about the result; the full result stays in the workbench. */
   brief?(result: any): unknown;
+  /** The object the agent's result card shows: references only, so every number on a card comes from the host. */
+  card?(params: any, result: any): CardRef | undefined;
+  /** Facts for the step row, written from the real result. */
+  notes?(params: any, result: any): string[];
+  /** Only a person may run it. The agent is refused before anything else is looked at, and is never offered the tool. */
+  human_only?: true;
 }
 
 const project = str({ description: '工程标识，例如 p-1a2b3c4d' });
+const DEFAULT_MODEL = 'system.yjq02-110kv-800';
+const KIND_OPEN: Record<string, string> = { library: '型号库', import: '导入页', series: '系列', spec: '规格', project: '工程', run: '运行记录' };
 const SWEEP_VARIABLES = ['soil_thermal_resistivity', 'ambient_temperature_c', 'depth_m', 'spacing_m', 'current_a'] as const;
 
 function runTitle(record: { kind: string; summary?: RunRecord['summary']; sweep?: RunRecord['sweep']; selection?: RunRecord['selection'] }): string {
@@ -73,6 +86,10 @@ export class Studio {
     this.user = user;
     this.events.setMaxListeners(100);
     for (const operation of [...this.#define(), ...productOperations(this)]) this.operations.set(operation.id, operation);
+    // The agent's writes wait for a person; one that cannot be described must never reach it.
+    for (const operation of this.agentOperations()) {
+      if (operation.kind === 'write' && !operation.review && !operation.plan) throw new Error(`操作 ${operation.id} 是写操作，但没有审阅说明。`);
+    }
   }
 
   /** An empty product library starts with the structures that come with the software. */
@@ -122,6 +139,9 @@ export class Studio {
   async invoke(id: string, params: unknown, context: Context): Promise<unknown> {
     const operation = this.operations.get(id);
     if (!operation) throw new StudioError({ code: 'OPERATION_UNKNOWN', message: `没有操作 ${id}。` }, 404);
+    if (context.by === 'agent' && operation.human_only) {
+      throw new StudioError({ code: 'REVIEW_FORBIDDEN', message: `${operation.title}只能由人来做。` }, 403);
+    }
     const errors = compile(operation.parameters).errors(params);
     if (errors.length) {
       const first = errors[0] as { path?: string; instancePath?: string; message?: string };
@@ -133,6 +153,23 @@ export class Studio {
   }
 
   layoutLabel = (kind: string): string => this.#layouts.get(kind) ?? kind;
+
+  /** The operations the agent is offered as tools: all of them but those only a person may run, and the workbench's own scratch layer. */
+  agentOperations(): Operation[] {
+    return [...this.operations.values()].filter(operation => operation.tool && !operation.human_only);
+  }
+
+  /** What a person is asked to accept for an agent's write. A write nobody can describe is not run. */
+  async reviewFor(operation: Operation, params: any): Promise<Review> {
+    if (operation.review) return operation.review(params);
+    if (operation.plan) {
+      const plan = await operation.plan(params);
+      const parts = { ...this.store.parts(params.project), ...plan.parts };
+      const { preview, issue } = await this.preview(this.store.meta(params.project).name, parts);
+      return { title: operation.title, project: params.project, changes: plan.changes, preview, issue };
+    }
+    throw new StudioError({ code: 'REVIEW_UNAVAILABLE', message: `${operation.title}没有可供审阅的改动说明，Agent 不能执行。` }, 409);
+  }
 
   async #changes(before: Parts, after: Partial<Parts>): Promise<Change[]> {
     for (const construction of ['single_core', 'three_core']) await this.layouts(construction);
@@ -211,6 +248,15 @@ export class Studio {
       input_issue: result.view.issue, tier: result.view.preview?.tier.label,
     });
     const planned = (id: string, parts: Partial<Parts>) => async (): Promise<Plan> => ({ parts, changes: await this.#changes(store.parts(id), parts) });
+    const runCard = (params: { project: string }, record: RunRecord): CardRef => ({ kind: 'run', project: params.project, run: record.id });
+    const runNotes = (_params: unknown, record: RunRecord): string[] => {
+      if (record.kind !== 'rating') return [record.title];
+      const summary = record.summary;
+      if (!summary || summary.status !== 'succeeded') return [`未算出：${summary?.error?.message ?? '方法拒绝了这组输入'}`];
+      const limiting = summary.operating?.cables.find(cable => cable.id === summary.ampacity?.limiting_cable);
+      return [`允许电流 ${fixed(summary.ampacity?.value_a)} A`,
+        `先到温限：${limiting ? PHASE_NAMES[limiting.phase] ?? limiting.phase : summary.ampacity?.limiting_cable}`, `可信分档：${record.method_card?.tier.label ?? '—'}`];
+    };
 
     const planCable = async (params: { project: string; model_id: string }): Promise<Plan> => {
       const before = store.parts(params.project);
@@ -267,23 +313,41 @@ export class Studio {
     });
 
     return [
-      { id: 'project.list', title: '工程列表', description: '列出全部工程。', kind: 'read', parameters: obj({}),
-        execute: async () => store.list() },
-      { id: 'project.create', title: '新建工程', description: '新建工程并选定初始型号。', kind: 'write',
-        parameters: obj({ name: str({ minLength: 1, maxLength: 80 }), model_id: opt(str()) }),
+      { id: 'project.list', tool: 'list_projects', title: '工程列表', kind: 'read', parameters: obj({}),
+        description: '列出全部载流量计算工程：标识、名称、最近修改时间。',
+        execute: async () => store.list(),
+        brief: (list: ProjectMeta[]) => list.map(item => ({ project: item.id, name: item.name, updated: item.updated })) },
+      { id: 'project.create', tool: 'create_project', title: '新建工程', kind: 'write',
+        description: '新建一个载流量计算工程并选定型号。敷设、土壤、环境温度、负荷从该型号的默认模板起步，工程师审阅时会看到这些起始值；之后用 set_installation、set_conditions 修改。必须指定型号（从 list_library 取标识）。这是改动，先交给工程师审阅。',
+        parameters: obj({ name: str({ minLength: 1, maxLength: 80, description: '工程名称' }), model_id: opt(str({ description: '型号库标识；Agent 调用时必须给出' })) }),
+        review: async (params: { name: string; model_id?: string }): Promise<Review> => {
+          const defaults = await starting(params.model_id ?? DEFAULT_MODEL);
+          await this.layouts(defaults.cable.summary.construction);
+          const name = params.name.trim();
+          const changes: Change[] = [
+            { part: 'project', field: 'name', label: '工程名称', before: '—', after: name },
+            ...describeStart('cable', defaults.cable, this.layoutLabel),
+            ...describeStart('installation', defaults.installation, this.layoutLabel),
+            ...describeStart('conditions', defaults.conditions, this.layoutLabel),
+          ];
+          const { preview, issue } = await this.preview(name, { ...defaults, method: { method: 'iec60287.steady', parameters: {} } });
+          return { title: '新建工程', changes, preview, issue };
+        },
         execute: async (params: { name: string; model_id?: string }) => {
-          const defaults = await starting(params.model_id ?? 'system.yjq02-110kv-800');
+          const defaults = await starting(params.model_id ?? DEFAULT_MODEL);
           const meta = store.create(params.name.trim(), { ...defaults, method: { method: 'iec60287.steady', parameters: {} } });
           this.emit({ type: 'project', project_id: meta.id });
           return this.view(meta.id);
-        } },
-      { id: 'project.rename', title: '重命名工程', description: '修改工程名称。', kind: 'write',
+        }, brief: briefView },
+      { id: 'project.rename', tool: 'rename_project', title: '重命名工程', kind: 'write', description: '修改工程名称。这是改动，先交给工程师审阅。',
         parameters: obj({ project, name: str({ minLength: 1, maxLength: 80 }) }),
+        review: async (params: { project: string; name: string }): Promise<Review> => ({ title: '重命名工程', project: params.project,
+          changes: [{ part: 'project', field: 'name', label: '工程名称', before: store.meta(params.project).name, after: params.name.trim() }] }),
         execute: async (params: { project: string; name: string }) => {
           store.rename(params.project, params.name.trim());
           this.emit({ type: 'project', project_id: params.project });
           return this.view(params.project);
-        } },
+        }, brief: briefView },
       { id: 'project.get', tool: 'get_project', title: '读取工程', kind: 'read', parameters: obj({ project }),
         description: '读取当前工程的型号、敷设、工况、方法参数、输入是否有问题、可信分档和运行记录列表。动手之前先调用它。',
         execute: async (params: { project: string }) => this.view(params.project), brief: briefView },
@@ -334,7 +398,7 @@ export class Studio {
           const parts = store.parts(params.project);
           const record = await core.call('study.rate', { scene: this.scene(store.meta(params.project).name, parts) });
           return this.#saveRun(params.project, parts, record, context);
-        }, brief: briefRun },
+        }, brief: briefRun, card: runCard, notes: runNotes },
       // Drafts are for the workbench: a result for the present inputs right after a change, without filling the
       // project with records. A draft is a real result of the method; keeping it writes that same result as a record.
       { id: 'draft.rate', title: '草算', kind: 'run', parameters: obj({ project }),
@@ -371,7 +435,7 @@ export class Studio {
           const record = await core.call('study.sweep', { scene: this.scene(store.meta(params.project).name, parts),
             variable: params.variable, values: params.values });
           return this.#saveRun(params.project, parts, record, context);
-        }, brief: briefRun },
+        }, brief: briefRun, card: runCard, notes: runNotes },
       { id: 'run.select', tool: 'run_selection', title: '运行选型', kind: 'run',
         description: '在当前敷设和工况下，对一组候选型号逐个计算载流量，按目标电流选出满足要求的最小截面，生成一条运行记录。不改动工程输入；要采用选出的型号，再调用 set_cable。',
         parameters: obj({ project, target_current_a: num({ exclusiveMinimum: 0, description: '目标电流，A' }),
@@ -384,11 +448,11 @@ export class Studio {
           const record = await core.call('study.select', { scene: this.scene(store.meta(params.project).name, parts),
             candidates, target_current_a: params.target_current_a });
           return this.#saveRun(params.project, parts, record, context);
-        }, brief: briefRun },
+        }, brief: briefRun, card: runCard, notes: runNotes },
       { id: 'run.get', tool: 'get_run', title: '读取运行记录', kind: 'read',
         description: '读取一条运行记录的结果摘要：允许电流、各电缆温度、损耗、热阻，或扫描点、选型候选表。',
         parameters: obj({ project, run: str({ description: '运行记录标识，例如 run-1a2b3c4d' }) }),
-        execute: async (params: { project: string; run: string }) => store.run(params.project, params.run), brief: briefRun },
+        execute: async (params: { project: string; run: string }) => store.run(params.project, params.run), brief: briefRun, card: runCard },
       { id: 'report.export', tool: 'export_report', title: '导出计算书', kind: 'run',
         description: '把一条运行记录导出为计算书（可打印的 HTML 文件），保存在工程的 reports 文件夹。',
         parameters: obj({ project, run: str(), open: opt(bool()) }),
@@ -397,7 +461,39 @@ export class Studio {
           const path = store.saveReport(params.project, record.id, renderReport(record));
           this.emit({ type: 'project', project_id: params.project });
           return { run: record.id, path, url: `/api/projects/${params.project}/reports/${record.id}` };
-        } },
+        }, brief: (result: { run: string; url: string }) => ({ run: result.run, saved: true, url: result.url }),
+        card: (params: { project: string }, result: { run: string; url: string }): CardRef => ({ kind: 'file', url: result.url, title: `计算书 · ${store.run(params.project, result.run).title}`, type: 'html' }),
+        notes: () => ['计算书已保存，可打印，浏览器里可另存为 PDF'] },
+      { id: 'workbench.open', tool: 'open_in_workbench', title: '在工作台打开', kind: 'read',
+        description: '让工程师在工作台里看一个对象：型号库、结构表导入、一个系列、一个规格（可指定版本）、一个工程或一条运行记录。对象必须已经存在。结果会显示成一个“在工作台打开”按钮。',
+        parameters: obj({
+          target: oneOf(['library', 'import', 'series', 'spec', 'project', 'run'], { description: 'library 型号库；import 导入结构表；series 系列；spec 规格；project 工程；run 运行记录' }),
+          series: opt(str()), spec: opt(str()), version: opt(int({ minimum: 1 })), project: opt(str()), run: opt(str()),
+        }),
+        execute: async (params: { target: string; series?: string; spec?: string; version?: number; project?: string; run?: string }) => {
+          const need = (value: string | undefined, name: string): string => {
+            if (!value) throw new StudioError({ code: 'INPUT_INVALID', message: `打开${KIND_OPEN[params.target]}需要 ${name}。`, path: `/${name}` });
+            return value;
+          };
+          if (params.target === 'library') return { label: '型号库', href: '/library' };
+          if (params.target === 'import') return { label: '导入结构表', href: '/library/import' };
+          if (params.target === 'series') {
+            const view = library.seriesView(need(params.series, 'series'));
+            return { label: `系列 ${view.series.name}`, href: `/library/${view.series.id}` };
+          }
+          if (params.target === 'spec') {
+            const view = library.specView(need(params.spec, 'spec'), params.version);
+            return { label: `${view.spec.name} · 第 ${view.version.number} 版`, href: `/library/${view.series.id}?spec=${encodeURIComponent(view.spec.id)}&version=${view.version.number}` };
+          }
+          if (params.target === 'project') {
+            const meta = store.meta(need(params.project, 'project'));
+            return { label: `工程 ${meta.name}`, href: `/p/${meta.id}` };
+          }
+          const record = store.run(need(params.project, 'project'), need(params.run, 'run'));
+          return { label: `运行记录 ${record.sequence} · ${record.title}`, href: `/p/${record.project.id}?run=${record.id}` };
+        },
+        brief: (result: { label: string }) => ({ opened: result.label, shown_as: '工作台按钮' }),
+        card: (_params: unknown, result: { label: string; href: string }): CardRef => ({ kind: 'open', label: result.label, href: result.href }) },
     ];
   }
 }
