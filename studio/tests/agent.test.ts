@@ -14,7 +14,7 @@ import type { ProjectView, SeriesSummary, SpecView, StudioEvent } from '../share
 import { lastText, next, scriptedModel, steps, toolResult, toolText } from './support.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SKILLS = ['ampacity-rating', 'cable-import-check', 'cable-revision', 'spec-and-report', 'cable-3d-model'];
+const SKILLS = ['ampacity-rating', 'cable-import-check', 'cable-revision', 'spec-and-report', 'cable-3d-model', 'cable-new-model', 'standard-structure', 'rating-table', 'gb50217-correction'];
 const home = mkdtempSync(join(tmpdir(), 'cable-studio-agent-'));
 const homes = [home];
 let faux: Awaited<ReturnType<typeof scriptedModel>>['faux'];
@@ -691,6 +691,100 @@ test('a message sent while the agent waits for a decision reaches it after the d
   const view = await app.agent.view(session);
   assert.ok(view.items.every(item => !item.queued));
   assert.ok(view.items.some(item => item.role === 'user' && item.parts[0].type === 'text' && item.parts[0].text === '顺便说一句：别动埋深'));
+});
+
+test('the model-type operations are the agent\'s tools: the two that write wait for review', () => {
+  const offered = app.studio.agentOperations();
+  const tools = offered.map(operation => operation.tool);
+  for (const name of ['create_series', 'create_spec', 'build_rating_table', 'get_rating_tables', 'propose_structure', 'get_proposal', 'correct_ampacity_gb50217', 'list_corrections', 'get_correction']) {
+    assert.ok(tools.includes(name), `${name} is a tool`);
+  }
+  const typed = offered.filter(operation => ['create_series', 'create_spec'].includes(operation.tool!));
+  assert.deepEqual(typed.map(operation => operation.kind), ['write', 'write']);
+  assert.ok(typed.every(operation => operation.review), 'what they would make is described before anyone is asked');
+  // The results that are not a number or a table of the conversation's own leave a reference the page draws a card from.
+  assert.ok(['library.rating.table', 'structure.propose', 'structure.proposal', 'correction.gb50217', 'correction.get', 'library.series.create', 'library.spec.create']
+    .every(id => app.studio.operations.get(id)!.card), 'each result has a card');
+});
+
+test('a series the agent proposes is reviewed, made when it is accepted, and left as a way to the workbench', { timeout: 120_000 }, async () => {
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('create_series', { name: 'Agent 测试系列', designation: 'YJV22', cores: 3, u0_v: 8700, u_v: 15000, standards: ['GB/T 12706.2-2020'], outer_diameter_precision_mm: 0.1 })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxText('系列建好了，里面还没有规格。')]),
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '新建一个 YJV22 8.7/15 kV 三芯系列');
+  const proposal = (await proposed).proposal;
+  assert.equal(proposal.operation, 'library.series.create');
+  assert.ok(proposal.changes.length > 0);
+  assert.ok(!(await app.studio.invoke('library.series', {}, { by: 'human' }) as SeriesSummary[]).some(item => item.name === 'Agent 测试系列'), 'nothing is made while the review waits');
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  const made = (await app.studio.invoke('library.series', {}, { by: 'human' }) as SeriesSummary[]).find(item => item.name === 'Agent 测试系列')!;
+  assert.equal(made.created_by, 'Agent');
+  const [step] = steps(await app.agent.view(session));
+  assert.deepEqual([step.tool, step.status], ['create_series', 'done']);
+  assert.deepEqual(step.card, { kind: 'open', label: '系列 Agent 测试系列', href: `/library/${made.id}` });
+});
+
+test('a structure a standard gives is kept as a proposal and shown as a card of what the standard says', { timeout: 180_000 }, async () => {
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('propose_structure', { standard: 'GB/T 12706.2-2020', u0_v: 8700, u_v: 15000, cores: 3, conductor: 'copper', area_mm2: 240, insulation: 'XLPE', armour: 'steel_tape' })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxText('标准给出了绝缘厚度。')]),
+  ]);
+  const { session } = await app.agent.send(undefined, '按 GB/T 12706.2-2020 生成 8.7/15 kV 三芯 240 mm² 的初始结构');
+  await app.agent.idle(session);
+  const [step] = steps(await app.agent.view(session));
+  assert.equal(step.status, 'done', step.reason);
+  assert.equal(step.card!.kind, 'standard');
+  const id = (step.card as { proposal: string }).proposal;
+  assert.match(id, /^prop-[0-9a-f]{12}$/);
+  assert.ok(step.notes!.some(note => note.includes('GB/T 12706.2')), step.notes!.join('、'));
+  const kept = await app.studio.invoke('structure.proposal', { proposal: id }, { by: 'human' }) as { id: string; dimensions: { value: number; source: { standard?: string } }[] };
+  assert.equal(kept.id, id);
+  assert.ok(kept.dimensions.length > 0 && kept.dimensions.every(item => item.value > 0 && item.source), 'every dimension has its source');
+});
+
+test('an ampacity table is made from the conditions the engineer states and left as a card of its rows', { timeout: 180_000 }, async () => {
+  const spec = 'huayuan.yjv22-15kv-240';
+  const condition = (depth: number) => ({ layout: 'three_core_buried_single', depth_m: depth, soil_thermal_resistivity: 1, ambient_temperature_c: 25 });
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('build_rating_table', { spec, title: '埋深对比', conditions: [condition(1), condition(1.5)] })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxText('表做好了。')]),
+  ]);
+  const { session } = await app.agent.send(undefined, '给这个规格算埋深 1.0 m 和 1.5 m 两条载流量');
+  await app.agent.idle(session);
+  const [step] = steps(await app.agent.view(session));
+  assert.equal(step.status, 'done', step.reason);
+  assert.equal(step.card!.kind, 'rating_table');
+  assert.deepEqual(step.notes, ['2 个条件，2 个算出']);
+  const table = step.card as { spec: string; version: number; table: string; href: string };
+  assert.equal(table.spec, spec);
+  assert.ok(table.href.startsWith('/library/') && table.href.includes(`spec=${encodeURIComponent(spec)}`));
+  const kept = await app.studio.invoke('library.rating.tables', { spec, version: table.version }, { by: 'human' }) as { id: string; rows: { ampacity_a: number; depth_m: number }[] }[];
+  const mine = kept.find(item => item.id === table.table)!;
+  assert.deepEqual(mine.rows.map(row => row.depth_m), [1, 1.5]);
+  assert.ok(mine.rows[0].ampacity_a > mine.rows[1].ampacity_a, 'deeper is warmer, so it carries less');
+});
+
+test('a GB 50217 correction asks the engineer to confirm the baseline, and the agent cannot confirm it', { timeout: 180_000 }, async () => {
+  const id = await project('校正基准', 'huayuan.yjv22-15kv-240');
+  const baseline = await app.studio.invoke('run.rate', { project: id }, { by: 'human' }) as { id: string };
+  let pending = '';
+  let refused = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('correct_ampacity_gb50217', { project: id, baseline_run: baseline.id })], { stopReason: 'toolUse' }),
+    context => { pending = toolText(context); return fauxAssistantMessage([fauxToolCall('correct_ampacity_gb50217', { project: id, baseline_run: baseline.id, baseline_confirmed: true })], { stopReason: 'toolUse' }); },
+    context => { refused = toolText(context); return fauxAssistantMessage([fauxText('基准要你来确认，我不能代办。')]); },
+  ]);
+  const { session } = await app.agent.send(undefined, '按 GB 50217 把这条结果校正一下');
+  await app.agent.idle(session);
+  assert.equal(JSON.parse(pending).needs_confirmation, true, pending);
+  assert.ok(refused.includes('只能由人'), refused);
+  const view = steps(await app.agent.view(session));
+  assert.deepEqual(view.map(step => step.status), ['done', 'failed']);
+  assert.ok(view[0].notes!.some(note => note.includes('基准条件要工程师确认')), view[0].notes!.join('、'));
+  assert.deepEqual(await app.studio.invoke('correction.list', { project: id }, { by: 'human' }), [], 'no correction was made');
 });
 
 test('a conversation survives a restart: it is listed, its unfinished step is shown as cut off, and it can go on', { timeout: 120_000 }, async () => {

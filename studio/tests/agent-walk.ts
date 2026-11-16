@@ -36,14 +36,14 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       await page.screenshot({ path: join(out, `${width}-agent-${label}.png`) });
       for (const issue of await page.evaluate(probe)) problems.push(`${width} agent ${label}: ${issue}`);
       // The conversation never scrolls sideways: a control placed outside the column can make it (it did, on the empty page, at 1280 and wider).
-      const sideways = await page.locator('[data-slot="aui_thread-viewport"]').evaluate(el => el.scrollWidth - el.clientWidth).catch(() => 0);
+      const sideways = await page.locator('.fade-top').first().evaluate(el => el.scrollWidth - el.clientWidth).catch(() => 0);
       if (sideways > 0) problems.push(`${width} agent ${label}: the conversation scrolls sideways by ${sideways}px`);
     };
 
     try {
       // 1. Nothing said yet: the starting tasks. The mode switch is where it always is.
       await page.goto(`${base}/`);
-      await page.getByRole('button', { name: '选一款型号，算直埋载流量', exact: true }).waitFor();
+      await page.getByRole('button', { name: /^算一款型号的直埋载流量/ }).waitFor();
       await check('empty');
       if (!(await page.getByRole('tab', { name: 'Agent' }).getAttribute('aria-selected') === 'true')) problems.push(`${width} agent: the mode switch does not show Agent`);
 
@@ -55,9 +55,9 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
         (context: TranscriptContext) => fauxAssistantMessage([fauxToolCall('open_in_workbench', { target: 'run', project: created(context), run: toolResult(context).run })], { stopReason: 'toolUse' }),
         fauxAssistantMessage([fauxText('已按模板默认条件算出这款型号的允许电流。\n先到温限的是这根三芯电缆。\n默认的埋深、土壤热阻率和负荷请你确认。')]),
       ]);
-      await page.getByRole('button', { name: '选一款型号，算直埋载流量', exact: true }).click();
+      await page.getByRole('button', { name: /^算一款型号的直埋载流量/ }).click();
       await page.waitForURL('**/chat/**');
-      await page.getByText('请审阅').first().waitFor();
+      await page.getByText('待你审阅').first().waitFor();
       await check('proposal');
       await page.getByRole('button', { name: '接受', exact: true }).click();
       await page.getByText('允许电流', { exact: true }).waitFor();
@@ -81,8 +81,8 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
         fauxAssistantMessage([fauxText('核对结果和规格书都在上面的卡片里。')]),
       ]);
       await page.getByRole('button', { name: '新对话' }).first().click();
-      await page.getByRole('button', { name: '导出一份规格书', exact: true }).click();
-      await page.getByText('规格书（PDF）').waitFor({ timeout: 60_000 });
+      await page.getByRole('button', { name: /^导出一份规格书/ }).click();
+      await page.getByRole('button', { name: '预览' }).waitFor({ timeout: 60_000 });
       await check('check-and-file');
       await page.getByRole('button', { name: '预览' }).click();
       await page.getByRole('dialog').waitFor();
@@ -99,8 +99,8 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
         fauxAssistantMessage([fauxText('读到了这张表。')]),
       ]);
       await page.getByRole('button', { name: '新对话' }).first().click();
-      await page.getByRole('button', { name: '导入公开结构表示例并核对', exact: true }).waitFor();
-      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: '添加结构表' }).click()]);
+      await page.getByRole('button', { name: /^导入公开结构表示例并核对/ }).waitFor();
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: '附上结构表' }).click()]);
       await chooser.setFiles({ name: '走查结构表.csv', mimeType: 'text/csv', buffer: Buffer.from('标称截面,导体直径\n240,18.4\n') });
       await page.getByText('走查结构表.csv').first().waitFor();
       await check('attachment');
@@ -116,13 +116,13 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
         fauxAssistantMessage([fauxText('没有改成：工程在审阅期间被改动过，请重新提出。')]),
       ]);
       await page.getByRole('button', { name: '新对话' }).first().click();
-      await page.getByRole('button', { name: '选一款型号，算直埋载流量', exact: true }).click();
-      await page.getByText('请审阅').first().waitFor();
+      await page.getByRole('button', { name: /^算一款型号的直埋载流量/ }).click();
+      await page.getByText('待你审阅').first().waitFor();
       await app.studio.invoke('project.rename', { project: mine.id, name: `走查 工程师改名 ${width}` }, { by: 'human' });
       await page.getByRole('button', { name: '接受', exact: true }).click();
       await page.getByText('已接受，但没有执行').waitFor();
       await check('accepted-not-made');
-      if (await page.getByText('改动已生效').count()) problems.push(`${width} agent: the card says the change took effect when it was not made`);
+      if (await page.locator('[data-card="proposal"][data-phase="accepted"]').count()) problems.push(`${width} agent: the card says the change was made when it was not`);
       if (app.studio.store.meta(mine.id).name !== `走查 工程师改名 ${width}`) problems.push(`${width} agent: the agent's change was made over the engineer's`);
 
       // 7. The solid the CAD plugin builds comes as a card with the workbench's own viewer, in both of its views.
@@ -131,7 +131,7 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
         fauxAssistantMessage([fauxText('三维结构已生成：分层剖开和完整实体两种看法都在卡片里。')]),
       ]);
       await page.getByRole('button', { name: '新对话' }).first().click();
-      await page.getByRole('button', { name: '建一个电缆三维结构模型', exact: true }).click();
+      await page.getByRole('button', { name: /^建一个电缆三维结构模型/ }).click();
       await page.getByRole('button', { name: '完整实体' }).waitFor({ timeout: 120_000 });
       await page.waitForTimeout(2500);
       const viewer = await page.locator('.cad-viewport').first().boundingBox();

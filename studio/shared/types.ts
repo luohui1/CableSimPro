@@ -310,7 +310,13 @@ export type CardRef =
   /** status: where the version stands in review (draft or not), so an unreviewed sheet is never taken for an issued one. */
   | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html'; href?: string; status?: string }
   | { kind: 'model3d'; spec: string; version: number; href: string }
-  | { kind: 'open'; label: string; href: string };
+  | { kind: 'open'; label: string; href: string }
+  /** An ampacity table kept on a specification version; its rows are read from the host by the table's identifier. */
+  | { kind: 'rating_table'; spec: string; version: number; table: string; href: string }
+  /** The initial structure a standard gave, kept as a proposal. */
+  | { kind: 'standard'; proposal: string }
+  /** A GB 50217 correction kept on a project. */
+  | { kind: 'correction'; project: string; correction: string; href: string };
 
 export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';
 export interface ChatStep {

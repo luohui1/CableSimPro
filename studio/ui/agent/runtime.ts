@@ -7,14 +7,7 @@ import type { ChatMessage, ChatStep } from '@shared/types';
 import { reportFailure } from '@/components/notice';
 import { api } from '@/state/api';
 import { chatQuery, queryClient, useChat, useChats } from '@/state/queries';
-
-/** Real tasks to start from; one click sends it. */
-const STARTERS = [
-  { title: '导入公开结构表示例并核对', prompt: '导入公开结构表示例，算参数并按国标核对，列出不通过项。' },
-  { title: '选一款型号，算直埋载流量', prompt: '选一款型号，直埋敷设，算载流量，说明哪根电缆先到温限。' },
-  { title: '导出一份规格书', prompt: '挑一个规格，导出一份规格书。' },
-  { title: '建一个电缆三维结构模型', prompt: '挑一个三芯铠装规格，建三维结构模型，让我看各层。' },
-];
+import { ALL_STARTERS } from './starters';
 
 /** A structure table is kept on the host when the message is sent; the agent reads it by the identifier that comes back. */
 const attachments: AttachmentAdapter = {
@@ -78,13 +71,19 @@ export function useAgentRuntime(sessionId: string | undefined) {
     isLoading: Boolean(sessionId) && view.isPending,
     // The first message of a new conversation is on its way; a second one sent now would start another conversation.
     isSendDisabled: !sessionId && send.isPending,
-    suggestions: STARTERS,
+    suggestions: ALL_STARTERS.map(task => ({ title: task.title, label: task.result, prompt: task.prompt })),
     onNew: async message => {
       const { text, files } = toSend(message);
       if (text || files.length) await send.mutateAsync({ text, files }).catch(() => undefined);
     },
     onCancel: async () => {
       if (sessionId) await api.stop(sessionId);
+    },
+    // The host's conversation only grows: a retry is the last request asked again, below the answer that went wrong.
+    onReload: async () => {
+      const last = [...(view.data?.items ?? [])].reverse().find(item => item.role === 'user');
+      const text = last?.parts.map(part => (part.type === 'text' ? part.text : '')).join('').trim();
+      if (last && text) await send.mutateAsync({ text, files: (last.attachments ?? []).map(item => ({ upload: item.upload, file: item.file })) }).catch(() => undefined);
     },
     // With a queue adapter every send goes through it, idle or not. The host does the queueing: a message sent while the agent works
     // is held until the current step is done and shown on the page as waiting, so this adapter only passes the message on.

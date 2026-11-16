@@ -41,8 +41,6 @@ const EXEMPT: { path: string; owes: number; owner: string; until: string }[] = [
   { path: 'ui/components/tabs.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/tooltip.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/library-header.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除' },
-  { path: 'ui/agent/', owes: 5, owner: 'studio-build', until: '对话页换用 kit 组件' },
-  { path: 'ui/components/assistant-ui/', owes: 34, owner: 'studio-build', until: '对话页换用 kit 组件' },
 ];
 
 interface Rule { id: string; text: string; applies: (file: string) => boolean; find: (source: string, file: string) => string[] }
