@@ -24,7 +24,6 @@ import { useStart } from './queries';
 
 /** What the form holds for one size; numbers are null while their field is empty. */
 interface Values {
-  name: string;
   layout: string;
   bonding: string;
   depth: number | null;
@@ -38,7 +37,6 @@ interface Values {
 
 /** The values the host says a project of this size starts from. */
 const initial = (start: RatingStart): Values => ({
-  name: `${start.model.name} 载流量校核`,
   layout: start.installation.layout,
   bonding: start.installation.bonding,
   depth: start.installation.depth_m,
@@ -88,6 +86,9 @@ export function StartScreen({ model: asked }: { model?: string }) {
   const [typed, setTyped] = useState<{ model: string | undefined; values: Values } | null>(null);
   const values = start.data ? (typed && typed.model === model ? typed.values : initial(start.data)) : null;
   const set = (patch: Partial<Values>) => { if (values) setTyped({ model, values: { ...values, ...patch } }); };
+  // The name is the engineer's once typed; until then it is the size's own, which follows the size chosen.
+  const [named, setNamed] = useState<string | null>(null);
+  const name = named ?? (start.data ? `${start.data.model.name} 载流量校核` : '');
   // One project per press: a second press while the first is being made does nothing.
   const making = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -98,7 +99,7 @@ export function StartScreen({ model: asked }: { model?: string }) {
     event.preventDefault();
     if (making.current || !start.data || !values) return;
     const first = initial(start.data);
-    const refusal = !values.name.trim() ? '工程名称不能空。'
+    const refusal = !name.trim() ? '工程名称不能空。'
       : !finite(values.depth) || values.depth <= 0 ? '中心埋深要填大于 0 的数。'
       : !finite(values.soil) || values.soil <= 0 ? '土壤热阻率要填大于 0 的数。'
       : !finite(values.ambient) || values.ambient < -50 || values.ambient > 80 ? '环境温度要在 −50 到 80 °C 之间。'
@@ -126,7 +127,7 @@ export function StartScreen({ model: asked }: { model?: string }) {
     setBusy(true);
     let project: string;
     try {
-      project = (await api.op<ProjectView>('project.create', { name: values.name.trim(), model_id: start.data.model.id })).meta.id;
+      project = (await api.op<ProjectView>('project.create', { name: name.trim(), model_id: start.data.model.id })).meta.id;
     } catch (failure) {
       setError(messageOf(failure));
       making.current = false;
@@ -193,7 +194,7 @@ export function StartScreen({ model: asked }: { model?: string }) {
           </FormSection>
           {settings}
           {values && <FormSection title="工程名称" description="工程在左边的列表里叫这个名字。">
-            <FormRow label="名称" htmlFor="project-name"><Input id="project-name" value={values.name} maxLength={80} onChange={event => set({ name: event.target.value })} /></FormRow>
+            <FormRow label="名称" htmlFor="project-name"><Input id="project-name" value={name} maxLength={80} onChange={event => setNamed(event.target.value)} /></FormRow>
           </FormSection>}
           {error && <FormNote tone="attention" title="还不能建好">{error}</FormNote>}
         </div>

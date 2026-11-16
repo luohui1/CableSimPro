@@ -136,7 +136,10 @@ export function SweepScreen({ record }: { record: RunRecord }) {
   const stood = STOOD_AT[sweep.variable]?.(record.inputs) ?? null;
   const at = stood === null ? undefined : { value: stood, label: `工程取值 ${compact(stood)}` };
   const x: Axis = { key: 'value', label: sweep.label, unit: sweep.unit, format: value => compact(value) };
-  const conductorHeader = load === null ? (swept ? '该负荷下导体' : '保存负荷下导体') : `${compact(load)} A 时导体`;
+  // What the conductor's temperature is the temperature at: the saved load, or at each point the load that point sweeps.
+  const [atLoad, conductor] = load === null
+    ? (swept ? ['该负荷下', '该负荷下导体'] : ['保存负荷下', '保存负荷下导体'])
+    : [`保存负荷 ${compact(load)} A 时`, `${compact(load)} A 时导体`];
   // What each point says when it has no number: the method's words.
   const refused = rows.filter(row => row.error);
   const runaways = rows.filter(row => row.runaway && !row.error);
@@ -154,13 +157,13 @@ export function SweepScreen({ record }: { record: RunRecord }) {
     { key: 'ampacity', header: '允许电流', unit: 'A', numeric: true, width: 'w-28', cell: row => (row.ampacity === null
       ? <Tooltip><TooltipTrigger render={<span tabIndex={0} className="text-error">拒算</span>} /><TooltipContent>{row.error ?? '方法没有给出结果'}</TooltipContent></Tooltip>
       : fixed(row.ampacity)) },
-    { key: 'conductor', header: conductorHeader, unit: '°C', numeric: true, width: 'w-36', cell: row => (row.conductor !== null
+    { key: 'conductor', header: conductor, unit: '°C', numeric: true, width: 'w-36', cell: row => (row.conductor !== null
       ? <span className={limit !== null && row.conductor > limit ? 'text-error' : undefined}>{fixed(row.conductor)}</span>
       : row.runaway ? <Tooltip><TooltipTrigger render={<span tabIndex={0} className="text-ink-2">无稳态解</span>} /><TooltipContent>{row.runaway}</TooltipContent></Tooltip> : '—') },
   ];
 
   const save = () => {
-    const header = [`${sweep.label} (${sweep.unit})`, '允许电流 (A)', `${conductorHeader} (°C)`, '说明'];
+    const header = [`${sweep.label} (${sweep.unit})`, '允许电流 (A)', `${conductor} (°C)`, '说明'];
     download(`${record.project.name} 扫描 #${record.sequence}.csv`, csvOf([
       ['工程', record.project.name], ['运行记录', `#${record.sequence} ${record.title}`], ['方法', methodOf(record)], [],
       header,
@@ -175,7 +178,7 @@ export function SweepScreen({ record }: { record: RunRecord }) {
       y={{ key: 'conductor', label: '导体温度', unit: '°C', format: value => fixed(value) }} at={at} limit={limit === null ? undefined : { value: limit, label: `限值 ${fixed(limit, 0)} °C` }} />;
 
   return <Split panes={[
-    { id: 'curve', size: 62, min: 40, children: <Panel title={shown === 'ampacity' ? '允许电流' : `${conductorHeader.replace('导体', '的导体温度')}`}
+    { id: 'curve', size: 62, min: 40, children: <Panel title={shown === 'ampacity' ? '允许电流' : `${atLoad}的导体温度`}
         tools={<ToggleGroup value={[shown]} onValueChange={next => next[0] && setShown(next[0] as typeof shown)} size="sm" aria-label="曲线">
           <ToggleGroupItem value="ampacity">允许电流</ToggleGroupItem>
           <ToggleGroupItem value="conductor">导体温度</ToggleGroupItem>
@@ -186,7 +189,7 @@ export function SweepScreen({ record }: { record: RunRecord }) {
     { id: 'numbers', size: 38, min: 28, children: <Panel title="各点数值" tools={<Button variant="ghost" size="sm" onClick={save}><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button>}>
         <div className="grid grid-cols-2 gap-4 border-b border-line px-4 py-4">
           <Metric size="md" label="范围内最低允许电流" value={fixed(lowest?.ampacity)} unit="A" detail={lowest ? `${sweep.label} ${compact(lowest.value)} ${sweep.unit} 时` : undefined} />
-          <Metric size="md" label={`${conductorHeader.replace('导体', '最高导体温度')}`} value={fixed(hottest?.conductor)} unit="°C" detail={limit === null ? undefined : `限值 ${fixed(limit, 0)} °C`} />
+          <Metric size="md" label={`${atLoad}最高导体温度`} value={fixed(hottest?.conductor)} unit="°C" detail={limit === null ? undefined : `限值 ${fixed(limit, 0)} °C`} />
         </div>
         <DataTable rows={rows} rowKey={row => String(row.value)} selected={stood === null ? undefined : String(stood)} columns={columns} />
         {refused.length > 0 && <Disclosure title={`方法拒算 ${refused.length} 个点`} defaultOpen>{reasons(refused, row => row.error)}</Disclosure>}

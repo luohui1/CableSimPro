@@ -1,13 +1,14 @@
 // The rating workbench used the way an engineer uses it, in a real browser with the real host and core, at 1366×768 and
-// 1920×1080: a new project from a cable of the library, the check, reading the answer, changing a condition and checking
-// again, sweeping a condition, choosing a section for a target current, switching between the records, taking the sheet;
-// then the layouts that draw several cables, circuits and ducts, and the changes made on the drawing itself.
+// 1920×1080: a new project from a cable of the library that is made and checked in one step, reading the answer, changing a
+// condition at the side and applying it, sweeping a condition, choosing a section for a target current, the run records
+// in their row, the sheet; then the layouts that draw several cables, circuits and ducts, the changes made on the drawing
+// itself, and the word before the page is left with changes that were not applied.
 // Every step saves a screenshot and runs the layout probe (tests/probe.ts).
 //
 //   npm run build && node tests/rating-walk.ts [output folder]
 //   CABLE_STUDIO_WALK_BASE=http://127.0.0.1:8214 CABLE_STUDIO_WALK_MODEL=<library id> node tests/rating-walk.ts   (a host already running)
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -18,6 +19,8 @@ import { probe } from './probe.ts';
 
 /** The cable the walk starts from: a public three-core 3×240 that comes with the software. */
 const MODEL = process.env.CABLE_STUDIO_WALK_MODEL ?? 'huayuan.yjv22-15kv-240';
+/** A run of the method takes a few seconds; a selection over a series takes longer. */
+const RUN = 90_000;
 
 export async function walkRating(browser: Browser, base: string, out: string, problems: string[], model = MODEL) {
   const get = async <T>(path: string): Promise<T> => (await fetch(`${base}${path}`)).json() as Promise<T>;
@@ -28,8 +31,8 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     return body as T;
   };
 
-  // Three layouts that draw more than one cable, each checked by the real method: three single-core cables in trefoil (no
-  // field published), three three-core circuits in a row (with a field), and single-core cables in ducts (the air and wall
+  // Layouts that draw more than one cable, each checked by the real method: three single-core cables in trefoil (no field
+  // published), three three-core circuits in a row (with a field), and single-core cables in ducts (the air and wall
   // resistances of the duct).
   const trefoil = (await op<ProjectView>('project.create', { name: '走查 110 kV 品字形', model_id: 'system.yjq02-110kv-800' })).meta.id;
   await op('conditions.set', { project: trefoil, currents_a: [600] });
@@ -51,7 +54,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
   await op<RunRecord>('run.sweep', { project: sweepOnly, variable: 'soil_thermal_resistivity', values: [1, 1.5, 2] });
 
   for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
-    const page: Page = await browser.newPage({ viewport: { width, height } });
+    const page: Page = await browser.newPage({ viewport: { width, height }, acceptDownloads: true });
     page.on('pageerror', error => problems.push(`${width} page error: ${error.message}`));
     page.on('console', message => { if (message.type() === 'error') problems.push(`${width} console error: ${message.text()}`); });
     const check = async (label: string) => {
@@ -61,54 +64,70 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     };
     const projectId = () => /\/p\/(p-[0-9a-f]+)/.exec(page.url())![1];
     const view = (id = projectId()) => get<ProjectView>(`/api/projects/${id}`);
+    const record = (run: string, id = projectId()) => get<RunRecord>(`/api/projects/${id}/runs/${run}`);
     const shownNumber = async () => Number(await page.locator('.text-metric').first().innerText());
     const gpuReady = async () => {
       await page.waitForSelector('[data-gpu]:not([data-gpu="pending"])');
       if ((await page.getAttribute('[data-gpu]', 'data-gpu')) === 'none') problems.push(`${width}: the GPU layer did not start`);
     };
-    const waitFor = async (what: string, done: () => Promise<boolean>) => {
-      const deadline = Date.now() + 15_000;
+    const waitFor = async (what: string, done: () => Promise<boolean>, timeout = 15_000) => {
+      const deadline = Date.now() + timeout;
       while (Date.now() < deadline) {
         if (await done()) return;
         await page.waitForTimeout(150);
       }
       throw new Error(`timed out: ${what}`);
     };
+    const rail = () => page.getByRole('navigation', { name: '运行记录' });
+    const editor = () => page.locator('section[aria-label="已知条件"]');
+    /** What an engineer does with a number field: click it, replace what is in it by typing. */
+    const typeInto = async (selector: string, text: string) => {
+      await page.locator(selector).click();
+      await page.keyboard.press('Control+A');
+      await page.keyboard.type(text);
+    };
+    /** A given of the line above the drawing; the ones that seldom change are folded into one button on the narrower screen. */
+    const given = async (label: string) => {
+      const button = page.getByRole('button', { name: new RegExp(`^${label} `) });
+      if (!(await button.count())) await page.getByRole('button', { name: /^其余 \d 项/ }).click();
+      await page.getByRole('button', { name: new RegExp(`^${label} `) }).first().click();
+    };
+    const waiting = () => page.getByRole('button', { name: /改了 \d 项，还没应用/ });
 
-    // 1. A new project from a cable of the library: the address carries the cable, the form is filled by the host.
+    // 1. A new project from a cable of the library: the address carries the cable, the form is filled by the host, and one
+    //    press makes the project and runs the check.
     await page.goto(`${base}/workbench?model=${encodeURIComponent(model)}`);
-    await page.getByRole('button', { name: '创建工程' }).waitFor();
+    await page.getByRole('button', { name: '建好并计算' }).waitFor();
     await page.getByText('敷设方式', { exact: true }).waitFor();
     await check('new-project');
     const name = `走查 ${width}`;
-    await page.getByLabel('工程名称').fill(name);
-    await page.getByRole('button', { name: /^三芯直埋 · 单回/ }).click();
-    await page.getByLabel('土壤热阻率').fill('1');
-    await page.getByLabel('负荷电流').fill('300');
-    await page.getByRole('button', { name: '创建工程' }).click();
-    await page.waitForURL(/\/p\/p-/);
-    await page.getByRole('button', { name: '运行校核' }).waitFor();
+    await page.locator('#project-name').fill(name);
+    await page.getByText('三芯直埋 · 单回', { exact: true }).click();
+    await typeInto('#new-soil', '1');
+    await typeInto('#new-current', '300');
+    await page.getByRole('button', { name: '建好并计算' }).click();
+    await page.waitForURL(/\/p\/p-/, { timeout: RUN });
+    await page.getByRole('button', { name: '导出计算书' }).waitFor({ timeout: RUN });
     await gpuReady();
     const created = await view();
     assert.equal(created.meta.name, name);
     assert.equal(created.parts.installation.layout, 'three_core_buried_single');
     assert.equal(created.parts.conditions.currents_a[0], 300);
-    assert.equal(created.runs.length, 0, 'a new project has no record: nothing has been run');
-    await check('project-empty');
+    assert.equal(created.runs.length, 1, 'the new project was checked in the same step');
 
-    // 2. The check: the copper button is the next step, and the answer on the screen is the host's number.
-    await page.getByRole('button', { name: '运行校核' }).click();
-    await page.getByRole('button', { name: '导出计算书' }).waitFor();
-    const first = (await view()).runs[0];
-    const record = await get<RunRecord>(`/api/projects/${projectId()}/runs/${first.id}`);
-    assert.equal(record.status, 'succeeded');
-    const ampacity = record.summary!.ampacity!.value_a;
+    // 2. The answer on the screen is the host's number; the method is named, its plugin's identifier is not.
+    const first = created.runs[0];
+    const checked = await record(first.id);
+    assert.equal(checked.status, 'succeeded');
+    const ampacity = checked.summary!.ampacity!.value_a;
     assert.equal(await shownNumber(), Number(ampacity.toFixed(1)), 'the allowed current on the screen is the one the method saved');
-    const limiting = record.summary!.operating!.cables.find(cable => cable.id === record.summary!.ampacity!.limiting_cable)!;
+    const limiting = checked.summary!.operating!.cables.find(cable => cable.id === checked.summary!.ampacity!.limiting_cable)!;
     await page.getByText(`${limiting.conductor_c.toFixed(1)} / ${limiting.limit_c}`).first().waitFor();
     await page.getByText('先到温限', { exact: true }).waitFor();
-    const margin = record.summary!.circuits![0].margin_a!;
-    await page.getByText(`余量 ${Math.abs(margin).toFixed(1)} A`).waitFor();
+    await page.getByText(`余量 ${Math.abs(checked.summary!.circuits![0].margin_a!).toFixed(1)} A`).waitFor();
+    await page.getByText(`${checked.method_card!.method} ${checked.method_version}`).first().waitFor();
+    assert.equal(await page.getByText(checked.plugin_id).count(), 0, 'the plugin identifier is not on the screen');
+    await rail().getByRole('button', { name: /^#1 / }).waitFor();
     await check('result');
 
     await page.getByRole('button', { name: '电缆簇' }).click();
@@ -117,77 +136,111 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     if (!cable) throw new Error('no cable on the drawing');
     await page.mouse.click(cable.x + cable.width / 2, cable.y + cable.height / 2);
     await page.getByRole('button', { name: '算法与可信度' }).click();
+    assert.equal(await page.getByText(checked.plugin_id).count(), 0, 'nor in the method card');
     await check('result-method');
     await page.getByRole('button', { name: '全景' }).click();
     await page.getByRole('button', { name: '放大' }).click();
     await page.getByRole('button', { name: '回到这个视图的全貌' }).click();
 
-    // 3. Every given opens its editor; nothing is changed by looking.
-    for (const given of ['型号', '敷设', '埋深', '土壤热阻率', '环境', '负荷', '系统', '护套', '方法']) {
-      await page.getByRole('button', { name: new RegExp(`^${given}`) }).first().click();
-      await page.getByRole('dialog').waitFor();
-      await check(`given-${given}`);
-      await page.keyboard.press('Escape');
-      await page.getByRole('dialog').waitFor({ state: 'detached' });
+    // 3. Every given opens the editor at its field; nothing is changed by looking.
+    for (const label of ['型号', '敷设', '埋深', '土壤热阻率', '环境', '负荷', '系统', '护套', '方法']) {
+      await given(label);
+      await editor().waitFor();
+      await check(`given-${label}`);
+      await editor().getByRole('button', { name: '关闭' }).click();
+      await editor().waitFor({ state: 'detached' });
     }
-    assert.equal((await view()).inputs_sha256, created.inputs_sha256, 'opening an editor changes nothing');
+    assert.equal((await view()).inputs_sha256, created.inputs_sha256, 'opening the editor changes nothing');
 
-    // 4. Change one condition: the given is marked, the answer is marked out of date, and the copper button asks for a new check.
-    await page.getByRole('button', { name: /^土壤热阻率/ }).click();
-    await page.getByRole('textbox', { name: '土壤热阻率' }).fill(width === 1366 ? '1.6' : '1.4');
-    await page.getByRole('button', { name: '应用' }).click();
-    await page.getByText('条件已改 · 已过期').waitFor();
-    await page.getByRole('button', { name: '运行校核' }).waitFor();
+    // 4. Change one condition at the side: nothing is written to the project, the answer stays as it was, and the changes can
+    //    be taken back, made again and dropped.
+    const soil = width === 1366 ? '1.6' : '1.4';
+    await given('土壤热阻率');
+    await typeInto('#edit-soil', soil);
+    await editor().getByText('改了 1 项').waitFor();
     await page.getByRole('button', { name: /^土壤热阻率.*已改/ }).waitFor();
-    assert.equal((await view()).parts.conditions.soil_thermal_resistivity, width === 1366 ? 1.6 : 1.4);
-    assert.equal(await shownNumber(), Number(ampacity.toFixed(1)), 'the old answer stays until it is run again');
+    await page.getByText(/条件改了 1 项，画面仍是运行记录 #1/).waitFor();
+    assert.equal((await view()).inputs_sha256, created.inputs_sha256, 'a change waits in the editor: the project is not written');
+    assert.equal((await view()).runs.length, 1);
     await check('changed');
-    await page.getByRole('button', { name: '运行校核' }).click();
-    // The old record keeps a quiet sheet button of its own; the answer is new when its out-of-date mark is gone.
-    await page.getByText('条件已改 · 已过期').waitFor({ state: 'detached' });
-    await page.getByRole('button', { name: '导出计算书' }).waitFor();
+    await editor().getByText('现在是 1 K·m/W').waitFor();
+    await editor().getByRole('button', { name: /^撤销/ }).click();
+    await editor().getByText('没有改动').waitFor();
+    await editor().getByRole('button', { name: /^重做/ }).click();
+    await editor().getByText('改了 1 项').waitFor();
+    await editor().getByRole('button', { name: '放弃' }).click();
+    await editor().waitFor({ state: 'detached' });
+    assert.equal(await page.getByText('改了').count(), 0, 'dropped changes leave nothing marked');
+    assert.equal(await shownNumber(), Number(ampacity.toFixed(1)));
+
+    // The same change again, applied: it is written, the check is run, and the record is the new current answer.
+    await given('土壤热阻率');
+    await typeInto('#edit-soil', soil);
+    await editor().getByText('改了 1 项').waitFor();
+    await editor().getByRole('button', { name: '按新条件计算' }).click();
+    await rail().getByRole('button', { name: /^#2 / }).waitFor({ timeout: RUN });
+    await page.getByText('先到温限', { exact: true }).waitFor();
+    assert.equal((await view()).parts.conditions.soil_thermal_resistivity, Number(soil));
     assert.ok(await shownNumber() < Number(ampacity.toFixed(1)), 'a worse soil carries less');
+    await rail().getByRole('button', { name: /^#1 .*输入改过/ }).waitFor();
     await check('result-again');
 
-    // 5. Sweep one condition: a curve and a table, saved as a record that opens at its own address.
+    // 5. Sweep one condition: a curve and a table, saved as a record that opens at its own address, and its numbers as a file.
     await page.getByRole('button', { name: '扫一个条件' }).click();
-    const points = Number(await page.getByRole('textbox', { name: '点数' }).inputValue());
+    const points = Number(await page.locator('#sweep-count').inputValue());
     await check('sweep-form');
     await page.getByRole('button', { name: '运行扫描' }).click();
-    await page.waitForURL(/run=run-/);
-    await page.getByRole('img', { name: /变化时的允许电流曲线/ }).waitFor();
-    const sweep = (await view()).runs.find(run => run.kind === 'sweep')!;
+    await page.waitForURL(/run=run-/, { timeout: RUN });
+    await page.getByRole('img', { name: /随.*变化的曲线/ }).waitFor();
     assert.equal(await page.locator('table tbody tr').count(), points, 'one row for each point of the sweep');
     await check('sweep');
-    assert.ok(sweep.id);
+    await page.getByRole('button', { name: '导体温度', exact: true }).click();
+    await check('sweep-conductor');
+    const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '导出 CSV' }).click()]);
+    const csv = readFileSync(await file.path(), 'utf8');
+    assert.ok(csv.startsWith('﻿'), 'a spreadsheet reads Chinese from a file with the byte-order mark');
+    assert.equal(csv.trim().split('\r\n').length, 4 + 1 + points, 'what the file is about, its header, and a line for each point');
 
-    // 6. Choose a section for a target current.
-    await page.getByRole('button', { name: '选截面' }).click();
-    await page.getByRole('textbox', { name: '目标电流' }).fill('300');
+    // 6. Choose a section for a target current: the table of sizes, and the one the rule chose; it can be taken over as a change.
+    await page.getByRole('button', { name: '按电流选型' }).click();
+    await page.locator('#selection-target').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('300');
     await page.getByRole('button', { name: '运行选型' }).click();
-    await page.getByText(/^选中 /).waitFor();
+    await page.getByText('选定规格', { exact: true }).waitFor({ timeout: RUN });
     await check('selection');
+    const adopt = page.getByRole('button', { name: '改用这个型号' });
+    if (await adopt.count()) {
+      const before = (await view()).inputs_sha256;
+      await adopt.click();
+      await editor().waitFor();
+      await editor().getByText('改了 1 项').waitFor();
+      assert.equal((await view()).inputs_sha256, before, 'taking the size over is a change waiting in the editor, not a write');
+      await check('selection-adopted');
+      await editor().getByRole('button', { name: '放弃' }).click();
+      await editor().waitFor({ state: 'detached' });
+    }
 
-    // 7. The records: the list, and opening the one of the check as it was.
-    await page.getByRole('button', { name: /^运行记录 \d/ }).click();
-    await page.getByRole('dialog').waitFor();
-    await check('runs');
-    const rating = (await view()).runs.filter(run => run.kind === 'rating')[0];
-    await page.getByRole('row', { name: new RegExp(`#${rating.sequence}\\s`) }).click();
-    await page.getByRole('dialog').waitFor({ state: 'detached' });
-    await page.getByText('允许电流', { exact: true }).first().waitFor();
-    assert.ok(page.url().includes(`run=${rating.id}`));
+    // 7. The run records in their row: the one of the check as it was, with the givens it was computed from; a given of an
+    //    earlier record leads back to the present state, where it is edited.
+    await rail().getByRole('button', { name: /^#1 / }).click();
+    await page.waitForURL(/run=run-/);
+    await page.getByRole('button', { name: '土壤热阻率 1 K·m/W' }).waitFor();
+    await page.getByRole('button', { name: '回到现在的结果' }).waitFor();
     await check('record-opened');
+    await page.getByRole('button', { name: '土壤热阻率 1 K·m/W' }).click();
+    await editor().waitFor();
+    await page.waitForURL(url => !url.search.includes('run='));
+    await editor().getByRole('button', { name: '关闭' }).click();
 
-    // 8. The sheet: the copper button of a current, successful record opens the printable calculation sheet.
-    await page.getByRole('button', { name: /^运行记录 \d/ }).click();
-    await page.getByRole('row', { name: new RegExp(`#${rating.sequence}\\s`) }).click();
+    // 8. The sheet: the copper button of a record that is shown opens the printable calculation sheet of that record.
+    await rail().getByRole('button', { name: /^#1 / }).click();
     const sheetButton = page.getByRole('button', { name: '导出计算书' });
     await sheetButton.waitFor();
     const [sheet] = await Promise.all([page.context().waitForEvent('page'), sheetButton.click()]);
     await sheet.waitForLoadState();
-    assert.match(await sheet.locator('body').innerText(), new RegExp(`允许电流 ${(await shownNumber()).toFixed(1)} A`));
-    assert.match(sheet.url(), new RegExp(`/api/projects/${projectId()}/reports/${rating.id}`));
+    assert.match(await sheet.locator('body').innerText(), new RegExp(`允许电流 ${ampacity.toFixed(1)} A`));
+    assert.match(sheet.url(), new RegExp(`/api/projects/${projectId()}/reports/${first.id}`));
     await sheet.close();
     await check('sheet-exported');
 
@@ -213,30 +266,32 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
         .evaluate(element => { element.scrollTop = element.scrollHeight; });
       await check(`${label}-answer-end`);
       const saved = await get<ProjectView>(`/api/projects/${id}`);
-      const states = (await get<RunRecord>(`/api/projects/${id}/runs/${saved.runs[0].id}`)).summary!.operating!.cables;
+      const states = (await record(saved.runs[0].id, id)).summary!.operating!.cables;
       assert.equal(await page.locator('[data-cable]').count(), states.length, 'a cable is drawn for each state of the run');
       if (label === 'trefoil') await page.getByRole('row', { name: /A 相/ }).waitFor();
       // The allowed current of several circuits is the one they have together: no margin is claimed beside it.
       if (label === 'row' || label === 'mixed') assert.equal(await page.getByText('余量').count(), 0, `${label}: a margin beside the allowed current of all circuits`);
       if (label === 'mixed') {
         // The hottest cable is the method's, not the one that reaches its limit first at the allowed current, and the load that is too high is said.
-        const rated = (await get<RunRecord>(`/api/projects/${id}/runs/${saved.runs[0].id}`)).summary!;
+        const rated = (await record(saved.runs[0].id, id)).summary!;
         assert.equal(rated.operating!.within_limit, false);
         await page.getByText(/已经超过温限/).waitFor();
         await page.getByText(`导体温度 · 回路 ${/c(\d)/.exec(rated.operating!.hottest_cable!)![1]}`).waitFor();
         await check('mixed-over-limit');
       }
       if (label === 'ducts') {
-        await page.getByRole('button', { name: /^埋深/ }).click();
-        await page.getByRole('textbox', { name: '管内径' }).waitFor();
+        await given('埋深');
+        await editor().waitFor();
+        await page.locator('#edit-inner').waitFor();
         await check('ducts-depth-editor');
-        await page.keyboard.press('Escape');
-        await page.getByRole('dialog').waitFor({ state: 'detached' });
+        await editor().getByRole('button', { name: '关闭' }).click();
+        await editor().waitFor({ state: 'detached' });
         await page.getByText('T₄ 管内空气').waitFor();
       }
     }
 
-    // 10. Changes made on the drawing itself: type the depth in its capsule, drag the outer cable, undo both.
+    // 10. Changes made on the drawing itself wait like the others: type the depth in its capsule (Escape keeps what was), drag
+    //     the outer cable; both are marked and drawn as an outline, neither is written; undo takes them back; applied, they are written.
     await page.goto(`${base}/p/${row}`);
     await gpuReady();
     await page.getByRole('button', { name: '导出计算书' }).waitFor();
@@ -246,19 +301,19 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.keyboard.press('Control+A');
     await page.keyboard.type('1.9');
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(800);
-    assert.equal((await view(row)).parts.installation.depth_m, original.parts.installation.depth_m, 'Escape on the capsule keeps the depth as it was');
+    await page.waitForTimeout(500);
+    assert.equal(await waiting().count(), 0, 'Escape on the capsule keeps the depth as it was');
     await page.locator('[data-dimension="depth"]').click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type(String(depth));
     await page.keyboard.press('Enter');
-    await page.getByText('条件已改 · 已过期').waitFor();
-    await page.getByRole('button', { name: '运行校核' }).waitFor();
-    assert.equal((await view(row)).parts.installation.depth_m, depth, 'the depth typed on the drawing is the one saved');
+    await waiting().waitFor();
+    await page.locator('[data-dimension="depth"][data-changed]').waitFor();
     await page.getByText(`中心埋深 ${depth} m`).waitFor();
+    assert.equal((await view(row)).inputs_sha256, original.inputs_sha256, 'the depth typed on the drawing is not written yet');
+    assert.ok(await page.locator('svg circle[stroke-dasharray="6 4"]').count() > 0, 'the cables are outlined where they would be');
     await check('canvas-depth');
 
-    const before = (await view(row)).preview?.layout.spacing ?? 0;
     const target = await page.locator('[data-cable]').last().boundingBox();
     if (!target) throw new Error('no cable to drag');
     await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
@@ -266,25 +321,41 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.mouse.move(target.x + target.width / 2 + 60, target.y + target.height / 2, { steps: 8 });
     await page.screenshot({ path: join(out, `${width}-canvas-dragging.png`) });
     await page.mouse.up();
-    await waitFor('the spacing widened', async () => ((await view(row)).preview?.layout.spacing ?? 0) > before);
+    await page.getByRole('button', { name: /改了 2 项，还没应用/ }).waitFor();
+    assert.equal((await view(row)).inputs_sha256, original.inputs_sha256, 'the dragged spacing is not written yet');
     await check('canvas-drag');
 
-    // Undo takes both changes back, and the record of the check is the current answer again.
+    // Undo takes both changes back; nothing is left marked and the record is still the current answer.
     await page.locator('[data-gpu]').click({ position: { x: 300, y: 250 } });
     await page.keyboard.press('Control+Z');
-    await waitFor('the first undo', async () => ((await view(row)).preview?.layout.spacing ?? 0) <= before + 1e-9);
+    await page.getByRole('button', { name: /改了 1 项，还没应用/ }).waitFor();
     await page.keyboard.press('Control+Z');
-    await waitFor('the second undo', async () => (await view(row)).inputs_sha256 === original.inputs_sha256);
-    await page.getByRole('button', { name: '导出计算书' }).waitFor();
+    await waitFor('nothing is left waiting', async () => (await waiting().count()) === 0);
     await check('canvas-undone');
 
+    // The depth once more, opened from the header's mark and applied: written, checked, and the current answer.
+    await page.locator('[data-dimension="depth"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type(String(depth));
+    await page.keyboard.press('Enter');
+    await waiting().click();
+    await editor().getByText('改了 1 项').waitFor();
+    await editor().getByRole('button', { name: '按新条件计算' }).click();
+    await rail().getByRole('button', { name: /^#2 / }).waitFor({ timeout: RUN });
+    await page.getByText('先到温限', { exact: true }).waitFor();
+    assert.equal((await view(row)).parts.installation.depth_m, depth, 'the depth typed on the drawing is the one saved');
+    await check('canvas-applied');
+
     // 11. A project with only a sweep: its records can be reached and the answer says that no check has been run; an address
-    //     that names a record the project does not have says so; a method parameter and a cable of another core count are
-    //     changed and taken back.
+    //     that names a record the project does not have says so; a method parameter and a cable of the same core count are
+    //     changed and applied; a cable with another core count is not offered.
     await page.goto(`${base}/p/${sweepOnly}`);
-    await page.getByRole('button', { name: /^运行记录 \d · 扫描/ }).waitFor();
+    await rail().getByRole('button', { name: /^#1 扫描/ }).waitFor();
     await page.getByText('还没有校核', { exact: true }).first().waitFor();
     await check('only-sweep');
+    await rail().getByRole('button', { name: /^#1 扫描/ }).click();
+    await page.getByRole('img', { name: /随.*变化的曲线/ }).waitFor();
+    await check('only-sweep-opened');
     await page.goto(`${base}/p/${sweepOnly}?run=run-00000000`);
     await page.getByText('没有这条运行记录').waitFor();
     await check('unknown-record');
@@ -293,25 +364,45 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
 
     const eddy = async () => ((await view(sweepOnly)).preview?.parameters as { eddy?: string }).eddy;
     const eddyBefore = await eddy();
-    await page.getByRole('button', { name: /^护套/ }).click();
-    await page.getByRole('button', { name: eddyBefore === 'trefoil' ? '不计' : '计入' }).click();
-    await page.getByRole('button', { name: '应用' }).click();
-    await waitFor('the eddy losses changed', async () => (await eddy()) !== eddyBefore);
-    await page.getByRole('dialog').waitFor({ state: 'detached' });
-    await page.keyboard.press('Control+Z');
-    await waitFor('the first change of a method parameter taken back', async () => (await eddy()) === eddyBefore);
+    await given('方法');
+    await page.locator('#edit-ks').waitFor();
+    await check('method-parameters');
+    await page.locator('#edit-eddy').click();
+    await page.getByRole('option', { name: eddyBefore === 'trefoil' ? '不计' : '计入' }).click();
+    await editor().getByText('改了 1 项').waitFor();
+    assert.equal(await eddy(), eddyBefore, 'the parameter is changed in the editor only');
+    await editor().getByRole('button', { name: '按新条件计算' }).click();
+    await waitFor('the eddy losses changed and a check was run', async () => (await eddy()) !== eddyBefore && (await view(sweepOnly)).runs.some(run => run.kind === 'rating'), RUN);
 
     const beforeCable = await view(sweepOnly);
-    await page.getByRole('button', { name: /^型号/ }).click();
-    await page.getByRole('dialog').getByPlaceholder('搜索型号或系列').fill('YJL02');
-    await page.getByRole('dialog').getByRole('row', { name: /YJL02.*1×240/ }).first().click();
-    await page.getByRole('dialog').getByRole('button', { name: '应用' }).click();
-    await waitFor('a single-core cable', async () => (await view(sweepOnly)).parts.cable.summary.cores === 1);
-    await page.getByRole('dialog').waitFor({ state: 'detached' });
-    assert.notEqual((await view(sweepOnly)).parts.installation.layout, beforeCable.parts.installation.layout);
+    await given('型号');
+    await editor().getByRole('button', { name: '更换型号…' }).click();
+    const picker = page.getByRole('dialog');
+    await picker.getByPlaceholder('搜索规格或系列').fill('YJL02');
+    assert.equal(await picker.getByRole('row', { name: /YJL02/ }).count(), 0, 'a cable with another core count is not offered');
+    await picker.getByPlaceholder('搜索规格或系列').fill('3×300');
+    await picker.getByRole('row', { name: /3×300/ }).first().click();
+    await check('cable-picker');
+    await picker.getByRole('button', { name: '用这一款' }).click();
+    await editor().getByText('改了 1 项').waitFor();
+    assert.equal((await view(sweepOnly)).parts.cable.id, beforeCable.parts.cable.id, 'the cable is changed in the editor only');
+    await editor().getByRole('button', { name: '按新条件计算' }).click();
+    await waitFor('the cable of the project changed', async () => (await view(sweepOnly)).parts.cable.id !== beforeCable.parts.cable.id, RUN);
     await check('cable-changed');
-    await page.keyboard.press('Control+Z');
-    await waitFor('the cable and its laying back', async () => (await view(sweepOnly)).inputs_sha256 === beforeCable.inputs_sha256);
+
+    // 12. The word before a page is left with changes that were not applied: staying keeps them, leaving drops them.
+    await given('埋深');
+    await typeInto('#edit-depth', '1.7');
+    await editor().getByText('改了 1 项').waitFor();
+    await page.getByRole('link', { name: '新建工程' }).click();
+    await page.getByRole('alertdialog').waitFor();
+    await check('leave-asked');
+    await page.getByRole('button', { name: '留在这里' }).click();
+    await page.getByRole('alertdialog').waitFor({ state: 'detached' });
+    await editor().getByText('改了 1 项').waitFor();
+    await page.getByRole('link', { name: '新建工程' }).click();
+    await page.getByRole('button', { name: '放弃改动并离开' }).click();
+    await page.waitForURL(/\/workbench/);
     await page.close();
   }
 }
