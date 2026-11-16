@@ -1,0 +1,346 @@
+/* Cable Studio theme. design/tokens.css holds the identity (white and grey ground, copper accent, materials); this file
+   completes it into the one set of values the interface is built from. Nothing outside this file and app.css writes a
+   colour, a size off the scale, a shadow or a duration. Rules and the reasons for them: studio/DESIGN.md. */
+
+@import '@fontsource-variable/inter';
+
+/* ---- Values the tokens do not have ---- */
+
+:root,
+[data-theme='light'] {
+  /* The weakest text that still reads: 4.5:1 on white. Placeholders and quiet icons only, never content. */
+  --ink-3: #767676;
+  --copper-strong: color-mix(in oklab, var(--copper) 84%, #000);
+  --copper-fill: color-mix(in oklab, var(--copper) 8%, var(--panel));
+  --copper-line: color-mix(in oklab, var(--copper) 34%, var(--panel));
+  --success-fill: color-mix(in oklab, var(--success) 9%, var(--panel));
+  --attention-fill: color-mix(in oklab, var(--attention) 10%, var(--panel));
+  --error-fill: color-mix(in oklab, var(--error) 8%, var(--panel));
+  --focus: color-mix(in oklab, var(--copper) 55%, transparent);
+  --soil: color-mix(in oklab, var(--cad-soil) 22%, var(--panel));
+  --soil-line: color-mix(in oklab, var(--cad-soil) 55%, var(--panel));
+  /* Floating things only: the composer, menus, dialogs. Surfaces lie flat and are drawn with lines. */
+  --shadow-composer: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 20px rgba(0, 0, 0, 0.05);
+  --shadow-menu: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 28px rgba(0, 0, 0, 0.09);
+}
+
+[data-theme='dark'] {
+  --ink-3: #8f8f8f;
+  --copper-strong: color-mix(in oklab, var(--copper) 86%, #fff);
+  --copper-fill: color-mix(in oklab, var(--copper) 14%, var(--panel));
+  --copper-line: color-mix(in oklab, var(--copper) 40%, var(--panel));
+  --success-fill: color-mix(in oklab, var(--success) 14%, var(--panel));
+  --attention-fill: color-mix(in oklab, var(--attention) 14%, var(--panel));
+  --error-fill: color-mix(in oklab, var(--error) 14%, var(--panel));
+  --soil: color-mix(in oklab, var(--cad-soil) 16%, var(--panel));
+  --soil-line: color-mix(in oklab, var(--cad-soil) 40%, var(--panel));
+  --shadow-composer: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-menu: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- The scale ---- */
+
+@theme {
+  /* Tailwind's own palette and shadows are switched off: every colour and shadow comes from below. */
+  --color-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+}
+
+@theme inline {
+  /* Neutrals: ground under everything, surfaces on it, lines between. */
+  --color-canvas: var(--ground);
+  --color-surface: var(--panel);
+  --color-subtle: var(--fill);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--control-border);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-secondary);
+  --color-ink-3: var(--ink-3);
+  /* Copper: the primary button, what is selected, focus. */
+  --color-copper: var(--copper);
+  --color-copper-strong: var(--copper-strong);
+  --color-copper-fill: var(--copper-fill);
+  --color-copper-line: var(--copper-line);
+  --color-on-copper: var(--on-copper);
+  /* Verdicts, always with an icon. */
+  --color-success: var(--success);
+  --color-success-fill: var(--success-fill);
+  --color-attention: var(--attention);
+  --color-attention-fill: var(--attention-fill);
+  --color-error: var(--error);
+  --color-error-fill: var(--error-fill);
+  /* What the Agent proposes, until a person decides. */
+  --color-agent: var(--agent);
+  --color-agent-fill: var(--agent-fill);
+  /* Drawing colours, for drawings only. */
+  --color-conductor: var(--conductor);
+  --color-semi: var(--material-semi);
+  --color-insulation: var(--material-insulation);
+  --color-metal: var(--material-metal);
+  --color-sheath: var(--material-sheath);
+  --color-soil: var(--soil);
+  --color-soil-line: var(--soil-line);
+  --color-phase-a: var(--phase-a);
+  --color-phase-b: var(--phase-b);
+  --color-phase-c: var(--phase-c);
+  --color-scrim: var(--overlay);
+
+  /* shadcn/ui's names, pointing at the same values: one palette. */
+  --color-background: var(--panel);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--copper);
+  --color-primary-foreground: var(--on-copper);
+  --color-secondary: var(--fill);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--fill);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--hover);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--error);
+  --color-border: var(--line);
+  --color-input: var(--control-border);
+  --color-ring: var(--focus);
+  --color-sidebar: var(--ground);
+  --color-sidebar-foreground: var(--text);
+  --color-sidebar-border: var(--line);
+  --color-sidebar-accent: var(--hover);
+  --color-sidebar-accent-foreground: var(--text);
+  --color-sidebar-primary: var(--copper);
+  --color-sidebar-primary-foreground: var(--on-copper);
+  --color-sidebar-ring: var(--focus);
+
+  /* Inter draws Latin letters and figures (model names, numbers, units); Noto Sans SC draws Chinese. */
+  --font-sans: 'Inter Variable', 'Noto Sans SC Variable', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Type. Interface text 14 px, conversation prose 15 px, nothing smaller than 13 px. */
+  --text-xs: 13px;
+  --text-xs--line-height: 20px;
+  --text-sm: 14px;
+  --text-sm--line-height: 22px;
+  --text-base: 15px;
+  --text-base--line-height: 26px;
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 32px;
+  --text-4xl--line-height: 40px;
+  --text-caption: 13px;
+  --text-caption--line-height: 20px;
+  --text-ui: 14px;
+  --text-ui--line-height: 22px;
+  --text-prose: 15px;
+  --text-prose--line-height: 26px;
+  --text-h3: 14px;
+  --text-h3--line-height: 22px;
+  --text-h3--font-weight: 600;
+  --text-h2: 16px;
+  --text-h2--line-height: 24px;
+  --text-h2--font-weight: 600;
+  --text-h1: 20px;
+  --text-h1--line-height: 28px;
+  --text-h1--font-weight: 600;
+  --text-h1--letter-spacing: -0.01em;
+  --text-display: 28px;
+  --text-display--line-height: 36px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.02em;
+  --text-metric: 32px;
+  --text-metric--line-height: 36px;
+  --text-metric--font-weight: 600;
+  --text-metric--letter-spacing: -0.02em;
+  --text-metric-sm: 24px;
+  --text-metric-sm--line-height: 28px;
+  --text-metric-sm--font-weight: 600;
+  --text-metric-sm--letter-spacing: -0.01em;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-strong: 600;
+
+  /* Corners: fields 8, list items 10, cards 12, sheets 16, the composer 24, buttons and tags round. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-4xl: 999px;
+  --radius-chip: 6px;
+  --radius-field: 8px;
+  --radius-nav: 10px;
+  --radius-card: 12px;
+  --radius-sheet: 16px;
+  --radius-composer: 24px;
+
+  --shadow-composer: var(--shadow-composer);
+  --shadow-menu: var(--shadow-menu);
+  --shadow-modal: var(--shadow-dialog);
+  --shadow-lift: var(--shadow-composer);
+
+  /* Measures. */
+  --container-thread: 760px;
+  --container-prose: 640px;
+  --container-page: 1200px;
+
+  --ease-std: cubic-bezier(0.2, 0, 0, 1);
+  --ease-leave: cubic-bezier(0.4, 0, 1, 1);
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-collapsible-down: collapsible-down 200ms cubic-bezier(0.2, 0, 0, 1);
+  --animate-collapsible-up: collapsible-up 150ms cubic-bezier(0.4, 0, 1, 1);
+
+  @keyframes shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: 0 0;
+    }
+  }
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--collapsible-panel-height, auto);
+    }
+  }
+  @keyframes collapsible-up {
+    from {
+      height: var(--collapsible-panel-height, auto);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+/* ---- Motion: 150 ms for small things, 200 ms for things that open; no overshoot. ---- */
+
+@utility duration-fast {
+  transition-duration: 150ms;
+}
+@utility duration-std {
+  transition-duration: 200ms;
+}
+@utility transition-field {
+  transition-property: border-color, box-shadow, background-color;
+  transition-duration: 150ms;
+  transition-timing-function: var(--ease-std);
+}
+@utility transition-height {
+  transition-property: height;
+  transition-duration: 200ms;
+  transition-timing-function: var(--ease-std);
+}
+/* A running step's title: a band of light passes over it. Still text, still readable. */
+@utility shimmer {
+  background-image: linear-gradient(90deg, var(--text-secondary) 0 40%, var(--ink-3) 50%, var(--text-secondary) 60% 100%);
+  background-size: 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: var(--animate-shimmer);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    color: var(--text-secondary);
+  }
+}
+@utility shimmer-none {
+  animation: none;
+}
+@utility scrollbar-none {
+  scrollbar-width: none;
+}
+
+/* ---- Layout patterns the scale cannot spell ---- */
+
+/* Name, value, unit: three columns that line up down a whole panel. */
+@utility grid-cols-property {
+  grid-template-columns: minmax(0, 1fr) auto 3.5rem;
+}
+/* A label column and a content column. */
+@utility grid-cols-label {
+  grid-template-columns: 7rem minmax(0, 1fr);
+}
+/* Item, before, arrow, after. */
+@utility grid-cols-change {
+  grid-template-columns: minmax(0, 1fr) minmax(5rem, auto) 1rem minmax(5rem, auto);
+}
+@utility grid-cols-gallery {
+  grid-template-columns: 15rem minmax(0, 1fr);
+}
+
+/* ---- Base ---- */
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tailwind draws borders in the text colour unless told otherwise; every line here is the line colour. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--copper) 22%, transparent);
+  }
+
+  ::placeholder {
+    color: var(--ink-3);
+  }
+
+  svg text {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--control-border) transparent;
+  }
+}
