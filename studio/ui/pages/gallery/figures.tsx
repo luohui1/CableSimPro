@@ -10,22 +10,6 @@ import { RUN_CABLE, RUN_DOCUMENT } from './run-document';
 
 const scene = buildScene(RUN_DOCUMENT, [RUN_CABLE], RUN_CABLE.id);
 
-/** The cable as it lies in the soil, to scale, for a result card: the cable fills most of the box. */
-export function SectionThumb({ width = 176, height = 132 }: { width?: number; height?: number }) {
-  const scale = (height * 0.62) / (2 * scene.shape.radius);
-  return <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label="敷设断面：三芯电缆直埋，埋深 1.2 m">
-    {scene.cables.map(cable => <CableGlyph key={cable.id} shape={scene.shape} x={width / 2} y={height / 2} scale={scale} />)}
-  </svg>;
-}
-
-/** The cable alone, filling its box: the structure view of a type. */
-export function CableSection({ size = 240 }: { size?: number }) {
-  const scale = (size * 0.46) / scene.shape.radius;
-  return <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full" role="img" aria-label="YJV22-8.7/15 kV 3×240 结构断面">
-    <CableGlyph shape={scene.shape} x={size / 2} y={size / 2} scale={scale} />
-  </svg>;
-}
-
 // The soil field of run-9dd64e85 as the method states it (analytical_soil_view: kennelly-image-line-sources, operating):
 // one line source at the cable with soil resistivity 1 K·m/W times its total loss at the saved load, over 2π.
 const AMBIENT = 25;
@@ -37,6 +21,36 @@ const FIELD = {
 } as FieldModel;
 const LEVELS = [27.5, 30, 32.5, 35, 37.5, 40];
 const LINES = [30, 35];
+
+
+/** The cable as it lies in the soil, to scale, in the warmth of its own field: for a result card. */
+export function SectionThumb({ width = 176, height = 132 }: { width?: number; height?: number }) {
+  const dark = useTheme(state => state.theme) === 'dark';
+  const ramp = readRamp();
+  const cable = scene.cables[0];
+  const scale = (height * 0.62) / (2 * scene.shape.radius);
+  const x = (metres: number) => width / 2 + (metres - cable.x) * scale;
+  const y = (metres: number) => height / 2 - (metres - cable.z) * scale;
+  const outline = (level: number) => Array.from({ length: 72 }, (_, index) => {
+    const point = levelOnRay(FIELD, level, [cable.x, cable.z], (index / 72) * Math.PI * 2, scene.shape.radius, 8);
+    return point ? `${x(point[0]).toFixed(1)},${y(point[1]).toFixed(1)}` : null;
+  }).filter(Boolean).join(' ');
+  return <svg viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full" role="img" aria-label="敷设断面：三芯电缆直埋，埋深 1.2 m">
+    <g opacity={dark ? 0.3 : 1}>
+      <rect width={width} height={height} fill={ramp.field(rampPosition(37.5, AMBIENT, LIMIT))} />
+      <polygon points={outline(40)} fill={ramp.field(rampPosition(40, AMBIENT, LIMIT))} />
+    </g>
+    <CableGlyph shape={scene.shape} x={x(cable.x)} y={y(cable.z)} scale={scale} conductor={ramp.css(rampPosition(RUN_CABLE.conductor_c, AMBIENT, LIMIT))} />
+  </svg>;
+}
+
+/** The cable alone, filling its box: the structure view of a type. */
+export function CableSection({ size = 240 }: { size?: number }) {
+  const scale = (size * 0.46) / scene.shape.radius;
+  return <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full" role="img" aria-label="YJV22-8.7/15 kV 3×240 结构断面">
+    <CableGlyph shape={scene.shape} x={size / 2} y={size / 2} scale={scale} />
+  </svg>;
+}
 
 /** The laying from the ground down: the soil coloured by its temperature, isotherms every 5 K, the depth, the cable. */
 export function SectionField() {
@@ -78,7 +92,7 @@ function FieldDrawing({ width, height, dark }: { width: number; height: number; 
   return <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block" role="img"
     aria-label="敷设断面：三芯电缆直埋 1.2 m，土壤温度场与等温线">
     {/* The ramp tokens are the same in both themes; on the dark ground the soil is drawn at a third of its strength. */}
-    <g opacity={dark ? 0.3 : 1}>
+    <g opacity={dark ? 0.24 : 1}>
       <rect x={0} y={ground} width={width} height={height - ground} fill={ramp.field(0)} />
       {LEVELS.map(level => <polygon key={level} points={outline(level)} fill={ramp.field(rampPosition(level, AMBIENT, LIMIT))} />)}
     </g>

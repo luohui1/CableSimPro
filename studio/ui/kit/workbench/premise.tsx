@@ -13,8 +13,8 @@ export function PremiseStrip({ asked, children, className }: { asked: ReactNode;
       <span className="text-h3 text-ink">{asked}</span>
     </div>
     <span className="mt-1 h-6 w-px shrink-0 bg-line" aria-hidden="true" />
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <span className="flex h-8 shrink-0 items-center text-sm text-ink-2">已知</span>
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1">
+      <span className="mr-2 flex h-8 shrink-0 items-center text-sm text-ink-2">已知</span>
       {children}
     </div>
   </div>;
@@ -23,7 +23,7 @@ export function PremiseStrip({ asked, children, className }: { asked: ReactNode;
 /** One given: its name and value. A button: it opens the editor for that value. */
 export function Given({ label, value, changed, className, ...props }: { label: string; value: ReactNode; changed?: boolean } & ComponentProps<'button'>) {
   return <button type="button"
-    className={cn('flex h-8 shrink-0 items-center gap-2 rounded-field border border-line bg-surface px-3 text-sm whitespace-nowrap outline-none transition-colors duration-fast hover:border-line-strong hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring', className)}
+    className={cn('flex h-8 shrink-0 items-center gap-2 rounded-field px-2 text-sm whitespace-nowrap outline-none transition-colors duration-fast hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring', className)}
     {...props}>
     <span className="text-ink-2">{label}</span>
     <span className="font-medium text-ink tabular-nums">{value}</span>

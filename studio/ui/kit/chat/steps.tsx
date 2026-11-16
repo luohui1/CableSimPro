@@ -79,7 +79,7 @@ export function StepTrace({ steps, defaultOpen = false, className }: { steps: St
   const line = summary(steps);
   return <Trace className={cn('gap-0', className)} data-steps={steps.length}>
     <TraceCollapsible defaultOpen={defaultOpen}>
-      <TraceCollapsibleTrigger>
+      <TraceCollapsibleTrigger className="h-8 rounded-full border border-line bg-surface pr-2 pl-3 hover:bg-subtle">
         <TraceLine status={line.status}>
           <TraceIcon>{line.icon}</TraceIcon>
           <TraceTitle>{line.title}</TraceTitle>

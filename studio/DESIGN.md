@@ -11,7 +11,7 @@
 | 文字色 | 正文 `ink`；次要 `ink-2`（白底 6.6:1，深底 7.8:1）；`ink-3` 只给占位符和安静的图标（4.5:1），不写内容 |
 | 中性色 | 底 `canvas`（外框、侧栏）、面 `surface`（屏幕本身、卡片）、浅底 `subtle`、悬停 `hover`、分隔线 `line`、控件边 `line-strong` |
 | 铜色 | `copper` 只给主按钮、选中（`copper-fill`）和焦点环；不做装饰、不做强调字 |
-| 结论色 | 通过 `success`、注意 `attention`、不通过 `error`，各有浅底 `*-fill`；总配图标，少量使用。Agent 的提案用 `agent` 青色 |
+| 结论色 | 通过 `success`、注意 `attention`（琥珀，与铜色分开，改自令牌的 #A4560B）、不通过 `error`，各有浅底 `*-fill`；总配图标，少量使用。Agent 的提案用 `agent` 青色 |
 | 间距 | 4 的倍数，只用整数步（`p-3`、`gap-4`…）；屏幕边距 24，面板内边距 16 |
 | 圆角 | 字段 8（`rounded-field`）、列表项 10（`rounded-nav`）、卡片 12（`rounded-card`）、面板与对话框 16（`rounded-sheet`）、输入框 24（`rounded-composer`）；按钮和标签是胶囊 |
 | 尺寸 | 控件 36（紧凑 32）、表格行 36、页头 64、面板标题栏 44、状态栏 32 |

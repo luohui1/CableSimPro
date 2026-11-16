@@ -39,7 +39,7 @@ export function ChatItem({ title, active, running, className, ...props }: { titl
     <button type="button" data-active={active || undefined} aria-current={active ? 'page' : undefined} title={title}
       className={cn('flex h-9 w-full min-w-0 items-center gap-2 rounded-nav px-3 text-left text-sm text-ink transition-colors duration-fast outline-none hover:bg-hover focus-visible:ring-3 focus-visible:ring-ring data-active:bg-copper-fill data-active:font-medium', className)}
       {...props}>
-      <span className="min-w-0 flex-1 truncate">{title}</span>
+      <span className="min-w-0 flex-1 overflow-hidden whitespace-nowrap fade-end">{title}</span>
       {running && <Spinner className="text-ink-2" />}
     </button>
   </li>;

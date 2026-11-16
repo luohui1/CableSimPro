@@ -7,7 +7,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Icon } from '@/kit/icon';
-import { ReviewMark, TierMark, VERDICT, VerdictMark, type Verdict } from '@/kit/marks';
+import { ReviewMark, TierMark, VERDICT, VerdictBar, VerdictMark, type Verdict } from '@/kit/marks';
 import { LimitMeter, Metric } from '@/kit/metric';
 import { PropertyGroup, PropertyList } from '@/kit/properties';
 import { CanvasFrame, CanvasLayer, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
@@ -44,12 +44,7 @@ export function WorkbenchSide({ at }: { at: 'library' | 'series' | 'project' }) 
 
 function CheckCell({ check }: { check: Record<string, number> | null }) {
   if (!check) return <span className="text-ink-2">未核对</span>;
-  return <span className="inline-flex items-center gap-3">
-    {(['failed', 'passed', 'missing'] as Verdict[]).filter(verdict => verdict !== 'failed' || check.failed).map(verdict =>
-      <span key={verdict} className="inline-flex items-center gap-1 tabular-nums">
-        <Icon name={VERDICT[verdict].icon} className={VERDICT[verdict].tone} />{check[verdict] ?? 0}
-      </span>)}
-  </span>;
+  return <VerdictBar counts={check} />;
 }
 
 // Dimensions to one decimal as the catalogue prints them; resistance to four significant figures; weight whole.
@@ -153,9 +148,16 @@ function CheckList() {
     grouped.set(key, entry);
   }
   const items = [...grouped.values()];
+  const row = (item: (typeof items)[number]) => <li key={item.title} className="flex min-h-9 items-center gap-2 rounded-nav px-2 hover:bg-subtle" title={item.reason ?? undefined}>
+    <span className="min-w-0 flex-1 text-sm text-ink">{item.title}{item.cores.length === 3 && <span className="ml-2 text-ink-2">三芯</span>}</span>
+    <Badge variant="outline">{item.clause}</Badge>
+  </li>;
+  // The first six of a section; the rest one click away.
   const section = (verdict: Verdict, open: boolean) => {
     const list = items.filter(item => item.verdict === verdict);
     if (!list.length) return null;
+    const first = list.slice(0, 6);
+    const rest = list.slice(6);
     return <Collapsible defaultOpen={open} className="border-b border-line last:border-b-0">
       <CollapsibleTrigger className="group flex h-11 w-full items-center gap-2 px-4 text-left outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring">
         <VerdictMark verdict={verdict} count={counts[verdict] ?? 0} className="flex-1" />
@@ -163,10 +165,13 @@ function CheckList() {
       </CollapsibleTrigger>
       <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
         <ul className="m-0 flex list-none flex-col px-2 pb-3">
-          {list.map(item => <li key={item.title} className="flex min-h-9 items-center gap-2 rounded-nav px-2 hover:bg-subtle" title={item.reason ?? undefined}>
-            <span className="min-w-0 flex-1 text-sm text-ink">{item.title}{item.cores.length === 3 && <span className="ml-2 text-ink-2">三芯</span>}</span>
-            <Badge variant="outline">{item.clause}</Badge>
-          </li>)}
+          {first.map(row)}
+          {rest.length > 0 && <Collapsible>
+            <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">{rest.map(row)}</CollapsibleContent>
+            <CollapsibleTrigger className="group/more mt-1 flex h-8 items-center gap-1 rounded-nav px-2 text-sm text-ink-2 outline-none hover:bg-subtle hover:text-ink focus-visible:ring-3 focus-visible:ring-ring">
+              <span className="group-data-panel-open/more:hidden">其余 {rest.length} 项</span><span className="hidden group-data-panel-open/more:inline">收起</span>
+            </CollapsibleTrigger>
+          </Collapsible>}
         </ul>
       </CollapsibleContent>
     </Collapsible>;

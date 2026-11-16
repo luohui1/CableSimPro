@@ -3,6 +3,9 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
+/** The scrolling area of a conversation: what scrolls under its top edge fades in. For ThreadPrimitive.Viewport's className. */
+export const threadViewportClass = 'flex min-h-0 flex-1 flex-col overflow-y-auto fade-top';
+
 /** The conversation column: one measure for messages, cards and the composer. */
 export function ThreadColumn({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('mx-auto flex w-full max-w-thread flex-col px-6', className)} {...props} />;

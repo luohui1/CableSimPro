@@ -57,7 +57,7 @@ function AgentEmptyScreen() {
 function AgentChatScreen() {
   return <Frame mode="agent" side={<Conversations active={ACTIVE_CHAT} />}>
     {/* A finished conversation opens at its end, as a chat does. */}
-    <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto fade-top">
       <ThreadColumn className="gap-8 pt-8 pb-6">
         <UserMessage>{RATING_ASK}</UserMessage>
         <AssistantMessage>

@@ -52,6 +52,32 @@ export function VerdictMark({ verdict, count, className }: { verdict: Verdict; c
   </span>;
 }
 
+/**
+ * The share of each outcome of a check in one thin bar (不通过, 通过, 缺项, 未覆盖), with the count that matters beside it:
+ * the failures when there are any, otherwise the passes. The other counts are in the tooltip.
+ */
+export function VerdictBar({ counts, className }: { counts: Partial<Record<Verdict, number>>; className?: string }) {
+  const order: Verdict[] = ['failed', 'passed', 'missing', 'uncovered'];
+  const fill: Record<Verdict, string> = { failed: 'fill-error', passed: 'fill-success', missing: 'fill-attention', uncovered: 'fill-line-strong' };
+  const total = order.reduce((sum, verdict) => sum + (counts[verdict] ?? 0), 0) || 1;
+  let at = 0;
+  const failed = counts.failed ?? 0;
+  const title = order.filter(verdict => counts[verdict]).map(verdict => `${VERDICT[verdict].label} ${counts[verdict]}`).join('，');
+  return <span className={cn('inline-flex items-center gap-2 text-sm whitespace-nowrap tabular-nums', className)} title={title}>
+    <svg viewBox="0 0 64 6" preserveAspectRatio="none" className="h-1.5 w-16 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
+      {order.map(verdict => {
+        const width = ((counts[verdict] ?? 0) / total) * 64;
+        const bar = <rect key={verdict} x={at} width={width} height={6} className={fill[verdict]} />;
+        at += width;
+        return bar;
+      })}
+    </svg>
+    {failed > 0
+      ? <span className="text-error">{VERDICT.failed.label} {failed}</span>
+      : <span className="text-ink">{VERDICT.passed.label} {counts.passed ?? 0}</span>}
+  </span>;
+}
+
 /** A small dot before a name: running work, a live connection. */
 export function Dot({ tone = 'ink', pulse, className }: { tone?: 'ink' | 'success' | 'attention' | 'error' | 'agent'; pulse?: boolean; className?: string }) {
   const colour = { ink: 'bg-ink-2', success: 'bg-success', attention: 'bg-attention', error: 'bg-error', agent: 'bg-agent' }[tone];

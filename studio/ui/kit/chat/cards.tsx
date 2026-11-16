@@ -71,7 +71,7 @@ export interface RatingCardProps {
 export function RatingCard({ title, tier, current, basis, limiting, figure, actions }: RatingCardProps) {
   return <CardFrame icon="calc/ampacity" title={title} aside={<TierMark tier={tier} />} actions={actions} data-card="rating">
     <div className="flex items-stretch gap-6">
-      {figure && <div className="flex w-44 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-soil">{figure}</div>}
+      {figure && <div className="flex w-44 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-subtle">{figure}</div>}
       <div className="grid min-w-0 flex-1 grid-cols-2 items-start gap-6 py-1">
         <Metric label="允许电流" value={current} unit="A" detail={basis} />
         <div className="flex min-w-0 flex-col gap-3">

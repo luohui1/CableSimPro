@@ -10,6 +10,8 @@
 [data-theme='light'] {
   /* The weakest text that still reads: 4.5:1 on white. Placeholders and quiet icons only, never content. */
   --ink-3: #767676;
+  /* The tokens' attention (#A4560B) is the copper's hue; amber keeps "needs a look" apart from "selected". 4.9:1 on white. */
+  --attention: #9a6700;
   --copper-strong: color-mix(in oklab, var(--copper) 84%, #000);
   --copper-fill: color-mix(in oklab, var(--copper) 8%, var(--panel));
   --copper-line: color-mix(in oklab, var(--copper) 34%, var(--panel));
@@ -26,6 +28,7 @@
 
 [data-theme='dark'] {
   --ink-3: #8f8f8f;
+  --attention: #d29922;
   --copper-strong: color-mix(in oklab, var(--copper) 86%, #fff);
   --copper-fill: color-mix(in oklab, var(--copper) 14%, var(--panel));
   --copper-line: color-mix(in oklab, var(--copper) 40%, var(--panel));
@@ -265,6 +268,14 @@
 }
 @utility scrollbar-none {
   scrollbar-width: none;
+}
+/* Content scrolling under the top of its area fades in, instead of being cut by a hard edge. */
+@utility fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 32px);
+}
+/* A long name that runs out of its line fades out at the end instead of ending in an ellipsis. */
+@utility fade-end {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
 }
 
 /* ---- Layout patterns the scale cannot spell ---- */
