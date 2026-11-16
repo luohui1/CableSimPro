@@ -39,7 +39,7 @@ def make_router(harness):
                 'scope': {
                     'kind': record['context']['kind'],
                     'workspace_id': str(record['context']['id']),
-                    'study_id': record['context'].get('study_id'),
+                    'study_id': record.get('study_id'),
                 },
                 'parameters': definition['parameters'],
             })
