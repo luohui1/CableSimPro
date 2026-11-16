@@ -2,11 +2,10 @@
 import { useMutation } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Button, ToolButton } from '@/components/button';
-import { Icon, Mark } from '@/components/icon';
+import { Icon } from '@/components/icon';
 import { reportFailure } from '@/components/notice';
 import { Menu, MenuItem } from '@/components/popover';
 import { api } from '@/state/api';
-import { useTheme } from '@/state/theme';
 import type { ProjectMeta } from '@shared/types';
 
 /** The next step: either the calculation sheet, or an action the workbench names. */
@@ -24,7 +23,6 @@ export function TopBar({ projects, project, sheetRun, next, canUndo, canRedo, on
   onRedo: () => void;
   onOpenProject: (id: string) => void;
 }) {
-  const { theme, toggle } = useTheme();
   const sheet = useMutation({
     mutationFn: async () => {
       // The tab is opened inside the click, so the browser does not treat it as a pop-up.
@@ -41,8 +39,6 @@ export function TopBar({ projects, project, sheetRun, next, canUndo, canRedo, on
   });
 
   return <header className="flex h-12 shrink-0 items-center gap-3 px-4">
-    <Mark />
-    <span className="text-16 font-strong text-ink">Cable Studio</span>
     <Link to="/library" className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1 text-14 text-ink no-underline hover:bg-hover"><Icon name="nav/library" />产品库</Link>
     <span className="mx-1 h-5 w-px bg-control" />
     <Menu trigger={
@@ -55,7 +51,6 @@ export function TopBar({ projects, project, sheetRun, next, canUndo, canRedo, on
     <div className="flex-1" />
     <ToolButton icon="action/undo" label="撤销上一次改动（Ctrl+Z）" disabled={!canUndo} onClick={onUndo} />
     <ToolButton icon="action/redo" label="重做（Ctrl+Y）" disabled={!canRedo} onClick={onRedo} />
-    <ToolButton icon="nav/theme" label={theme === 'light' ? '换成深色' : '换成浅色'} onClick={toggle} />
     {/* One copper button: the next step. */}
     {next.kind === 'sheet'
       ? <Button variant="primary" icon="result/report" busy={sheet.isPending} onClick={() => sheet.mutate()}>出计算书</Button>

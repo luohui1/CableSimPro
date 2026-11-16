@@ -305,10 +305,10 @@ export interface AgentStatus { configured: boolean; model?: string; provider?: s
 
 /** What a result card shows. References only: the card reads the numbers from the host, so none of them passes through the model. */
 export type CardRef =
-  | { kind: 'run'; project: string; run: string }
-  | { kind: 'check'; series: string }
-  | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html' }
-  | { kind: 'model3d'; spec: string; version: number }
+  | { kind: 'run'; project: string; run: string; href: string }
+  | { kind: 'check'; series: string; href: string }
+  | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html'; href?: string }
+  | { kind: 'model3d'; spec: string; version: number; href: string }
   | { kind: 'open'; label: string; href: string };
 
 export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';

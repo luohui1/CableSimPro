@@ -248,7 +248,7 @@ export class Studio {
       input_issue: result.view.issue, tier: result.view.preview?.tier.label,
     });
     const planned = (id: string, parts: Partial<Parts>) => async (): Promise<Plan> => ({ parts, changes: await this.#changes(store.parts(id), parts) });
-    const runCard = (params: { project: string }, record: RunRecord): CardRef => ({ kind: 'run', project: params.project, run: record.id });
+    const runCard = (params: { project: string }, record: RunRecord): CardRef => ({ kind: 'run', project: params.project, run: record.id, href: `/p/${params.project}?run=${record.id}` });
     const runNotes = (_params: unknown, record: RunRecord): string[] => {
       if (record.kind !== 'rating') return [record.title];
       const summary = record.summary;
@@ -462,7 +462,8 @@ export class Studio {
           this.emit({ type: 'project', project_id: params.project });
           return { run: record.id, path, url: `/api/projects/${params.project}/reports/${record.id}` };
         }, brief: (result: { run: string; url: string }) => ({ run: result.run, saved: true, url: result.url }),
-        card: (params: { project: string }, result: { run: string; url: string }): CardRef => ({ kind: 'file', url: result.url, title: `计算书 · ${store.run(params.project, result.run).title}`, type: 'html' }),
+        card: (params: { project: string }, result: { run: string; url: string }): CardRef => ({ kind: 'file', url: result.url, type: 'html',
+          title: `计算书 · ${store.run(params.project, result.run).title}`, href: `/p/${params.project}?run=${result.run}` }),
         notes: () => ['计算书已保存，可打印，浏览器里可另存为 PDF'] },
       { id: 'workbench.open', tool: 'open_in_workbench', title: '在工作台打开', kind: 'read',
         description: '让工程师在工作台里看一个对象：型号库、结构表导入、一个系列、一个规格（可指定版本）、一个工程或一条运行记录。对象必须已经存在。结果会显示成一个“在工作台打开”按钮。',

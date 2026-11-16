@@ -1,6 +1,10 @@
 /* Shared engineering tokens and the workspace's Tailwind utility classes. */
 @import 'tailwindcss';
 @import './product.css';
+@import 'tw-animate-css';
+
+/* shadcn/ui's dark: variants follow the document's theme (data-theme), not the operating system. */
+@custom-variant dark (&:is([data-theme='dark'] *));
 
 /* The CJK font draws the middle dot of a unit (K·m/W) a full character wide.
    This face takes that one character from a Latin font, so units read as units. */
@@ -66,6 +70,63 @@
 
   --ease-std: var(--ease-standard);
   --ease-leave: var(--ease-exit);
+
+  /* shadcn/ui's semantic colours, radii and sizes are references to the design tokens: no second palette. */
+  --color-background: var(--panel);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--copper);
+  --color-primary-foreground: var(--on-copper);
+  --color-secondary: var(--fill);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--fill);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--hover);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--error);
+  --color-border: var(--line);
+  --color-input: var(--control-border);
+  --color-ring: var(--copper);
+  --color-sidebar: var(--ground);
+  --color-sidebar-foreground: var(--text);
+  --color-sidebar-border: var(--line);
+
+  --radius-sm: calc(var(--radius-input) - 2px);
+  --radius-md: var(--radius-input);
+  --radius-lg: var(--radius-item);
+  --radius-xl: var(--radius-surface);
+  --radius-2xl: var(--radius-panel);
+  --radius-3xl: 24px;
+  --radius-4xl: var(--radius-pill);
+
+  /* Body text is 14 px and nothing is smaller than 13 px; the library's text-xs and text-sm follow. */
+  --text-xs: var(--text-note);
+  --text-xs--line-height: 20px;
+  --text-sm: var(--text-body);
+  --text-sm--line-height: 22px;
+  --text-base: var(--text-subheading);
+  --text-base--line-height: 24px;
+  --text-xl: var(--text-heading);
+  --text-xl--line-height: 28px;
+  @keyframes collapsible-down {
+  from {
+    height: 0;
+    }
+  to {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  }
+  @keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    }
+  to {
+    height: 0;
+    }
+  }
 }
 
 @layer base {
@@ -88,6 +149,13 @@
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tailwind 4 draws a border in the text colour unless told otherwise; the library's components expect the line colour. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
   }
 
   button {
@@ -150,3 +218,7 @@
 @utility duration-slow {
   transition-duration: var(--motion-slow);
 }
+
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

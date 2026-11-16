@@ -128,7 +128,7 @@ test('the agent imports the public sample, checks it against the standard and li
   const view = await app.agent.view(session);
   assert.deepEqual(steps(view).map(step => [step.tool, step.status]), [['load_public_sample', 'done'], ['preview_import', 'done'], ['import_series', 'done'],
     ['compute_series', 'done'], ['list_check_failures', 'done']]);
-  assert.deepEqual(steps(view).at(-1)!.card, { kind: 'check', series });
+  assert.deepEqual(steps(view).at(-1)!.card, { kind: 'check', series, href: `/library/${series}` });
   const imported = (await app.studio.invoke('library.series', {}, { by: 'human' }) as SeriesSummary[]).find(item => item.id === series)!;
   assert.equal(imported.specs, ready);
   assert.equal(counts.passed + counts.failed + counts.missing + counts.uncovered > 0, true, 'every spec has a check result');

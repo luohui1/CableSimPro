@@ -48,8 +48,14 @@ export const api = {
   },
 };
 
-export function subscribe(listener: (event: StudioEvent) => void): () => void {
+/** onOpen runs when the connection is made again after it dropped, not on the first connection. */
+export function subscribe(listener: (event: StudioEvent) => void, onOpen?: () => void): () => void {
   const source = new EventSource('/api/events');
+  let opened = false;
+  source.onopen = () => {
+    if (opened) onOpen?.();
+    opened = true;
+  };
   source.onmessage = message => listener(JSON.parse(message.data) as StudioEvent);
   return () => source.close();
 }

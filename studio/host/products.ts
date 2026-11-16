@@ -165,6 +165,10 @@ export function productOperations(studio: Studio): Operation[] {
   const briefJob = (current: LibraryJob | null) => (current ? { job: current.id, series: current.series_id, state: current.state, title: current.title,
     done: current.done, total: current.total, error: current.error?.message } : null);
   const issues = (list: { message: string }[]) => list.map(item => item.message);
+  /** Where the workbench shows one version of one specification. */
+  const specHref = (spec: string, version: number) => `/library/${library.specView(spec, version).series.id}?spec=${encodeURIComponent(spec)}&version=${version}`;
+  /** The solid the agent built is shown again on its card; building it twice would cost seconds for nothing. */
+  const solids = new Map<string, Record<string, unknown>>();
   const briefSpec = (spec: SpecView) => ({
     spec: spec.spec.id, name: spec.spec.name, series: spec.series.name, version: spec.version.number, review: spec.version.review,
     summary: spec.entry.summary, source: spec.entry.source.slice(0, 600), warnings: spec.warnings.map(item => item.message),
@@ -196,13 +200,18 @@ export function productOperations(studio: Studio): Operation[] {
       description: '从指定版本的保存结构调用已封签的 CadQuery/OpenCASCADE 插件，生成三维实体与 STEP；缺少构造参数或不支持的结构直接拒绝，不画替代模型。实体会以三维卡片显示在对话里。',
       execute: async (params: { spec: string; version: number }) => {
         const selected = library.specView(params.spec, params.version);
+        const held = solids.get(selected.version.content_sha256);
+        if (held) return held;
         const result = await core.call<Record<string, unknown>>('product.geometry', { entry: selected.entry });
-        return { ...result, spec: selected.spec.id, version: selected.version.number, content_sha256: selected.version.content_sha256 };
+        const built = { ...result, spec: selected.spec.id, version: selected.version.number, content_sha256: selected.version.content_sha256 };
+        solids.set(selected.version.content_sha256, built);
+        if (solids.size > 4) solids.delete(solids.keys().next().value as string);
+        return built;
       },
       brief: (cad: ProductCad) => ({ spec: cad.spec, version: cad.version, built: true, outer_diameter_mm: cad.model.outer_diameter_m * 1000, length_mm: cad.model.length_m * 1000,
         layers: cad.model.layers.map(layer => layer.label ?? layer.role), mass_kg_per_km: cad.model.mass_kg_per_km, quantity_missing_layers: cad.model.quantity_missing_layers,
         approximation: cad.model.geometry_approximation, warnings: issues(cad.warnings), step_file: '已随实体生成，工作台可下载' }),
-      card: (_params: unknown, cad: ProductCad): CardRef => ({ kind: 'model3d', spec: cad.spec, version: cad.version }),
+      card: (_params: unknown, cad: ProductCad): CardRef => ({ kind: 'model3d', spec: cad.spec, version: cad.version, href: specHref(cad.spec, cad.version) }),
       notes: (_params: unknown, cad: ProductCad) => [`外径 ${compact(cad.model.outer_diameter_m * 1000)} mm`, `${cad.model.layers.length} 层，STEP 文件已生成`] },
     { id: 'library.export', tool: 'export_specification', title: '导出规格书', kind: 'run', parameters: obj({ spec: str({ description: '规格标识' }), version: int({ minimum: 1, description: '版本号' }) }),
       description: '把指定版本的结构、已保存结果、计算条件、问题及来源保存为不可覆盖的 PDF 和快照。未审核版本标为草稿，缺项明确列出。',
@@ -213,7 +222,7 @@ export function productOperations(studio: Studio): Operation[] {
       },
       brief: (report: SpecificationReport) => ({ id: report.id, title: report.title, version: report.version, review: REVIEW_NAMES[report.review] ?? report.review,
         draft_marking: report.review === 'draft' ? '版本未审核，文件上标为草稿' : undefined, url: report.url }),
-      card: (_params: unknown, report: SpecificationReport): CardRef => ({ kind: 'file', url: report.url, title: report.title, type: 'pdf' }),
+      card: (_params: unknown, report: SpecificationReport): CardRef => ({ kind: 'file', url: report.url, title: report.title, type: 'pdf', href: specHref(report.spec, report.version) }),
       notes: (_params: unknown, report: SpecificationReport) => [report.title, `审核状态：${REVIEW_NAMES[report.review] ?? report.review}`] },
     { id: 'library.series', tool: 'list_series', title: '产品系列', kind: 'read', parameters: obj({}),
       description: '列出产品库的全部系列：名称、厂家、型号、电压、执行标准、规格数和各审核状态的数量。',
@@ -353,7 +362,7 @@ export function productOperations(studio: Studio): Operation[] {
           limit: item.limit, actual: item.actual, unit: item.unit, comparison: item.comparison, reason: item.reason })),
         failures_not_shown: Math.max(0, result.failures.length - 60),
         missing: result.missing.slice(0, 20).map(item => ({ spec: item.name, item: item.title, reason: item.reason })) }),
-      card: (params: { series: string }): CardRef => ({ kind: 'check', series: params.series }),
+      card: (params: { series: string }): CardRef => ({ kind: 'check', series: params.series, href: `/library/${params.series}` }),
       notes: (_params: unknown, result: CheckFailures) => [`通过 ${result.counts.passed} 项，不通过 ${result.counts.failed} 项，缺项 ${result.counts.missing} 项`,
         ...(result.not_checked.length ? [`${result.not_checked.length} 个规格还没有核对结果`] : [])] },
     { id: 'library.revise', tool: 'revise_spec', title: '修改结构', kind: 'write',

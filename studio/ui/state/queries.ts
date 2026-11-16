@@ -1,7 +1,7 @@
 // The host is the single source of truth. These hooks read it; the event stream tells them when to read again.
 import { keepPreviousData, QueryClient, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { LibraryJob, LibraryVocabulary, RunRecord, SeriesSummary, SeriesView, SpecificationReport, SpecView } from '@shared/types';
+import type { ChatSummary, ChatView, LibraryJob, LibraryVocabulary, RunRecord, SeriesSummary, SeriesView, SpecificationReport, SpecView, StudioEvent } from '@shared/types';
 import { api, subscribe } from './api';
 
 export const queryClient = new QueryClient({
@@ -40,8 +40,38 @@ export const useDraft = (project: string, digest: string | undefined, enabled: b
 export const useRun = (project: string, run: string | undefined) =>
   useQuery({ queryKey: ['run', project, run], queryFn: () => api.run(project, run as string), enabled: Boolean(run), staleTime: Infinity });
 
+// ---- Conversations with the agent ----
+
+export const useChats = () => useQuery({ queryKey: ['chats'], queryFn: api.chats, refetchOnMount: 'always' });
+export const useChat = (id: string | undefined) => useQuery({ queryKey: ['chat', id], queryFn: () => api.chat(id as string), enabled: Boolean(id), staleTime: Infinity });
+
+/** The host sends the last few messages as they stand; they replace the page's own tail. A gap means events were missed: read the whole conversation again. */
+function takeChat(event: Extract<StudioEvent, { type: 'chat' }>): void {
+  const id = event.summary.id;
+  queryClient.setQueryData<ChatSummary[]>(['chats'], list => {
+    if (!list) return list;
+    const next = list.some(item => item.id === id) ? list.map(item => (item.id === id ? event.summary : item)) : [event.summary, ...list];
+    return next.sort((a, b) => b.updated.localeCompare(a.updated));
+  });
+  const held = queryClient.getQueryData<ChatView>(['chat', id]);
+  if (!held) {
+    void queryClient.invalidateQueries({ queryKey: ['chats'] });
+    return;
+  }
+  const kept = event.count - event.tail.length;
+  if (kept < 0 || held.items.length < kept) {
+    void queryClient.invalidateQueries({ queryKey: ['chat', id] });
+    return;
+  }
+  queryClient.setQueryData<ChatView>(['chat', id], { ...held, ...event.summary, items: [...held.items.slice(0, kept), ...event.tail], waiting: event.waiting });
+}
+
 export function useHostEvents() {
   useEffect(() => subscribe(event => {
+    if (event.type === 'chat') {
+      takeChat(event);
+      return;
+    }
     if (event.type === 'library') {
       void queryClient.invalidateQueries({ queryKey: ['library'] });
       return;
@@ -49,5 +79,9 @@ export function useHostEvents() {
     if (event.type !== 'project') return;
     void queryClient.invalidateQueries({ queryKey: ['project', event.project_id] });
     void queryClient.invalidateQueries({ queryKey: ['projects'] });
+  }, () => {
+    // A connection that came back may have missed events.
+    void queryClient.invalidateQueries({ queryKey: ['chats'] });
+    void queryClient.invalidateQueries({ queryKey: ['chat'] });
   }), []);
 }

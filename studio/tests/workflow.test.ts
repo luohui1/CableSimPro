@@ -130,7 +130,7 @@ test('the agent selects for 300 A through the same operations and its change wai
   const done = await agent.view(sent.session);
   assert.equal(done.running, false);
   assert.deepEqual(steps(done).map(step => [step.tool, step.status]), [['get_project', 'done'], ['run_selection', 'done'], ['set_cable', 'done']]);
-  assert.deepEqual(steps(done)[1].card, { kind: 'run', project, run: selection.id }, 'a card carries a reference; its numbers are read from the host');
+  assert.deepEqual(steps(done)[1].card, { kind: 'run', project, run: selection.id, href: `/p/${project}?run=${selection.id}` }, 'a card carries references; its numbers are read from the host');
   assert.equal(steps(done)[2].proposal?.status, 'accepted');
   assert.equal(studio.store.parts(project).cable.id, chosen.model_id);
   assert.ok(lastText(done).includes(chosen.name));
