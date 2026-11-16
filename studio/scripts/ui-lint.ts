@@ -23,7 +23,7 @@ const EXEMPT: { path: string; owes: number; owner: string; until: string }[] = [
   { path: 'ui/pages/import.tsx', owes: 60, owner: 'studio-build', until: '工作台型号库重做' },
   { path: 'ui/pages/series.tsx', owes: 18, owner: 'studio-build', until: '工作台型号工作区重做' },
   { path: 'ui/series/', owes: 109, owner: 'studio-build', until: '工作台型号工作区重做' },
-  { path: 'ui/components/product-', owes: 25, owner: 'studio-build', until: '工作台型号库重做' },
+  { path: 'ui/components/product-', owes: 24, owner: 'studio-build', until: '工作台型号库重做' },
   { path: 'ui/workbench/', owes: 21, owner: 'studio-build', until: '工作台载流量计算重做' },
   { path: 'ui/canvas/', owes: 17, owner: 'studio-build', until: '工作台载流量计算重做（断面绘图保留，外框换成 kit 的画布外框）' },
   { path: 'ui/results/', owes: 65, owner: 'studio-build', until: '工作台载流量计算重做' },

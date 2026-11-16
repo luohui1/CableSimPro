@@ -8,8 +8,8 @@ import { Notice, reportFailure } from '@/components/notice';
 import { Shell } from '@/shell/shell';
 import { api } from '@/state/api';
 import { queryClient, useHostEvents, useProjects } from '@/state/queries';
+import { typeRoutes } from '@/types/routes';
 const AgentPage = lazyRouteComponent(() => import('@/agent/agent-page'), 'AgentPage');
-const ProductLibrary = lazyRouteComponent(() => import('@/pages/library'), 'ProductLibrary');
 const ImportLibrary = lazyRouteComponent(() => import('@/pages/import'), 'ImportLibrary');
 const SeriesWorkspace = lazyRouteComponent(() => import('@/pages/series'), 'SeriesWorkspace');
 const Workbench = lazyRouteComponent(() => import('@/workbench/workbench'), 'Workbench');
@@ -73,7 +73,6 @@ function ChatPage() {
   const { sessionId } = chatRoute.useParams();
   return <AgentPage key={sessionId} sessionId={sessionId} />;
 }
-const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library', component: ProductLibrary });
 const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/import', component: ImportLibrary });
 const seriesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/$seriesId',
   validateSearch: (search: Record<string, unknown>): { spec?: string; version?: number } => ({ ...(typeof search.spec === 'string' ? { spec: search.spec } : {}),
@@ -95,7 +94,7 @@ const projectRoute = createRoute({
 
 const galleryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gallery', component: Gallery });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, chatRoute, libraryRoute, importRoute, seriesRoute, workbenchRoute, projectRoute, galleryRoute]) });
+export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, chatRoute, ...typeRoutes(rootRoute), importRoute, seriesRoute, workbenchRoute, projectRoute, galleryRoute]) });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
