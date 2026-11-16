@@ -118,6 +118,8 @@ def propose(standard, u0_v, u_v, cores, conductor, area_mm2, insulation='XLPE', 
                 raise CoreError('STANDARD_MISMATCH', f"{round(u0_v)}/{round(u_v)} V 的 XLPE 绝缘厚度按 {asked['standard']}—{asked['edition']} 规定，"
                                 f'与所给的执行标准 {standard} 不一致；请核对电压等级或执行标准。', '/standard')
         fresh = {name: query for name, query in queries.items() if name not in references}
+        if not fresh:
+            raise CoreError('BASIS_INCOMPLETE', '标准依据查询没有收敛：方法在反复询问已经回答过的条件，请核对输入。')
         repeated = [name for name in fresh if name in unanswered]
         if repeated:
             query = fresh[repeated[0]]

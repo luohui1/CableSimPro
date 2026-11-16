@@ -10,6 +10,11 @@ export interface ManualDerivation extends Derivation {
   entry: 'manual';
   entered_by: string;
   entered_at: string;
+  /** What the entry is called: a person typed it, or an agent did and an engineer has yet to check it. */
+  entered_how: string;
+  /** The standard proposal the dimensions were taken from, with the method that gave it. */
+  proposal?: { id: string; standard: string; scope: string; fields: string[];
+    method: { plugin_id: string; plugin_version: string; method_version: string; manifest_sha256: string; request_sha256: string } };
 }
 
 export interface SeriesCreated { series: string; name: string; description: string; declaration: SeriesDeclaration }
@@ -116,6 +121,8 @@ export interface ProposedDimension {
 export interface MissingDimension { field: string; label: string; unit: string; reason: string }
 
 export interface StructureProposal {
+  /** The proposal as it is kept: the same inputs and the same answers have the same identity. */
+  id: string;
   /** `insulation`: the insulation thickness only; `complete`: also bedding, armour and oversheath, from the standard's annex. */
   scope: 'insulation' | 'complete';
   standard: string;
@@ -173,6 +180,8 @@ export interface Gb50217Correction {
   /** Digest of the project's inputs at the moment of the correction: these are the actual conditions. */
   inputs_sha256: string;
   checks: CorrectionCheck[];
+  /** The person who confirmed the baseline, as the product library names people. */
+  confirmed_by: string;
   coefficients: CorrectionCoefficient[];
   total_factor: number;
   corrected_current_a: number;

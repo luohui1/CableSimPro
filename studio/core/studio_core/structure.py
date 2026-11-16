@@ -335,6 +335,9 @@ def _completed(series, parts, built):
 def declare(series):
     """A series declaration checked before it has any row: what a hand-made series has to state."""
     parts = _series(series)
+    unknown = [key for key in series.get('modelling') or {} if key not in MODELLING]
+    if unknown:  # a misspelt parameter would otherwise be ignored and the method's own default used
+        raise CoreError('SERIES_INVALID', f'系列声明里有未收录的计算用参数：{unknown[0]}。', f'/series/modelling/{unknown[0]}')
     return {'designation': {**parts, 'description': designation.describe(parts)}}
 
 

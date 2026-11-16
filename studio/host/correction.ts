@@ -7,9 +7,10 @@
 // The software checks what it can (the same cable, a single circuit, the base ambient) and lists it; it does not
 // confirm for anyone, and an agent cannot.
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bool, obj, opt, str } from '@earendil-works/pi-schema';
+import { BONDING_NAMES } from '../shared/format.ts';
 import type { CorrectionBaseline, CorrectionCheck, CorrectionCoefficient, CorrectionPending, Gb50217Correction } from '../shared/model-types.ts';
 import type { MethodCard, Parts, RunRecord } from '../shared/types.ts';
 import { StudioError } from './core.ts';
@@ -59,6 +60,12 @@ export function correctionOperations(studio: Studio): Operation[] {
         detail: `基准 ${base.installation.depth_m} m；当前 ${actual.installation.depth_m} m` },
       { item: '基准与当前的土壤热阻率相同', passed: near(base.conditions.soil_thermal_resistivity, actual.conditions.soil_thermal_resistivity),
         detail: `基准 ${base.conditions.soil_thermal_resistivity} K·m/W；当前 ${actual.conditions.soil_thermal_resistivity} K·m/W` },
+      { item: '基准与当前的系统电压相同', passed: (base.conditions.system_voltage_v ?? null) === (actual.conditions.system_voltage_v ?? null),
+        detail: `基准 ${base.conditions.system_voltage_v ?? '未填'} V；当前 ${actual.conditions.system_voltage_v ?? '未填'} V` },
+      { item: '基准与当前的频率相同', passed: near(base.conditions.frequency_hz, actual.conditions.frequency_hz),
+        detail: `基准 ${base.conditions.frequency_hz} Hz；当前 ${actual.conditions.frequency_hz} Hz` },
+      { item: '基准与当前的护套接地方式相同', passed: base.installation.bonding === actual.installation.bonding,
+        detail: `基准 ${BONDING_NAMES[base.installation.bonding]}；当前 ${BONDING_NAMES[actual.installation.bonding]}` },
     ];
   };
 
@@ -68,7 +75,7 @@ export function correctionOperations(studio: Studio): Operation[] {
   return [
     { id: 'correction.gb50217', tool: 'correct_ampacity_gb50217', title: '按 GB 50217 校正载流量', kind: 'run',
       description: '把一条基准运行记录的允许电流，按本工程当前的环境温度、并列敷设（三芯电缆、同深度等间距），按 GB 50217—2018 附录 D 校正：给出各项校正系数（带条款和页码）、总系数和校正后的允许电流。'
-        + '基准须是本工程里单回路、环境 25 °C、与当前同埋深同土壤热阻率的一条载流量校核。适用范围：10 kV 及以下；表外条件拒绝，不插值。分档为“参考”。'
+        + '基准须是本工程里单回路、环境 25 °C，且与当前同埋深、同土壤热阻率、同系统电压、同频率、同护套接地方式的一条载流量校核。适用范围：10 kV 及以下；表外条件拒绝，不插值。分档为“参考”。'
         + '基准条件是否成立由工程师确认：不传 baseline_confirmed 或传 false 时只返回核对项，不给数；确认只能由人做，Agent 不能代为确认。',
       parameters: obj({
         project,
@@ -109,7 +116,7 @@ export function correctionOperations(studio: Studio): Operation[] {
         const found = done.correction;
         const saved: Gb50217Correction = {
           schema: 'cablesim.studio.correction/1', id: 'corr-' + randomBytes(4).toString('hex'), created: new Date().toISOString(), by: context.by,
-          project: { id: meta.id, name: meta.name }, baseline, inputs_sha256: inputsDigest(actual), checks,
+          project: { id: meta.id, name: meta.name }, baseline, inputs_sha256: inputsDigest(actual), checks, confirmed_by: studio.user,
           coefficients: found.coefficients.map((item): CorrectionCoefficient => ({ label: item.label, condition: item.condition_text, factor: item.factor,
             standard: `${item.record.standard}—${item.record.edition}`, clause: item.record.clause, printed_page: item.record.printed_page, pdf_page: item.record.pdf_page,
             source_sha256: item.record.source_sha256, ...(item.formula_inputs ? { formula_inputs: item.formula_inputs } : {}) })),
@@ -118,8 +125,12 @@ export function correctionOperations(studio: Studio): Operation[] {
           manifest_sha256: done.manifest_sha256, request_sha256: done.request_sha256, core_run_id: done.core_run_id, request: done.request, result: done.result,
           method_card: done.method_card,
         };
+        // Written whole or not at all: a half-written file would make the project's whole list unreadable.
         mkdirSync(folder(params.project), { recursive: true });
-        writeFileSync(join(folder(params.project), `${saved.id}.json`), JSON.stringify(saved, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
+        const path = join(folder(params.project), `${saved.id}.json`);
+        const staging = `${path}.${randomBytes(4).toString('hex')}.part`;
+        writeFileSync(staging, JSON.stringify(saved, null, 2) + '\n', 'utf8');
+        renameSync(staging, path);
         studio.emit({ type: 'project', project_id: params.project });
         return saved;
       },

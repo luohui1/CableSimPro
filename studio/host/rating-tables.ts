@@ -114,8 +114,12 @@ export function ratingTableOperations(studio: Studio): Operation[] {
         const all = params.conditions.map(item => partsOf(cable, defaults, item));
         // Every condition must make a valid input before anything is written.
         for (const [index, parts] of all.entries()) {
-          const { issue } = await studio.preview(name, parts);
+          const { preview, issue } = await studio.preview(name, parts);
           if (issue) throw new StudioError({ code: issue.code, message: `第 ${index + 1} 条条件：${issue.message}`, path: `/conditions/${index}${issue.path ?? ''}` });
+          if (preview?.document.sections[0].backfill) {
+            throw new StudioError({ code: 'CONDITION_UNSUPPORTED', path: `/conditions/${index}/layout`,
+              message: `第 ${index + 1} 条条件：这个敷设带回填或包封区域，表里还没有它的尺寸和热阻率的位置，暂不能写进载流量表。` });
+          }
         }
         const meta = store.create(name, all[0]);
         const rows: RatingTableRow[] = [];
@@ -127,16 +131,21 @@ export function ratingTableOperations(studio: Studio): Operation[] {
             rows.push(row(index, params.conditions[index], parts, record, meta.id));
           }
         } catch (error) {
+          // The table is not kept, but what was done is not lost track of: the project says it is unfinished and the version records it.
           store.rename(meta.id, `${name}（未完成）`);
+          library.note(actor(context.by), 'version', selected.version.id, 'rating_table_failed', { project: meta.id, done: rows.length, total: all.length,
+            error: error instanceof StudioError ? error.issue() : { code: 'INTERNAL', message: error instanceof Error ? error.message : String(error) } });
           throw error;
         }
         const table: RatingTable = { id: 'rt-' + randomBytes(4).toString('hex'), title, spec: params.spec, version: number, content_sha256: selected.version.content_sha256,
           project: meta.id, created: new Date().toISOString(), by: actor(context.by), rows };
-        ensure(library.db).prepare('insert into rating_table (id, version_id, title, project_id, created, created_by, body) values (?, ?, ?, ?, ?, ?, ?)')
-          .run(table.id, selected.version.id, title, meta.id, table.created, table.by,
-            JSON.stringify({ spec: table.spec, version: table.version, content_sha256: table.content_sha256, rows: table.rows }));
-        library.note(table.by, 'version', selected.version.id, 'rating_table', { table: table.id, project: meta.id, rows: rows.length,
-          succeeded: rows.filter(item => item.status === 'succeeded').length });
+        library.db.transaction(() => {
+          ensure(library.db).prepare('insert into rating_table (id, version_id, title, project_id, created, created_by, body) values (?, ?, ?, ?, ?, ?, ?)')
+            .run(table.id, selected.version.id, title, meta.id, table.created, table.by,
+              JSON.stringify({ spec: table.spec, version: table.version, content_sha256: table.content_sha256, rows: table.rows }));
+          library.note(table.by, 'version', selected.version.id, 'rating_table', { table: table.id, project: meta.id, rows: rows.length,
+            succeeded: rows.filter(item => item.status === 'succeeded').length });
+        })();
         studio.emit({ type: 'library', series_id: selected.series.id });
         return table;
       },

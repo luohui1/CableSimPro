@@ -9,6 +9,7 @@ import type {
   ReviewState, SeriesDeclaration, SeriesSummary, SeriesView, SpecRow, SpecView, StructureValue, ValueRow, VersionHeader,
 } from '../shared/types.ts';
 import { REVIEW_NAMES } from '../shared/format.ts';
+import type { ManualDerivation } from '../shared/model-types.ts';
 import { StudioError } from './core.ts';
 import { digest } from './store.ts';
 
@@ -308,12 +309,20 @@ export class Library {
     const at = now();
     const structure = row.structure.map(value => {
       const before = previous.find(item => item.key === value.key);
+      // What a value rested on is kept: on the value while it stays, on the revision once it is changed.
+      const basis = before?.basis ?? (before?.revision as { previous_basis?: string } | undefined)?.previous_basis;
       return { ...value, ...(before && before.value !== value.value
-        ? { revision: { previous: before.value, by: actor, at, note } }
+        ? { revision: { previous: before.value, by: actor, at, note, ...(basis ? { previous_basis: basis } : {}) } }
         : { ...(before?.revision ? { revision: before.revision } : {}), ...(before?.basis && !value.basis ? { basis: before.basis } : {}) }) };
     });
+    // A structure that was typed in stays typed in: who typed it, when, and the source line of that entry, whoever revises it later.
+    const typed = parse<Partial<ManualDerivation>>(latest.derivation);
+    const manual = typed.entry === 'manual';
+    const derivation: Derivation = manual
+      ? { ...row.derivation, entry: 'manual', entered_by: typed.entered_by, entered_at: typed.entered_at, entered_how: typed.entered_how } as ManualDerivation : row.derivation;
+    const entry = manual ? { ...row.entry, source: parse<LibraryEntry>(latest.entry).source } : row.entry;
     this.db.transaction(() => {
-      this.#insertVersion(spec, number, 'draft', row.entry, { structure, closure: row.closure, derivation: row.derivation,
+      this.#insertVersion(spec, number, 'draft', entry, { structure, closure: row.closure, derivation,
         warnings: row.warnings, note }, actor);
       this.db.prepare('update series set updated = ? where id = (select series_id from spec where id = ?)').run(now(), spec);
       this.#event(actor, 'version', `${spec}@${number}`, 'revised', { from: latest.number, note });

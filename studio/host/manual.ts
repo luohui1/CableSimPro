@@ -7,6 +7,7 @@ import type { ManualDerivation, SeriesCreated, SpecCreated } from '../shared/mod
 import type { BuildResult, DesignationParts, GivenParameter, SeriesDeclaration } from '../shared/types.ts';
 import { StudioError } from './core.ts';
 import type { Context, Operation, Studio } from './operations.ts';
+import { loadProposal } from './proposal.ts';
 
 const given = obj({ value: union([num(), str()]), unit: str(), reference: str({ minLength: 1, maxLength: 2000 }) });
 
@@ -26,7 +27,7 @@ type SeriesParams = Omit<SeriesDeclaration, 'cores' | 'standards' | 'common' | '
   cores: 1 | 3; standards?: string[]; common?: Record<string, number>; common_basis?: Record<string, string>; manufacturer?: string;
   modelling?: Record<string, GivenParameter>; reference_modelling?: boolean; outer_diameter_precision_mm?: number;
 };
-interface SpecParams { series: string; values: Record<string, number>; basis?: Record<string, string> }
+interface SpecParams { series: string; values: Record<string, number>; basis?: Record<string, string>; proposal?: string }
 
 export function manualOperations(studio: Studio): Reviewable[] {
   const { core, library } = studio;
@@ -42,17 +43,22 @@ export function manualOperations(studio: Studio): Reviewable[] {
       ? (await core.call<{ reference_modelling: Record<string, GivenParameter> }>('structure.vocabulary')).reference_modelling : {};
     const modelling: Record<string, GivenParameter> = { ...reference, ...(params.modelling ?? {}) };
     // The precision the engineer states wins over a reference value, but not over a rounding the declaration itself gives.
-    if (!('diameter_rounding' in (params.modelling ?? {})) && (params.outer_diameter_precision_mm !== undefined || !('diameter_rounding' in modelling))) {
-      const precision = params.outer_diameter_precision_mm ?? 0.1;
+    if (!('diameter_rounding' in (params.modelling ?? {})) && params.outer_diameter_precision_mm !== undefined) {
+      const precision = params.outer_diameter_precision_mm;
       modelling.diameter_rounding = { value: precision / 2000, unit: 'm',
-        reference: `人工填写：电缆外径按 ${precision} mm 的精度填写，半个末位 ${precision / 2} mm；闭合容差另加 max(0.5 mm, 外径 1%)。` };
+        reference: `${entered(context)}：电缆外径按 ${precision} mm 的精度填写，半个末位 ${precision / 2} mm；闭合容差另加 max(0.5 mm, 外径 1%)。` };
+    }
+    // The closure of the outer diameter needs it, and it is not for the software to pick one.
+    if (!('diameter_rounding' in modelling)) {
+      throw new StudioError({ code: 'INPUT_INVALID', path: '/outer_diameter_precision_mm',
+        message: '请说明电缆外径填写的精度（outer_diameter_precision_mm，mm），外径闭合的容差要用它；也可以在 modelling 里直接给 diameter_rounding，或用 reference_modelling。' });
     }
     const declaration: SeriesDeclaration = {
       name: params.name.trim(), manufacturer: params.manufacturer ?? '', designation: params.designation.trim(), cores: params.cores,
       u0_v: params.u0_v, u_v: params.u_v, ...(params.um_v ? { um_v: params.um_v } : {}), standards: params.standards ?? [],
       common: params.common ?? {}, common_basis: params.common_basis ?? {}, modelling, origin: params.origin ?? 'factory',
       ...(params.armour_material ? { armour_material: params.armour_material } : {}),
-      source: { title: '人工填写', location: `Cable Studio 型号库 · ${by} · ${at}` },
+      source: { title: entered(context), location: `Cable Studio 型号库 · ${by} · ${at}` },
     };
     const checked = await core.call<{ designation: DesignationParts }>('structure.declare', { series: declaration });
     return { declaration, description: checked.designation.description, by };
@@ -69,13 +75,30 @@ export function manualOperations(studio: Studio): Reviewable[] {
     const by = actor(context);
     const at = new Date().toISOString();
     const how = entered(context);
-    const bases = Object.fromEntries(Object.keys(params.values).map(key => [key, params.basis?.[key] ? `${how}；${params.basis[key]}` : how]));
+    // A value keeps the standard's citation only while it is the standard's value: the numbers of a proposal are not to be changed under it.
+    const proposal = params.proposal ? loadProposal(studio.home, params.proposal) : undefined;
+    const taken = proposal ? Object.keys(proposal.values).filter(field => field in params.values) : [];
+    for (const field of taken) {
+      if (params.values[field] !== proposal!.values[field]) {
+        throw new StudioError({ code: 'PROPOSAL_VALUE_CHANGED', path: `/values/${field}`,
+          message: `“${field}”是 ${params.values[field]}，提案 ${proposal!.id} 里是 ${proposal!.values[field]}；依据属于提案的数，要改这个数就不要引用提案。` });
+      }
+      if (params.basis && field in params.basis) {
+        throw new StudioError({ code: 'PROPOSAL_BASIS_GIVEN', path: `/basis/${field}`, message: `“${field}”的依据由提案 ${proposal!.id} 给出，不能另写。` });
+      }
+    }
+    const basisOf = (key: string): string | undefined => (taken.includes(key) ? proposal!.basis[key] : params.basis?.[key]);
+    const bases = Object.fromEntries(Object.keys(params.values).map(key => [key, basisOf(key) ? `${how}；${basisOf(key)}` : how]));
     // The row is typed in whatever the series' own source says: what the builder writes into the entry's source is this.
     const typed: SeriesDeclaration = { ...declaration, source: { title: how, location: `Cable Studio 型号库 · ${by} · ${at}；所在系列：${declaration.name}` } };
-    const built = await core.call<BuildResult>('structure.build', { series: typed, rows: [params.values], bases: [bases] });
-    const row = built.rows[0];
+    // Built together with the rows the series already has, so the series-wide look at a typing slip (a weight lighter than a smaller size's,
+    // a wrapping out of line) applies to a typed row as it does to an imported table; only this row's warnings are kept.
+    const others = library.seriesView(params.series).specs.map(spec => Object.fromEntries(library.specView(spec.id).structure
+      .filter(item => item.origin === 'table').map(item => [item.key, item.value])));
+    const built = await core.call<BuildResult>('structure.build', { series: typed, rows: [...others, params.values], bases: [...others.map(() => ({})), bases] });
+    const row = built.rows[others.length];
     if (!row.ok) throw new StudioError(row.error);
-    return { row, how, by, at, declaration };
+    return { row, how, by, at, declaration, proposal, taken };
   };
   const exists = (series: string, key: string): boolean => library.seriesView(series).specs.some(spec => spec.key === key);
 
@@ -130,6 +153,7 @@ export function manualOperations(studio: Studio): Reviewable[] {
         series: str({ description: '系列标识，例如 s-1a2b3c4d' }),
         values: map(num({ exclusiveMinimum: 0 }), { description: '字段 → 数值，单位见字段说明；area 是规格身份，必填' }),
         basis: opt(map(str({ maxLength: 400 }), { description: '字段 → 这个数值的依据（标准条款、图纸号等），随数值保存' })),
+        proposal: opt(str({ description: 'propose_structure 返回的提案标识：写了它，values 里属于提案的字段必须与提案一致，依据取自提案，提案标识和方法版本记进版本' })),
       }),
       review: async (params: SpecParams): Promise<Shown> => {
         const { row, declaration } = await prepared(params, { by: 'agent' });
@@ -147,8 +171,11 @@ export function manualOperations(studio: Studio): Reviewable[] {
         ] };
       },
       execute: async (params: SpecParams, context: Context): Promise<SpecCreated> => {
-        const { row, how, by, at } = await prepared(params, context);
-        const derivation: ManualDerivation = { ...row.derivation, entry: 'manual', entered_by: by, entered_at: at };
+        const { row, how, by, at, proposal, taken } = await prepared(params, context);
+        const derivation: ManualDerivation = { ...row.derivation, entry: 'manual', entered_by: by, entered_at: at, entered_how: how,
+          ...(proposal ? { proposal: { id: proposal.id, standard: proposal.standard, scope: proposal.scope, fields: taken,
+            method: { plugin_id: proposal.method.plugin_id, plugin_version: proposal.method.plugin_version, method_version: proposal.method.method_version,
+              manifest_sha256: proposal.method.manifest_sha256, request_sha256: proposal.method.request_sha256 } } } : {}) };
         const spec = library.addSpec(params.series, { ...row, derivation }, how, by);
         studio.emit({ type: 'library', series_id: params.series });
         return { spec, version: 1, view: library.specView(spec) };
