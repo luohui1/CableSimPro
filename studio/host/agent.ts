@@ -20,6 +20,14 @@ const STUDIO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS = join(STUDIO, 'skills');
 const PROPOSAL_ENTRY = 'cable-studio.proposal';
 
+/** pi's system prompt with the working folder dropped and each skill's location replaced by its name. */
+export function noPaths(prompt: string): string {
+  return prompt
+    .replace(/\n*<cwd>[\s\S]*?<\/cwd>\n*/, '\n')
+    .replace(/(<name>([^<]+)<\/name>[\s\S]*?<location>)[^<]*(<\/location>)/g, '$1$2$3')
+    .replace('Use absolute paths in tool calls.', 'Call the read tool with the skill name.');
+}
+
 /** The skills' names in Chinese (what comes before the first full-width colon of their description), read without the session layer so a
  *  conversation opened from its file can name them too. */
 function skillTitles(dir: string): Map<string, string> {
@@ -269,8 +277,8 @@ export class AgentService {
   /** The gate: a write the agent proposes waits here until a person accepts or rejects it. Aborting settles it as a rejection. */
   #gate(live: () => Live): ExtensionFactory {
     return pi_ => {
-      // The working folder is an implementation detail of the session layer; the model has no use for the machine's paths.
-      pi_.on('before_agent_start', event => ({ systemPrompt: event.systemPrompt.replace(/\n*<cwd>[\s\S]*?<\/cwd>\n*/, '\n') }));
+      // The model has no use for the machine's paths: the working folder is left out, and a skill is named, not located. The reader takes the name.
+      pi_.on('before_agent_start', event => ({ systemPrompt: noPaths(event.systemPrompt) }));
       pi_.on('tool_call', async (event, ctx) => {
         if (event.toolName === 'read') return undefined;
         const operation = this.#tool(event.toolName);

@@ -287,6 +287,11 @@ export function productOperations(studio: Studio): Operation[] {
           throw new StudioError({ code: 'IMPORT_HAS_ERRORS', message: `有 ${result.preview.failed} 行不能导入；改正结构表，或经工程师同意后选择只导入可用的行。` }, 409);
         }
         const declared = result.declaration;
+        // What the commit itself would refuse is refused here, before a person is asked to approve something that cannot happen.
+        if (!result.preview.ready) throw new StudioError({ code: 'IMPORT_EMPTY', message: '没有可以导入的规格。' });
+        if (library.seriesList().some(item => item.name === declared.name)) {
+          throw new StudioError({ code: 'SERIES_EXISTS', message: `产品库里已有名为“${declared.name}”的系列，请改名后再导入。`, path: '/series/name' }, 409);
+        }
         const changes: Change[] = [
           { part: 'series', field: 'name', label: '新系列', before: '—', after: `${declared.name}（${declared.designation}）` },
           { part: 'series', field: 'specs', label: '规格数', before: '—', after: `${result.preview.ready} 个` },

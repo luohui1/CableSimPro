@@ -32,7 +32,8 @@ after(async () => {
 const project = async (name: string, model_id: string) => (await app.studio.invoke('project.create', { name, model_id }, { by: 'human' }) as ProjectView).meta.id;
 
 test('the agent has the studio\'s operations and a skill reader, and is told nothing about the repository', async () => {
-  faux.setResponses([fauxAssistantMessage([fauxText('你好。')])]);
+  let sent = '';
+  faux.setResponses([context => { sent = JSON.stringify(context); return fauxAssistantMessage([fauxText('你好。')]); }]);
   const { session } = await app.agent.send(undefined, '你好');
   await app.agent.idle(session);
   const seen = app.agent.inspect(session);
@@ -42,10 +43,24 @@ test('the agent has the studio\'s operations and a skill reader, and is told not
     assert.ok(!app.studio.agentOperations().some(operation => operation.id === refused), `${refused} is not a tool`);
   }
   for (const name of SKILLS) assert.ok(seen.prompt.includes(name), `the skill catalogue lists ${name}`);
-  for (const leak of ['CableSimPro', '开发约定', 'AGENTS.md', 'CLAUDE.md', '仓库卫生', REPO.replace(/\\/g, '/')]) {
+  for (const leak of ['CableSimPro', '开发约定', 'AGENTS.md', 'CLAUDE.md', '仓库卫生']) {
     assert.ok(!seen.prompt.includes(leak), `the prompt does not carry "${leak}"`);
   }
   assert.ok(seen.prompt.includes('数字') && seen.prompt.includes('审阅'));
+
+  // What the model is actually sent, not what the session layer says it holds: the skills by name, and no path of this machine in any spelling.
+  assert.ok(!sent.includes('<cwd>'), 'the working folder is left out');
+  for (const name of SKILLS) assert.ok(sent.includes(`<name>${name}</name>`), `the request lists ${name}`);
+  const spellings = (path: string) => {
+    const backslashes = path.replace(/\//g, '\\');
+    return [path.replace(/\\/g, '/'), backslashes, backslashes.replace(/\\/g, '\\\\')];
+  };
+  for (const path of [home, REPO, join(REPO, 'studio', 'skills')]) {
+    for (const form of spellings(path)) assert.ok(!sent.includes(form), `the request does not carry ${form}`);
+  }
+  assert.ok(sent.includes('Call the read tool with the skill name.'));
+  // Control: the session layer does hold where the skills are, so a request without it is the rewrite's doing and this check can fail.
+  assert.ok(spellings(join(REPO, 'studio', 'skills')).some(form => JSON.stringify(seen.prompt).includes(form)), 'the control: pi itself lists where the skills are');
 });
 
 test('the reader opens a skill and refuses every other file', async () => {
@@ -135,6 +150,22 @@ test('the agent imports the public sample, checks it against the standard and li
   const listed = await app.studio.invoke('library.check.failures', { series }, { by: 'human' }) as { checked: number; specs: number };
   assert.equal(listed.checked, listed.specs, 'the check ran for every spec of the series');
   assert.equal(lastText(view), '已导入并核对。');
+});
+
+test('an import the library would refuse is refused before a person is asked to approve it', async () => {
+  // The previous test imported the public sample's first sheet; the same sheet again is a series with the same name.
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('load_public_sample', {})], { stopReason: 'toolUse' }),
+    context => { const sample = toolResult(context); return fauxAssistantMessage([fauxToolCall('import_series', { upload: sample.upload, sheet: sample.sheets[0].sheet })], { stopReason: 'toolUse' }); },
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('这个系列已经在库里，不重复导入。')]); },
+  ]);
+  const { session } = await app.agent.send(undefined, '再导入一次公开结构表示例');
+  await app.agent.idle(session);
+  const view = await app.agent.view(session);
+  assert.equal(view.waiting.length, 0, 'nobody was asked');
+  assert.deepEqual(steps(view).map(step => step.status), ['done', 'failed']);
+  assert.ok(told.includes('已有名为'), told);
 });
 
 test('stopping the agent while a change waits settles it at once and leaves the inputs alone', async () => {
