@@ -14,7 +14,7 @@ import { EmptyState } from '@/kit/workbench/premise';
 import { cn } from '@/lib/utils';
 import { compact, fixed, LEVEL_NAMES } from '@shared/format';
 import type { CableState, RunRecord } from '@shared/types';
-import type { Rating } from './rating';
+import { methodOf, type Rating } from './rating';
 
 export type ConclusionState =
   | { kind: 'issue'; message: string }
@@ -144,8 +144,7 @@ export function Conclusion({ state }: { state: ConclusionState }) {
         <p className="m-0 text-sm text-ink">{card.tier.meaning}</p>
         {rating.summary.ampacity?.meaning && <p className="m-0 text-sm text-ink-2">{rating.summary.ampacity.meaning}</p>}
         <PropertyList rows={[
-          { label: '方法', value: card.method },
-          { label: '插件', value: `${record.plugin_id} ${record.plugin_version}` },
+          { label: '方法', value: methodOf(record) },
           { label: '验证水平', value: LEVEL_NAMES[card.validation.level] ?? card.validation.level },
           { label: '独立核对', value: verification ? `${verification.rows.filter(row => row.passed).length} / ${verification.rows.length} 项通过` : '本次没有核对项' },
         ]} />

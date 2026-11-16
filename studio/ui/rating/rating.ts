@@ -1,7 +1,7 @@
 // What the conclusion reads from a rating record: the answer, the cable it is about and the numbers under it. Every number
 // is the method's own, as saved in the record; nothing here computes one, and nothing here overrules what the method says
 // (which cable reaches its limit first, whether the saved load is within the limit).
-import type { CableState, HeatContribution, Issue, RunRecord, Summary } from '@shared/types';
+import type { CableState, HeatContribution, Issue, Parts, RunRecord, Summary } from '@shared/types';
 
 export interface Rating {
   summary: Summary;
@@ -35,6 +35,15 @@ export interface Rating {
   /** Shares of the focus cable's surface rise; known at the saved load only. */
   contributions: HeatContribution[] | null;
 }
+
+/** The conductor temperature limit of the cable a record was computed for, °C. */
+export const limitOf = (inputs: Parts): number | null => {
+  const limit = inputs.cable.payload.cable_type.rating.max_conductor_temperature.normal;
+  return typeof limit === 'number' ? limit - 273.15 : null;
+};
+
+/** The method a record was computed with, as the screen names it: the method's name and its version (never the plugin's identifier). */
+export const methodOf = (record: RunRecord): string => `${record.method_card?.method ?? '载流量'} ${record.method_version}`;
 
 export function ratingOf(record: RunRecord | undefined, selected: string | null): Rating | null {
   const summary = record?.kind === 'rating' ? record.summary : undefined;

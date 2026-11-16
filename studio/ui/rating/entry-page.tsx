@@ -4,7 +4,7 @@
 import { getRouteApi, Navigate } from '@tanstack/react-router';
 import { EmptyState } from '@/kit/workbench/premise';
 import { useProjects } from '@/state/queries';
-import { messageOf } from './edit';
+import { messageOf } from './messages';
 import { RatingFrame } from './frame';
 import { LAST_PROJECT } from './last';
 import { StartScreen } from './project-start';

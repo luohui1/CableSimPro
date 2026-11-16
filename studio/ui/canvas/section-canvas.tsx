@@ -6,6 +6,7 @@ import { animate } from 'motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Dot } from '@/kit/marks';
 import { CanvasFrame, CanvasLayer, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
 import { cn } from '@/lib/cn';
 import { rampPosition, readRamp } from '@/lib/ramp';
@@ -36,8 +37,12 @@ interface Span { x0: number; x1: number; y: number; from0: number; from1: number
 interface Depth { x: number; top: number; bottom: number; broken: boolean; refX: number; label: string; rect: Rect }
 
 /** Everything that depends on the camera: screen positions and a collision-free place for every label. */
-function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: Size, options: { dimensions: boolean; isotherms: boolean; result: boolean; capsules: boolean; reserved: Rect[] }) {
-  // A dimension that can be changed is a capsule (a button); one that cannot is plain text.
+function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: Size, options: {
+  dimensions: boolean; isotherms: boolean; result: boolean; capsules: boolean; reserved: Rect[];
+  /** The depth and spacing the dimensions read when the engineer has changed them and not applied it yet, and which were changed. */
+  shown: { depth: number | null; spacing: number | null; changed: { depth: boolean; spacing: boolean } };
+}) {
+  // A dimension that can be changed is a capsule (a button); one that cannot is plain text. A changed one has room for its dot.
   const pad = options.capsules ? 26 : 8;
   const tall = options.capsules ? 24 : 20;
   const point = (x: number, z: number) => toScreen(camera, size, x, z);
@@ -57,8 +62,8 @@ function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: S
     if (pair) {
       const [a, b] = pair.map(item => cables.find(cable => cable.id === item.id) as (typeof cables)[number]);
       const y = Math.max(a.sy + a.r, b.sy + b.r) + 22;
-      const label = `${compact(scene.spacing as number * 1000)} mm`;
-      const width = textWidth(label) + pad;
+      const label = `${compact((options.shown.spacing ?? (scene.spacing as number)) * 1000)} mm`;
+      const width = textWidth(label) + pad + (options.shown.changed.spacing ? 16 : 0);
       const rect = { x: (a.sx + b.sx) / 2 - width / 2, y: y + 7, w: width, h: tall };
       span = { x0: a.sx, x1: b.sx, y, from0: a.sy + a.r + 4, from1: b.sy + b.r + 4, label, rect };
       taken.push(rect, { x: a.sx - 4, y: a.sy + a.r, w: b.sx - a.sx + 8, h: y - a.sy - a.r + 4 });
@@ -68,8 +73,8 @@ function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: S
       const bottom = point(0, -scene.depth)[1];
       const broken = groundY < 56;
       const top = broken ? 64 : groundY;
-      const label = `中心埋深 ${compact(scene.depth)} m`;
-      const width = textWidth(label) + pad;
+      const label = `中心埋深 ${compact(options.shown.depth ?? scene.depth)} m`;
+      const width = textWidth(label) + pad + (options.shown.changed.depth ? 16 : 0);
       const rect = { x: x - 10 - width, y: (top + bottom) / 2 - tall / 2, w: width, h: tall };
       if (bottom - top > 40 && rect.x > 8) {
         depth = { x, top, bottom, broken, refX: point(scene.group.left, 0)[0] - 5, label, rect };
@@ -180,11 +185,19 @@ function CapsuleField({ value, unit, label, least, onApply, onLeave }: { value: 
   </InputGroup>;
 }
 
-/** Changing the laying on the drawing. Positions follow the laying template, so what changes is its depth and spacing. */
+/**
+ * Changing the laying on the drawing. Positions follow the laying template, so what changes is its depth and spacing. The
+ * drawing itself stays what it was until the change is applied: what is changed shows in its dimension, with a dot, and as
+ * a dashed outline of the cables where they would be.
+ */
 export interface SectionEdit {
+  /** The depth the laying is being changed to; what is drawn when nothing was changed. */
   depth: number;
-  /** The spacing in force (set or the template's default), when the template has one. */
+  /** The spacing it is being changed to (set or the template's default), when the template has one. */
   spacing: number | null;
+  /** Which of the two are changes that are not applied yet. */
+  changed: { depth: boolean; spacing: boolean };
+  /** A change of one of them; the caller keeps it until the engineer applies it. */
   commit: (fields: { depth_m?: number; spacing_m?: number }) => void;
 }
 interface Ghost { axis: 'depth' | 'spacing'; depth: number; spacing: number | null; x: number; y: number }
@@ -327,6 +340,7 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
   const shaded = Boolean(field) && layers.field && gpu !== 'none';
   const view = camera && size.width ? compose(scene, layers.field ? field : null, camera, size, {
     dimensions: layers.dimensions, isotherms: layers.isotherms && layers.field && gpu !== 'none', result, capsules: Boolean(edit),
+    shown: { depth: edit?.depth ?? null, spacing: edit?.spacing ?? null, changed: edit?.changed ?? { depth: false, spacing: false } },
     // Where the frame floats its tools, view switch and temperature scale; no label may be put under them.
     reserved: [
       { x: 0, y: 0, w: 264, h: 60 },
@@ -355,13 +369,16 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
     if (!edit.spacing || Math.abs(lever) < 0.25) return;
     setGhost({ axis: 'spacing', depth: edit.depth, spacing: Math.max(tightest, snap(edit.spacing + (x - held.x) / held.camera.scale / lever, SPACING_SNAP)), x, y });
   };
-  const ghosts = ghost && edit && camera ? (() => {
+  // Where the cables would be: under the pointer while one is dragged, and after that for as long as the change is not applied.
+  const drawn = { depth: scene.depth ?? edit?.depth ?? 0, spacing: scene.spacing ?? edit?.spacing ?? null };
+  const outline = ghost ?? (edit && (edit.changed.depth || edit.changed.spacing) ? { depth: edit.depth, spacing: edit.spacing } : null);
+  const ghosts = outline && edit && camera ? (() => {
     const centreX = scene.cables.reduce((sum, cable) => sum + cable.x, 0) / scene.cables.length;
     const centreZ = scene.cables.reduce((sum, cable) => sum + cable.z, 0) / scene.cables.length;
-    const ratio = ghost.spacing && edit.spacing ? ghost.spacing / edit.spacing : 1;
+    const ratio = outline.spacing && drawn.spacing ? outline.spacing / drawn.spacing : 1;
     return scene.cables.map(cable => ({
       id: cable.id,
-      at: toScreen(camera, size, centreX + (cable.x - centreX) * ratio, centreZ + (cable.z - centreZ) * ratio - (ghost.depth - edit.depth)),
+      at: toScreen(camera, size, centreX + (cable.x - centreX) * ratio, centreZ + (cable.z - centreZ) * ratio - (outline.depth - drawn.depth)),
       r: cable.radius * camera.scale,
     }));
   })() : null;
@@ -495,9 +512,10 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
         {editing === which
           ? <CapsuleField value={Number((value * scale).toFixed(4))} unit={unit} label={which === 'depth' ? '中心埋深' : '中心距'} least={least * scale} onLeave={() => setEditing(null)}
             onApply={next => edit.commit(which === 'depth' ? { depth_m: next } : { spacing_m: next / 1000 })} />
-          : <button type="button" data-dimension={which} onClick={() => setEditing(which)} style={{ width: dimension.rect.w, height: dimension.rect.h }}
-            className="flex cursor-text items-center justify-center rounded-full border border-control bg-panel text-13 whitespace-nowrap text-ink shadow-lift transition-colors duration-fast ease-std hover:border-ink">
+          : <button type="button" data-dimension={which} data-changed={edit.changed[which] || undefined} onClick={() => setEditing(which)} style={{ width: dimension.rect.w, height: dimension.rect.h }}
+            className="flex cursor-text items-center justify-center gap-2 rounded-full border border-control bg-panel text-13 whitespace-nowrap text-ink shadow-lift transition-colors duration-fast ease-std hover:border-ink">
             {dimension.label}
+            {edit.changed[which] && <Dot tone="attention" />}
           </button>}
       </div>)}
 
