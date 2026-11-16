@@ -8,7 +8,7 @@ const read = (token: string) => getComputedStyle(document.documentElement).getPr
 export function useThemeColor(token: string): string {
   const theme = useTheme(state => state.theme);
   const [colour, setColour] = useState(() => read(token));
-  // The theme's class lands on the root in the same commit; read after it.
+  // data-theme is set on the root before the theme's state changes, so reading after the render gets the new colour.
   useEffect(() => setColour(read(token)), [theme, token]);
   return colour;
 }

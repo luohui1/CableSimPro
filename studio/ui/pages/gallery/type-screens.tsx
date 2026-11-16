@@ -1,28 +1,28 @@
 // The cable-type screens of round two: importing a structure table in five steps on one screen; a new type typed layer by
 // layer or generated from a product standard; and the pages of a specification after its structure: parameters, the
-// ampacity table, versions and files with the review. Data: round2-data.ts (this branch's host, and the proposal of
+// ampacity table, versions and files with the review. Data: host-records.ts (this branch's host, and the proposal of
 // studio-types' core) and the workspace of library-data.ts, both YJV22-8.7/15 kV 3×240.
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Disclosure } from '@/kit/disclosure';
 import { Icon } from '@/kit/icon';
-import { ReviewMark, TierMark, VerdictBar, type Review } from '@/kit/marks';
-import { Metric } from '@/kit/metric';
+import { ReviewMark, TierMark, VerdictBar, type Review, type Tier } from '@/kit/marks';
+import { Metric, MetricGroup } from '@/kit/metric';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { FlowLayout, Stepper, type FlowStep } from '@/kit/workbench/flow';
-import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, FormSection, ReadonlyValue, SourceTag, UnitInput, type SourceKind } from '@/kit/workbench/form';
+import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, FormSection, ReadonlyValue, Segmented, SourceTag, UnitInput } from '@/kit/workbench/form';
 import { PageHeader, Panel, Split } from '@/kit/workbench/page';
 import { Given, PremiseStrip } from '@/kit/workbench/premise';
 import { ReviewActions, ReviewTrack } from '@/kit/workbench/review';
 import { compact, fixed } from '@shared/format';
 import { CableSection } from './figures';
 import { WORKSPACE } from './library-data';
-import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS } from './round2-data';
-import { SeriesShell } from './workbench-screens';
+import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS } from './host-records';
+import { PLACED, SeriesShell, residualText } from './workbench-screens';
 
 /** A host time as the screen writes times: date and minute, in the reader's zone. */
 export const when = (iso: string) => new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
@@ -45,7 +45,7 @@ const FIELD_OPTIONS = [
 function importSteps(at: ImportStep): FlowStep[] {
   const index = IMPORT_STEPS.findIndex(step => step.key === at);
   const settled: Record<ImportStep, string> = {
-    upload: IMPORT.file, sheet: IMPORT.sheet, columns: `${MAPPED} 列对上字段`, preview: `${IMPORT.rows.length} 行可导入`, commit: '',
+    upload: IMPORT.file, sheet: IMPORT.sheet, columns: `${MAPPED} 列对上字段`, preview: `${IMPORT.ready} 行可导入`, commit: '',
   };
   return IMPORT_STEPS.map((step, position) => ({
     title: step.title,
@@ -69,8 +69,15 @@ const PREVIEW_COLUMNS: Column<PreviewRow>[] = [
   { key: 'od', header: '表列外径', unit: 'mm', numeric: true, width: 'w-28', cell: row => fixed(row.od, 1) },
   { key: 'listed', header: '各层合计', unit: 'mm', numeric: true, width: 'w-28', cell: row => fixed(row.listed, 2) },
   { key: 'residual', header: '余量（单边）', unit: 'mm', numeric: true, width: 'w-32', cell: row => fixed(row.residual, 2) },
-  { key: 'state', header: '状态', width: 'w-28', cell: () => <Badge variant="success"><Icon name="action/check" data-icon="inline-start" />可导入</Badge> },
+  { key: 'state', header: '状态', width: 'w-28', cell: row => {
+    const notes: string[] = row.ok ? row.warnings : [row.error ?? ''];
+    const badge = !row.ok ? <Badge variant="error"><Icon name="status/error" data-icon="inline-start" />不能导入</Badge>
+      : notes.length ? <Badge variant="attention"><Icon name="status/warning" data-icon="inline-start" />可导入</Badge>
+        : <Badge variant="success"><Icon name="action/check" data-icon="inline-start" />可导入</Badge>;
+    return notes.length ? <Tooltip><TooltipTrigger render={badge} /><TooltipContent>{notes.join('；')}</TooltipContent></Tooltip> : badge;
+  } },
 ];
+const PLACED_IN_PREVIEW = [...new Set(IMPORT.rows.map(row => row.placedIn).filter(Boolean))].map(key => PLACED[key] ?? key).join('、');
 
 function ImportContent({ at }: { at: ImportStep }) {
   if (at === 'upload') return <div className="flex max-w-3xl flex-col gap-10">
@@ -92,28 +99,20 @@ function ImportContent({ at }: { at: ImportStep }) {
   if (at === 'columns') return <div className="flex max-w-4xl flex-col gap-6">
     <FormSection title="把列对上字段" description={`${IMPORT.sheet}：表头第 ${SHEET.headerRows.join('–')} 行，第 ${SHEET.firstDataRow} 行起 ${SHEET.dataRows} 行数据。下拉里是建议的对应，不对就改。`}
       aside={<Button variant="outline" size="sm"><Icon name="action/save" data-icon="inline-start" />存为常用对应</Button>}>
-      <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-canvas px-4 py-3 text-sm">
-        <span className="text-ink-2">表名读出的型号</span>
-        <span className="font-semibold text-ink">{IMPORT.designation.model}</span>
-        <span className="text-ink">{IMPORT.designation.description}</span>
-      </div>
-      <div className="overflow-hidden rounded-card border border-line">
-        <DataTable rows={IMPORT.columns} rowKey={column => column.letter} columns={COLUMN_COLUMNS} />
-      </div>
+      <FormNote title={`表名读出的型号：${IMPORT.designation.model}`}>{IMPORT.designation.description}</FormNote>
+      <DataTable framed rows={IMPORT.columns} rowKey={column => column.letter} columns={COLUMN_COLUMNS} />
     </FormSection>
   </div>;
   if (at === 'preview') return <div className="flex max-w-4xl flex-col gap-6">
     <FormSection title="每一行生成的规格" description="按系列声明和列对应生成，还没有保存。">
-      <div className="grid grid-cols-3 gap-4 rounded-card border border-line px-4 py-4">
-        <Metric size="md" label="可导入" value={IMPORT.rows.length} unit="行" />
-        <Metric size="md" label="不能导入" value={0} unit="行" />
+      <MetricGroup>
+        <Metric size="md" label="可导入" value={IMPORT.ready} unit="行" />
+        <Metric size="md" label="不能导入" value={IMPORT.failed} unit="行" />
         <Metric size="md" label="不是数据，跳过" value={IMPORT.skipped.length} unit="行" />
-      </div>
-      <div className="overflow-hidden rounded-card border border-line">
-        <DataTable rows={IMPORT.rows} rowKey={row => row.key} columns={PREVIEW_COLUMNS} />
-      </div>
+      </MetricGroup>
+      <DataTable framed rows={IMPORT.rows} rowKey={row => row.key} columns={PREVIEW_COLUMNS} />
       {IMPORT.skipped.map(row => <FormNote key={row.row} title={`第 ${row.row} 行不导入`}>{row.text}</FormNote>)}
-      <FormNote title="尺寸怎么来的">{WORKSPACE.derivation} 表列外径比各层合计多出的部分计入填充。</FormNote>
+      <FormNote title="尺寸怎么来的">{WORKSPACE.derivation}{PLACED_IN_PREVIEW && ` 表列外径比各层合计多出的部分计入${PLACED_IN_PREVIEW}。`}</FormNote>
     </FormSection>
   </div>;
   return <div className="flex max-w-3xl flex-col gap-10">
@@ -160,7 +159,7 @@ function ImportBody({ at }: { at: ImportStep }) {
       {index > 0 && <Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>}
       {at === 'upload' ? null
         : next ? <Button>下一步：{next.title}<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
-        : <Button><Icon name="action/import" data-icon="inline-start" />导入 {IMPORT.rows.length} 个规格</Button>}
+        : <Button><Icon name="action/import" data-icon="inline-start" />导入 {IMPORT.ready} 个规格</Button>}
     </>}>
       <ImportContent at={at} />
     </FlowLayout>
@@ -171,10 +170,7 @@ function ImportBody({ at }: { at: ImportStep }) {
 
 function NewTypeHeader({ way, primary }: { way: 'manual' | 'standard'; primary?: ReactNode }) {
   return <PageHeader trail={[{ label: '型号库' }]} title="新建型号"
-    marks={<ToggleGroup value={[way]} aria-label="新建方式" className="rounded-lg border border-line bg-surface p-1">
-      <ToggleGroupItem value="manual">从零填写</ToggleGroupItem>
-      <ToggleGroupItem value="standard">按标准生成</ToggleGroupItem>
-    </ToggleGroup>}
+    marks={<Segmented label="新建方式" value={way} options={[{ value: 'manual', label: '从零填写' }, { value: 'standard', label: '按标准生成' }]} />}
     actions={<Button variant="ghost">取消</Button>} primary={primary} />;
 }
 
@@ -192,7 +188,7 @@ function TypeNewManualBody() {
             <FormSection title="型号" description="系列的名称、型号写法、芯数、电压和执行标准；同一系列的规格共用这些。">
               <FormRow label="系列名称" htmlFor="type-name"><Input id="type-name" defaultValue="YJV22-8.7/15 kV 三芯" /></FormRow>
               <FormRow label="型号" htmlFor="type-designation" hint={IMPORT.designation.description}><Input id="type-designation" defaultValue={DECLARATION.designation} className="w-48" /></FormRow>
-              <FormRow label="芯数"><ToggleGroup value={['3']} aria-label="芯数" className="rounded-lg border border-line bg-surface p-1"><ToggleGroupItem value="1">单芯</ToggleGroupItem><ToggleGroupItem value="3">三芯</ToggleGroupItem></ToggleGroup></FormRow>
+              <FormRow label="芯数"><Segmented label="芯数" value={String(DECLARATION.cores)} options={CORE_OPTIONS} /></FormRow>
               <FormRow label="电压">
                 <div className="grid grid-cols-3 gap-2">
                   <UnitInput aria-label="U₀" prefix="U₀" unit="kV" defaultValue={compact(DECLARATION.u0_v / 1000)} />
@@ -212,7 +208,7 @@ function TypeNewManualBody() {
             </FormSection>
           </div>
         </div> },
-      { id: 'preview', size: 40, min: 28, children: <Panel title="断面" tools={<span className="text-sm text-ink-2">外径余量 {fixed(WORKSPACE.closure.residual_mm, 2)} mm 计入填充</span>} bodyClassName="relative bg-canvas">
+      { id: 'preview', size: 40, min: 28, children: <Panel title="断面" tools={<span className="text-sm text-ink-2">{residualText(WORKSPACE.closure.residual_mm, WORKSPACE.closure.placed_in)}</span>} bodyClassName="relative bg-canvas">
           <div className="absolute inset-8"><CableSection /></div>
         </Panel> },
     ]} />
@@ -223,22 +219,40 @@ type Dimension = (typeof PROPOSAL.complete.dimensions)[number];
 
 function placeOf(dimension: Dimension) {
   if (dimension.kind === 'given') return undefined;
-  return `${dimension.clause} · PDF 第 ${dimension.pdf_page} 页`;
+  const parts = [dimension.clause, dimension.pdf_page ? `PDF 第 ${dimension.pdf_page} 页` : null].filter(Boolean);
+  return parts.length ? parts.join(' · ') : undefined;
 }
 
 function difference(dimension: Dimension) {
   const printed = PRINTED[dimension.field];
   if (printed === undefined) return <span className="text-ink-2">手册未列</span>;
-  const delta = Math.round((dimension.value - printed) * 100) / 100;
+  const delta = Math.round((dimension.value - printed) * 10) / 10;
   return delta === 0 ? <span className="text-ink-2">相同</span> : <span className="font-medium text-attention-ink">{delta > 0 ? '+' : '−'}{fixed(Math.abs(delta), 1)}</span>;
 }
 
 const PROPOSAL_COLUMNS: Column<Dimension>[] = [
   { key: 'label', header: '尺寸', cell: dimension => dimension.label },
   { key: 'value', header: '提案', unit: 'mm', numeric: true, width: 'w-24', cell: dimension => <span className="font-medium">{fixed(dimension.value, 1)}</span> },
-  { key: 'source', header: '出处', width: 'w-56', cell: dimension => <SourceTag kind={dimension.kind as SourceKind} place={placeOf(dimension)} /> },
-  { key: 'printed', header: '手册 3×240', unit: 'mm', numeric: true, width: 'w-28', cell: dimension => PRINTED[dimension.field] === undefined ? '—' : fixed(PRINTED[dimension.field], 1) },
-  { key: 'delta', header: '提案比手册', numeric: true, width: 'w-28', cell: difference },
+  { key: 'source', header: '出处', width: 'w-56', cell: dimension => <SourceTag kind={dimension.kind} place={placeOf(dimension)} /> },
+  { key: 'printed', header: `手册 ${PROPOSAL.inputs.cores}×${PROPOSAL.inputs.area_mm2}`, unit: 'mm', numeric: true, width: 'w-28', cell: dimension => PRINTED[dimension.field] === undefined ? '—' : fixed(PRINTED[dimension.field], 1) },
+  { key: 'delta', header: '提案比手册', unit: 'mm', numeric: true, width: 'w-32', cell: difference },
+];
+
+// The words of the proposal's inputs (structure.propose's own values).
+const CORE_OPTIONS = [{ value: '1', label: '单芯' }, { value: '3', label: '三芯' }];
+const CORE_WORD: Record<number, string> = { 1: '单芯', 3: '三芯' };
+const CONDUCTOR_WORD: Record<string, string> = { copper: '铜', aluminium: '铝' };
+const ARMOUR_WORD: Record<string, string> = { none: '无铠装', steel_tape: '双钢带铠装' };
+const STAGES = PROPOSAL.calculation.map((stage, index) => ({ ...stage, step: index + 1 }));
+const STAGE_COLUMNS: Column<(typeof STAGES)[number]>[] = [
+  { key: 'stage', header: '阶段', width: 'w-56', cell: stage => `${stage.step}. ${stage.stage}` },
+  { key: 'formula', header: '式子', cell: stage => <span className="text-ink-2">{stage.formula}</span> },
+  { key: 'value', header: '值', unit: 'mm', numeric: true, width: 'w-24', cell: stage => fixed(stage.value, 1) },
+];
+type Missing = (typeof PROPOSAL.complete.missing)[number];
+const MISSING_COLUMNS: Column<Missing>[] = [
+  { key: 'label', header: '尺寸', width: 'w-36', cell: item => <span className="font-medium">{item.label}</span> },
+  { key: 'reason', header: '为什么由你给', cell: item => <span className="whitespace-normal">{item.reason}</span> },
 ];
 
 export type StandardStep = 'conditions' | 'proposal' | 'create';
@@ -246,10 +260,6 @@ const STANDARD_STEPS: { key: StandardStep; title: string }[] = [
   { key: 'conditions', title: '条件' }, { key: 'proposal', title: '提案与对照' }, { key: 'create', title: '补齐并建成草稿' },
 ];
 
-const Segments = ({ label, value, options }: { label: string; value: string; options: [string, string][] }) =>
-  <ToggleGroup value={[value]} aria-label={label} className="rounded-lg border border-line bg-surface p-1">
-    {options.map(([key, word]) => <ToggleGroupItem key={key} value={key}>{word}</ToggleGroupItem>)}
-  </ToggleGroup>;
 
 /** Step 1: the cable as the standard asks for it, and the screens the engineer gives so the annex can run. */
 function StandardConditions() {
@@ -263,14 +273,14 @@ function StandardConditions() {
           <UnitInput aria-label="U" prefix="U" unit="kV" defaultValue={compact(inputs.u_v / 1000)} />
         </div>
       </FormRow>
-      <FormRow label="芯数"><Segments label="芯数" value={String(inputs.cores)} options={[['1', '单芯'], ['3', '三芯']]} /></FormRow>
-      <FormRow label="导体"><Segments label="导体材料" value={inputs.conductor} options={[['copper', '铜'], ['aluminium', '铝']]} /></FormRow>
+      <FormRow label="芯数"><Segmented label="芯数" value={String(inputs.cores)} options={CORE_OPTIONS} /></FormRow>
+      <FormRow label="导体"><Segmented label="导体材料" value={inputs.conductor} options={Object.entries(CONDUCTOR_WORD).map(([value, label]) => ({ value, label }))} /></FormRow>
       <FormRow label="截面" htmlFor="std-area"><UnitInput id="std-area" unit="mm²" defaultValue={inputs.area_mm2} className="w-48" /></FormRow>
       <FormRow label="绝缘" hint="目前只有 XLPE 的标准结构提案"><ReadonlyValue className="w-64">XLPE（交联聚乙烯）</ReadonlyValue></FormRow>
-      <FormRow label="铠装"><Segments label="铠装" value={inputs.armour} options={[['none', '无铠装'], ['steel_tape', '双钢带铠装']]} /></FormRow>
+      <FormRow label="铠装"><Segmented label="铠装" value={inputs.armour} options={Object.entries(ARMOUR_WORD).map(([value, label]) => ({ value, label }))} /></FormRow>
     </FormSection>
     <FormSection title="屏蔽（由你给定）" description="要连内衬、钢带和外护套一起算，须给出屏蔽层的厚度；标准只规定铜带的最小标称厚度，实际厚度由工程师定。">
-      <FormRow label="半导电屏蔽"><Segments label="半导电屏蔽" value={inputs.screened ? 'yes' : 'no'} options={[['yes', '有'], ['no', '无']]} /></FormRow>
+      <FormRow label="半导电屏蔽"><Segmented label="半导电屏蔽" value={inputs.screened ? 'yes' : 'no'} options={[{ value: 'yes', label: '有' }, { value: 'no', label: '无' }]} /></FormRow>
       <FormRow label="导体屏蔽厚度" htmlFor="std-cs"><UnitInput id="std-cs" unit="mm" defaultValue={inputs.conductor_screen_thickness_mm} className="w-48" /></FormRow>
       <FormRow label="绝缘屏蔽厚度" htmlFor="std-is"><UnitInput id="std-is" unit="mm" defaultValue={inputs.insulation_screen_thickness_mm} className="w-48" /></FormRow>
       <FormRow label="铜带厚度" htmlFor="std-tt"><UnitInput id="std-tt" unit="mm" defaultValue={inputs.screen_tape_thickness_mm} className="w-48" /></FormRow>
@@ -283,7 +293,7 @@ function StandardConditions() {
 function StandardCreate() {
   const proposal = PROPOSAL.complete;
   return <div className="flex max-w-3xl flex-col gap-10">
-    <FormSection title="标准不规定的两项" description="按实际值填写；成品外径用来做外径闭合核对。">
+    <FormSection title={`标准不规定的 ${proposal.missing.length} 项`} description="按实际值填写；成品外径用来做外径闭合核对。">
       {proposal.missing.map(item => <FormRow key={item.field} label={item.label} htmlFor={`std-${item.field}`} hint={item.reason}>
         <UnitInput id={`std-${item.field}`} unit={item.unit} defaultValue={PRINTED[item.field]} className="w-48" />
       </FormRow>)}
@@ -315,7 +325,7 @@ function TypeNewStandardBody({ at = 'proposal' }: { at?: StandardStep }) {
   const proposal = PROPOSAL.complete;
   const index = STANDARD_STEPS.findIndex(step => step.key === at);
   const settled: Record<StandardStep, string> = {
-    conditions: `${PROPOSAL.standard} · 3×${inputs.area_mm2}`,
+    conditions: `${PROPOSAL.standard} · ${inputs.cores}×${inputs.area_mm2}`,
     proposal: `${proposal.dimensions.length} 个尺寸，还缺 ${proposal.missing.length} 项`,
     create: '',
   };
@@ -334,28 +344,15 @@ function TypeNewStandardBody({ at = 'proposal' }: { at?: StandardStep }) {
     <FlowLayout steps={<Stepper label="按标准生成的步骤" steps={steps} />} footer={footer}>
       {at === 'conditions' ? <StandardConditions /> : at === 'create' ? <StandardCreate /> : <div className="flex max-w-4xl flex-col gap-8">
         <FormSection title="标准给出的尺寸"
-          description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · 三芯 · 铜 ${inputs.area_mm2} mm² · XLPE 绝缘 · 钢带铠装 · 有金属屏蔽`}
+          description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · ${CORE_WORD[inputs.cores]} · ${CONDUCTOR_WORD[inputs.conductor]} ${inputs.area_mm2} mm² · ${inputs.insulation} 绝缘 · ${ARMOUR_WORD[inputs.armour]} · ${inputs.screened ? '有' : '无'}半导电屏蔽`}
           aside={<Badge variant="outline">{PROPOSAL.method.plugin_id} {PROPOSAL.method.plugin_version}</Badge>}>
-          <div className="overflow-hidden rounded-card border border-line">
-            <DataTable rows={proposal.dimensions} rowKey={dimension => dimension.field} columns={PROPOSAL_COLUMNS} />
-          </div>
-          <Disclosure title={`内衬、钢带和外护套怎么来的（附录 A 假设直径，${PROPOSAL.calculation.length} 步）`} className="rounded-card border border-line">
-            <ol className="m-0 flex list-none flex-col px-4 pb-3">
-              {PROPOSAL.calculation.map((stage, index) => <li key={stage.stage} className="flex min-h-9 items-center gap-4 border-b border-line py-1 text-sm last:border-b-0">
-                <span className="w-48 shrink-0 text-ink">{index + 1}. {stage.stage}</span>
-                <span className="min-w-0 flex-1 text-ink-2">{stage.formula}</span>
-                <span className="w-20 shrink-0 text-right font-medium text-ink tabular-nums">{fixed(stage.value, 1)} {stage.unit}</span>
-              </li>)}
-            </ol>
+          <DataTable framed rows={proposal.dimensions} rowKey={dimension => dimension.field} columns={PROPOSAL_COLUMNS} />
+          <Disclosure title={`内衬、钢带和外护套怎么来的（附录 A 假设直径，${STAGES.length} 步）`}>
+            <DataTable framed rows={STAGES} rowKey={stage => String(stage.step)} columns={STAGE_COLUMNS} />
           </Disclosure>
         </FormSection>
-        <FormSection title="还要你给的" description="标准不规定这两项；下一步按实际值填写。">
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {proposal.missing.map(item => <li key={item.field} className="grid grid-cols-label gap-x-4 text-sm">
-              <span className="font-medium text-ink">{item.label}</span>
-              <span className="text-ink">{item.reason}</span>
-            </li>)}
-          </ul>
+        <FormSection title="还要你给的" description={`标准不规定这 ${proposal.missing.length} 项；下一步按实际值填写。`}>
+          <DataTable framed rows={proposal.missing} rowKey={item => item.field} columns={MISSING_COLUMNS} />
         </FormSection>
         <FormNote title="这份提案不说明什么">
           <ul className="m-0 flex list-disc flex-col gap-1 pl-4">{proposal.limitations.map(text => <li key={text}>{text}</li>)}</ul>
@@ -373,6 +370,13 @@ const PER_KM: Record<string, { factor: number; unit: string }> = {
   'Ω/m': { factor: 1000, unit: 'Ω/km' }, 'F/m': { factor: 1e9, unit: 'μF/km' }, 'A/m': { factor: 1000, unit: 'A/km' }, 'H/m': { factor: 1e6, unit: 'mH/km' },
 };
 const nameOf = (title: string) => title.replace(/^芯 1 · /, '');
+// The component a row is about, from its id: the generic 金属组件 of the title becomes the screen or the armour.
+const COMPONENT: [string, string][] = [['core/1:metallic_screen', '金属屏蔽'], ['common:armour', '铠装']];
+const labelOf = (row: Quantity) => {
+  const component = COMPONENT.find(([prefix]) => row.id.startsWith(prefix))?.[1];
+  return component ? nameOf(row.title).replace('金属组件', component) : nameOf(row.title);
+};
+const STATUS_WORD: Record<string, string> = { missing: '缺项', uncovered: '未覆盖' };
 const quantityValue = (row: Quantity) => {
   const scale = PER_KM[row.unit];
   return { value: row.value === null ? '—' : compact(row.value * (scale?.factor ?? 1), 4), unit: scale?.unit ?? (row.unit === '1' ? '' : row.unit) };
@@ -388,10 +392,10 @@ function Missing({ rows }: { rows: Quantity[] }) {
   return <ul className="m-0 flex list-none flex-col p-0">
     {rows.map(row => <li key={row.id} className="grid grid-cols-property items-start gap-x-4 border-b border-line px-4 py-2 text-sm last:border-b-0">
       <span className="flex flex-col gap-1">
-        <span className="text-ink">{nameOf(row.title)}</span>
+        <span className="text-ink">{labelOf(row)}</span>
         <span className="text-ink-2">{row.reason}</span>
       </span>
-      <Badge variant={row.status === 'uncovered' ? 'outline' : 'secondary'}>{row.status === 'uncovered' ? '未覆盖' : '缺依据'}</Badge>
+      <Badge variant={row.status === 'uncovered' ? 'outline' : 'secondary'}>{STATUS_WORD[row.status] ?? row.status}</Badge>
       <span />
     </li>)}
   </ul>;
@@ -400,21 +404,24 @@ function Missing({ rows }: { rows: Quantity[] }) {
 function SeriesParamsBody() {
   const electrical = WORKSPACE.electrical.filter(row => row.status === 'available');
   const short = WORKSPACE.short_circuit.filter(row => row.status === 'available');
-  const value = (id: string) => WORKSPACE.short_circuit.find(row => row.id === id)?.value ?? 0;
+  const value = (id: string) => WORKSPACE.short_circuit.find(row => row.id === id)?.value ?? null;
+  const kA = (id: string) => { const amps = value(id); return amps === null ? null : amps / 1000; };
+  const adiabatic = kA('core/1:conductor-adiabatic');
+  const factor = value('core/1:conductor-factor');
   const conditions = WORKSPACE.short_circuit_conditions;
   return <SeriesShell page="params" version={WORKSPACE.version.number}
     primary={<Button><Icon name="object/file" data-icon="inline-start" />规格书</Button>}>
     <Split panes={[
       { id: 'electrical', size: 56, min: 40, children: <Panel title="每芯电气参数" tools={<Badge variant="outline">{WORKSPACE.electrical_method.plugin_id} {WORKSPACE.electrical_method.plugin_version}</Badge>}>
           <DataTable rows={electrical} rowKey={row => row.id} columns={QUANTITY_COLUMNS} />
-          <Disclosure title={`还没有算 ${WORKSPACE.electrical.length - electrical.length} 项`} defaultOpen>
+          <Disclosure title={`没有给出的 ${WORKSPACE.electrical.length - electrical.length} 项`} defaultOpen>
             <Missing rows={WORKSPACE.electrical.filter(row => row.status !== 'available')} />
           </Disclosure>
         </Panel> },
       { id: 'short', size: 44, min: 32, children: <Panel title="短路电流" tools={<Badge variant="outline">{WORKSPACE.short_circuit_method.plugin_id} {WORKSPACE.short_circuit_method.plugin_version}</Badge>}>
           <div className="flex flex-col gap-4 border-b border-line px-4 py-4">
-            <Metric label="导体非绝热允许短路电流" value={fixed(value('core/1:conductor-nonadiabatic') / 1000, 2)} unit="kA"
-              detail={`绝热 ${fixed(value('core/1:conductor-adiabatic') / 1000, 2)} kA × 修正因数 ${fixed(value('core/1:conductor-factor'), 4)}`} />
+            <Metric label="导体非绝热允许短路电流" value={fixed(kA('core/1:conductor-nonadiabatic'), 2)} unit="kA"
+              detail={adiabatic !== null && factor !== null ? `绝热 ${fixed(adiabatic, 2)} kA × 修正因数 ${fixed(factor, 4)}` : undefined} />
           </div>
           <dl className="m-0 flex flex-col gap-2 border-b border-line px-4 py-4 text-sm">
             {Object.entries(conditions.sources).map(([key, text]) => <div key={key} className="grid grid-cols-label gap-x-4">
@@ -422,7 +429,7 @@ function SeriesParamsBody() {
               <dd className="m-0 text-ink">{text}</dd>
             </div>)}
           </dl>
-          <Disclosure title={`金属屏蔽与铠装还没有算 ${WORKSPACE.short_circuit.length - short.length} 项`}>
+          <Disclosure title={`金属屏蔽与铠装没有给出的 ${WORKSPACE.short_circuit.length - short.length} 项`}>
             <Missing rows={WORKSPACE.short_circuit.filter(row => row.status !== 'available')} />
           </Disclosure>
         </Panel> },
@@ -436,11 +443,12 @@ function SeriesRatingBody() {
   const layouts = [...new Set(RATING_TABLE.rows.map(row => row.layout))];
   const soils = [...new Set(RATING_TABLE.rows.map(row => row.soil))];
   const cell = (layout: string, soil: number) => RATING_TABLE.rows.find(row => row.layout === layout && row.soil === soil);
-  const first = RATING_TABLE.rows[0];
-  return <SeriesShell page="rating" version={1} primary={<Button><Icon name="module/rating-table" data-icon="inline-start" />新算一张</Button>}>
+  const basis = (layout: string) => RATING_TABLE.rows.find(row => row.layout === layout)?.basis;
+  const shared = (key: 'depth' | 'ambient') => [...new Set(RATING_TABLE.rows.map(row => row[key]))].join('、');
+  return <SeriesShell page="rating" version={RATING_TABLE.version} primary={<Button><Icon name="module/rating-table" data-icon="inline-start" />新算一张</Button>}>
     <PremiseStrip asked="允许持续载流量">
-      <Given label="埋深" value={`${first.depth} m`} />
-      <Given label="环境" value={`${first.ambient} °C`} />
+      <Given label="埋深" value={`${shared('depth')} m`} />
+      <Given label="环境" value={`${shared('ambient')} °C`} />
       <Given label="敷设" value={`${layouts.length} 种`} />
       <Given label="土壤热阻率" value={`${soils.length} 档`} />
     </PremiseStrip>
@@ -448,11 +456,11 @@ function SeriesRatingBody() {
       <Panel title="载流量表" tools={<><span className="mr-2 text-sm text-ink-2 tabular-nums">算于 {when(RATING_TABLE.created)}</span><Button variant="ghost" size="sm"><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button></>}>
         <DataTable rows={soils} rowKey={soil => String(soil)} columns={[
           { key: 'soil', header: '土壤热阻率', unit: 'K·m/W', numeric: true, width: 'w-36', cell: soil => fixed(soil, 1) },
-          ...layouts.map(layout => ({ key: layout, header: layout, unit: 'A', numeric: true, width: 'w-48',
+          ...layouts.map(layout => ({ key: layout, header: basis(layout) ? `${layout}（${basis(layout)}）` : layout, unit: 'A', numeric: true, width: 'w-64',
             cell: (soil: number) => { const row = cell(layout, soil); return row ? fixed(row.ampacity, 1) : '—'; } })),
         ]} />
       </Panel>
-      <Panel title="可信分档" tools={<TierMark tier="reference" />} className="w-80 flex-none border-l border-line" bodyClassName="flex flex-col gap-4 px-4 py-4 text-sm">
+      <Panel title="可信分档" tools={<TierMark tier={RATING_TABLE.tierKey as Tier} />} className="w-80 flex-none border-l border-line" bodyClassName="flex flex-col gap-4 px-4 py-4 text-sm">
         <p className="m-0 text-ink">{RATING_TABLE.tierMeaning}</p>
         {RATING_TABLE.tierBasis.map(text => <p key={text} className="m-0 text-ink-2">{text}</p>)}
         <div className="flex flex-col gap-1 border-t border-line pt-4">
@@ -490,11 +498,10 @@ function SeriesVersionsBody() {
           <ReviewTrack state={shown.review as Review} created={shown.created} stamps={stamps} when={when} />
           <section className="flex flex-col gap-2">
             <h3 className="m-0 text-h3 text-ink">文件</h3>
-            {files.length === 0 && <div className="flex items-center justify-between gap-3 rounded-card border border-dashed border-line-strong px-4 py-3 text-sm text-ink-2">
-              这一版还没有导出文件
-              <Button variant="outline" size="sm"><Icon name="object/file" data-icon="inline-start" />导出规格书</Button>
-            </div>}
-            {files.map(document => <Item key={document.title} variant="outline">
+            {files.length === 0 && <FormNote title="这一版还没有导出文件">
+              <div><Button variant="outline" size="sm"><Icon name="object/file" data-icon="inline-start" />导出规格书</Button></div>
+            </FormNote>}
+            {files.map(document => <Item key={`${document.title}/${document.created}`} variant="outline">
               <ItemMedia variant="tile"><Icon name="object/file" /></ItemMedia>
               <ItemContent className="min-w-0">
                 <ItemTitle className="w-full truncate">{document.title}</ItemTitle>

@@ -1,10 +1,11 @@
 // Forms of the workbench: a titled section of rows, each row a label, its control and (only when it helps) a hint; numbers
 // with their unit inside the field; a choice among a few options as cards; where a value came from as a tag.
-import type { ComponentProps, ReactNode } from 'react';
+import { useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
@@ -80,8 +81,8 @@ export function ChoiceCards({ value, onValueChange, options, columns = 'grid-col
   label: string;
 }) {
   return <RadioGroup value={value} onValueChange={next => onValueChange?.(next as string)} aria-label={label} className={cn('grid gap-2', columns)}>
-    {options.map(option => <label key={option.value} data-checked={option.value === value || undefined}
-      className="flex min-w-0 cursor-pointer items-start gap-3 rounded-card border border-line bg-surface px-3 py-3 transition-colors duration-fast hover:bg-subtle data-checked:border-copper data-checked:bg-copper-fill">
+    {options.map(option => <label key={option.value} data-checked={option.value === value || undefined} data-disabled={option.disabled || undefined}
+      className="flex min-w-0 cursor-pointer items-start gap-3 rounded-card border border-line bg-surface px-3 py-3 transition-colors duration-fast hover:bg-subtle data-checked:border-copper data-checked:bg-copper-fill data-disabled:cursor-not-allowed data-disabled:bg-subtle data-disabled:text-ink-2">
       <RadioGroupItem value={option.value} disabled={option.disabled} className="mt-1" />
       {option.icon && <Icon name={option.icon} className="mt-1 text-ink-2" />}
       <span className="flex min-w-0 flex-col">
@@ -101,9 +102,10 @@ const SOURCE: Record<SourceKind, { icon: string; word: string }> = {
   manual: { icon: 'action/edit', word: '人工填写' },
 };
 
-/** Where a value came from: the kind as an icon and a word, and the place (表 7 · PDF 第 15 页). */
-export function SourceTag({ kind, place, className }: { kind: SourceKind; place?: string; className?: string }) {
-  const source = SOURCE[kind];
+/** Where a value came from: the kind as an icon and a word, and the place (表 7 · PDF 第 15 页). A kind the page does not
+ *  know yet is shown by its own name with a neutral icon. */
+export function SourceTag({ kind, place, className }: { kind: SourceKind | (string & {}); place?: string; className?: string }) {
+  const source = SOURCE[kind as SourceKind] ?? { icon: 'status/info', word: kind };
   return <Badge variant="outline" className={cn('gap-1', className)} data-source={kind}>
     <Icon name={source.icon} data-icon="inline-start" />{source.word}{place && <span className="text-ink-2">{place}</span>}
   </Badge>;
@@ -140,17 +142,52 @@ export function FormNote({ tone = 'info', title, children, className }: { tone?:
   </div>;
 }
 
-/** Where a file is dropped or chosen: what it takes, and the button for those who do not drag. Copper while a file is over it. */
-export function DropZone({ title, formats, dragging, action = '选择文件', className }: { title: string; formats: string; dragging?: boolean; action?: string; className?: string }) {
-  return <div data-dragging={dragging || undefined}
+/**
+ * Where a file is dropped or chosen: what it takes, and the button for those who do not drag. Copper while a file is over
+ * it. `onFiles` gets what was dropped or chosen; `dragging` forces the look (the gallery shows the state with it).
+ */
+export function DropZone({ title, formats, accept, onFiles, dragging, action = '选择文件', className }: {
+  title: string;
+  formats: string;
+  /** For the file dialog: .xlsx,.xls,.csv */
+  accept?: string;
+  onFiles?: (files: File[]) => void;
+  dragging?: boolean;
+  action?: string;
+  className?: string;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const take = (list: FileList | null) => { if (list?.length) onFiles?.([...list]); };
+  return <div data-dragging={(dragging ?? over) || undefined}
+    onDragOver={event => { event.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+    onDrop={event => { event.preventDefault(); setOver(false); take(event.dataTransfer.files); }}
     className={cn('flex h-56 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-canvas px-6 text-center transition-colors duration-fast data-dragging:border-copper data-dragging:bg-copper-fill', className)}>
+    <input ref={input} type="file" accept={accept} multiple={false} className="sr-only" tabIndex={-1} aria-hidden="true"
+      onChange={event => { take(event.target.files); event.target.value = ''; }} />
     <span className="flex size-12 items-center justify-center rounded-full bg-surface text-ink-2 shadow-menu"><Icon name="action/import" className="size-6" /></span>
     <span className="flex flex-col gap-1">
       <span className="text-h3 text-ink">{title}</span>
       <span className="text-sm text-ink-2">{formats}</span>
     </span>
-    <Button variant="outline">{action}</Button>
+    <Button variant="outline" onClick={() => input.current?.click()}>{action}</Button>
   </div>;
+}
+
+/** A few short, mutually exclusive words in one row (单芯 / 三芯, 从零填写 / 按标准生成): the segmented look of the theme. */
+export function Segmented({ label, value, options, onValueChange, floating, className }: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onValueChange?: (value: string) => void;
+  /** Over a drawing: with the menu shadow. */
+  floating?: boolean;
+  className?: string;
+}) {
+  return <ToggleGroup value={[value]} onValueChange={next => next[0] && onValueChange?.(next[0] as string)} aria-label={label}
+    className={cn('rounded-lg border border-line bg-surface p-1', floating && 'shadow-menu', className)}>
+    {options.map(option => <ToggleGroupItem key={option.value} value={option.value}>{option.label}</ToggleGroupItem>)}
+  </ToggleGroup>;
 }
 
 /** A value the page shows but does not change (it comes from the environment): in a field's box, on the light fill. */

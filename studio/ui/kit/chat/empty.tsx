@@ -27,11 +27,11 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
     </div>
     <div className="grid grid-cols-2 gap-4">
       {groups.map(group => group.figure
-        ? <section key={group.label} className="flex min-w-0 flex-col overflow-hidden rounded-panel border border-line bg-surface" aria-label={group.label}>
+        ? <section key={group.label} className="flex min-w-0 flex-col overflow-hidden rounded-sheet border border-line bg-surface" aria-label={group.label}>
           <header className="relative flex h-28 items-center overflow-hidden border-b border-line bg-canvas">
             <div aria-hidden="true" className="absolute inset-y-0 right-0 w-48 fade-start">{group.figure}</div>
             <div className="relative flex min-w-0 flex-col gap-2 px-4">
-              <h2 className="m-0 flex items-center gap-2 text-h3 text-ink"><Icon name={group.icon} className="text-copper" />{group.label}</h2>
+              <h2 className="m-0 flex items-center gap-2 text-h3 text-ink"><Icon name={group.icon} className="text-ink-2" />{group.label}</h2>
               {group.facts && <div className="flex flex-col gap-1 text-sm text-ink-2">{group.facts}</div>}
             </div>
           </header>

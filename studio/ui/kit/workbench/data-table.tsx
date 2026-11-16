@@ -27,7 +27,7 @@ export interface RowGroup<Row> {
   onToggle?: () => void;
 }
 
-export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, footer, sort, onSort, empty, className }: {
+export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, footer, sort, onSort, empty, framed, className }: {
   columns: Column<Row>[];
   rows?: Row[];
   groups?: RowGroup<Row>[];
@@ -39,6 +39,8 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
   onSort?: (key: string) => void;
   /** What an empty table says; an EmptyState usually. */
   empty?: ReactNode;
+  /** Inside a form or a section rather than a panel: the table draws its own rounded border. */
+  framed?: boolean;
   className?: string;
 }) {
   const body = (list: Row[]) => list.map(row => {
@@ -56,7 +58,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
   // When every column has a width, what is left over goes to an empty column at the end, not between the columns.
   const filler = columns.every(column => column.width);
   const span = columns.length + (filler ? 1 : 0);
-  return <Table containerClassName={cn('min-h-0', className)}>
+  return <Table containerClassName={cn('min-h-0', framed && 'rounded-card border border-line', className)}>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           {columns.map(column => <TableHead key={column.key} numeric={column.numeric} className={cn('sticky top-0 z-1', column.width)}

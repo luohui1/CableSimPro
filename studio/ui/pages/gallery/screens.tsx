@@ -17,22 +17,31 @@ import { CableSection, SectionThumb } from './figures';
 import { LIBRARY } from './library-data';
 import { ProjectNew, RatingBody, RatingEdit, RatingSelection, RatingSweep } from './rating-screens';
 import { ImportScreen, SeriesParams, SeriesRating, SeriesVersions, TypeNewManual, TypeNewStandard, type ImportStep } from './type-screens';
-import { LibraryBody, SeriesBody, WorkbenchSide } from './workbench-screens';
-import { ModelCardLive, SettingsModelBody, SettingsModelLive } from './live-screens';
+import { LibraryBody, PROJECTS, SeriesBody, WorkbenchSide } from './workbench-screens';
+import { AgentModelCard, SettingsModelBody, useHostStatus } from './live-screens';
 import {
   ACTIVE_CHAT, CHATS, EXPORT_ASK, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_STEPS_DONE, MODEL_STEPS_RUNNING, NEW_PROJECT, NOT_CONFIGURED, RATING, RATING_ASK, RATING_STEPS, REFUSED_ASK,
   REFUSED_RATING, SHEET, STARTERS, STEPS_CUT, STEPS_FAILED, STEPS_WAITING, STREAMED, STREAMING_LINE, UPLOADING,
 } from './samples';
 
 export type ScreenGroup = 'agent' | 'types' | 'rating' | 'settings';
-export interface ScreenSpec { id: string; group: ScreenGroup; title: string; job: string; render: () => ReactNode }
+export interface ScreenSpec {
+  id: string;
+  group: ScreenGroup;
+  title: string;
+  job: string;
+  render: () => ReactNode;
+  /** The screen makes the host do real work (build a solid): the gallery's preview does not draw it, only the full screen. */
+  heavy?: boolean;
+}
 export const GROUPS: { id: ScreenGroup; title: string }[] = [
   { id: 'agent', title: 'Agent 模式' }, { id: 'types', title: '电缆型号' }, { id: 'rating', title: '载流量计算' }, { id: 'settings', title: '设置' },
 ];
 
-function Frame({ mode, side, model = MODEL, children }: { mode: Mode; side?: ReactNode; model?: string | null; children: ReactNode }) {
+/** `model`: the name in the top bar; null when none is configured, false while the host has not said. */
+function Frame({ mode, side, model = MODEL, children }: { mode: Mode; side?: ReactNode; model?: string | null | false; children: ReactNode }) {
   const { theme, toggle } = useTheme();
-  return <AppFrame top={<TopBar mode={mode} model={model} theme={theme} onThemeToggle={toggle} />} side={side}>{children}</AppFrame>;
+  return <AppFrame top={<TopBar mode={mode} model={model === false ? undefined : model} theme={theme} onThemeToggle={toggle} />} side={side}>{children}</AppFrame>;
 }
 
 function Conversations({ active, running }: { active?: string; running?: boolean }) {
@@ -77,7 +86,7 @@ function AgentEmptyScreen() {
             facts: <><TileFact value={LIBRARY.length}>个系列</TileFact><TileFact value={SPECS}>个规格</TileFact></>,
             tasks: STARTERS.types.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
           { label: '载流量计算', icon: 'calc/ampacity', figure: <SectionThumb width={192} height={112} />,
-            facts: <><TileFact value={2}>个工程</TileFact><TileFact before="最近一次校核" value={`${RATING.current} A`} /></>,
+            facts: <><TileFact value={PROJECTS.length}>个工程</TileFact><TileFact before="最近一次校核" value={`${RATING.current} A`} /></>,
             tasks: STARTERS.rating.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
         ]} />
     </div>
@@ -132,13 +141,22 @@ function AgentRefusedScreen() {
   </Thread>;
 }
 
-/** The solid in the conversation, asked of the host when the card shows (the same cable as conversation 01a1e248). */
+/** The settings as the serving host has them: its model in the top bar and in the section. */
+function SettingsLiveScreen() {
+  const { agent, error } = useHostStatus();
+  return <Frame mode="agent" model={agent ? (agent.configured ? agent.model ?? null : null) : false}>
+    <SettingsModelBody status={agent} error={error} />
+  </Frame>;
+}
+
+/** The solid in the conversation, asked of the host when the card shows: the 3×240 of conversation 01a1e248 where the host
+ *  has it, the catalogue's otherwise. */
 function AgentModelScreen() {
   return <Thread active={CHATS[0].id} composer={<Composer placeholder="接着交办，或追问这条结果" />}>
     <UserMessage>{CHATS[0].title}</UserMessage>
     <AssistantMessage>
       <StepTrace steps={MODEL_STEPS_DONE} />
-      <ModelCardLive spec="s-89150e51.3x240" version={3} title="三维模型 · YJV22-8.7/15 kV 3×240" />
+      <AgentModelCard />
     </AssistantMessage>
   </Thread>;
 }
@@ -213,7 +231,7 @@ export const SCREENS: ScreenSpec[] = [
   { id: 'agent-waiting', group: 'agent', title: 'Agent 模式 · 提案等你决定', job: '工程师在这屏看清 Agent 要建或要改的每一项，接受，或写下原因拒绝。', render: () => <AgentWaitingScreen /> },
   { id: 'agent-refused', group: 'agent', title: 'Agent 模式 · 拒算，附件上传中', job: '工程师在这屏看懂为什么没有算出结果、缺什么或超出什么范围，并接着交办下一件事。', render: () => <AgentRefusedScreen /> },
   { id: 'agent-error', group: 'agent', title: 'Agent 模式 · 出错', job: '工程师在这屏知道任务停在哪一步、为什么停，确认服务恢复后重试。', render: () => <AgentErrorScreen /> },
-  { id: 'agent-model', group: 'agent', title: 'Agent 模式 · 三维模型卡（实时取自宿主）', job: '工程师在这屏转着看 Agent 建好的三维实体，剖开看各层，下载 STEP，或到工作台接着看。', render: () => <AgentModelScreen /> },
+  { id: 'agent-model', group: 'agent', title: 'Agent 模式 · 三维模型卡（实时取自宿主）', job: '工程师在这屏转着看 Agent 建好的三维实体，剖开看各层，下载 STEP，或到工作台接着看。', render: () => <AgentModelScreen />, heavy: true },
   { id: 'library', group: 'types', title: '工作台 · 型号库', job: '工程师在这屏找到一款型号，看清它每个规格的尺寸、审核状态和核对结果，打开它或导入新的结构表。',
     render: () => workbench('library', <LibraryBody />) },
   ...IMPORT_SCREENS.map(item => ({ id: `import-${item.step}`, group: 'types' as const, title: `工作台 · ${item.title}`, job: item.job,
@@ -245,7 +263,7 @@ export const SCREENS: ScreenSpec[] = [
   { id: 'rating-selection', group: 'rating', title: '工作台 · 载流量计算 · 选型', job: '工程师在这屏按目标电流从一个系列里选出最小够用的截面，并看清其余规格为什么不选。',
     render: () => workbench('project', <RatingSelection />) },
   { id: 'settings-model', group: 'settings', title: '设置 · Agent 用的模型（实时取自宿主）', job: '工程师在这屏确认 Agent 用的是哪个接口、哪个模型，密钥配了没有，连不连得上。',
-    render: () => <Frame mode="agent"><SettingsModelLive /></Frame> },
+    render: () => <SettingsLiveScreen /> },
   { id: 'settings-model-missing', group: 'settings', title: '设置 · 模型未配置', job: '工程师在这屏看到模型还没配置，照着说明设好环境变量再重启。',
     render: () => <Frame mode="agent" model={null}><SettingsModelBody status={{ configured: false, hint: NOT_CONFIGURED }} /></Frame> },
 ];

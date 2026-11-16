@@ -2,6 +2,7 @@
 // its parts from here; a part that is not here does not exist. /gallery#screen=<id> opens one screen at full size.
 import { useEffect, useRef, useState } from 'react';
 import { ButtonLink } from '@/components/ui/button';
+import { EmptyState } from '@/kit/workbench/premise';
 import { Icon } from '@/kit/icon';
 import { FlowSection } from './gallery/flow-section';
 import { AgentSection, ControlsSection, SectionTitle, ThemeSection, WorkbenchSection } from './gallery/sections';
@@ -78,7 +79,9 @@ function ScreenPreview({ item }: { item: ScreenSpec }) {
       <ButtonLink variant="outline" size="sm" href={`#screen=${item.id}`}><Icon name="action/external" data-icon="inline-start" />全屏看</ButtonLink>
     </header>
     <div ref={frame} className="screen-half overflow-hidden rounded-card border border-line bg-canvas" inert>
-      {near && <div className="screen-frame origin-top-left scale-50">{item.render()}</div>}
+      {near && (item.heavy
+        ? <EmptyState icon="tool/view-3d" title="全屏打开时才向宿主要" description="这屏要宿主现建三维实体（首次约半分钟），陈列页的缩略图不替它开工。" className="h-full" />
+        : <div className="screen-frame origin-top-left scale-50">{item.render()}</div>)}
     </div>
   </section>;
 }

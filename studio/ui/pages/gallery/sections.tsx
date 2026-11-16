@@ -28,7 +28,7 @@ import { EmptyState, Given, PremiseStrip } from '@/kit/workbench/premise';
 import { compact, fixed } from '@shared/format';
 import { useTheme } from '@/state/theme';
 import { CableSection, SectionThumb, fieldStops } from './figures';
-import { WORKSPACE } from './library-data';
+import { LIBRARY, WORKSPACE } from './library-data';
 import {
   CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
   RATING_STEPS, REFUSED_IMPORT, REFUSED_RATING, SHEET, STARTERS, STEPS_FAILED, STEPS_RECOVERED, STEPS_STOPPED, STEPS_WAITING, THINNER,
@@ -147,8 +147,9 @@ export function ControlsSection() {
       <State label="未勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox />只导入可用的行</label></State>
       <State label="已勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox defaultChecked />只导入可用的行</label></State>
       <State label="不可用"><label className="flex items-center gap-2 text-sm text-ink-2"><Checkbox disabled />只导入可用的行</label></State>
-      <State label="进度" className="w-72"><Progress value={3} max={11} format={{ maximumFractionDigits: 0 }}>
-        <ProgressLabel>计算全系列</ProgressLabel><ProgressValue>{() => '3 / 11 个规格'}</ProgressValue>
+      <State label="进行中，还没有计数" className="w-72"><Progress value={null}><ProgressLabel>计算全系列</ProgressLabel></Progress></State>
+      <State label="完成" className="w-72"><Progress value={LIBRARY[0].specs.length} max={LIBRARY[0].specs.length}>
+        <ProgressLabel>计算全系列</ProgressLabel><ProgressValue>{() => `${LIBRARY[0].specs.length} / ${LIBRARY[0].specs.length} 个规格`}</ProgressValue>
       </Progress></State>
     </Specimen>
     <Specimen title="页签与分段" rule="分段是凹槽加白片（同一视图的几种状态）；页签是平字加下划线（同一位置的不同内容）。">

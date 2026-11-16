@@ -13,7 +13,6 @@ import { useThemeColor } from '@/kit/theme-color';
 import { ConnectionCheck, FormNote, FormRow, FormSection, ReadonlyValue } from '@/kit/workbench/form';
 import { PageHeader } from '@/kit/workbench/page';
 import { api } from '@/state/api';
-import { NOT_CONFIGURED } from './samples';
 
 /** The solid of one version, from the host: building, built, or refused with the plugin's own words. */
 export function ModelCardLive({ spec, version, title }: { spec: string; version: number; title: string }) {
@@ -33,31 +32,55 @@ export function ModelCardLive({ spec, version, title }: { spec: string; version:
     </>} />;
 }
 
-/** The model section of the settings. The model is set in the environment, so the page shows it and says how to change it. */
+/**
+ * The model section of the settings. The model is set in the environment, so the page shows it; how to set it is the host's
+ * own hint, which it gives when nothing is configured. Until the host has answered, nothing is claimed either way. The host
+ * has no operation yet that checks the connection, so the check stays unavailable.
+ */
 export function SettingsModelBody({ status, error }: { status?: AgentStatus; error?: string }) {
-  const configured = status?.configured ?? false;
+  const configured = status?.configured;
   return <>
     <PageHeader title="设置" />
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex max-w-4xl flex-col gap-10 px-8 py-10">
         <FormSection split title="Agent 用的模型" description="Agent 模式用它听懂你的话、调用工作台的操作；结果里的数由方法插件算出，不经过模型。"
-          aside={status && <Badge variant={configured ? 'success' : 'attention'}>{configured ? '已配置' : '未配置'}</Badge>}>
+          aside={status ? <Badge variant={configured ? 'success' : 'attention'}>{configured ? '已配置' : '未配置'}</Badge> : !error && <Badge variant="secondary">读取中</Badge>}>
           {error && <FormNote tone="attention" title="读不到设置">{error}</FormNote>}
           <FormRow label="接口"><ReadonlyValue empty={!status?.provider}>{status?.provider}</ReadonlyValue></FormRow>
           <FormRow label="模型"><ReadonlyValue empty={!status?.model}>{status?.model}</ReadonlyValue></FormRow>
           <FormRow label="密钥" hint="只从环境变量读取，不写入磁盘；这里只说有没有">
-            <ReadonlyValue>{configured ? '已配置' : '未配置'}</ReadonlyValue>
+            <ReadonlyValue empty={!status}>{configured ? '已配置' : '未配置'}</ReadonlyValue>
           </FormRow>
-          <FormRow label="连通性"><ConnectionCheck state="idle" disabled={!configured} /></FormRow>
-          <FormNote tone={configured ? 'info' : 'attention'} title={configured ? '换模型或接口' : '怎么配置'}>{status?.hint ?? NOT_CONFIGURED}</FormNote>
+          <FormRow label="连通性"><ConnectionCheck state="idle" disabled /></FormRow>
+          {status?.hint && <FormNote tone="attention" title="怎么配置">{status.hint}</FormNote>}
         </FormSection>
       </div>
     </div>
   </>;
 }
 
-/** The section as it stands on this host. */
-export function SettingsModelLive() {
+/**
+ * A three-core 3×240 the serving host holds: the public sample's as imported there, else the built-in catalogue's (华远),
+ * which every host has. Its latest version is the one the card asks for.
+ */
+function useSampleSpec() {
+  const library = useQuery({ queryKey: ['library'], queryFn: api.library, staleTime: Infinity, retry: false });
+  const entries = library.data ?? [];
+  const entry = entries.find(item => item.name === 'YJV22-8.7/15 kV 3×240' && item.family.startsWith('人民电缆集团'))
+    ?? entries.find(item => item.id === 'huayuan.yjv22-15kv-240');
+  return { entry, pending: library.isPending, error: library.error?.message };
+}
+
+/** The card of the conversation that asked for a solid, on whichever host serves the gallery. */
+export function AgentModelCard() {
+  const { entry, pending, error } = useSampleSpec();
+  if (pending) return <ModelCard title="三维模型" state="loading" />;
+  if (!entry) return <ModelCard title="三维模型" state="failed" error={error ?? '这台宿主的型号库里没有 3×240 的三芯规格。'} />;
+  return <ModelCardLive spec={entry.id} version={Number(entry.version)} title={`三维模型 · ${entry.name}`} />;
+}
+
+/** What the serving host says about its model: for the top bar and the settings alike. */
+export function useHostStatus() {
   const status = useQuery({ queryKey: ['status'], queryFn: api.status, retry: false });
-  return <SettingsModelBody status={status.data?.agent} error={status.error?.message} />;
+  return { agent: status.data?.agent, error: status.error?.message };
 }

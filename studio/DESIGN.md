@@ -32,7 +32,7 @@
 | `chat/composer`：`ComposerFrame` `ComposerInput` `ComposerBar` `ComposerAttach` `ComposerSend` `ComposerStop` `FileChip` `composerInputClass` | 输入框；发送是墨色，停止在任务进行中出现 |
 | `workbench/nav`：`WorkbenchNav` `NavSection` `NavItem` | 工作台的两个工作区（电缆型号、载流量计算）和最近的对象；`NavItem` 可经 `render` 渲染成路由链接 |
 | `workbench/page`：`PageHeader` `PageTabs` `Panel` `Split` `Toolbar` | 页头（标题加唯一主按钮）、同一对象的几页、贴边平铺的面板、可拖动分栏、表格上方的工具行 |
-| `workbench/form`：`FormSection` `FormRow` `UnitInput` `ChoiceCards` `ChoiceSelect` `SourceTag` `FormNote` `DropZone` | 表单：名称在左、控件在右，单位在框内成列；几种做法用卡片，固定清单用下拉；值的出处（标准、推算、给定、厂家表、人工填写）；动手前要知道的事；拖放文件 |
+| `workbench/form`：`FormSection` `FormRow` `UnitInput` `ChoiceCards` `ChoiceSelect` `Segmented` `SourceTag` `FormNote` `DropZone` | 表单：名称在左、控件在右，单位在框内成列；几种做法用卡片，固定清单用下拉，几个短词用分段；值的出处（标准、推算、给定、厂家表、人工填写，不认识的出处照原名显示）；动手前要知道的事；拖放文件（`onFiles` 收到拖入或选中的文件） |
 | `workbench/flow`：`FlowLayout` `Stepper` | 一屏分步的任务（导入结构表、按标准生成）：步骤一列在左，当前步的内容在右，往前走的按钮在下 |
 | `workbench/runs`：`RunRail` | 一个工程的运行记录排成一行，旧的在前；多了横向滚动；Agent 算的、输入改过之后的各带一个点 |
 | `workbench/side-editor`：`SideEditor` `SideEditorSection` | 从右边停靠出来的编辑栏，占结论面板的位置，画面不动；底部是唯一的应用动作 |
@@ -40,12 +40,12 @@
 | `workbench/chart`：`CurveChart` `TargetBar` | 结果图（recharts）：一个结果随一个条件的曲线，工程取值和比较水平是参考线；表格里数值对目标的比例条 |
 | `workbench/form` 补：`ReadonlyValue` `ConnectionCheck`；`FormSection split` | 只显示不改的值（来自环境变量）；一个服务连不连得上（还没检查、正在检查、连通、连不上并给原话）；设置页的左说明右字段 |
 | `theme-color`：`useThemeColor` | 给 CSS 之外画图的东西（三维视口、画布）取主题色，换主题时重取 |
-| `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选 |
-| `workbench/premise`：`PremiseStrip` `Given` `EmptyState` | 计算屏的“求什么、已知什么”；空状态 |
+| `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选；放在表单或说明里时用 `framed` 自带圆角边框 |
+| `workbench/premise`：`PremiseStrip` `Given` `EmptyState` | 计算屏的“求什么、已知什么”（`Given active` 是编辑栏正打开的那一项）；空状态 |
 | `workbench/canvas`：`CanvasFrame` `CanvasToolbar` `CanvasTool` `CanvasLayer` `TemperatureLegend` | 断面画布外框：工具左上、视图右上、图例左下、状态栏在下；画布内容是 `ui/canvas` 自有绘图 |
 | `marks`：`TierMark` `ReviewMark` `VerdictMark` `VerdictBar` `Dot` | 可信分档、审核状态、核对结论（一个词加一个图标；表格里用一条比例条） |
 | `disclosure`：`Disclosure` `DisclosurePanel` `DisclosureMore` `DisclosureRoot` | 面板里点开才看的分组（损耗、热阻、已通过的核对项），“其余 N 项” |
-| `metric`：`Metric` `LimitMeter` | 一屏的主数字；数值对着它的限值 |
+| `metric`：`Metric` `LimitMeter` `MetricGroup` | 一屏的主数字；数值对着它的限值；几个一起读的数放进一个框 |
 | `properties`：`PropertyGroup` `PropertyList` | 名称、数值、单位三列对齐 |
 | `icon`：`Icon` `ProductMark` `Spinner` | 自有图标 `design/icons`（`group/name`） |
 
@@ -98,7 +98,10 @@
 - 拒算卡在步骤下面时，步骤不再重复原因；连不上本机服务是输入框上方的出错条，带重试。
 - 空状态的两块是这款产品自己的图：型号是电缆断面，载流量是电缆在土里的温度场；数字是库里真有的。
 - 三维卡的网格向宿主要（`library.geometry`，宿主建一次后留着），不进仓库；视口铺满卡里的灰底（`cad-fill`），底色用 `useThemeColor('--fill')` 跟着主题换。接法照 `ui/pages/gallery/live-screens.tsx` 的 `ModelCardLive`。
-- 设置页的模型一节只读：值来自环境变量，页面上显示接口主机、模型名和“密钥已配置 / 未配置”，从不显示密钥本身；怎么改用宿主自己的说明原文。
+- 设置页的模型一节只读：值来自环境变量，页面上显示接口主机、模型名和“密钥已配置 / 未配置”，从不显示密钥本身；宿主还没回话时什么都不断言；怎么配置用宿主自己的说明原文（宿主只在未配置时给）。宿主还没有检查连通的操作，连通检查的按钮在接上之前不可用。
+- 铜色只给主按钮、选中和焦点；“当前”算选中：曲线上的工程取值、分步里的当前步、表里选中的行。图标、标题不用铜色。
+- 宿主没给的数是“—”，不是 0；方法没给结果的点或规格写方法的原话（如“该负荷下无有效稳态解；减小负荷或使用数值模型。”），不当成数。
+- 示例数据在 `ui/pages/gallery/host-records.ts`（本分支宿主的记录）、`library-data.ts`、`samples.ts`、`run-document.ts`；屏里的数都从这里取。
 - 标准给出的值带条款和页码；表里写“手册未列”“—”，不编值。
 
 ## 能做和不能做

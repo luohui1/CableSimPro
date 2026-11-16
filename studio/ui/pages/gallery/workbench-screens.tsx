@@ -14,11 +14,16 @@ import { PageHeader, PageTabs, Panel, Split, Toolbar } from '@/kit/workbench/pag
 import { VersionSelect } from '@/kit/workbench/review';
 import { CableSection } from './figures';
 import { LIBRARY, WORKSPACE, type LibrarySeries, type LibrarySpec } from './library-data';
-import { RATING_TABLE, VERSIONS } from './round2-data';
+import { PROJECT_NAMES, RATING_TABLE, VERSIONS } from './host-records';
 import { MODEL_FACTS } from './samples';
 import { compact, fixed } from '@shared/format';
 
-const PROJECTS = ['YJV22-8.7/15 3×240 直埋载流量校核', 'YJV22-8.7/15 3×240 直埋载流量示例'];
+export const PROJECTS = PROJECT_NAMES;
+
+/** Where the host put the outer diameter's residual (closure.placed_in): the layer that takes it. */
+export const PLACED: Record<string, string> = { filler: '填充', binder: '包带' };
+export const residualText = (residual: number, placedIn: string | null | undefined) =>
+  placedIn ? `外径余量 ${fixed(residual, 2)} mm 计入${PLACED[placedIn] ?? placedIn}` : `外径余量 ${fixed(residual, 2)} mm`;
 const ORIGIN: Record<string, string> = { public: '公开资料', demo: '演示结构', factory: '本厂' };
 const CORES: Record<number, string> = { 1: '单芯', 3: '三芯' };
 
@@ -154,7 +159,7 @@ function CheckList() {
 const SERIES_PAGES = [
   { value: 'structure', label: '结构与核对' },
   { value: 'params', label: '参数' },
-  { value: 'rating', label: '载流量表', count: RATING_TABLE.rows.length },
+  { value: 'rating', label: '载流量表' },
   { value: 'versions', label: '版本与文件', count: VERSIONS.length },
 ];
 
@@ -187,7 +192,7 @@ function SeriesScreenBody() {
           <div className="absolute inset-6"><CableSection /></div>
           <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1 text-xs text-ink-2 shadow-menu">{MODEL_FACTS.map((fact, index) => <span key={fact.label} className="flex items-center gap-1">{index > 0 && <span aria-hidden="true">·</span>}{fact.label}<span className="font-medium text-ink tabular-nums">{fact.value}</span></span>)}</div>
         </Panel> },
-      { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={<span className="text-sm text-ink-2">外径余量 {fixed(WORKSPACE.closure.residual_mm, 2)} mm 计入填充</span>}>
+      { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={<span className="text-sm text-ink-2">{residualText(WORKSPACE.closure.residual_mm, WORKSPACE.closure.placed_in)}</span>}>
           <DataTable rowKey={row => row.key} rows={LAYERS} selected="insulation_thickness" onSelect={() => undefined} columns={[
             { key: 'label', header: '层', cell: row => row.label },
             { key: 'value', header: '厚度 / 直径', unit: 'mm', numeric: true, width: 'w-32', cell: row => row.value },

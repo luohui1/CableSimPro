@@ -20,7 +20,9 @@ export function Stepper({ steps, label }: { steps: FlowStep[]; label: string }) 
         {step.status === 'done' ? <Icon name="action/check" className="size-3.5" /> : step.status === 'error' ? <Icon name="status/error" className="size-3.5" /> : index + 1}
       </span>
       <span className="flex min-w-0 flex-col">
-        <span className={cn('text-sm', step.status === 'current' ? 'font-semibold text-ink' : step.status === 'upcoming' ? 'text-ink-2' : 'text-ink')}>{step.title}</span>
+        <span className={cn('text-sm', step.status === 'current' ? 'font-semibold text-ink' : step.status === 'upcoming' ? 'text-ink-2' : 'text-ink')}>
+          {step.title}<span className="sr-only">（{{ done: '已完成', current: '当前步', upcoming: '未开始', error: '出错' }[step.status]}）</span>
+        </span>
         {step.detail && <span className="truncate text-sm text-ink-2">{step.detail}</span>}
       </span>
     </li>)}
