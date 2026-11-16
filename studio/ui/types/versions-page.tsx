@@ -55,8 +55,8 @@ export function VersionsPage({ view, latest, frozen, onVersion, onReview, onRevi
     { key: 'number', header: '版本', width: 'w-20', cell: item => <span className="font-medium">第 {item.number} 版</span> },
     { key: 'review', header: '审核', width: 'w-24', cell: item => <ReviewMark state={item.review} /> },
     { key: 'note', header: '说明', cell: item => <span className="whitespace-normal" title={`${item.created_by} · ${shortTime(item.created)}`}>{item.note || '—'}</span> },
-    { key: 'check', header: '标准核对', width: 'w-52', cell: item => { const counts = checkOf(item.number); return counts ? <VerdictBar counts={counts} /> : <span className="text-ink-2">未核对</span>; } },
-    { key: 'created', header: '建于', width: 'w-36', cell: item => <span className="text-ink-2 tabular-nums">{when(item.created)}</span> },
+    { key: 'check', header: '标准核对', width: 'w-44', cell: item => { const counts = checkOf(item.number); return counts ? <VerdictBar counts={counts} /> : <span className="text-ink-2">未核对</span>; } },
+    { key: 'created', header: '建于', width: 'w-28', cell: item => <span className="text-ink-2 tabular-nums">{shortTime(item.created)}</span> },
   ];
 
   const reports = useSpecificationReports(view.spec.id);

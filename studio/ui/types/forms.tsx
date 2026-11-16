@@ -173,7 +173,7 @@ export function StructureFields({ vocabulary, values, basis, onValues, onBasis, 
   return <>
     {fields.map(field => <FormRow key={field.key} label={field.label} htmlFor={`value-${field.key}`} wide>
       <div className="flex items-center gap-3">
-        <UnitInput id={`value-${field.key}`} aria-label={`填写${field.label}`} unit={field.unit} className="w-36 shrink-0" min={0} placeholder={taken?.has(field.key) ? '取系列声明' : undefined}
+        <UnitInput id={`value-${field.key}`} aria-label={`填写${field.label}`} unit={field.unit} className="w-36 shrink-0" min={0} placeholder={taken?.has(field.key) ? '同系列' : undefined}
           value={values[field.key] ?? null} onValueChange={number => onValues({ ...values, [field.key]: number })} />
         <SourceTag kind="manual" className="shrink-0" />
         <Input aria-label={`${field.label}（本规格）依据`} placeholder="依据（可选）" className="min-w-0 flex-1" value={basis[field.key] ?? ''} onChange={event => onBasis({ ...basis, [field.key]: event.target.value })} />
