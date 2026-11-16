@@ -6,17 +6,17 @@
 
 | 项 | 取值 |
 | --- | --- |
-| 字体 | Inter 写拉丁字母和数字，Noto Sans SC 写中文；数字一律等宽（`tabular-nums`） |
+| 字体 | 令牌 `--font-ui`：Inter 写拉丁字母和数字，Noto Sans SC 写中文；数字一律等宽（`tabular-nums`） |
 | 字号 | 界面 14/22（`text-ui`、`text-sm`），对话正文 15/26（`text-prose`），说明 13/20（`text-caption`，最小，用于分组名、状态栏）；标题三级：`text-h1` 20/28、`text-h2` 16/24、`text-h3` 14/22，均 600；空状态大标题 `text-display` 28/36；主数字 `text-metric` 32/36、`text-metric-sm` 24/28 |
 | 文字色 | 正文 `ink`；次要 `ink-2`（白底 6.6:1，深底 7.8:1）；`ink-3` 只给占位符和安静的图标（4.5:1），不写内容 |
 | 中性色 | 底 `canvas`（外框、侧栏）、面 `surface`（屏幕本身、卡片）、浅底 `subtle`、悬停 `hover`、分隔线 `line`、控件边 `line-strong` |
 | 铜色 | `copper` 只给主按钮、选中（`copper-fill`）和焦点环；不做装饰、不做强调字 |
-| 结论色 | 通过 `success`、注意 `attention`（琥珀，与铜色分开，改自令牌的 #A4560B）、不通过 `error`，各有浅底 `*-fill`；浅底上的字用加深的 `attention-ink`、`agent-ink`（不低于 4.5:1）；总配图标，少量使用。Agent 的提案用 `agent` 青色 |
+| 结论色 | 通过 `success`、注意 `attention`（琥珀 #9A6700 / 深色 #D29922，与铜色分开）、不通过 `error`，各有浅底 `*-fill`；浅底上的字用加深的 `attention-ink`、`agent-ink`（不低于 4.5:1）；总配图标，少量使用。Agent 的提案用 `agent` 青色 |
 | 间距 | 4 的倍数，只用整数步（`p-3`、`gap-4`…）；屏幕边距 24，面板内边距 16 |
 | 圆角 | 字段 8（`rounded-field`）、列表项 10（`rounded-nav`）、卡片 12（`rounded-card`）、面板与对话框 16（`rounded-sheet`）、输入框 24（`rounded-composer`）；按钮和标签是胶囊 |
 | 尺寸 | 控件 36（紧凑 32）、表格行 36、页头 64、面板标题栏 44、状态栏 32 |
 | 阴影 | 只给浮起来的东西：输入框 `shadow-composer`、菜单与浮在画布上的工具 `shadow-menu`、对话框 `shadow-modal`。卡片和面板不用阴影，用线 |
-| 动效 | 小变化 150 ms（`duration-fast`），展开收起 200 ms（`duration-std`、`transition-height`），曲线 `ease-std`，不弹跳；进行中的步骤用 `shimmer`；系统要求少动时停。令牌里的 `--motion-fast` 120 ms 不再用于新界面 |
+| 动效 | 小变化 150 ms（`duration-fast`），展开收起 200 ms（`duration-std`、`transition-height`），曲线 `ease-std`，不弹跳；进行中的步骤用 `shimmer`；系统要求少动时停。时长取令牌 `--motion-fast`、`--motion-standard` |
 | 深浅色 | 顶栏切换，两套都成立；颜色全部来自令牌，换主题不改代码 |
 
 ## 部件（`ui/kit`）

@@ -10,8 +10,6 @@
 [data-theme='light'] {
   /* The weakest text that still reads: 4.5:1 on white. Placeholders and quiet icons only, never content. */
   --ink-3: #767676;
-  /* The tokens' attention (#A4560B) is the copper's hue; amber keeps "needs a look" apart from "selected". 4.9:1 on white. */
-  --attention: #9a6700;
   --copper-strong: color-mix(in oklab, var(--copper) 84%, #000);
   --copper-fill: color-mix(in oklab, var(--copper) 8%, var(--panel));
   --copper-line: color-mix(in oklab, var(--copper) 34%, var(--panel));
@@ -31,7 +29,6 @@
 
 [data-theme='dark'] {
   --ink-3: #8f8f8f;
-  --attention: #d29922;
   --copper-strong: color-mix(in oklab, var(--copper) 86%, #fff);
   --copper-fill: color-mix(in oklab, var(--copper) 14%, var(--panel));
   --copper-line: color-mix(in oklab, var(--copper) 40%, var(--panel));
@@ -127,8 +124,8 @@
   --color-sidebar-primary-foreground: var(--on-copper);
   --color-sidebar-ring: var(--focus);
 
-  /* Inter draws Latin letters and figures (model names, numbers, units); Noto Sans SC draws Chinese. */
-  --font-sans: 'Inter Variable', 'Noto Sans SC Variable', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  /* The tokens' interface face: Inter for Latin letters and figures, Noto Sans SC for Chinese. */
+  --font-sans: var(--font-ui);
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   /* Type. Interface text 14 px, conversation prose 15 px, nothing smaller than 13 px. */
@@ -243,19 +240,19 @@
 /* ---- Motion: 150 ms for small things, 200 ms for things that open; no overshoot. ---- */
 
 @utility duration-fast {
-  transition-duration: 150ms;
+  transition-duration: var(--motion-fast);
 }
 @utility duration-std {
-  transition-duration: 200ms;
+  transition-duration: var(--motion-standard);
 }
 @utility transition-field {
   transition-property: border-color, box-shadow, background-color;
-  transition-duration: 150ms;
+  transition-duration: var(--motion-fast);
   transition-timing-function: var(--ease-std);
 }
 @utility transition-height {
   transition-property: height;
-  transition-duration: 200ms;
+  transition-duration: var(--motion-standard);
   transition-timing-function: var(--ease-std);
 }
 /* A running step's title: a band of light passes over it. Still text, still readable. */
