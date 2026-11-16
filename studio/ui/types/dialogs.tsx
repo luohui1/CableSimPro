@@ -67,7 +67,7 @@ export function ReviseDialog({ view, latest, open, onOpenChange, onRevised }: {
   view: SpecView; latest: boolean; open: boolean; onOpenChange: (open: boolean) => void; onRevised: () => void;
 }) {
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-xl">{open && <ReviseForm view={view} latest={latest} onRevised={onRevised} />}</DialogContent>
+    <DialogContent className="max-w-xl">{open && <ReviseForm key={view.version.id} view={view} latest={latest} onRevised={onRevised} />}</DialogContent>
   </Dialog>;
 }
 
@@ -110,7 +110,7 @@ function ReviewForm({ view, action, onClose }: { view: SpecView; action: ReviewA
 
 export function ReviewDialog({ view, action, onClose }: { view: SpecView; action: ReviewAction | null; onClose: () => void }) {
   return <Dialog open={action !== null} onOpenChange={open => { if (!open) onClose(); }}>
-    <DialogContent className="max-w-lg">{action && <ReviewForm view={view} action={action} onClose={onClose} />}</DialogContent>
+    <DialogContent className="max-w-lg">{action && <ReviewForm key={view.version.id} view={view} action={action} onClose={onClose} />}</DialogContent>
   </Dialog>;
 }
 
@@ -156,6 +156,6 @@ export function SheetDialog({ view, open, report, onOpenChange, onReport }: {
   view: SpecView; open: boolean; report: SpecificationReport | null; onOpenChange: (open: boolean) => void; onReport: (report: SpecificationReport) => void;
 }) {
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className={report ? 'max-w-5xl' : 'max-w-lg'}>{open && <SheetBody view={view} report={report} onReport={onReport} onClose={() => onOpenChange(false)} />}</DialogContent>
+    <DialogContent className={report ? 'max-w-5xl' : 'max-w-lg'}>{open && <SheetBody key={view.version.id} view={view} report={report} onReport={onReport} onClose={() => onOpenChange(false)} />}</DialogContent>
   </Dialog>;
 }

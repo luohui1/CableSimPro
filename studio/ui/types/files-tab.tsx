@@ -19,7 +19,7 @@ type Version = SpecView['versions'][number];
 const COLUMNS: Column<Version>[] = [
   { key: 'number', header: '版本', width: 'w-24', cell: version => `第 ${version.number} 版` },
   { key: 'review', header: '审核', width: 'w-28', cell: version => <ReviewMark state={version.review} /> },
-  { key: 'note', header: '说明', cell: version => <span className="block truncate" title={`${version.created_by} · ${shortTime(version.created)}\n${version.note}`}>{version.note || '—'}</span> },
+  { key: 'note', header: '说明', width: 'w-full max-w-0', cell: version => <span className="block truncate" title={`${version.created_by} · ${shortTime(version.created)}\n${version.note}`}>{version.note || '—'}</span> },
 ];
 
 function IconLink({ label, href, download, icon }: { label: string; href: string; download: string; icon: string }) {
@@ -29,9 +29,11 @@ function IconLink({ label, href, download, icon }: { label: string; href: string
   </Tooltip>;
 }
 
-export function FilesTab({ view, latest, onVersion, onReview, onPreview }: {
+export function FilesTab({ view, latest, frozen, onVersion, onReview, onPreview }: {
   view: SpecView;
   latest: boolean;
+  /** The size is still loading: what is shown is the one before, and nothing may be done to it. */
+  frozen: boolean;
   onVersion: (version?: number) => void;
   onReview: (action: ReviewAction) => void;
   onPreview: (report: SpecificationReport) => void;
@@ -49,7 +51,7 @@ export function FilesTab({ view, latest, onVersion, onReview, onPreview }: {
     <PropertyGroup title="审核" aside={<ReviewMark state={version.review} />}>
       {stamps.length > 0 && <PropertyList rows={stamps} />}
       {latest && steps.length > 0 && <div className="flex flex-wrap gap-2">
-        {steps.map(action => <Button key={action} variant="outline" size="sm" onClick={() => onReview(action)}>{REVIEW_ACTIONS[action]}</Button>)}
+        {steps.map(action => <Button key={action} variant="outline" size="sm" disabled={frozen} onClick={() => onReview(action)}>{REVIEW_ACTIONS[action]}</Button>)}
       </div>}
       {!latest && <p className="m-0 text-sm text-ink">这是历史版本，审核和修改在最新版上做。</p>}
       {latest && version.review === 'published' && <p className="m-0 text-sm text-ink">已发布。再改结构会出新的草稿版本，这一版保持不变。</p>}
@@ -57,7 +59,7 @@ export function FilesTab({ view, latest, onVersion, onReview, onPreview }: {
 
     <TableGroup title="版本" aside={<Badge variant="secondary">{view.versions.length} 版</Badge>}>
       <DataTable columns={COLUMNS} rows={view.versions} rowKey={item => item.id} selected={version.id}
-        onSelect={item => onVersion(item.number === view.versions[0].number ? undefined : item.number)} />
+        onSelect={frozen ? undefined : item => onVersion(item.number === view.versions[0].number ? undefined : item.number)} />
     </TableGroup>
 
     {difference.length > 0 && <PropertyGroup title={`与第 ${previousNumber} 版的差异`}>

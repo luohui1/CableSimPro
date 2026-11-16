@@ -74,6 +74,9 @@ export function conditionValue(key: string, value: number | string): string {
   return compact(value, 5);
 }
 
+/** A line of source text without file digests: those are for the files and the API, not for reading. */
+export const withoutHashes = (text: string) => text.replace(/[\s，,；;（(]*(?:SHA-?256)?[:：\s]*[0-9a-f]{40,}[）)]?/gi, '').trim();
+
 /** Date and time as a table cell holds them: 11/15 13:45. */
 export const shortTime = (value: string) => new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 

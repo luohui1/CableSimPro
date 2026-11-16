@@ -2,12 +2,12 @@
 // completed by the engineer. A size made here is the first draft of a version, recorded as typed by a person, with the basis
 // of every number; review stays with a person too. A standard's proposal says where each dimension comes from, and what it
 // leaves for the engineer to give.
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { getRouteApi, useNavigate } from '@tanstack/react-router';
 import { useState, type ReactNode } from 'react';
 import { compact } from '@shared/format';
 import type { SeriesCreated, SpecCreated, StructureProposal } from '@shared/model-types';
-import type { SeriesDeclaration } from '@shared/types';
+import type { SeriesDeclaration, SeriesView } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,11 +16,15 @@ import { Icon, Spinner } from '@/kit/icon';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { PageHeader } from '@/kit/workbench/page';
 import { api } from '@/state/api';
-import { queryClient, useProductLibrary, useProductSeries, useVocabulary } from '@/state/queries';
+import { queryClient, useProductLibrary, useVocabulary } from '@/state/queries';
 import { DeclarationForm, EMPTY_DECLARATION, FieldRow, Labelled, numberOf, Pick, StructureFields } from './forms';
 import { TypeFrame } from './frame';
 
 const route = getRouteApi('/library/new');
+
+/** The series being added to, when there is one; nothing is asked of the host for a series that is yet to be made. */
+const useSeriesOf = (id: string | undefined) => useQuery({ queryKey: ['library', 'series', id], enabled: Boolean(id),
+  queryFn: () => api.op<SeriesView>('library.series.get', { series: id! }) });
 const NEW_SERIES = '__new__';
 
 /** What `create_series` takes of a declaration: everything the person wrote, nothing filled in for them. */
@@ -63,7 +67,7 @@ function useCreate() {
       void navigate({ to: '/library/$seriesId', params: { seriesId: result.view.series.id }, search: { spec: result.spec } });
     },
   });
-  return create;
+  return { ...create, created };
 }
 
 function Fail({ error }: { error: Error | null }) {
@@ -76,22 +80,24 @@ function FromScratch({ fixedSeries }: { fixedSeries: string | undefined }) {
   const vocabulary = useVocabulary();
   const library = useProductLibrary();
   const [target, setTarget] = useState(fixedSeries ?? NEW_SERIES);
-  const series = useProductSeries(target === NEW_SERIES ? '' : target);
+  const series = useSeriesOf(target === NEW_SERIES ? undefined : target);
   const [declaration, setDeclaration] = useState<SeriesDeclaration>(EMPTY_DECLARATION);
   const [values, setValues] = useState<Record<string, string>>({});
   const [basis, setBasis] = useState<Record<string, string>>({});
   const [precision, setPrecision] = useState('0.1');
   const create = useCreate();
   const making = target === NEW_SERIES;
-  const missingBasis = making ? Object.keys(declaration.common).filter(key => !declaration.common_basis[key]?.trim()) : [];
+  const locked = Boolean(create.created);
+  const missingBasis = making && !locked ? Object.keys(declaration.common).filter(key => !declaration.common_basis[key]?.trim()) : [];
   const given = new Set(Object.keys(making ? declaration.common : series.data?.declaration.common ?? {}));
   return <form className="flex flex-col gap-6" onSubmit={event => { event.preventDefault(); create.mutate({ ...(making ? { declaration, precision } : { series: target }), values: numbers(values), basis: texts(basis) }); }}>
     <section className="flex flex-col gap-4">
       <h2 className="m-0 text-h2 text-ink">系列</h2>
-      {fixedSeries ? null : <Labelled label="放进哪个系列"><Pick label="系列" value={target} onValueChange={setTarget}
+      {locked && <p className="m-0 text-sm text-ink">系列「{declaration.name}」已经建好，下面只差规格；改好规格后再创建一次。</p>}
+      {fixedSeries || locked ? null : <Labelled label="放进哪个系列"><Pick label="系列" value={target} onValueChange={setTarget}
         options={[{ value: NEW_SERIES, label: '新建一个系列…' }, ...(library.data ?? []).map(item => ({ value: item.id, label: item.name }))]} /></Labelled>}
-      {making && <DeclarationForm value={declaration} onChange={setDeclaration} vocabulary={vocabulary.data} />}
-      {making && <Precision value={precision} onChange={setPrecision} />}
+      {making && !locked && <DeclarationForm value={declaration} onChange={setDeclaration} vocabulary={vocabulary.data} />}
+      {making && !locked && <Precision value={precision} onChange={setPrecision} />}
     </section>
     <section className="flex flex-col gap-4">
       <h2 className="m-0 text-h2 text-ink">{making ? '第一个规格' : `规格（加进 ${series.data?.series.name ?? '这个系列'}）`}</h2>
@@ -159,15 +165,15 @@ function FromStandard({ fixedSeries }: { fixedSeries: string | undefined }) {
       </div>
       <Fail error={propose.error} />
       <div className="flex justify-end">
-        <Button type="submit" disabled={propose.isPending}>{propose.isPending ? <Spinner /> : <Icon name="module/standard-check" data-icon="inline-start" />}按标准给出初始结构</Button>
+        <Button type="submit" variant={proposal ? 'outline' : 'default'} disabled={propose.isPending}>{propose.isPending ? <Spinner /> : <Icon name="module/standard-check" data-icon="inline-start" />}按标准给出初始结构</Button>
       </div>
     </form>
-    {proposal && <Proposal key={proposal.id} proposal={proposal} area={numberOf(form.area) ?? 0} fixedSeries={fixedSeries} library={library.data} vocabulary={vocabulary.data} />}
+    {proposal && <Proposal key={proposal.id} proposal={proposal} fixedSeries={fixedSeries} library={library.data} vocabulary={vocabulary.data} />}
   </div>;
 }
 
-function Proposal({ proposal, area, fixedSeries, library, vocabulary }: {
-  proposal: StructureProposal; area: number; fixedSeries: string | undefined; library: { id: string; name: string; cores: number }[] | undefined; vocabulary: ReturnType<typeof useVocabulary>['data'];
+function Proposal({ proposal, fixedSeries, library, vocabulary }: {
+  proposal: StructureProposal; fixedSeries: string | undefined; library: { id: string; name: string; cores: number }[] | undefined; vocabulary: ReturnType<typeof useVocabulary>['data'];
 }) {
   const [filled, setFilled] = useState<Record<string, string>>({});
   const [basis, setBasis] = useState<Record<string, string>>({});
@@ -178,6 +184,10 @@ function Proposal({ proposal, area, fixedSeries, library, vocabulary }: {
   const create = useCreate();
   const pending = proposal.missing.filter(item => numberOf(filled[item.field] ?? '') === undefined);
   const making = target === NEW_SERIES;
+  const locked = Boolean(create.created);
+  // The size is the one the proposal was made for, whatever the form above says now.
+  const area = Number(proposal.inputs.area_mm2);
+  const missingBasis = making && !fixedSeries && !locked ? Object.keys(declaration.common).filter(key => !declaration.common_basis[key]?.trim()) : [];
   const submit = () => {
     // The basis of what the standard gave comes from the proposal itself; only what the engineer gave carries a basis of their own.
     const values = { area, ...proposal.values, ...numbers(filled) };
@@ -207,14 +217,16 @@ function Proposal({ proposal, area, fixedSeries, library, vocabulary }: {
     </section>}
     <section className="flex flex-col gap-4">
       <h2 className="m-0 text-h2 text-ink">放进哪个系列</h2>
-      {fixedSeries ? null : <Labelled label="系列"><Pick label="系列" value={target} onValueChange={setTarget}
+      {locked && <p className="m-0 text-sm text-ink">系列「{declaration.name}」已经建好，只差规格；补齐上面的尺寸后再创建一次。</p>}
+      {fixedSeries || locked ? null : <Labelled label="系列"><Pick label="系列" value={target} onValueChange={setTarget}
         options={[...(library ?? []).filter(item => item.cores === declaration.cores).map(item => ({ value: item.id, label: item.name })), { value: NEW_SERIES, label: '新建一个系列…' }]} /></Labelled>}
-      {making && !fixedSeries && <DeclarationForm value={declaration} onChange={setDeclaration} vocabulary={vocabulary} />}
-      {making && !fixedSeries && <Precision value={precision} onChange={setPrecision} />}
+      {making && !fixedSeries && !locked && <DeclarationForm value={declaration} onChange={setDeclaration} vocabulary={vocabulary} />}
+      {making && !fixedSeries && !locked && <Precision value={precision} onChange={setPrecision} />}
     </section>
+    {missingBasis.length > 0 && <p role="status" className="m-0 text-sm text-attention">请补充取值依据：{missingBasis.map(key => vocabulary?.fields.find(field => field.key === key)?.label ?? key).join('、')}。</p>}
     <Fail error={create.error} />
     <div className="flex justify-end">
-      <Button type="submit" disabled={create.isPending || pending.length > 0}>{create.isPending ? <Spinner /> : <Icon name="action/add" data-icon="inline-start" />}以此建草稿规格</Button>
+      <Button type="submit" disabled={create.isPending || pending.length > 0 || missingBasis.length > 0}>{create.isPending ? <Spinner /> : <Icon name="action/add" data-icon="inline-start" />}以此建草稿规格</Button>
     </div>
   </form>;
 }
@@ -222,7 +234,7 @@ function Proposal({ proposal, area, fixedSeries, library, vocabulary }: {
 export function CreateScreen() {
   const navigate = useNavigate();
   const { series: fixedSeries, from } = route.useSearch();
-  const series = useProductSeries(fixedSeries ?? '');
+  const series = useSeriesOf(fixedSeries);
   const [tab, setTab] = useState(from === 'standard' ? 'standard' : 'scratch');
   const header = (children: ReactNode) => <TypeFrame at={{ kind: 'library' }}>
     <PageHeader trail={[{ label: '型号库', onClick: () => void navigate({ to: '/library' }) }]} title={fixedSeries ? '新建规格' : '新建型号'}

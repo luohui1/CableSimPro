@@ -61,6 +61,7 @@ export function DeclarationForm({ value, onChange, vocabulary, taken, lead }: {
   const set = (values: Partial<SeriesDeclaration>) => onChange({ ...value, ...values });
   const group = STRUCTURE_GROUPS.find(item => item.id === part)!;
   const declared = (vocabulary?.fields ?? []).filter(field => !['area', 'weight'].includes(field.key) && !taken?.has(field.key) && group.keys.includes(field.key));
+  const mapped = (vocabulary?.fields ?? []).filter(field => taken?.has(field.key) && group.keys.includes(field.key));
   const common = (key: string, text: string) => {
     const next = { ...value.common };
     const number = numberOf(text);
@@ -97,7 +98,8 @@ export function DeclarationForm({ value, onChange, vocabulary, taken, lead }: {
       <ToggleGroup value={[part]} onValueChange={next => { if (next[0]) setPart(next[0]); }} aria-label="选择部位" className="flex-wrap">
         {STRUCTURE_GROUPS.map(item => <ToggleGroupItem key={item.id} value={item.id}>{item.label}</ToggleGroupItem>)}
       </ToggleGroup>
-      {declared.length === 0 && <p className="m-0 text-sm text-ink">这一部位的尺寸都由结构表给出，不用再声明。</p>}
+      {mapped.length > 0 && <p className="m-0 text-sm text-ink">原表已有：{mapped.map(field => field.label).join('、')}。</p>}
+      {declared.length === 0 && <p className="m-0 text-sm text-ink">{mapped.length > 0 ? '这一部位的尺寸都由结构表给出，不用再声明。' : '这一部位没有要声明的尺寸。'}</p>}
       {declared.map(field => <FieldRow key={field.key} label={field.label} unit={field.unit} htmlFor={`common-${field.key}`}>
         <Input id={`common-${field.key}`} aria-label={`声明${field.label}`} className="w-32 shrink-0" type="number" min="0.000001" step="any" placeholder="未声明"
           value={value.common[field.key] ?? ''} onChange={event => common(field.key, event.target.value)} />

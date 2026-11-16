@@ -40,7 +40,7 @@ const WHOLE = new Set(['area', 'outer_diameter', 'weight', 'r20']);
 const LAYER_COLUMNS: Column<StructureValue>[] = [
   { key: 'label', header: '层', cell: row => row.label },
   { key: 'value', header: '厚度 / 直径', unit: 'mm', numeric: true, width: 'w-36', cell: row => <>{compact(row.value, 6)}{row.unit !== 'mm' && <span className="ml-1 text-ink-2">{row.unit}</span>}</> },
-  { key: 'origin', header: '来源', width: 'w-20', cell: row => <span className="text-ink-2" title={row.basis}>{ORIGIN_MARK[row.revision ? 'revised' : row.origin]}</span> },
+  { key: 'origin', header: '来源', width: 'w-20', cell: row => <span className="text-ink-2" title={row.basis}>{ORIGIN_MARK[row.revision ? 'revised' : row.origin]}{row.basis && <span className="sr-only">：{row.basis}</span>}</span> },
 ];
 
 export function SeriesScreen() {
@@ -66,6 +66,8 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
   const [dialog, setDialog] = useState<'revise' | null>(null);
   const [sheet, setSheet] = useState<{ open: boolean; report: SpecificationReport | null }>({ open: false, report: null });
   const [review, setReview] = useState<ReviewAction | null>(null);
+  /** The calculation this page started; any other that is running or failed is shown in a bar of its own. */
+  const [mine, setMine] = useState<string | null>(null);
 
   const drawing = useMemo(() => {
     if (!view) return { shape: null, error: '' };
@@ -82,9 +84,17 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
 
   const compute = useMutation({
     mutationFn: () => api.op<LibraryJob>('library.compute', { series: seriesId, specs: [view!.spec.id], kinds: [...RESULT_KINDS], force: false }),
+    onSuccess: started => { setMine(started.id); void queryClient.invalidateQueries({ queryKey: ['library'] }); }, onError: reportFailure,
+  });
+  const stop = useMutation({
+    mutationFn: () => api.op('library.compute.cancel', { job: job.data!.id }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['library'] }), onError: reportFailure,
   });
   const running = compute.isPending || job.data?.state === 'running';
+  // While the next size loads, the one before stays on screen; nothing may be done to it in the new one's name.
+  const settled = Boolean(view) && !query.isPlaceholderData;
+  const others = job.data?.state === 'running' && job.data.id !== mine;
+  const failed = job.data?.state === 'failed' && job.data.series_id === seriesId;
 
   const openSpec = (id: string | undefined, number?: number) => void navigate({ to: '/library/$seriesId', params: { seriesId }, search: { ...(id ? { spec: id } : {}), ...(number ? { version: number } : {}) } });
   const step = (offset: number) => { const next = rows[index + offset]; if (next) openSpec(next.id); };
@@ -105,6 +115,17 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
     </TypeFrame>;
   }
 
+  if (query.isError && !view) {
+    return <TypeFrame at={{ kind: 'series', id: seriesId }}>
+      <PageHeader trail={[{ label: '型号库', onClick: toLibrary }]} title={series.data?.series.name ?? '型号'} />
+      <EmptyState icon="status/error" title="读不到这个规格" description={query.error.message}
+        action={<div className="flex gap-2">
+          {version && <Button variant="outline" onClick={() => openSpec(activeId)}>回到最新版</Button>}
+          <Button variant="outline" onClick={() => void query.refetch()}>重新读取</Button>
+        </div>} />
+    </TypeFrame>;
+  }
+
   const weight = view?.structure.find(item => item.key === 'weight');
   const facts: [string, string][] = [];
   if (view) facts.push(['外径', `${fixed(view.entry.summary.outer_diameter_m * 1000, 1)} mm`]);
@@ -120,16 +141,21 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
         <Badge variant="secondary">{ORIGIN_NAMES[originOf(view.series.origin)]}</Badge>
       </> : undefined}
       actions={<>
-        <Button variant="outline" disabled={!view} onClick={() => setSheet({ open: true, report: null })}><Icon name="object/file" data-icon="inline-start" />规格书</Button>
-        <Button variant="outline" disabled={!view || running} onClick={() => compute.mutate()}>
+        <Button variant="outline" disabled={!settled} onClick={() => setSheet({ open: true, report: null })}><Icon name="object/file" data-icon="inline-start" />规格书</Button>
+        <Button variant="outline" disabled={!settled || running || !latest} onClick={() => compute.mutate()}>
           {running ? <Icon name="status/spinner" data-icon="inline-start" className="animate-spin motion-reduce:animate-none" /> : <Icon name="run/run" data-icon="inline-start" />}
-          {running ? (job.data?.state === 'running' ? `计算中 ${job.data.done}/${job.data.total}` : '计算中') : '计算与核对'}
+          {running ? (job.data?.state === 'running' ? `${others ? '另一批计算中' : '计算中'} ${job.data.done}/${job.data.total}` : '计算中') : '计算与核对'}
         </Button>
       </>}
-      primary={<Button disabled={!view} onClick={() => setDialog('revise')}><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>} />
+      primary={<Button disabled={!settled} onClick={() => setDialog('revise')}><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>} />
+    {(others || failed) && job.data && <Toolbar end={job.data.state === 'running'
+      ? <Button variant="outline" size="sm" disabled={stop.isPending || job.data.cancel_requested} onClick={() => stop.mutate()}>{job.data.cancel_requested ? '本批结束后停止' : '停止'}</Button> : undefined}>
+      {failed ? <Icon name="status/error" className="text-error" /> : <Icon name="status/spinner" className="animate-spin motion-reduce:animate-none" />}
+      <span className="text-sm text-ink">{failed ? `上一批计算没有算完：${job.data.error?.message ?? '原因不明'}` : `${job.data.title}，${job.data.done}/${job.data.total}`}</span>
+    </Toolbar>}
     {view && !latest && <Toolbar end={<Button variant="outline" size="sm" onClick={() => openSpec(activeId)}>回到最新版</Button>}>
       <Icon name="status/info" className="text-ink-2" />
-      <span className="text-sm text-ink">正在查看第 {view.version.number} 版（历史）。修改和审核请回到最新版。</span>
+      <span className="text-sm text-ink">正在查看第 {view.version.number} 版（历史）。计算、修改和审核请回到最新版。</span>
     </Toolbar>}
     <Split panes={[
       { id: 'section', size: 34, min: 24, children: <Panel title="结构断面" bodyClassName="flex flex-col overflow-hidden"
@@ -174,11 +200,11 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
           </TabsList>
         </div>
         {view ? <>
-          <TabsContent value="params" className="min-h-0 overflow-auto"><ParamsTab view={view} onCompute={() => compute.mutate()} busy={running} /></TabsContent>
-          <TabsContent value="check" className="min-h-0 overflow-auto"><ChecksTab view={view} onCompute={() => compute.mutate()} busy={running} /></TabsContent>
-          <TabsContent value="rating" className="min-h-0 overflow-auto"><RatingTab view={view} onCompute={() => compute.mutate()} busy={running} onWorkbench={toWorkbench} /></TabsContent>
+          <TabsContent value="params" className="min-h-0 overflow-auto"><ParamsTab view={view} onCompute={latest ? () => compute.mutate() : null} busy={running || !settled} /></TabsContent>
+          <TabsContent value="check" className="min-h-0 overflow-auto"><ChecksTab view={view} onCompute={latest ? () => compute.mutate() : null} busy={running || !settled} /></TabsContent>
+          <TabsContent value="rating" className="min-h-0 overflow-auto"><RatingTab view={view} onCompute={latest ? () => compute.mutate() : null} busy={running || !settled} onWorkbench={settled ? toWorkbench : undefined} /></TabsContent>
           <TabsContent value="files" className="min-h-0 overflow-auto">
-            <FilesTab view={view} latest={latest} onVersion={number => openSpec(activeId, number)} onReview={setReview} onPreview={report => setSheet({ open: true, report })} />
+            <FilesTab view={view} latest={latest} frozen={!settled} onVersion={number => openSpec(activeId, number)} onReview={setReview} onPreview={report => setSheet({ open: true, report })} />
           </TabsContent>
         </> : <Skeleton className="m-4 h-64" />}
       </Tabs> },

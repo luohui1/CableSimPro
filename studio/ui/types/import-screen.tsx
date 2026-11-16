@@ -19,6 +19,7 @@ import { api } from '@/state/api';
 import { queryClient, useVocabulary } from '@/state/queries';
 import { DeclarationForm, EMPTY_DECLARATION, Labelled, numberOf, Pick } from './forms';
 import { TypeFrame } from './frame';
+import { STRUCTURE_GROUPS } from './model';
 
 const STEPS = ['选择文件', '选择工作表', '列对应', '系列声明', '预览导入'];
 const KEPT = 'studio.import-draft';
@@ -188,7 +189,7 @@ export function ImportScreen() {
       <DeclarationForm value={draft.declaration} onChange={declare} vocabulary={vocabulary.data} taken={new Set(Object.keys(draft.mapping))}
         lead={draft.declaration.source ? <p className="m-0 text-sm text-ink-2">来源：{draft.declaration.source.title}；{draft.declaration.source.location}</p> : undefined} />
       <Confirm pressed={confirmed} onPressedChange={setConfirmed}>我已核对系列声明、缺失尺寸及计算参数的来源。</Confirm>
-      {missingBasis.length > 0 && <p role="status" className="m-0 text-sm text-attention">请补充取值依据：{missingBasis.map(key => fields.find(field => field.key === key)?.label ?? key).join('、')}。</p>}
+      {missingBasis.length > 0 && <p role="status" className="m-0 text-sm text-attention">请补充取值依据：{missingBasis.map(key => fields.find(field => field.key === key)?.label ?? key).join('、')}。对应部位：{STRUCTURE_GROUPS.filter(group => group.keys.some(key => missingBasis.includes(key))).map(group => group.label).join('、')}。</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => update({ step: 2 })}>上一步</Button>
         <Button type="submit" disabled={!confirmed || missingBasis.length > 0 || busy}>{busy ? <Spinner /> : null}预览导入</Button>

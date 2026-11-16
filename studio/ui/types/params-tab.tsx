@@ -8,7 +8,7 @@ import { Disclosure } from '@/kit/disclosure';
 import { Icon } from '@/kit/icon';
 import { PropertyGroup, PropertyList, type Property } from '@/kit/properties';
 import { ResultGate } from './gate';
-import { conditionLabel, conditionValue, ORIGIN_MARK } from './model';
+import { conditionLabel, conditionValue, ORIGIN_MARK, withoutHashes } from './model';
 
 /** A three-core cable gives one row per core; equal values are shown once and say so. */
 function grouped(result: ProductResult): { name: string; rows: ValueRow[] }[] {
@@ -20,16 +20,19 @@ function grouped(result: ProductResult): { name: string; rows: ValueRow[] }[] {
   return [...groups.entries()].map(([name, rows]) => ({ name, rows }));
 }
 
+/** A value a result could not give, and the method's own reason. */
+interface Open { label: string; why: string; reason: string | null }
+
 /** The values a result gave, and the ones it could not give. Cores that agree read once; cores that differ read one by one. */
-function valueRows(result: ProductResult): { done: Property[]; open: Property[] } {
+function valueRows(result: ProductResult): { done: Property[]; open: Open[] } {
   const done: Property[] = [];
-  const open: Property[] = [];
+  const open: Open[] = [];
   for (const { name, rows } of grouped(result)) {
     const same = rows.every(item => item.value === rows[0].value && item.status === rows[0].status);
     for (const row of same ? [rows[0]] : rows) {
       const label = same ? name : (row.title ?? row.label ?? row.id);
       if (row.value === null) {
-        open.push({ label, value: '', missing: true, unit: row.status === 'missing' ? '缺输入' : '未覆盖' });
+        open.push({ label, why: row.status === 'missing' ? '缺输入' : '未覆盖', reason: row.reason ?? null });
         continue;
       }
       const shown = resultValue({ ...row, value: Number(row.value.toPrecision(6)) });
@@ -68,7 +71,7 @@ function Conditions({ results }: { results: (ProductResult | undefined)[] }) {
   </Disclosure>;
 }
 
-export function ParamsTab({ view, onCompute, busy }: { view: SpecView; onCompute: () => void; busy: boolean }) {
+export function ParamsTab({ view, onCompute, busy }: { view: SpecView; onCompute: (() => void) | null; busy: boolean }) {
   const item = (key: string) => view.structure.find(entry => entry.key === key);
   // A value from the structure table is the usual case and says nothing; one the series states, the standard gives or an engineer changed says so.
   const mark = (key: string) => { const found = item(key); return found && (found.revision || found.origin !== 'table') ? <span>{found.revision ? ORIGIN_MARK.revised : ORIGIN_MARK[found.origin]}</span> : undefined; };
@@ -96,8 +99,16 @@ export function ParamsTab({ view, onCompute, busy }: { view: SpecView; onCompute
       </PropertyGroup>
     </ResultGate>
     {shortRows && shortRows.done.length > 0 && <PropertyGroup title="短路容量"><PropertyList rows={shortRows.done} /></PropertyGroup>}
+    {!shortRows && electrical?.current && !electrical.error && <PropertyGroup title="短路容量">
+      <p className="m-0 text-sm text-ink">{!shortCircuit ? '这一版还没有算短路容量。' : !shortCircuit.current ? '短路容量对不上现在的版本，需要重算。' : `短路容量没有算出来：${shortCircuit.error?.message ?? ''}`}</p>
+    </PropertyGroup>}
     {((electricalRows?.open.length ?? 0) + (shortRows?.open.length ?? 0)) > 0 && <PropertyGroup title="还没有算">
-      <PropertyList rows={[...(electricalRows?.open ?? []), ...(shortRows?.open ?? [])]} />
+      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        {[...(electricalRows?.open ?? []), ...(shortRows?.open ?? [])].map(item => <li key={item.label} className="flex flex-col text-sm">
+          <span className="flex items-baseline justify-between gap-3"><span className="text-ink">{item.label}</span><span className="shrink-0 text-ink-2">{item.why}</span></span>
+          {item.reason && <span className="text-ink-2">{item.reason}</span>}
+        </li>)}
+      </ul>
     </PropertyGroup>}
     {view.warnings.length > 0 && <PropertyGroup title="资料提示">
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -110,6 +121,6 @@ export function ParamsTab({ view, onCompute, busy }: { view: SpecView; onCompute
     <PropertyGroup title="来源" aside={<Badge variant="outline">{STATE_NAMES[view.series.origin] ?? view.series.origin}</Badge>}>
       <p className="m-0 text-sm text-ink">{view.derivation.note}</p>
     </PropertyGroup>
-    <Disclosure title="完整来源说明"><p className="m-0 px-4 pb-4 text-sm text-ink-2">{view.entry.source}</p></Disclosure>
+    <Disclosure title="完整来源说明"><p className="m-0 px-4 pb-4 text-sm text-ink-2">{withoutHashes(view.entry.source)}</p></Disclosure>
   </>;
 }

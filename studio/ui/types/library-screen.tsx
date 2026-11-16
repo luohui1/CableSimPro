@@ -65,6 +65,7 @@ export function LibraryScreen() {
   const normalised = raw.replace(/[x*]/g, '×');
   const has = (haystack: string) => !raw || haystack.includes(raw) || haystack.includes(normalised);
   const filtering = Boolean(raw) || review !== 'all';
+  const narrowed = filtering || origin !== 'all';
   // With nothing opened by hand, the series of the size opened last is open, or else the first one.
   const initial = list.find(item => selected.startsWith(`${item.id}.`))?.id ?? list[0]?.id;
   const groups = list.flatMap((item, index) => {
@@ -82,6 +83,7 @@ export function LibraryScreen() {
         <Badge variant="outline">{ORIGIN_NAMES[seriesOrigin(item)]}</Badge>
         <span className="flex w-24 items-center justify-end gap-2 text-sm text-ink-2 tabular-nums">
           {views[index]?.isPending && <Spinner />}
+          {views[index]?.isError && <span className="text-error" title={views[index].error.message}>读不到</span>}
           {filtering && loaded ? `${shown.length} / ${item.specs}` : item.specs} 个规格
         </span>
       </>,
@@ -113,9 +115,15 @@ export function LibraryScreen() {
     body = <DataTable className="flex-1" columns={COLUMNS} groups={groups} rowKey={row => row.id} selected={selected} onSelect={open}
       empty={list.length === 0
         ? <EmptyState icon="nav/library" title="型号库还是空的" description="导入一张结构表，型号和规格就出现在这里。"
-          action={<Button onClick={() => void navigate({ to: '/library/import' })}><Icon name="action/import" data-icon="inline-start" />导入结构表</Button>} />
-        : <EmptyState icon="action/search" title="没有符合条件的规格" description="换个关键词，或者清除筛选。"
-          action={<Button variant="outline" onClick={clear}>清除筛选</Button>} />} />;
+          action={<Button variant="outline" onClick={() => void navigate({ to: '/library/import' })}><Icon name="action/import" data-icon="inline-start" />导入结构表</Button>} />
+        : views.some(view => view.isPending)
+          ? <div role="status" aria-label="正在读取规格" className="flex flex-col gap-2 p-4">{[0, 1, 2].map(index => <Skeleton key={index} className="h-9 w-full" />)}</div>
+          : views.some(view => view.isError)
+            ? <EmptyState icon="status/error" title="有的系列读不到" description={views.find(view => view.isError)!.error!.message}
+              action={<Button variant="outline" onClick={() => views.filter(view => view.isError).forEach(view => void view.refetch())}>重新读取</Button>} />
+            : narrowed
+              ? <EmptyState icon="action/search" title="没有符合条件的规格" description="换个关键词，或者清除筛选。" action={<Button variant="outline" onClick={clear}>清除筛选</Button>} />
+              : <EmptyState icon="nav/cable-type" title="这些系列里还没有规格" description="导入结构表或新建型号后，规格出现在这里。" />} />;
   }
 
   return <TypeFrame at={{ kind: 'library' }}>

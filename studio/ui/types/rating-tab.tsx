@@ -15,7 +15,6 @@ import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { api } from '@/state/api';
 import { ResultGate } from './gate';
 import { shortTime } from './model';
-import { TableGroup } from './table-group';
 
 const refused = (message: string | undefined) => <span className="text-error" title={message}>拒算</span>;
 
@@ -57,7 +56,7 @@ function rowName(row: RatingTableRow): string {
 }
 
 const tableColumns: Column<RatingTableRow>[] = [
-  { key: 'condition', header: '敷设', cell: row => <span className="block truncate" title={`${rowName(row)}\n环境 ${compact(row.ambient_temperature_c)} °C · ${compact(row.frequency_hz)} Hz${row.circuits ? ` · ${row.circuits} 回` : ''}${row.error ? `\n${row.error.message}` : ''}`}>{rowName(row)}</span> },
+  { key: 'condition', header: '敷设', width: 'w-full max-w-0', cell: row => <span className="block truncate" title={`${rowName(row)}\n环境 ${compact(row.ambient_temperature_c)} °C · ${compact(row.frequency_hz)} Hz${row.circuits ? ` · ${row.circuits} 回` : ''}${row.error ? `\n${row.error.message}` : ''}`}>{rowName(row)}</span> },
   { key: 'depth', header: '埋深', unit: 'm', numeric: true, width: 'w-20', cell: row => compact(row.depth_m) },
   { key: 'soil', header: '热阻率', unit: 'K·m/W', numeric: true, width: 'w-28', cell: row => compact(row.soil_thermal_resistivity) },
   { key: 'ampacity', header: '载流量', unit: 'A', numeric: true, width: 'w-24', cell: row => row.ampacity_a != null ? fixed(row.ampacity_a, 1) : refused(row.error?.message) },
@@ -86,9 +85,9 @@ function Saved({ view }: { view: SpecView }) {
   </>;
 }
 
-export function RatingTab({ view, onCompute, busy, onWorkbench }: { view: SpecView; onCompute: () => void; busy: boolean; onWorkbench: () => void }) {
+export function RatingTab({ view, onCompute, busy, onWorkbench }: { view: SpecView; onCompute: (() => void) | null; busy: boolean; onWorkbench: (() => void) | undefined }) {
   return <>
-    <PropertyGroup title="按敷设条件细算" aside={<Button variant="outline" size="sm" onClick={onWorkbench}><Icon name="calc/ampacity" data-icon="inline-start" />算载流量</Button>}>
+    <PropertyGroup title="按敷设条件细算" aside={<Button variant="outline" size="sm" disabled={!onWorkbench} onClick={onWorkbench}><Icon name="calc/ampacity" data-icon="inline-start" />算载流量</Button>}>
       <p className="m-0 text-sm text-ink">在载流量计算里写明敷设和环境条件，逐条算出允许电流，写回这个规格。</p>
     </PropertyGroup>
     <ResultGate result={view.results.rating} name="基准载流量" onCompute={onCompute} busy={busy}><Reference view={view} /></ResultGate>

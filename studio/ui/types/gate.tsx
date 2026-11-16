@@ -8,7 +8,8 @@ import { EmptyState } from '@/kit/workbench/premise';
 export function ResultGate({ result, name, onCompute, busy, children }: {
   result: ProductResult | undefined;
   name: string;
-  onCompute: () => void;
+  /** Null where nothing can be calculated: calculating is for the newest version only. */
+  onCompute: (() => void) | null;
   busy: boolean;
   children: ReactNode;
 }) {
@@ -16,6 +17,6 @@ export function ResultGate({ result, name, onCompute, busy, children }: {
     : !result.current ? { title: `${name}需要重算`, text: '结构或执行标准已变化，这个结果对不上现在的版本。' }
       : result.error ? { title: `${name}没有算出来`, text: result.error.message } : null;
   if (!state) return <>{children}</>;
-  return <EmptyState className="py-12" icon={result?.error ? 'status/error' : 'run/run'} title={state.title} description={state.text}
-    action={<Button variant="outline" disabled={busy} onClick={onCompute}><Icon name="run/run" data-icon="inline-start" />计算与核对</Button>} />;
+  return <EmptyState className="py-12" icon={result?.error ? 'status/error' : 'run/run'} title={state.title} description={onCompute ? state.text : `${state.text}计算只在最新版上做。`}
+    action={onCompute ? <Button variant="outline" disabled={busy} onClick={onCompute}><Icon name="run/run" data-icon="inline-start" />计算与核对</Button> : undefined} />;
 }

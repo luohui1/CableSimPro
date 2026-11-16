@@ -279,6 +279,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('row', { name: /^第 1 版/ }).click();
     await page.getByText('正在查看第 1 版（历史）').waitFor();
     await capture('series-history');
+    assert.equal(await page.getByRole('button', { name: '计算与核对', exact: true }).first().isDisabled(), true, 'calculating is for the newest version only');
     assert.equal((await op<SpecView>('library.spec.get', { spec: spec('3×240').id, version: 1 })).structure.find(row => row.key === 'insulation_thickness')!.value, 4.5);
     await page.getByRole('button', { name: '回到最新版' }).click();
     await page.getByText('正在查看第 1 版（历史）').waitFor({ state: 'detached' });
@@ -289,6 +290,12 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await tab('载流量表');
     await page.getByText('拒算', { exact: true }).first().waitFor();
     await capture('series-method-refusal');
+
+    // A version that does not exist is said so, with the way back, instead of a page that stays empty.
+    await page.goto(`${base}/library/${armoured.id}?spec=${encodeURIComponent(spec('3×240').id)}&version=99`);
+    await page.getByText('读不到这个规格').waitFor();
+    await page.getByRole('button', { name: '回到最新版', exact: true }).click();
+    await title('3×240');
 
     // ---- A new type typed in from nothing: with the imported series' own declaration and one imported size's structure, the
     // library fingerprints it as it fingerprints the imported one ----

@@ -18,7 +18,7 @@ function Row({ item, product }: { item: Requirement; product: string | undefined
   const { required, actual } = requirementText(item);
   const where = `${item.standard} ${item.clause}${item.pdf_page ? ` · PDF 第 ${item.pdf_page} 页` : ''}${item.printed_page ? ` / 印刷第 ${item.printed_page} 页` : ''}`;
   // What failed, and what could not be judged, say how: the number found against the number asked for.
-  const values = item.verdict === 'failed' ? `实际 ${actual} · 要求 ${required}` : item.verdict === 'missing' ? `要求 ${required}` : '';
+  const values = item.verdict === 'failed' ? `实际 ${actual} · 要求 ${required}` : item.verdict === 'missing' ? `要求 ${required}${item.reason ? ` · ${item.reason}` : ''}` : '';
   return <li className="flex min-h-9 items-center gap-3 rounded-nav px-2 py-1 hover:bg-subtle" title={[item.reason, where].filter(Boolean).join('\n')}>
     <span className="flex min-w-0 flex-1 flex-col">
       <span className="text-sm text-ink">
@@ -26,6 +26,7 @@ function Row({ item, product }: { item: Requirement; product: string | undefined
         {item.cores > 1 && <span className="ml-2 whitespace-nowrap text-ink-2">{item.cores === 3 ? '三芯' : `${item.cores} 芯`}</span>}
       </span>
       {values && <span className="text-sm text-ink-2 tabular-nums">{values}</span>}
+      <span className="sr-only">{where}{item.verdict === 'failed' && item.reason ? `。${item.reason}` : ''}</span>
     </span>
     <Badge variant="outline" className="shrink-0">{clauseOf(item, product)}</Badge>
   </li>;
@@ -34,7 +35,7 @@ function Row({ item, product }: { item: Requirement; product: string | undefined
 /** The first rows of a section show; the rest are one click away. */
 const FIRST = 6;
 
-export function ChecksTab({ view, onCompute, busy }: { view: SpecView; onCompute: () => void; busy: boolean }) {
+export function ChecksTab({ view, onCompute, busy }: { view: SpecView; onCompute: (() => void) | null; busy: boolean }) {
   const result = view.results.check;
   const items = requirements(result);
   const counts = result?.summary?.count ?? {};
