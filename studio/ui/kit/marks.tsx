@@ -2,7 +2,6 @@
 //   TierMark    how far a method's result can be trusted (可交付 / 参考 / 探索). Shown wherever a result is.
 //   ReviewMark  where a version of a type stands in review (草稿 / 待审核 / 已审核 / 已发布).
 //   VerdictMark one outcome of a standard check (通过 / 不通过 / 缺项 / 未覆盖), optionally with its count.
-import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Icon } from './icon';
@@ -85,7 +84,3 @@ export function Dot({ tone = 'ink', pulse, className }: { tone?: 'ink' | 'succes
     {pulse && <span className={cn('absolute inset-0 animate-ping rounded-full motion-reduce:animate-none', colour)} />}
   </span>;
 }
-
-/** A word in the secondary colour that names what follows: 先到温限, 改前. Never a sentence. */
-export const Label = ({ children, className }: { children: ReactNode; className?: string }) =>
-  <span className={cn('text-sm text-ink-2', className)}>{children}</span>;
