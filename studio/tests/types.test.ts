@@ -209,6 +209,10 @@ test('a specification typed in is the same kind of object as the imported one it
   const inText = pdfText((await op<SpecificationReport>('library.export', { spec: inSeries.spec, version: 1 })).id).replace(/\s+/g, ' ');
   assert.ok(!inText.includes(declaration.source!.sha256!.slice(0, 16)));
   assert.match(inText, /资料：人工填写；Cable Studio 型号库/);
+  // When the typed size is the smaller of the pair the look flags the larger row that already exists; the flag is brought to the typed one.
+  const small = structureValues(await op<SpecView>('library.spec.get', { spec: view.specs.find(spec => spec.key === '3×25')!.id }));
+  const heavy = await op<SpecCreated>('library.spec.create', { series, values: { ...small, area: 16, weight: small.weight + 1000 } });
+  assert.ok(heavy.view.warnings.some(item => item.code === 'WEIGHT_ORDER' && /不小于更大截面 3×25/.test(item.message)), JSON.stringify(heavy.view.warnings));
 });
 
 test('an ampacity table is kept on a specification version, each number is a run record, and each equals a single check of the same inputs', async () => {
@@ -370,8 +374,10 @@ test('the initial structure a standard gives becomes a draft specification whose
   const rows = checked.rows as CheckRow[];
   const thicknesses = rows.filter(row => /nominal$/.test(row.id));
   assert.ok(thicknesses.length >= 5, rows.map(row => row.id).join(', '));
-  // Every thickness the check can judge passes. The three that follow from the annex's diameter chain (bedding, armour tape, oversheath)
-  // are left unjudged for any three-core structure that has a filler wrapping, imported or typed alike: not failed, but not passed either.
+  // Every thickness the check can judge passes. The three that follow from the annex's diameter chain (bedding, armour tape, oversheath) are
+  // left unjudged for any structure the library builds, imported or typed alike: the check only runs that chain for a draft that comes from a
+  // complete proposal (it carries the annex's provenance mark, has no filler wrapping, a smooth bedding and a single lapped tape).
+  // Not failed, but not passed either.
   const judged = thicknesses.filter(row => row.verdict !== 'uncovered');
   assert.ok(judged.length >= 4);
   assert.deepEqual(judged.filter(row => row.verdict !== 'passed').map(row => `${row.id}:${row.verdict}`), []);

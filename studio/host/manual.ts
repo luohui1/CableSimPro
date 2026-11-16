@@ -4,7 +4,7 @@
 import { arr, bool, map, num, obj, oneOf, opt, str, union } from '@earendil-works/pi-schema';
 import { compact } from '../shared/format.ts';
 import type { ManualDerivation, SeriesCreated, SpecCreated } from '../shared/model-types.ts';
-import type { BuildResult, DesignationParts, GivenParameter, SeriesDeclaration } from '../shared/types.ts';
+import type { BuildResult, BuiltRow, DesignationParts, GivenParameter, SeriesDeclaration } from '../shared/types.ts';
 import { StudioError } from './core.ts';
 import type { Context, Operation, Studio } from './operations.ts';
 import { loadProposal } from './proposal.ts';
@@ -98,6 +98,14 @@ export function manualOperations(studio: Studio): Reviewable[] {
     const built = await core.call<BuildResult>('structure.build', { series: typed, rows: [...others, params.values], bases: [...others.map(() => ({})), bases] });
     const row = built.rows[others.length];
     if (!row.ok) throw new StudioError(row.error);
+    // That look compares each size with the next smaller one and flags the larger. When the typed size is the smaller of a pair, the flag sits on
+    // the existing larger row; it is about this row's weight as much as that row's, so it is brought here.
+    const weightOf = (item: Extract<BuiltRow, { ok: true }>) => item.structure.find(value => value.key === 'weight')?.value;
+    const larger = built.rows.slice(0, others.length).filter((item): item is Extract<BuiltRow, { ok: true }> => item.ok && item.area_mm2 > row.area_mm2)
+      .sort((a, b) => a.area_mm2 - b.area_mm2)[0];
+    if (larger && weightOf(row) !== undefined && larger.warnings.some(warning => warning.code === 'WEIGHT_ORDER')) {
+      row.warnings.push({ code: 'WEIGHT_ORDER', message: `重量 ${weightOf(row)} kg/km 不小于更大截面 ${larger.key} 的 ${weightOf(larger)} kg/km；请核对这一行的重量。` });
+    }
     return { row, how, by, at, declaration, proposal, taken };
   };
   const exists = (series: string, key: string): boolean => library.seriesView(series).specs.some(spec => spec.key === key);
