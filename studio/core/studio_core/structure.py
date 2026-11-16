@@ -48,6 +48,9 @@ MODELLING = {
     'armour_gap_ratio': ('钢带间隙 / 带宽', '1'), 'steel_relative_permeability': ('钢带相对磁导率', '1'),
     'diameter_rounding': ('外径列示精度的半个单位', 'm'),
 }
+# What a row must state, in its own cells or in the series declaration, before a structure can be built.
+REQUIRED = ('conductor_diameter', 'conductor_screen_thickness', 'insulation_thickness', 'insulation_screen_thickness',
+            'screen_tape_thickness', 'oversheath_thickness', 'outer_diameter')
 IEC = 'cablesim.iec60287'
 THERMAL = 'IEC 60287-2-1:2023 表 1（XLPE 3.5、半导电料 2.5、3 kV 以上 PVC 6.0、PE 3.5 K·m/W）'
 DIELECTRIC = 'IEC 60287-1-1:2023 表 3（XLPE：εr 2.5，36 kV 及以下 tanδ 0.004）'
@@ -95,19 +98,21 @@ def covered_by_completion(series, parts):
             and series['u0_v'] == 8700 and series['u_v'] == 15000)
 
 
-def _resolved(series, values):
-    """Each field with its value and where it comes from: the table row first, then the series declaration."""
+def _resolved(series, values, bases=None):
+    """Each field with its value and where it comes from: the table row first, then the series declaration.
+
+    `bases` is what a person who typed a row says about a value (a clause, a drawing); it travels with the value.
+    """
     resolved = {}
     common, notes = series.get('common') or {}, series.get('common_basis') or {}
     for key in FIELDS:
         if values.get(key) is not None:
-            resolved[key] = {'value': _number(values[key], key), 'origin': 'table'}
+            resolved[key] = {'value': _number(values[key], key), 'origin': 'table', **({'basis': bases[key]} if bases and bases.get(key) else {})}
         elif common.get(key) is not None:
             resolved[key] = {'value': _number(common[key], key), 'origin': 'series', 'basis': notes.get(key) or '系列声明'}
     if 'area' not in resolved:
         raise CoreError('STRUCTURE_INCOMPLETE', '缺标称截面。', '/values/area')
-    for key in ('conductor_diameter', 'conductor_screen_thickness', 'insulation_thickness',
-                'insulation_screen_thickness', 'screen_tape_thickness', 'oversheath_thickness', 'outer_diameter'):
+    for key in REQUIRED:
         if key not in resolved:
             raise CoreError('STRUCTURE_INCOMPLETE', f'缺{FIELDS[key][0]}：结构表和系列声明里都没有。', f'/values/{key}')
     return resolved
@@ -327,14 +332,23 @@ def _completed(series, parts, built):
                         'note': f"由 {run['plugin_id']} {run['plugin_version']} model-completion 推导，径向尺寸闭合已核对；铜带纵向电阻按系列声明的接触模型得出。"})
 
 
-def build(series, rows):
-    """Every row of a structure table as a product ready for the methods; a row that cannot be built says why."""
+def declare(series):
+    """A series declaration checked before it has any row: what a hand-made series has to state."""
+    parts = _series(series)
+    return {'designation': {**parts, 'description': designation.describe(parts)}}
+
+
+def build(series, rows, bases=None):
+    """Every row of a structure table as a product ready for the methods; a row that cannot be built says why.
+
+    `bases`, when given, holds one dict per row: what the person who typed that row says about its values.
+    """
     parts = _series(series)
     modelling = series.get('modelling') or {}
     resolved = []
-    for values in rows:
+    for index, values in enumerate(rows):
         try:
-            resolved.append(_resolved(series, values))
+            resolved.append(_resolved(series, values, bases[index] if bases else None))
         except CoreError as error:
             resolved.append(error)
     _resistance(series, parts, resolved)

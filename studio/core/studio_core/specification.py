@@ -235,6 +235,9 @@ def render(snapshot, snapshot_sha256, path):
 
     story.append(text('版本、方法与来源追溯', 'StudioHeading'))
     story.append(text(f"版本说明：{version['note']}；建立人 {version['created_by']}；建立时间 {version['created']}。"))
+    typed = view['derivation'] if view['derivation'].get('entry') == 'manual' else None
+    if typed:
+        story.append(text(f"录入方式：人工填写；填写人 {typed.get('entered_by', '未记录')}；填写时间 {typed.get('entered_at', '未记录')}。", 'StudioNote'))
     source = declaration.get('source') or {}
     story.append(text(f"资料：{source.get('title') or entry['source']}；{source.get('location', '')}"))
     story.append(text('资料 SHA-256：' + source.get('sha256', '未提供'), 'StudioNote'))

@@ -13,6 +13,7 @@ import type { Library } from './library.ts';
 import { productOperations } from './products.ts';
 import { renderReport } from './report.ts';
 import { inputsDigest, type Store } from './store.ts';
+import { typeOperations } from './type-operations.ts';
 
 export interface Context { by: 'human' | 'agent'; task_id?: string }
 export interface Plan { changes: Change[]; parts: Partial<Parts> }
@@ -72,7 +73,7 @@ export class Studio {
     this.home = store.home;
     this.user = user;
     this.events.setMaxListeners(100);
-    for (const operation of [...this.#define(), ...productOperations(this)]) this.operations.set(operation.id, operation);
+    for (const operation of [...this.#define(), ...productOperations(this), ...typeOperations(this)]) this.operations.set(operation.id, operation);
   }
 
   /** An empty product library starts with the structures that come with the software. */
