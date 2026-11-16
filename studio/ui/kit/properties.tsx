@@ -1,5 +1,6 @@
 // Name, value, unit: three columns that line up down a whole panel, so a column of numbers reads like a table.
 import { useState, type ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export interface Property {
@@ -52,9 +53,8 @@ export function PointList({ title, points, shown = points.length }: { title: Rea
     <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-ink marker:text-ink-3">
       {visible.map((point, index) => <li key={index}>{point}</li>)}
     </ul>
-    {points.length > shown && <button type="button" onClick={() => setOpen(value => !value)}
-      className="self-start rounded-sm text-sm text-ink-2 outline-none hover:text-ink focus-visible:ring-3 focus-visible:ring-ring">
+    {points.length > shown && <Button variant="ghost" size="xs" className="-ml-3 self-start" aria-expanded={open} onClick={() => setOpen(value => !value)}>
       {open ? '收起' : `其余 ${points.length - shown} 条`}
-    </button>}
+    </Button>}
   </section>;
 }
