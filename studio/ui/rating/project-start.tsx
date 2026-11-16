@@ -137,11 +137,13 @@ export function StartScreen({ model: asked }: { model?: string }) {
     // The project exists. What the form changed is written next, each part on its own: a part the host refuses keeps the
     // starting values, and the notice says which part and why. The check follows either way.
     const notes: string[] = [];
+    const refused: string[] = [];
     for (const [part, op, patch] of [['敷设', 'installation.set', laying], ['工况', 'conditions.set', conditions]] as const) {
       if (Object.keys(patch).length === 0) continue;
       try {
         await api.op(op, { project, ...patch });
       } catch (failure) {
+        refused.push(part);
         notes.push(`${part}没有按填的改：${messageOf(failure)}`);
       }
     }
@@ -151,7 +153,8 @@ export function StartScreen({ model: asked }: { model?: string }) {
     } catch (failure) {
       notes.push(`校核没有算出结果：${messageOf(failure)}`);
     }
-    if (notes.length) reportFailure(new Error(`工程已建好，但${notes.join('；')}。工程里是起始值，可以在“已知”里再改。`));
+    // Only a part the host refused is left at its starting values.
+    if (notes.length) reportFailure(new Error(`工程已建好，但${notes.join('；')}。${refused.length ? `${refused.join('、')}还是起始值，` : ''}可以在“已知”里改条件再算。`));
     void queryClient.invalidateQueries({ queryKey: ['projects'] });
     void navigate({ to: '/p/$projectId', params: { projectId: project }, search: {} });
   };

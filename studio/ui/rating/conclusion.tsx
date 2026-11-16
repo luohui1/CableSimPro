@@ -85,7 +85,7 @@ export function Conclusion({ state }: { state: ConclusionState }) {
           <LimitMeter label={meter.id === rating.limiting ? '导体温度' : `导体温度 · ${shortNames(meter.id)}`} value={meter.conductor_c} limit={meter.limit_c} from={rating.ambient} unit="°C"
             caption={<>
               {load && <>保存负荷 <span className="text-ink tabular-nums">{load}</span></>}
-              {spare !== null && <>，{spare >= 0 ? '余量' : <><Icon name="status/error" className="inline text-error" /> 超出</>} <span className={cn('tabular-nums', spare >= 0 ? 'text-ink' : 'text-error')}>{fixed(Math.abs(spare))} A</span></>}
+              {spare !== null && <>，{spare >= 0 ? rating.marginName : <><Icon name="status/error" className="inline text-error" /> 超出</>} <span className={cn('tabular-nums', spare >= 0 ? 'text-ink' : 'text-error')}>{fixed(Math.abs(spare))} A</span></>}
             </>} />
           {rating.withinLimit === false && <p className="m-0 flex items-start gap-2 text-sm text-error"><Icon name="status/error" className="mt-1" />保存负荷下 {names(meter.id)} 已经超过温限</p>}
         </>

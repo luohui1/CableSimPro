@@ -30,12 +30,14 @@ function IconAction({ label, icon, ...props }: { label: string; icon: string } &
   </Tooltip>;
 }
 
-export function GivensEditor({ view, base, staged, changed, stage, focus, problem, applying, canUndo, canRedo, onUndo, onRedo, onDiscard, onApply, onClose }: {
+export function GivensEditor({ view, base, staged, changed, stage, settle, focus, problem, applying, canUndo, canRedo, onUndo, onRedo, onDiscard, onApply, onClose }: {
   view: ProjectView;
   base: Base;
   staged: Staged;
   changed: Key[];
   stage: (patch: Staged, group: string) => void;
+  /** Ends the group of changes of one field: leaving a field ends it. */
+  settle: () => void;
   /** The given whose field takes the focus; `at` counts the asks, so asking again for the same given focuses it again. */
   focus: { key: GivenKey; at: number } | null;
   /** Why the changes could not be applied, in the host's words or the field's. */
@@ -73,7 +75,7 @@ export function GivensEditor({ view, base, staged, changed, stage, focus, proble
   </FormRow>;
 
   const layouts = view.layouts.map(option => ({ value: option.kind, label: option.label }));
-  const layoutLabel = (kind: Value) => layouts.find(option => option.value === kind)?.label ?? String(kind);
+  const layoutLabel = (kind: Value) => layouts.find(option => option.value === kind)?.label ?? '—';
   // A laying of its own brings its spacing, duct and backfill: until it is applied there is nothing to set for them yet.
   const sameLaying = !is('layout');
 
@@ -86,7 +88,13 @@ export function GivensEditor({ view, base, staged, changed, stage, focus, proble
       onValueChange={next => stage({ load: alike ? baseLoads.map(() => next ?? Number.NaN) : loads.map((load, index) => (index === at ? next ?? Number.NaN : load)) }, 'load')} />
   </FormRow>;
 
-  const cableName = (id: Value) => (id === view.parts.cable.id ? view.parts.cable.name : library.data?.find(entry => entry.id === id)?.name ?? String(id));
+  // Never an identifier in place of a name: until the library has been read, the name of another cable is not known.
+  const cableName = (id: Value) => (id === view.parts.cable.id ? view.parts.cable.name : library.data?.find(entry => entry.id === id)?.name ?? '…');
+  // The host moves the system voltage with the cable only while it was following the cable.
+  const followed = view.parts.conditions.system_voltage_v === (view.parts.cable.summary.u_v ?? null);
+  const chosen = library.data?.find(entry => entry.id === val('cable'));
+  const newVoltage = chosen?.summary.u_v ?? null;
+  const voltageFollows = is('cable') && !is('voltage') && followed && chosen !== undefined && newVoltage !== (view.parts.cable.summary.u_v ?? null);
   const sameCores = (library.data ?? []).filter(entry => entry.summary.cores === view.parts.cable.summary.cores);
 
   const count = changed.length;
@@ -104,6 +112,8 @@ export function GivensEditor({ view, base, staged, changed, stage, focus, proble
     </>}>
       {problem && <FormNote tone="attention" title="没有应用">{problem}</FormNote>}
 
+      {/* While the changes are being written nothing is changed in the editor: what is typed meanwhile would be lost. */}
+      <div className="contents" inert={applying || undefined} onBlur={settle}>
       <SideEditorSection title="型号">
         <FormRow label="电缆" htmlFor="edit-cable" changed={is('cable')} hint={is('cable') ? `现在是 ${cableName(base.cable)}` : undefined}>
           {/* The size is at the end of the name: the name wraps rather than losing it. */}
@@ -144,6 +154,7 @@ export function GivensEditor({ view, base, staged, changed, stage, focus, proble
       <SideEditorSection title="系统">
         {field('frequency', '频率', 'Hz', 'edit-frequency')}
         {field('voltage', '系统电压', 'kV', 'edit-voltage')}
+        {voltageFollows && <FormNote title="系统电压跟着型号">系统电压原来就是这款电缆的额定电压，换型号后会改成新型号的{newVoltage === null ? '（没有给出）' : ` ${compact(newVoltage / 1000)} kV`}；在这里填了就按填的。</FormNote>}
       </SideEditorSection>
 
       <SideEditorSection title="负荷">
@@ -165,6 +176,7 @@ export function GivensEditor({ view, base, staged, changed, stage, focus, proble
           </FormRow>
         </div>
       </Disclosure>
+      </div>
     </SideEditor>
 
     {picking && <CablePicker entries={sameCores} selected={String(val('cable'))} onClose={() => setPicking(false)}

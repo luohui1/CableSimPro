@@ -23,7 +23,7 @@ import type { ProjectView, RunRecord } from '@shared/types';
 import { Conclusion, type ConclusionState } from './conclusion';
 import { LeaveGuard } from './leave-guard';
 import { messageOf } from './messages';
-import { baseOf, effectiveNumber, usePending, writesOf, type GivenKey } from './pending';
+import { baseOf, effectiveNumber, restoresOf, usePending, writesOf, type GivenKey } from './pending';
 import { changedGivens, givensOf, Premise, type Study } from './premise';
 import { methodOf, ratingOf } from './rating';
 import { SelectionDialog, SelectionScreen } from './selection';
@@ -63,17 +63,23 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   const [applying, setApplying] = useState(false);
   // One apply at a time: a second press before the screen has redrawn with the first one working does nothing.
   const applyingNow = useRef(false);
+  // Whether this screen is still the one on show: a run that ends after the engineer went elsewhere does not bring them back.
+  const here = useRef(true);
+  useEffect(() => {
+    here.current = true;
+    return () => { here.current = false; };
+  }, []);
   const [panel, setPanel] = useState<'sweep' | 'select' | null>(null);
   useEffect(() => useView.getState().select(null), [projectId, shown?.id]);
 
-  const toNow = () => void navigate({ to: '/p/$projectId', params: { projectId }, search: {} });
-  const toRun = (run: string) => void navigate({ to: '/p/$projectId', params: { projectId }, search: { run } });
+  const toNow = () => { if (here.current) void navigate({ to: '/p/$projectId', params: { projectId }, search: {} }); };
+  const toRun = (run: string) => { if (here.current) void navigate({ to: '/p/$projectId', params: { projectId }, search: { run } }); };
   // The givens can be changed where the drawing is the project's own: the present conditions, or a rating that stands for them.
-  const editable = Boolean(view) && (!opened || (opened.kind === 'rating' && current));
+  const editable = Boolean(view) && (applying || !opened || (opened.kind === 'rating' && current));
   const showEditor = editing && editable;
   /** Opens the editor at a given's field; from a record that is not the present state, first back to the present state. */
   const openEditor = (key: GivenKey | null) => {
-    if (!view) return;
+    if (!view || applying) return;
     if (!editable) toNow();
     // Asked for by a given: its field takes the focus. Asked for by the mark in the header: nothing is asked for.
     setAsks(was => (key ? { key, at: (was?.at ?? 0) + 1 } : null));
@@ -84,7 +90,7 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
     const keys = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       // A form that is open, or a field being typed in, keeps the keys.
-      if (!(event.ctrlKey || event.metaKey) || target.closest('input, textarea, [contenteditable]') || document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      if (applyingNow.current || !(event.ctrlKey || event.metaKey) || target.closest('input, textarea, [contenteditable]') || document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
       const key = event.key.toLowerCase();
       if (key !== 'z' && key !== 'y') return;
       const again = key === 'y' || event.shiftKey;
@@ -125,7 +131,9 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
 
   /**
    * Writes the changes of the editor to the project and runs the check. All or nothing: when the host refuses one of the
-   * writes, the ones before it are taken back, the changes stay in the editor, and the host's words say why.
+   * writes, the project is put back to what it was, the changes stay in the editor, and the host's words say why. What is said
+   * about the project being as it was comes from its digest, not from the writes having gone back: the host may have stored
+   * the write it then refused, and a cable goes back to its newest version.
    */
   const apply = async () => {
     if (!view || applyingNow.current) return;
@@ -134,26 +142,31 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
     setProblem(null);
     applyingNow.current = true;
     setApplying(true);
-    const done: typeof plan.writes = [];
     try {
       for (const write of plan.writes) {
         const reply = await api.op<{ view: ProjectView }>(write.op, { project: projectId, ...write.params });
         queryClient.setQueryData(['project', projectId], reply.view);
-        done.push(write);
       }
     } catch (failure) {
-      let undone = true;
-      for (const write of done.reverse()) {
-        try {
-          const reply = await api.op<{ view: ProjectView }>(write.op, { project: projectId, ...write.restore });
-          queryClient.setQueryData(['project', projectId], reply.view);
-        } catch {
-          undone = false;
+      let now: ProjectView | null = null;
+      const read = async () => { try { now = await api.project(projectId); } catch { /* the words below say the project could not be read */ } };
+      const send = async (list: ReturnType<typeof restoresOf>) => {
+        for (const write of list) {
+          try {
+            const reply = await api.op<{ view: ProjectView }>(write.op, { project: projectId, ...write.params });
+            now = reply.view;
+          } catch { /* the digest below says whether the project is as it was */ }
         }
+      };
+      await read();
+      if (now) {
+        await send(restoresOf(view, now, 'cable'));
+        await send(restoresOf(view, now, 'others'));
       }
-      // What was refused is said in the host's words; when taking back what was written failed too, that is said as well.
-      await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      setProblem(undone ? `没有应用，工程还是原来的条件：${messageOf(failure)}` : `没有应用，而且前面写进工程的没能全部撤回，请核对已知条件：${messageOf(failure)}`);
+      await read();
+      if (now) queryClient.setQueryData(['project', projectId], now);
+      const exact = (now as ProjectView | null)?.inputs_sha256 === view.inputs_sha256;
+      setProblem(exact ? `没有应用，工程还是原来的条件：${messageOf(failure)}` : `没有应用，但工程的条件和原来不完全一样，请核对已知条件：${messageOf(failure)}`);
       applyingNow.current = false;
       setApplying(false);
       return;
@@ -178,6 +191,7 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   };
   /** The size a selection chose goes into the editor as a change; applying it is the engineer's step. */
   const adopt = (model: string) => {
+    if (applying) return;
     pending.stage({ cable: model }, 'cable');
     openEditor('cable');
   };
@@ -193,12 +207,12 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   // The drawing calls the cable of a three-core circuit 电缆 or 回路 2; the answer names it for what it is: 三芯电缆 · 回路 1.
   const circuitOf = (id: string) => record?.document?.circuits.find(circuit => circuit.cables.some(item => item.id === id))?.label;
   const names = (id: string) => {
-    const name = recordScene?.cables.find(cable => cable.id === id)?.name ?? id;
+    const name = recordScene?.cables.find(cable => cable.id === id)?.name ?? '电缆';
     if (record?.document?.cable_types[0]?.construction !== 'three_core') return name;
     return `三芯电缆 · ${circuitOf(id) ?? name}`;
   };
   // In a table the circuit alone is enough: the table says these are cables.
-  const shortNames = (id: string) => (record?.document?.cable_types[0]?.construction === 'three_core' ? circuitOf(id) : undefined) ?? recordScene?.cables.find(cable => cable.id === id)?.name ?? id;
+  const shortNames = (id: string) => (record?.document?.cable_types[0]?.construction === 'three_core' ? circuitOf(id) : undefined) ?? recordScene?.cables.find(cable => cable.id === id)?.name ?? '电缆';
   const screenName = recordScene?.shape.rings.some(ring => ring.role === 'metallic_sheath') ? '金属套' : '金属屏蔽';
 
   // Inputs the method cannot take stop the answer of the present conditions; a record that was opened is still its own answer.
@@ -228,11 +242,15 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   // Changing the laying on the drawing is changing the givens: the dimension shows the new value, the drawing waits.
   const depthNow = base ? effectiveNumber(pending.staged, base, 'depth') : null;
   const spacingNow = base && base.spacing !== null && !pending.changed.includes('layout') ? effectiveNumber(pending.staged, base, 'spacing') : null;
-  const canvasEdit: SectionEdit | null = editable && view?.preview && base && depthNow !== null ? {
+  const canvasEdit: SectionEdit | null = editable && !applying && view?.preview && base && depthNow !== null ? {
     depth: depthNow,
     spacing: spacingNow === null ? null : spacingNow / 1000,
     changed: { depth: pending.changed.includes('depth'), spacing: pending.changed.includes('spacing') },
-    commit: fields => pending.stage(fields.depth_m !== undefined ? { depth: fields.depth_m } : { spacing: Number(((fields.spacing_m ?? 0) * 1000).toPrecision(10)) }, fields.depth_m !== undefined ? 'depth' : 'spacing'),
+    commit: (fields, by) => {
+      pending.stage(fields.depth_m !== undefined ? { depth: fields.depth_m } : { spacing: Number(((fields.spacing_m ?? 0) * 1000).toPrecision(10)) }, fields.depth_m !== undefined ? 'depth' : 'spacing');
+      // Typing a dimension or dragging a cable is a step of its own; stepping with the arrow keys is one step however long it goes on.
+      if (by === 'pointer') pending.settle();
+    },
   } : null;
 
   // The next step: the sheet of a result that is shown as it stands; otherwise the check itself. While the editor is open it
@@ -287,7 +305,7 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
         ? <SectionCanvas scene={scene} field={field} result={drawsResult} notice={drawsResult && !field ? '这种敷设形式不发布土壤温度场' : null} status={status} edit={canvasEdit} />
         : <EmptyState icon="status/warning" title="现在的输入画不出断面" description={view.issue?.message ?? '检查上面的已知条件。'} />}
       {showEditor && base
-        ? <GivensEditor view={view} base={base} staged={pending.staged} changed={pending.changed} stage={pending.stage} focus={asks} problem={problem} applying={applying}
+        ? <GivensEditor view={view} base={base} staged={pending.staged} changed={pending.changed} stage={pending.stage} settle={pending.settle} focus={asks} problem={problem} applying={applying}
           canUndo={pending.canUndo} canRedo={pending.canRedo} onUndo={pending.undo} onRedo={pending.redo}
           onDiscard={() => { pending.clear(); setProblem(null); setEditing(false); }} onApply={() => void apply()} onClose={() => setEditing(false)} />
         : <Conclusion state={conclusion} />}
@@ -300,6 +318,9 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
         ? <Button variant="outline" size="sm" onClick={() => openEditor(null)}><Dot tone="attention" />改了 {pending.count} 项，还没应用</Button> : undefined}
       actions={view && <>
         {opened && succeededNow && opened.id !== succeededNow.id && <Button variant="outline" onClick={toNow}><Icon name="action/arrow-left" data-icon="inline-start" />回到现在的结果</Button>}
+        {opened && !current && !succeededNow && <Button variant="outline" disabled={rate.isPending || applying || !view.preview || pending.count > 0} onClick={() => rate.mutate()}>
+          {rate.isPending ? <Spinner /> : <Icon name="run/run" data-icon="inline-start" />}{rate.isPending ? '计算中' : '按现在的条件运行校核'}
+        </Button>}
         <Button variant="outline" disabled={!view.preview} onClick={() => setPanel('sweep')}><Icon name="calc/sweep" data-icon="inline-start" />扫一个条件</Button>
         <Button variant="outline" disabled={!view.preview} onClick={() => setPanel('select')}><Icon name="calc/selection" data-icon="inline-start" />按电流选型</Button>
       </>}

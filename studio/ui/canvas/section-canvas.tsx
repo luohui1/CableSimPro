@@ -197,8 +197,11 @@ export interface SectionEdit {
   spacing: number | null;
   /** Which of the two are changes that are not applied yet. */
   changed: { depth: boolean; spacing: boolean };
-  /** A change of one of them; the caller keeps it until the engineer applies it. */
-  commit: (fields: { depth_m?: number; spacing_m?: number }) => void;
+  /**
+   * A change of one of them; the caller keeps it until the engineer applies it. `by` says how it was made: stepping with the
+   * arrow keys goes on as one change, a dimension typed or a cable dragged is a change of its own.
+   */
+  commit: (fields: { depth_m?: number; spacing_m?: number }, by: 'keys' | 'pointer') => void;
 }
 interface Ghost { axis: 'depth' | 'spacing'; depth: number; spacing: number | null; x: number; y: number }
 
@@ -353,24 +356,25 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
   const paper = soil.field(0);
   const ruleColour = 'var(--text-secondary)';
 
+  // The laying as it is drawn: what a dragged cable moves from, whatever has been changed and not applied since.
+  const drawn = { depth: scene.depth ?? edit?.depth ?? 0, spacing: scene.spacing ?? edit?.spacing ?? null };
   // Dragging a cable moves the whole laying: up and down changes the depth, sideways changes the spacing.
-  // The drawing shows where the cables would go; the host places them when the pointer is released.
+  // The drawing shows where the cables would go; the change waits for the engineer to apply it.
   const drag = (held: NonNullable<typeof press.current>, x: number, y: number) => {
     if (!edit || !held.cable) return;
     held.axis ??= Math.abs(x - held.x) > Math.abs(y - held.y) ? 'spacing' : 'depth';
     if (held.axis === 'depth') {
-      setGhost({ axis: 'depth', depth: Math.max(shallowest, snap(edit.depth + (y - held.y) / held.camera.scale, DEPTH_SNAP)), spacing: edit.spacing, x, y });
+      setGhost({ axis: 'depth', depth: Math.max(shallowest, snap(drawn.depth + (y - held.y) / held.camera.scale, DEPTH_SNAP)), spacing: edit.spacing, x, y });
       return;
     }
     const target = scene.cables.find(cable => cable.id === held.cable);
     const centre = scene.cables.reduce((sum, cable) => sum + cable.x, 0) / scene.cables.length;
-    const lever = target && edit.spacing ? (target.x - centre) / edit.spacing : 0;
+    const lever = target && drawn.spacing ? (target.x - centre) / drawn.spacing : 0;
     // A cable on the centre line does not set the spacing.
-    if (!edit.spacing || Math.abs(lever) < 0.25) return;
-    setGhost({ axis: 'spacing', depth: edit.depth, spacing: Math.max(tightest, snap(edit.spacing + (x - held.x) / held.camera.scale / lever, SPACING_SNAP)), x, y });
+    if (!drawn.spacing || edit.spacing === null || Math.abs(lever) < 0.25) return;
+    setGhost({ axis: 'spacing', depth: edit.depth, spacing: Math.max(tightest, snap(drawn.spacing + (x - held.x) / held.camera.scale / lever, SPACING_SNAP)), x, y });
   };
   // Where the cables would be: under the pointer while one is dragged, and after that for as long as the change is not applied.
-  const drawn = { depth: scene.depth ?? edit?.depth ?? 0, spacing: scene.spacing ?? edit?.spacing ?? null };
   const outline = ghost ?? (edit && (edit.changed.depth || edit.changed.spacing) ? { depth: edit.depth, spacing: edit.spacing } : null);
   const ghosts = outline && edit && camera ? (() => {
     const centreX = scene.cables.reduce((sum, cable) => sum + cable.x, 0) / scene.cables.length;
@@ -390,10 +394,10 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
       const stride = event.shiftKey ? 5 : 1;
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         event.preventDefault();
-        edit.commit({ depth_m: Math.max(shallowest, snap(edit.depth + (event.key === 'ArrowDown' ? 1 : -1) * DEPTH_SNAP * stride, DEPTH_SNAP)) });
+        edit.commit({ depth_m: Math.max(shallowest, snap(edit.depth + (event.key === 'ArrowDown' ? 1 : -1) * DEPTH_SNAP * stride, DEPTH_SNAP)) }, 'keys');
       } else if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && edit.spacing) {
         event.preventDefault();
-        edit.commit({ spacing_m: Math.max(tightest, snap(edit.spacing + (event.key === 'ArrowRight' ? 1 : -1) * SPACING_SNAP * stride, SPACING_SNAP)) });
+        edit.commit({ spacing_m: Math.max(tightest, snap(edit.spacing + (event.key === 'ArrowRight' ? 1 : -1) * SPACING_SNAP * stride, SPACING_SNAP)) }, 'keys');
       }
     }}
     onPointerDown={event => {
@@ -418,8 +422,8 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
       press.current = null;
       if (held && !held.dragged) return select(cableAt(...local(event)));
       if (ghost && edit) {
-        if (ghost.axis === 'depth' && Math.abs(ghost.depth - edit.depth) > 1e-9) edit.commit({ depth_m: ghost.depth });
-        if (ghost.axis === 'spacing' && ghost.spacing && Math.abs(ghost.spacing - (edit.spacing ?? 0)) > 1e-9) edit.commit({ spacing_m: ghost.spacing });
+        if (ghost.axis === 'depth' && Math.abs(ghost.depth - edit.depth) > 1e-9) edit.commit({ depth_m: ghost.depth }, 'pointer');
+        if (ghost.axis === 'spacing' && ghost.spacing && Math.abs(ghost.spacing - (edit.spacing ?? 0)) > 1e-9) edit.commit({ spacing_m: ghost.spacing }, 'pointer');
       }
       setGhost(null);
     }}
@@ -511,7 +515,7 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
         style={{ translate: `${Math.round(Math.min(dimension.rect.x, size.width - 176))}px ${Math.round(dimension.rect.y)}px` }}>
         {editing === which
           ? <CapsuleField value={Number((value * scale).toFixed(4))} unit={unit} label={which === 'depth' ? '中心埋深' : '中心距'} least={least * scale} onLeave={() => setEditing(null)}
-            onApply={next => edit.commit(which === 'depth' ? { depth_m: next } : { spacing_m: next / 1000 })} />
+            onApply={next => edit.commit(which === 'depth' ? { depth_m: next } : { spacing_m: next / 1000 }, 'pointer')} />
           : <button type="button" data-dimension={which} data-changed={edit.changed[which] || undefined} onClick={() => setEditing(which)} style={{ width: dimension.rect.w, height: dimension.rect.h }}
             className="flex cursor-text items-center justify-center gap-2 rounded-full border border-control bg-panel text-13 whitespace-nowrap text-ink shadow-lift transition-colors duration-fast ease-std hover:border-ink">
             {dimension.label}

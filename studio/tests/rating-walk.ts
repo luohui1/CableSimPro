@@ -152,9 +152,11 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('button', { name: '回到这个视图的全貌' }).click();
 
     // 3. Every given opens the editor at its field; nothing is changed by looking.
+    const FOCUSED: Record<string, string> = { 型号: 'edit-cable', 敷设: 'edit-layout', 埋深: 'edit-depth', 土壤热阻率: 'edit-soil', 环境: 'edit-ambient', 负荷: 'edit-load', 系统: 'edit-voltage', 护套: 'edit-bonding', 方法: 'edit-ks' };
     for (const label of ['型号', '敷设', '埋深', '土壤热阻率', '环境', '负荷', '系统', '护套', '方法']) {
       await given(label);
       await editor().waitFor();
+      await page.waitForFunction(id => document.activeElement?.id === id, FOCUSED[label], { timeout: 5000 });
       await check(`given-${label}`);
       await editor().getByRole('button', { name: '关闭' }).click();
       await editor().waitFor({ state: 'detached' });
@@ -207,8 +209,13 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await check('sweep-conductor');
     const [file] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '导出 CSV' }).click()]);
     const csv = readFileSync(await file.path(), 'utf8');
-    assert.ok(csv.startsWith('﻿'), 'a spreadsheet reads Chinese from a file with the byte-order mark');
+    assert.ok(csv.startsWith(String.fromCharCode(0xfeff)), 'a spreadsheet reads Chinese from a file with the byte-order mark');
     assert.equal(csv.trim().split('\r\n').length, 4 + 1 + points, 'what the file is about, its header, and a line for each point');
+    const swept = await record((await view()).runs.find(run => run.kind === 'sweep')!.id);
+    const point = swept.sweep!.points[0];
+    assert.ok(csv.includes('允许电流 (A)') && csv.includes(`${swept.sweep!.label} (${swept.sweep!.unit})`), 'the columns say their units');
+    assert.ok(csv.includes(`\r\n${point.value},${Number(point.ampacity_a!.toFixed(1))},`), 'the first point is the first line, in the numbers the screen shows');
+    assert.ok(csv.includes(`${swept.method_card!.method} ${swept.method_version}`), 'the file says which method made the numbers');
 
     // 6. Choose a section for a target current: the table of sizes, and the one the rule chose; it can be taken over as a change.
     await page.getByRole('button', { name: '按电流选型' }).click();
@@ -219,16 +226,15 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByText('选定规格', { exact: true }).waitFor({ timeout: RUN });
     await check('selection');
     const adopt = page.getByRole('button', { name: '改用这个型号' });
-    if (await adopt.count()) {
-      const before = (await view()).inputs_sha256;
-      await adopt.click();
-      await editor().waitFor();
-      await editor().getByText('改了 1 项').waitFor();
-      assert.equal((await view()).inputs_sha256, before, 'taking the size over is a change waiting in the editor, not a write');
-      await check('selection-adopted');
-      await editor().getByRole('button', { name: '放弃' }).click();
-      await editor().waitFor({ state: 'detached' });
-    }
+    assert.equal(await adopt.count(), 1, 'a smaller size than the 3×240 carries 300 A: it is offered');
+    const before = (await view()).inputs_sha256;
+    await adopt.click();
+    await editor().waitFor();
+    await editor().getByText('改了 1 项').waitFor();
+    assert.equal((await view()).inputs_sha256, before, 'taking the size over is a change waiting in the editor, not a write');
+    await check('selection-adopted');
+    await editor().getByRole('button', { name: '放弃' }).click();
+    await editor().waitFor({ state: 'detached' });
 
     // 7. The run records in their row: the one of the check as it was, with the givens it was computed from; a given of an
     //    earlier record leads back to the present state, where it is edited.
@@ -312,6 +318,13 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
     assert.equal(await waiting().count(), 0, 'Escape on the capsule keeps the depth as it was');
+    // The depth typed twice: two changes of one field, and Ctrl+Z takes back the second only.
+    const typedFirst = width === 1366 ? 1.4 : 1.6;
+    await page.locator('[data-dimension="depth"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type(String(typedFirst));
+    await page.keyboard.press('Enter');
+    await page.getByText(`中心埋深 ${typedFirst} m`).waitFor();
     await page.locator('[data-dimension="depth"]').click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type(String(depth));
@@ -322,6 +335,11 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     assert.equal((await view(row)).inputs_sha256, original.inputs_sha256, 'the depth typed on the drawing is not written yet');
     assert.ok(await page.locator('svg circle[stroke-dasharray="6 4"]').count() > 0, 'the cables are outlined where they would be');
     await check('canvas-depth');
+    await page.locator('[data-gpu]').click({ position: { x: 300, y: 250 } });
+    await page.keyboard.press('Control+Z');
+    await page.getByText(`中心埋深 ${typedFirst} m`).waitFor();
+    await page.keyboard.press('Control+Y');
+    await page.getByText(`中心埋深 ${depth} m`).waitFor();
 
     const target = await page.locator('[data-cable]').last().boundingBox();
     if (!target) throw new Error('no cable to drag');
@@ -332,6 +350,9 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.mouse.up();
     await page.getByRole('button', { name: /改了 2 项，还没应用/ }).waitFor();
     assert.equal((await view(row)).inputs_sha256, original.inputs_sha256, 'the dragged spacing is not written yet');
+    assert.equal((await view(row)).runs.length, original.runs.length, 'nothing was run');
+    await page.locator('[data-dimension="spacing"][data-changed]').waitFor();
+    await page.getByRole('button', { name: '导出计算书' }).waitFor();
     await check('canvas-drag');
 
     // Undo takes both changes back; nothing is left marked and the record is still the current answer.
@@ -340,6 +361,8 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('button', { name: /改了 1 项，还没应用/ }).waitFor();
     await page.keyboard.press('Control+Z');
     await waitFor('nothing is left waiting', async () => (await waiting().count()) === 0);
+    assert.equal((await view(row)).inputs_sha256, original.inputs_sha256);
+    await page.getByRole('button', { name: '导出计算书' }).waitFor();
     await check('canvas-undone');
 
     // The depth once more, opened from the header's mark and applied: written, checked, and the current answer.
@@ -412,6 +435,35 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('link', { name: '新建工程' }).click();
     await page.getByRole('button', { name: '放弃改动并离开' }).click();
     await page.waitForURL(/\/workbench/);
+
+    // 13. The host refuses the second of two writes: the first is taken back, the project is as it was (its digest says so), and the
+    //     changes are still in the editor with the host's words.
+    await page.goto(`${base}/p/${row}`);
+    await gpuReady();
+    await page.getByRole('button', { name: '导出计算书' }).waitFor();
+    const beforeRefusal = await view(row);
+    let refused = 0;
+    await page.route('**/api/ops/installation.set', async route => {
+      refused += 1;
+      await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: { code: 'INPUT_INVALID', message: '走查：宿主拒绝了这次敷设改动。' } }) });
+    });
+    await given('型号');
+    await editor().getByRole('button', { name: '更换型号…' }).click();
+    await page.getByRole('dialog').getByPlaceholder('搜索规格或系列').fill('3×300');
+    await page.getByRole('dialog').getByRole('row', { name: /YJV22.*3×300/ }).first().click();
+    await page.getByRole('dialog').getByRole('button', { name: '用这一款' }).click();
+    await typeInto('#edit-depth', '1.7');
+    await editor().getByText('改了 2 项').waitFor();
+    await editor().getByRole('button', { name: '按新条件计算' }).click();
+    await editor().getByText(/没有应用，工程还是原来的条件：走查：宿主拒绝了这次敷设改动。/).waitFor({ timeout: RUN });
+    assert.equal(refused, 1, 'the write was asked for once');
+    await check('apply-refused');
+    const afterRefusal = await view(row);
+    assert.equal(afterRefusal.inputs_sha256, beforeRefusal.inputs_sha256, 'the cable written before the refusal was taken back');
+    assert.equal(afterRefusal.runs.length, beforeRefusal.runs.length, 'no check was run');
+    await editor().getByText('改了 2 项').waitFor();
+    await page.unroute('**/api/ops/installation.set');
+    await editor().getByRole('button', { name: '放弃' }).click();
     await page.close();
   }
 }

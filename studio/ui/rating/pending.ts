@@ -101,6 +101,8 @@ export function usePending(base: Base | null) {
         return { staged: next, past: same ? current.past : [...current.past.slice(-49), current.staged], future: [], last: group };
       });
     },
+    /** Ends the group: the next change of the same field is a step of its own (the field was left, the dimension was set). */
+    settle: () => setState(current => (current.last === null ? current : { ...current, last: null })),
     undo: () => setState(current => (current.past.length
       ? { staged: current.past[current.past.length - 1], past: current.past.slice(0, -1), future: [...current.future, current.staged], last: null } : current)),
     redo: () => setState(current => (current.future.length
@@ -112,8 +114,8 @@ export function usePending(base: Base | null) {
 // ---- Writing the changes ----
 
 type WriteOp = 'cable.set' | 'installation.set' | 'conditions.set' | 'method.set';
-/** One host operation that applies a part of the changes, and the one that puts that part back as it was. */
-export interface Write { op: WriteOp; params: Record<string, unknown>; restore: Record<string, unknown> }
+/** One host operation that applies a part of the changes. */
+export interface Write { op: WriteOp; params: Record<string, unknown> }
 
 /**
  * The host operations that make the project what the editor shows, in the order the host needs them (a new cable first: it may
@@ -136,12 +138,12 @@ export function writesOf(view: ProjectView, staged: Staged): { writes: Write[] }
   const parts = view.parts;
   const writes: Write[] = [];
 
-  if (keys.includes('cable')) writes.push({ op: 'cable.set', params: { model_id: staged.cable }, restore: { model_id: parts.cable.id } });
+  if (keys.includes('cable')) writes.push({ op: 'cable.set', params: { model_id: staged.cable } });
 
   const installation: Record<string, unknown> = {};
   if (keys.includes('layout')) installation.layout = staged.layout;
   if (keys.includes('depth')) installation.depth_m = number('depth', '中心埋深', positive, '要填大于 0 的数');
-  if (keys.includes('spacing')) installation.spacing_m = staged.spacing === null ? null : round(number('spacing', '中心距', positive, '要填大于 0 的数') / 1000);
+  if (keys.includes('spacing')) installation.spacing_m = round(number('spacing', '中心距', positive, '要填大于 0 的数') / 1000);
   if (parts.installation.duct && has('inner', 'outer')) {
     const [inner, outer] = [number('inner', '管内径', positive, '要填大于 0 的数'), number('outer', '管外径', positive, '要填大于 0 的数')];
     if (inner >= outer) problems.push('管外径要大于管内径');
@@ -156,7 +158,7 @@ export function writesOf(view: ProjectView, staged: Staged): { writes: Write[] }
     };
   }
   if (keys.includes('bonding')) installation.bonding = staged.bonding;
-  if (Object.keys(installation).length) writes.push({ op: 'installation.set', params: installation, restore: { ...parts.installation } });
+  if (Object.keys(installation).length) writes.push({ op: 'installation.set', params: installation });
 
   const conditions: Record<string, unknown> = {};
   if (keys.includes('soil')) conditions.soil_thermal_resistivity = number('soil', '土壤热阻率', positive, '要填大于 0 的数');
@@ -171,24 +173,51 @@ export function writesOf(view: ProjectView, staged: Staged): { writes: Write[] }
     else conditions.system_voltage_v = round(number('voltage', '系统线电压', positive, '要填大于 0 的数，或留空') * 1000);
   }
   if (keys.includes('frequency')) conditions.frequency_hz = number('frequency', '频率', positive, '要填大于 0 的数');
-  if (Object.keys(conditions).length) writes.push({ op: 'conditions.set', params: conditions, restore: { ...parts.conditions } });
+  if (Object.keys(conditions).length) writes.push({ op: 'conditions.set', params: conditions });
 
   const method: Record<string, unknown> = {};
   const between = (n: number) => n > 0 && n <= 1;
   if (keys.includes('ks')) method.ks = number('ks', '集肤效应系数 ks', between, '要在 0 到 1 之间');
   if (keys.includes('kp')) method.kp = number('kp', '邻近效应系数 kp', between, '要在 0 到 1 之间');
   if (keys.includes('eddy')) method.eddy = staged.eddy;
-  if (Object.keys(method).length) {
-    // What was in force goes back: the engineer's own setting, else the value the library declares.
-    const kept = parts.method.parameters as Record<string, unknown>;
-    const effective = (view.preview?.parameters ?? kept) as Record<string, unknown>;
-    writes.push({ op: 'method.set', params: method, restore: Object.fromEntries(Object.keys(method).flatMap(key => {
-      const before = kept[key] ?? effective[key];
-      return before === undefined ? [] : [[key, before]];
-    })) });
-  }
+  if (Object.keys(method).length) writes.push({ op: 'method.set', params: method });
 
   return problems.length ? { problem: `${[...new Set(problems)].join('；')}。` } : { writes };
+}
+
+/** Whether two values are the same: objects by what they hold, not by the order of their keys. */
+export function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const [left, right] = [a as Record<string, unknown>, b as Record<string, unknown>];
+  return [...new Set([...Object.keys(left), ...Object.keys(right)])].every(key => same(left[key], right[key]));
+}
+
+/**
+ * The writes that put the project's parts back to what `start` had: only the parts that are not as they were. The cable is put
+ * back on its own and first, because the host moves other parts with it (the system voltage that followed it); the other
+ * parts are asked for from the project as it is after that. The cable goes back to its newest version: the host's
+ * `cable.set` takes no version. Whether the project is then exactly as it was is for its digest to say.
+ */
+export function restoresOf(start: ProjectView, now: ProjectView, which: 'cable' | 'others'): Write[] {
+  const [was, is] = [start.parts, now.parts];
+  if (which === 'cable') {
+    return was.cable.id === is.cable.id && was.cable.content_sha256 === is.cable.content_sha256 ? [] : [{ op: 'cable.set', params: { model_id: was.cable.id } }];
+  }
+  const list: Write[] = [];
+  if (!same(was.installation, is.installation)) list.push({ op: 'installation.set', params: { ...was.installation } });
+  if (!same(was.conditions, is.conditions)) list.push({ op: 'conditions.set', params: { ...was.conditions } });
+  if (!same(was.method.parameters, is.method.parameters)) {
+    // A parameter the engineer had not set was in force at the value the library declares: that is what goes back.
+    const kept = was.method.parameters as Record<string, unknown>;
+    const effective = (start.preview?.parameters ?? kept) as Record<string, unknown>;
+    const params = Object.fromEntries(['ks', 'kp', 'eddy'].flatMap(key => {
+      const value = kept[key] ?? effective[key];
+      return value === undefined ? [] : [[key, value]];
+    }));
+    if (Object.keys(params).length) list.push({ op: 'method.set', params });
+  }
+  return list;
 }
 
 /** The field each key of the changes belongs to in the line above the drawing. */

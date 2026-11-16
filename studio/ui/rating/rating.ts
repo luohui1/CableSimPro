@@ -28,8 +28,13 @@ export interface Rating {
   basis: string;
   /** The saved load of every circuit. */
   loads: number[];
-  /** What is left of the allowed current at the limiting circuit's load; only when the allowed current is that circuit's own. */
+  /**
+   * What is left of the allowed current at the saved load, when the allowed current is a circuit's own: the limiting circuit's
+   * for one circuit, the smallest of the circuits' for several. None when the allowed current is that of all circuits together.
+   */
   margin: number | null;
+  /** What the margin is called: 余量, or 最小余量 when it is the smallest of several circuits'. */
+  marginName: string;
   /** False when every cable is equally hot at the saved load, so "the hottest" would name one at random. */
   distinct: boolean;
   /** Shares of the focus cable's surface rise; known at the saved load only. */
@@ -58,6 +63,8 @@ export function ratingOf(record: RunRecord | undefined, selected: string | null)
   const circuits = summary.circuits ?? [];
   const circuit = circuits.find(item => item.id === summary.ampacity?.limiting_circuit);
   const temperatures = operating.map(state => state.conductor_c);
+  const margins = circuits.flatMap(item => (typeof item.margin_a === 'number' ? [item.margin_a] : []));
+  const several = circuits.length > 1 && margins.length > 0;
   const basis = summary.ampacity.basis;
   return {
     summary, operating, rated, states, focus, limiting, limitingState, basis,
@@ -68,7 +75,8 @@ export function ratingOf(record: RunRecord | undefined, selected: string | null)
     ambient: summary.ambient_c,
     ampacity: summary.ampacity.value_a,
     loads: circuits.flatMap(item => (typeof item.load_a === 'number' ? [item.load_a] : [])),
-    margin: basis === 'common' ? null : circuit?.margin_a ?? null,
+    margin: basis === 'common' ? null : several ? Math.min(...margins) : circuit?.margin_a ?? null,
+    marginName: several ? '最小余量' : '余量',
     distinct: temperatures.length > 0 && Math.max(...temperatures) - Math.min(...temperatures) > 0.05,
     contributions: operating.length ? summary.heat_contributions?.filter(item => item.target === focus.id) ?? null : null,
   };
