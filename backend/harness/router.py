@@ -130,4 +130,10 @@ def make_router(harness):
         return {'schema':'cablesim.agent-stream/1','events':TypeAdapter(StreamEvent).json_schema(),'plan_node':PlanNode.model_json_schema(),
                 'tools':[{'name':tool.name,'parameters':tool.model()['function']['parameters']} for tool in harness.registry.tools().values()]}
 
+    # Narrow bridge for the studio sidecar. It exposes only tools visible in a
+    # persisted CableSim session and dispatches every call through execute_plan
+    # -> ToolBroker.execute (never directly to a domain service).
+    from .external import make_external_router
+    router.include_router(make_external_router(harness))
+
     return router
