@@ -42,3 +42,21 @@ def test_external_read_call_uses_tool_broker_and_keeps_session_scope(client, mon
     assert response.status_code == 200, response.text
     assert response.json()['status'] == 'ok'
     assert called == [(workspace['id'], 'workspace_read', 'read')]
+
+
+def test_external_bridge_rejects_a_study_from_another_workspace(client):
+    from test_research import study
+
+    workspace, own_study = study(client)
+    other_workspace, other_study = study(client)
+    sid = client.post('/api/agent/sessions', json={
+        'workspace_id': workspace['id'], 'study_id': own_study['id'],
+    }).json()['id']
+    response = client.post('/api/agent/external/calls', json={
+        'session_id': sid,
+        'tool': 'study_read',
+        'arguments': {'study_id': other_study['id']},
+    })
+    assert response.status_code in (404, 422), response.text
+    assert response.json()['detail']
+    assert other_workspace['id'] != workspace['id']
