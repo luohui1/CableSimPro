@@ -38,6 +38,8 @@
 | `workbench/side-editor`：`SideEditor` `SideEditorSection` | 从右边停靠出来的编辑栏，占结论面板的位置，画面不动；底部是唯一的应用动作 |
 | `workbench/review`：`ReviewTrack` `ReviewActions` `VersionSelect` | 一个版本的审核：四个状态竖排，到过的记下谁、何时、说了什么；每个状态下人能走的一步；页头的版本切换 |
 | `workbench/chart`：`CurveChart` `TargetBar` | 结果图（recharts）：一个结果随一个条件的曲线，工程取值和比较水平是参考线；表格里数值对目标的比例条 |
+| `workbench/form` 补：`ReadonlyValue` `ConnectionCheck`；`FormSection split` | 只显示不改的值（来自环境变量）；一个服务连不连得上（还没检查、正在检查、连通、连不上并给原话）；设置页的左说明右字段 |
+| `theme-color`：`useThemeColor` | 给 CSS 之外画图的东西（三维视口、画布）取主题色，换主题时重取 |
 | `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选 |
 | `workbench/premise`：`PremiseStrip` `Given` `EmptyState` | 计算屏的“求什么、已知什么”；空状态 |
 | `workbench/canvas`：`CanvasFrame` `CanvasToolbar` `CanvasTool` `CanvasLayer` `TemperatureLegend` | 断面画布外框：工具左上、视图右上、图例左下、状态栏在下；画布内容是 `ui/canvas` 自有绘图 |
@@ -62,6 +64,7 @@
 | `agent-waiting` Agent 提案等你决定 | 看清 Agent 要建或要改的每一项，接受，或写下原因拒绝 |
 | `agent-refused` Agent 拒算，附件上传中 | 看懂为什么没有算出结果、缺什么或超出什么范围，并接着交办下一件事 |
 | `agent-error` Agent 出错 | 知道任务停在哪一步、为什么停，确认服务恢复后重试 |
+| `agent-model` Agent 三维模型卡（实时取自宿主） | 转着看 Agent 建好的三维实体，剖开看各层，下载 STEP，或到工作台接着看 |
 | `library` 型号库 | 找到一款型号，看清它每个规格的尺寸、审核状态和核对结果，打开它或导入新的结构表 |
 | `import-upload` 导入结构表 · 上传 | 把厂家的结构表交给软件：拖进来，或先用公开样例试一遍 |
 | `import-sheet` 导入结构表 · 选工作表 | 挑出要导入的那张工作表，一张表成一个系列 |
@@ -79,6 +82,8 @@
 | `rating-edit` 载流量计算 · 改已知条件 | 改一个已知条件，一边看着原来的结果，一边决定按新条件重算 |
 | `rating-sweep` 载流量计算 · 扫描 | 看一个条件从小到大变化时，允许电流和导体温度怎么走，哪一点最紧 |
 | `rating-selection` 载流量计算 · 选型 | 按目标电流从一个系列里选出最小够用的截面，并看清其余规格为什么不选 |
+| `settings-model` 设置 · Agent 用的模型（实时取自宿主） | 确认 Agent 用的是哪个接口、哪个模型，密钥配了没有，连不连得上 |
+| `settings-model-missing` 设置 · 模型未配置 | 看到模型还没配置，照着说明设好环境变量再重启 |
 
 拼这些屏的约定：
 
@@ -90,6 +95,8 @@
 - 等人决定时，待审卡的“接受”是那屏唯一的铜色按钮，输入框提示先审提案。
 - 拒算卡在步骤下面时，步骤不再重复原因；连不上本机服务是输入框上方的出错条，带重试。
 - 空状态的两块是这款产品自己的图：型号是电缆断面，载流量是电缆在土里的温度场；数字是库里真有的。
+- 三维卡的网格向宿主要（`library.geometry`，宿主建一次后留着），不进仓库；视口铺满卡里的灰底（`cad-fill`），底色用 `useThemeColor('--fill')` 跟着主题换。接法照 `ui/pages/gallery/live-screens.tsx` 的 `ModelCardLive`。
+- 设置页的模型一节只读：值来自环境变量，页面上显示接口主机、模型名和“密钥已配置 / 未配置”，从不显示密钥本身；怎么改用宿主自己的说明原文。
 - 标准给出的值带条款和页码；表里写“手册未列”“—”，不编值。
 
 ## 能做和不能做

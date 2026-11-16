@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/kit/icon';
 import { CurveChart, TargetBar } from '@/kit/workbench/chart';
 import { Stepper } from '@/kit/workbench/flow';
-import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, SourceTag, UnitInput } from '@/kit/workbench/form';
+import { ChoiceCards, ChoiceSelect, ConnectionCheck, DropZone, FormNote, FormRow, ReadonlyValue, SourceTag, UnitInput } from '@/kit/workbench/form';
 import { PageTabs } from '@/kit/workbench/page';
 import { ReviewActions, ReviewTrack, VersionSelect, type ReviewStamp } from '@/kit/workbench/review';
 import { RunRail } from '@/kit/workbench/runs';
@@ -12,7 +12,7 @@ import { SideEditor, SideEditorSection } from '@/kit/workbench/side-editor';
 import type { Review } from '@/kit/marks';
 import { BONDING_NAMES, fixed } from '@shared/format';
 import { DEFAULTS, IMPORT, LAYOUTS, PROPOSAL, REVIEW_NOTES, RUNS, SELECTION, SWEEP, VERSIONS } from './round2-data';
-import { REFUSED_IMPORT } from './samples';
+import { HOST_DOWN, MODEL, REFUSED_IMPORT } from './samples';
 import { Specimen, State } from './sections';
 import { when } from './type-screens';
 
@@ -34,6 +34,14 @@ export function FlowSection() {
       <State label="改过" className="w-96"><FormRow label="土壤热阻率" htmlFor="specimen-soil" changed hint={`运行记录 #1 用的是 ${conditions.soil_thermal_resistivity} K·m/W`}><UnitInput id="specimen-soil" unit="K·m/W" defaultValue="1.5" /></FormRow></State>
       <State label="一行几个" className="w-96"><FormRow label="电压"><div className="grid grid-cols-2 gap-2"><UnitInput aria-label="U₀" prefix="U₀" unit="kV" defaultValue="8.7" /><UnitInput aria-label="U" prefix="U" unit="kV" defaultValue="15" /></div></FormRow></State>
       <State label="出错" className="w-96"><FormRow label="埋深" htmlFor="specimen-bad"><UnitInput id="specimen-bad" unit="m" defaultValue="-1" aria-invalid /></FormRow></State>
+    </Specimen>
+    <Specimen title="只读值与连通检查" rule="来自环境变量的值只显示、不在页面上改，放在浅底框里；密钥只说有没有。连通检查说状态和时间，连不上时给宿主的原话。">
+      <State label="有值" className="w-72"><ReadonlyValue>{MODEL}</ReadonlyValue></State>
+      <State label="没有值" className="w-72"><ReadonlyValue empty /></State>
+      <State label="还没检查"><ConnectionCheck state="idle" /></State>
+      <State label="正在检查"><ConnectionCheck state="checking" /></State>
+      <State label="连通"><ConnectionCheck state="ok" /></State>
+      <State label="连不上" className="w-96"><ConnectionCheck state="failed" error={HOST_DOWN} /></State>
     </Specimen>
     <Specimen title="选择" rule="几种互斥的做法用卡片，选中是铜色边和浅底；固定清单里的一项用下拉。" wide>
       <State label="卡片" className="w-full"><ChoiceCards label="敷设方式" columns="grid-cols-3" value={installation.layout} options={LAYOUTS.slice(0, 3).map(layout => ({

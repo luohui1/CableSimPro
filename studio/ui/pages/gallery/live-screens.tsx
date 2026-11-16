@@ -1,0 +1,63 @@
+// Two parts wired to the host the gallery is served from, the way the real pages wire them: the model section of the
+// settings reads /api/status, and the 3D card asks the host for the solid with library.geometry (the host builds it once
+// with the sealed CAD plugin and keeps it). Neither the configured endpoint nor the mesh is copied into the repository.
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import type { ProductCad } from '@shared/cad';
+import type { AgentStatus } from '@shared/types';
+import { compact } from '@shared/format';
+import { Badge } from '@/components/ui/badge';
+import { CadViewport, download } from '@/components/product-cad';
+import { CardAction, ModelCard, OpenInWorkbench } from '@/kit/chat/cards';
+import { useThemeColor } from '@/kit/theme-color';
+import { ConnectionCheck, FormNote, FormRow, FormSection, ReadonlyValue } from '@/kit/workbench/form';
+import { PageHeader } from '@/kit/workbench/page';
+import { api } from '@/state/api';
+import { NOT_CONFIGURED } from './samples';
+
+/** The solid of one version, from the host: building, built, or refused with the plugin's own words. */
+export function ModelCardLive({ spec, version, title }: { spec: string; version: number; title: string }) {
+  const solid = useQuery({ queryKey: ['library', 'cad', spec, version], staleTime: Infinity, retry: false,
+    queryFn: () => api.op<ProductCad>('library.geometry', { spec, version }) });
+  const [view, setView] = useState<'cutaway' | 'solid'>('cutaway');
+  const ground = useThemeColor('--fill');
+  if (solid.isPending) return <ModelCard title={title} state="loading" />;
+  if (solid.error) return <ModelCard title={title} state="failed" error={solid.error.message} />;
+  const model = solid.data.model;
+  return <ModelCard title={title} state="ready" view={view} onViewChange={setView}
+    facts={[{ label: '外径', value: `${compact(model.outer_diameter_m * 1000)} mm` }, { label: '层数', value: String(model.layers.length) }]}
+    viewport={<CadViewport data={solid.data} cutaway={view === 'cutaway'} selected="" background={ground} />}
+    actions={<>
+      <CardAction icon="action/export" onClick={() => download(model.step_text, `${spec}-第${version}版.step`, 'application/step')}>下载 STEP</CardAction>
+      <OpenInWorkbench />
+    </>} />;
+}
+
+/** The model section of the settings. The model is set in the environment, so the page shows it and says how to change it. */
+export function SettingsModelBody({ status, error }: { status?: AgentStatus; error?: string }) {
+  const configured = status?.configured ?? false;
+  return <>
+    <PageHeader title="设置" />
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex max-w-4xl flex-col gap-10 px-8 py-10">
+        <FormSection split title="Agent 用的模型" description="Agent 模式用它听懂你的话、调用工作台的操作；结果里的数由方法插件算出，不经过模型。"
+          aside={status && <Badge variant={configured ? 'success' : 'attention'}>{configured ? '已配置' : '未配置'}</Badge>}>
+          {error && <FormNote tone="attention" title="读不到设置">{error}</FormNote>}
+          <FormRow label="接口"><ReadonlyValue empty={!status?.provider}>{status?.provider}</ReadonlyValue></FormRow>
+          <FormRow label="模型"><ReadonlyValue empty={!status?.model}>{status?.model}</ReadonlyValue></FormRow>
+          <FormRow label="密钥" hint="只从环境变量读取，不写入磁盘；这里只说有没有">
+            <ReadonlyValue>{configured ? '已配置' : '未配置'}</ReadonlyValue>
+          </FormRow>
+          <FormRow label="连通性"><ConnectionCheck state="idle" disabled={!configured} /></FormRow>
+          <FormNote tone={configured ? 'info' : 'attention'} title={configured ? '换模型或接口' : '怎么配置'}>{status?.hint ?? NOT_CONFIGURED}</FormNote>
+        </FormSection>
+      </div>
+    </div>
+  </>;
+}
+
+/** The section as it stands on this host. */
+export function SettingsModelLive() {
+  const status = useQuery({ queryKey: ['status'], queryFn: api.status, retry: false });
+  return <SettingsModelBody status={status.data?.agent} error={status.error?.message} />;
+}

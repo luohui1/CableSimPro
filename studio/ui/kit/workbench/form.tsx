@@ -9,14 +9,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
 import { Dot } from '../marks';
+import { Spinner } from '../icon';
 
-export function FormSection({ title, description, aside, children, className }: {
+export function FormSection({ title, description, aside, split, children, className }: {
   title: ReactNode;
   description?: ReactNode;
   aside?: ReactNode;
+  /** Title, description and aside in a column on the left, the fields on the right: a page of settings. */
+  split?: boolean;
   children: ReactNode;
   className?: string;
 }) {
+  if (split) return <section className={cn('flex gap-10', className)}>
+    <header className="flex w-64 shrink-0 flex-col items-start gap-2">
+      <h2 className="m-0 text-h2 text-ink">{title}</h2>
+      {description && <p className="m-0 text-sm text-ink-2">{description}</p>}
+      {aside}
+    </header>
+    <div className="flex min-w-0 flex-1 flex-col gap-3">{children}</div>
+  </section>;
   return <section className={cn('flex flex-col gap-4', className)}>
     <header className="flex items-start justify-between gap-4">
       <div className="flex min-w-0 flex-col gap-1">
@@ -137,5 +148,38 @@ export function DropZone({ title, formats, dragging, action = '选择文件', cl
       <span className="text-sm text-ink-2">{formats}</span>
     </span>
     <Button variant="outline">{action}</Button>
+  </div>;
+}
+
+/** A value the page shows but does not change (it comes from the environment): in a field's box, on the light fill. */
+export function ReadonlyValue({ children, empty, className }: { children?: ReactNode; empty?: boolean; className?: string }) {
+  return <div className={cn('flex h-9 min-w-0 items-center rounded-field bg-subtle px-3 text-sm', empty ? 'text-ink-2' : 'text-ink', className)}>
+    <span className="truncate">{empty ? '—' : children}</span>
+  </div>;
+}
+
+export type ConnectionState = 'idle' | 'checking' | 'ok' | 'failed';
+
+/** Whether a service answers: the state in a word with its dot, the host's own message when it does not, and the check. */
+export function ConnectionCheck({ state, when, error, onCheck, disabled }: {
+  state: ConnectionState;
+  /** When the last check was made, as the page writes times. */
+  when?: string;
+  /** The message the host gave when the check failed, word for word. */
+  error?: string;
+  onCheck?: () => void;
+  disabled?: boolean;
+}) {
+  const word = { idle: '还没检查', checking: '正在检查', ok: '连通', failed: '连不上' }[state];
+  return <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex min-h-9 flex-wrap items-center gap-3">
+      <span className="flex items-center gap-2 text-sm text-ink" role="status">
+        {state === 'checking' ? <Spinner /> : <Dot tone={state === 'ok' ? 'success' : state === 'failed' ? 'error' : 'ink'} />}
+        {word}
+        {when && state !== 'checking' && state !== 'idle' && <span className="text-ink-2 tabular-nums">{when}</span>}
+      </span>
+      <Button variant="outline" size="sm" onClick={onCheck} disabled={disabled || state === 'checking'}>{state === 'idle' ? '检查连通' : '再检查'}</Button>
+    </div>
+    {state === 'failed' && error && <p className="m-0 text-sm text-error">{error}</p>}
   </div>;
 }

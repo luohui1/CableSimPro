@@ -94,6 +94,14 @@ export const MODEL_STEPS_RUNNING: Step[] = [
   { id: 'm3', label: '读取规格', target: 'YJV22-8.7/15 kV 3×240', state: 'done', seconds: 0.005 },
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'running' },
 ];
+/** The same conversation once the solid was built: the step's notes as the host writes them (library.geometry of
+ *  YJV22-8.7/15 kV 3×240: outer diameter 0.082 m, 19 layers). */
+export const MODEL_STEPS_DONE: Step[] = [
+  ...MODEL_STEPS_RUNNING.slice(0, 3),
+  { ...MODEL_STEPS_RUNNING[3], state: 'done', notes: ['外径 82 mm', '19 层，STEP 文件已生成'] },
+];
+/** What the host says when no model is configured: NOT_CONFIGURED of studio/host/agent.ts, word for word. */
+export const NOT_CONFIGURED = '设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
 /** From the step's notes: 外径 82 mm, 19 层，STEP 文件已生成. */
 export const MODEL_FACTS = [{ label: '外径', value: '82 mm' }, { label: '层数', value: '19' }];
 

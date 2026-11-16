@@ -274,7 +274,7 @@ export function ModelCard({ title, state, viewport, error, facts, view = 'cutawa
     aside={facts && state === 'ready' && <span className="flex items-center gap-2">{facts.map(fact => <Badge key={fact.label} variant="secondary">{fact.label} {fact.value}</Badge>)}</span>}>
     {state === 'loading' && <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg bg-subtle"><Skeleton className="size-24 rounded-full bg-line" /><span className="text-sm text-ink-2">正在生成三维实体</span></div>}
     {state === 'failed' && <div className="flex h-40 items-center gap-3 rounded-lg bg-error-fill px-4 text-sm text-ink"><Icon name="status/error" className="text-error" />三维实体没有生成：{error}</div>}
-    {state === 'ready' && <div className="relative h-72 overflow-hidden rounded-lg border border-line bg-subtle">
+    {state === 'ready' && <div className="relative h-72 overflow-hidden rounded-lg border border-line bg-subtle cad-fill">
       {viewport}
       <ToggleGroup value={[view]} onValueChange={next => next[0] && onViewChange?.(next[0] as 'cutaway' | 'solid')} size="sm"
         className="absolute top-3 left-3 rounded-lg border border-line bg-surface p-1 shadow-menu" aria-label="显示方式">

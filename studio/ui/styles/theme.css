@@ -287,6 +287,22 @@
 @utility fade-end {
   mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
 }
+/* The workbench's 3D viewport (.cad-viewport of components/product-cad) filling the box it sits in. */
+@utility cad-fill {
+  & .cad-viewport {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  & .cad-viewport canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
 /* A drawing at the right edge of a tile fades in from the left, into the tile's ground. */
 @utility fade-start {
   mask-image: linear-gradient(to right, transparent 0, #000 64px);
