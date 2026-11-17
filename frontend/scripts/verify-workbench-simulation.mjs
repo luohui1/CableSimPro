@@ -689,6 +689,12 @@ await walkthrough('simulation', async ({
           await detail.getByRole('tablist', { name: '插件详情', exact: true }).getByRole('tab', { name: /^能力 \d+$/ }).click();
           await detail.getByRole('heading', { name: training.title, exact: true }).scrollIntoViewIfNeeded();
           await expect(detail.getByRole('heading', { name: training.title, exact: true })).toBeVisible();
+          const trainingCard = detail.locator('.capability').filter({
+            has: page.getByRole('heading', { name: training.title, exact: true }),
+          });
+          const trainingLocation = trainingCard.locator('.solver-location');
+          await expect(trainingLocation).toContainText(/求解位置：\s*超算/);
+          evidence.hybridEmpty.training = { capability: training.id, solverLocation: await trainingLocation.innerText() };
           await capture('09-hybrid-training-requirements');
           await page.goBack();
           await expect(page).toHaveURL(returnUrl);
