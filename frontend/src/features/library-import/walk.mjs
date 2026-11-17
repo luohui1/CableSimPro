@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as baseExpect } from '@playwright/test';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
@@ -16,6 +17,8 @@ await fs.mkdir(out, { recursive: true });
 const expect = baseExpect.configure({ timeout: 30000 });
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
 const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [] };
+const saveReport = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
+await saveReport();
 let browser;
 try { browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] }); }
 catch (error) {
@@ -60,7 +63,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await assertLayout(page, `${viewport.width} ${label}`);
     }
     catch (error) { report.layout_failures.push({ viewport: viewport.width, screenshot: name, message: String(error) }); }
+    await saveReport();
     console.log(`${viewport.width} ${label}`);
+  }
+  async function afterAction(waiter, action) {
+    const [result] = await Promise.all([waiter, Promise.resolve().then(action)]);
+    return result;
   }
   async function select(label, option) {
     const field = page.getByRole('combobox', { name: label, exact: true });
@@ -94,9 +102,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(page.getByRole('heading', { name: '确认列映射', exact: true })).toBeVisible();
   }
   async function preview() {
-    const response = page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 });
-    await page.getByRole('button', { name: '逐行校验并预览', exact: true }).click();
-    const result = await response;
+    const result = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 }),
+      () => page.getByRole('button', { name: '逐行校验并预览', exact: true }).click());
     assert.equal(result.status(), 200, await result.text());
     await expect(page.getByRole('heading', { name: '核对入库预览', exact: true })).toBeVisible();
     return result.json();
@@ -106,9 +113,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(page.getByRole('button', { name: '选择结构表文件', exact: true })).toBeEnabled();
     await expect(page.getByText('读取中', { exact: true })).toHaveCount(0);
     await capture('选择文件');
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('link', { name: '下载人民电缆示例结构表', exact: true }).click();
-    const download = await downloadPromise;
+    const download = await afterAction(page.waitForEvent('download'),
+      () => page.getByRole('link', { name: '下载人民电缆示例结构表', exact: true }).click());
     const samplePath = path.join(out, `people-mv-${viewport.width}.xlsx`);
     await download.saveAs(samplePath);
     assert.equal(await download.failure(), null);
@@ -154,9 +160,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     report.checks.push(`${viewport.width}：真实表格副本的第3行B列错误被准确指出，缺项与错误分别显示，未确认不能入库`);
 
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
-    const uploaded = page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/upload') && response.request().method() === 'POST');
-    await page.getByLabel('结构表文件', { exact: true }).setInputFiles(samplePath);
-    const uploadResponse = await uploaded;
+    const uploadResponse = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/upload') && response.request().method() === 'POST'),
+      () => page.getByLabel('结构表文件', { exact: true }).setInputFiles(samplePath));
     assert.equal(uploadResponse.ok(), true, await uploadResponse.text());
     const inspection = await uploadResponse.json();
     const wanted = inspection.sheets.find(sheet => sheet.name.includes('YJV22'));
@@ -196,9 +201,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const commitButton = page.getByRole('button', { name: '确认入库 11 个规格', exact: true });
     await expect(commitButton).toBeDisabled();
     await page.getByRole('checkbox', { name: '确认来源与系列声明', exact: true }).check();
-    const committed = page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/commit') && response.request().method() === 'POST', { timeout: 180000 });
-    await commitButton.click();
-    const savedResponse = await committed;
+    const savedResponse = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/commit') && response.request().method() === 'POST', { timeout: 180000 }),
+      () => commitButton.click());
     assert.equal(savedResponse.ok(), true, await savedResponse.text());
     const saved = await savedResponse.json();
     assert.equal(saved.created, 11);
@@ -228,9 +232,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const dialog = page.getByRole('dialog', { name: '批量标准核对', exact: true });
     await expect(dialog.getByRole('button', { name: '确认执行 11 个规格', exact: true })).toBeDisabled();
     await dialog.getByRole('checkbox', { name: '确认所选规格与版本', exact: true }).check();
-    const batchPromise = page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 300000 });
-    await dialog.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click();
-    const batchResponse = await batchPromise;
+    const batchResponse = await afterAction(page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 300000 }),
+      () => dialog.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click());
     assert.equal(batchResponse.ok(), true, await batchResponse.text());
     const batch = await batchResponse.json();
     await recordResponse('batch-check', batchResponse, batch);
@@ -244,7 +247,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const calculation = page.getByRole('dialog', { name: '批量计算', exact: true });
     await expect(calculation.getByRole('button', { name: '确认执行 11 个规格', exact: true })).toBeDisabled();
     for (const [label, value] of [
-      ['工况名称', '公开样本同工况直埋对照'], ['中心埋深 m', '0.7'], ['土壤热阻率 K·m/W', '1.0'],
+      ['工况名称', '显式研究工况直埋对照'], ['中心埋深 m', '0.7'], ['土壤热阻率 K·m/W', '1.0'],
       ['环境温度 °C', '25'], ['交流频率 Hz', '50'], ['集肤效应系数 kₛ 1', '1'], ['邻近效应系数 kₚ 1', '1'],
       ['护套初始温度 °C', '70'], ['电流收敛容差 A', '0.00000001'], ['最大迭代次数 次', '300'],
       ['工况来源', '人民电器集团公开样本直埋条件：土壤25 °C，热阻率1.0 K·m/W。原表未列埋深，验收明确采用0.7 m，两端接地；50 Hz来自原PDF使用特性。'],
@@ -258,9 +261,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await calculation.getByRole('heading', { name: '求解初值与收敛控制', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('批量计算显式求解控制');
     await calculation.getByLabel('确认所选规格与版本', { exact: true }).check();
-    const ratedPromise = page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 300000 });
-    await calculation.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click();
-    const ratedResponse = await ratedPromise;
+    const ratedResponse = await afterAction(page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 300000 }),
+      () => calculation.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click());
     assert.equal(ratedResponse.ok(), true, await ratedResponse.text());
     const rated = await ratedResponse.json();
     await recordResponse('batch-calculate', ratedResponse, rated);
@@ -282,9 +284,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await review.getByLabel('审核意见', { exact: true }).fill('核对审核门禁：这批导入草稿尚未提交审核，必须整批拒绝批准，保留草稿。');
     await review.getByLabel('确认所选规格与版本', { exact: true }).check();
     await capture('批量审核明确人工动作');
-    const reviewedPromise = page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 180000 });
-    await review.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click();
-    const reviewedResponse = await reviewedPromise;
+    const reviewedResponse = await afterAction(page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 180000 }),
+      () => review.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click());
     assert.equal(reviewedResponse.ok(), true, await reviewedResponse.text());
     const reviewed = await reviewedResponse.json();
     await recordResponse('batch-review', reviewedResponse, reviewed);
@@ -297,6 +298,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     report.checks.push(`${viewport.width}：真实Excel上传→工作表→列映射保存复用→系列声明→11规格预览→人工确认入库→型号库→真实批量标准核对与载流量计算→未提交草稿整批拒绝批准，保存版本/来源可回读`);
     await page.reload();
     await expect(page.getByRole('table', { name: '系列规格', exact: true })).toBeVisible();
+    await expect(page.getByText('读取中', { exact: true })).toHaveCount(0);
     await capture('刷新后同一系列');
     await page.getByRole('table', { name: '系列规格', exact: true }).getByRole('button', { name: detail.specs[0].name, exact: true }).click();
     await expect(page.getByRole('table', { name: '逐项来源', exact: true })).toBeVisible();
@@ -305,14 +307,23 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await sourceDialog.getByText('将当前设计保存为新版本', { exact: true }).click();
     await sourceDialog.getByLabel('改版说明', { exact: true }).fill('验收从当前已保存的公开样本设计建立独立第2版，数值保持原始资料，核对旧版与来源保留。');
     await sourceDialog.getByLabel('确认保存型号新版本', { exact: true }).check();
-    const revisionPromise = page.waitForResponse(response => response.url().endsWith(`/specs/${detail.specs[0].id}/revisions`) && response.request().method() === 'POST');
-    await sourceDialog.getByRole('button', { name: '建立新版本草稿', exact: true }).click();
-    const revisionResponse = await revisionPromise;
+    const revisionResponse = await afterAction(page.waitForResponse(response => response.url().endsWith(`/specs/${detail.specs[0].id}/revisions`) && response.request().method() === 'POST'),
+      () => sourceDialog.getByRole('button', { name: '建立新版本草稿', exact: true }).click());
     assert.equal(revisionResponse.ok(), true, await revisionResponse.text());
     const revision = await revisionResponse.json();
     assert.equal(revision.version, 2);
     await expect(sourceDialog.getByRole('status').filter({ hasText: '已建立独立新版本草稿' })).toBeVisible();
-    await sourceDialog.getByRole('combobox', { name: '查看规格版本', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    const closeState = { after_success_notice: {
+      busy: await sourceDialog.getAttribute('aria-busy'),
+      close_enabled: await sourceDialog.getByRole('button', { name: '关闭', exact: true }).isEnabled(),
+      version_enabled: await sourceDialog.getByRole('combobox', { name: '查看规格版本', exact: true }).isEnabled(),
+    } };
+    await fs.writeFile(path.join(out, `${viewport.width}-revision-close-state.json`), JSON.stringify(closeState, null, 2));
+    await expect(sourceDialog).toHaveAttribute('aria-busy', 'false');
+    await expect(sourceDialog.getByRole('combobox', { name: '查看规格版本', exact: true })).toBeEnabled();
+    closeState.settled = { busy: await sourceDialog.getAttribute('aria-busy'), close_enabled: await sourceDialog.getByRole('button', { name: '关闭', exact: true }).isEnabled() };
+    await fs.writeFile(path.join(out, `${viewport.width}-revision-close-state.json`), JSON.stringify(closeState, null, 2));
+    await sourceDialog.locator('.library-import-dialog-body').evaluate(element => element.scrollTo({ top: 0 }));
     await capture('独立新版本与旧版保留');
     await select('查看规格版本', '第 1 版 · 草稿');
     await expect(sourceDialog.getByRole('table', { name: '逐项来源', exact: true })).toBeVisible();
@@ -320,15 +331,38 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     assert.deepEqual(versions.versions.map(item => item.version), [2, 1]);
     assert.notEqual(versions.versions[0].workspace_id, versions.versions[1].workspace_id);
     await capture('旧版本来源仍可查看');
+    const versionSelector = sourceDialog.getByRole('combobox', { name: '查看规格版本', exact: true });
+    await versionSelector.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('listbox')).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await expect(sourceDialog).toBeVisible();
+    await expect(versionSelector).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(sourceDialog).toBeHidden();
+    report.checks.push(`${viewport.width}：版本选项打开时Escape只关选项；回到已闭合版本选择器后Escape关闭来源弹框`);
+    const beforeExport = await readApi(`/api/type-library/series/${saved.series_id}`);
+    await fs.writeFile(path.join(out, `${viewport.width}-before-export.json`), JSON.stringify(beforeExport, null, 2));
     const exportPaths = {};
     for (const [format, label] of [['json', '导出系列 JSON'], ['xlsx', '导出系列 Excel']]) {
-      const exportedPromise = page.waitForEvent('download');
-      await page.getByRole('button', { name: label, exact: true }).click();
-      const exported = await exportedPromise;
+      const [exported, exportResponse] = await Promise.all([
+        page.waitForEvent('download'),
+        page.waitForResponse(response => response.url().endsWith('/api/type-library/exchange/export') && response.request().method() === 'POST').then(async response => {
+          const error = response.ok() ? null : await response.text();
+          await fs.writeFile(path.join(out, `${viewport.width}-export-${format}-http.json`), JSON.stringify({
+            request: response.request().postDataJSON(), status: response.status(), headers: response.headers(), error,
+          }, null, 2));
+          assert.equal(response.ok(), true, `系列${format}导出 HTTP ${response.status()}：${error}`);
+          return response;
+        }),
+        Promise.resolve().then(() => page.getByRole('button', { name: label, exact: true }).click()),
+      ]);
       const exportedPath = path.join(out, `series-${viewport.width}.${format}`);
       await exported.saveAs(exportedPath);
       assert.equal(await exported.failure(), null);
+      const digest = createHash('sha256').update(await fs.readFile(exportedPath)).digest('hex');
+      assert.equal(digest, exportResponse.headers()['x-content-sha256'], '浏览器下载字节须与服务端导出摘要一致');
       exportPaths[format] = exportedPath;
     }
     await capture('型号与来源导出');
@@ -337,42 +371,150 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       specs: currentSeries.specs.map(spec => ({ name: spec.name, values: spec.values })) });
     await page.getByRole('tab', { name: '公开样本对照', exact: true }).click();
     await capture('公开样本对照入口');
-    // Both public manuals are recomputed using their sealed methods. Each
-    // metric is a real result or an explicit lack/refusal, never a made-up zero.
-    for (const sample of [{ id: 'people-mv', label: '人民电器集团 · 8.7/15 kV 公开样本', count: 46 }, { id: 'bahra-mv', label: 'Bahra · 3.6/6 kV 单芯公开样本', count: 13 }]) {
+    // Manufacturer omissions must refuse a real comparison. Only a separate,
+    // explicit human confirmation may execute the declared research scenario.
+    for (const sample of [{ id: 'people-mv', label: '人民电器集团 · 8.7/15 kV 公开样本', count: 46, referenceCount: 21 }, { id: 'bahra-mv', label: 'Bahra · 3.6/6 kV 单芯公开样本', count: 13, referenceCount: 13 }]) {
       await select('公开样本手册', sample.label);
-      const comparedPromise = page.waitForResponse(response => response.url().endsWith(`/catalogue-comparison/${sample.id}`) && response.request().method() === 'POST', { timeout: 300000 });
-      await page.getByRole('button', { name: '计算样本偏差', exact: true }).click();
-      const comparedResponse = await comparedPromise;
+      const comparedResponse = await afterAction(page.waitForResponse(response => response.url().endsWith(`/catalogue-comparison/${sample.id}`) && response.request().method() === 'POST', { timeout: 300000 }),
+        () => page.getByRole('button', { name: '核对厂家样本', exact: true }).click());
       assert.equal(comparedResponse.ok(), true, await comparedResponse.text());
       const compared = await comparedResponse.json();
+      await recordResponse(`${sample.id}-manufacturer-comparison`, comparedResponse, compared);
+      assert.deepEqual(comparedResponse.request().postDataJSON(), {}, '默认厂家核验不得隐含确认研究假设');
       assert.equal(compared.rows.length, sample.count);
+      assert.deepEqual([compared.summary.ampacity_compared, compared.summary.ampacity_refused, compared.summary.four_metric_passed], [0, sample.count, 0]);
+      assert.equal(compared.reference_calculation, null);
+      assert.deepEqual([compared.reference_scenario.requires_confirmation, compared.reference_scenario.confirmed, compared.reference_scenario.executed, compared.reference_scenario.manufacturer_data], [true, false, false, false]);
+      assert.ok(compared.reference_scenario.assumptions.length > 0);
+      for (const row of compared.rows) {
+        assert.deepEqual(Object.keys(row.metrics).sort(), ['ampacity', 'outer_diameter', 'r20', 'weight']);
+        const ampacity = row.metrics.ampacity;
+        assert.deepEqual([ampacity.value, ampacity.difference, ampacity.relative_difference, ampacity.status], [null, null, null, 'refused'], row.key);
+        assert.ok(ampacity.published > 0 && ampacity.missing_fields.length > 0 && ampacity.reason.length > 0, row.key);
+        assert.ok(ampacity.missing_fields.every(field => field.field && field.label && field.reason), row.key);
+        const diameter = row.metrics.outer_diameter;
+        assert.ok(diameter.published > 0, row.key);
+        assert.deepEqual([diameter.value, diameter.status, diameter.difference, diameter.relative_difference], [diameter.published, 'declared_input', null, null], row.key);
+        const resistance = row.metrics.r20;
+        if (sample.id === 'people-mv') assert.deepEqual([resistance.published, resistance.value, resistance.status], [null, null, 'missing'], row.key);
+        else {
+          assert.ok(resistance.published > 0, row.key);
+          assert.deepEqual([resistance.value, resistance.status], [resistance.published, 'declared_input'], row.key);
+        }
+        assert.deepEqual([resistance.difference, resistance.relative_difference], [null, null], row.key);
+      }
       assert.ok(compared.rows.every(row => row.metrics.weight.published > 0 && row.metrics.weight.value === null && row.metrics.weight.status === 'refused'), '厂家重量原值须保留；缺独立方法时必须拒绝计算重量');
       await page.getByRole('tab', { name: '载流量', exact: true }).click();
       await expect(page.getByRole('table', { name: '载流量逐规格对照', exact: true })).toBeVisible();
-      await capture(`${sample.id}-载流量逐规格偏差`);
-      if (sample.id === 'people-mv') {
-        const firstCalculated = compared.rows.findIndex(row => row.metrics.ampacity.status === 'compared');
-        assert.ok(firstCalculated >= 0, '人民样本须有真实可对照规格');
-        await page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('row').nth(firstCalculated + 1).evaluate(element => element.scrollIntoView({ block: 'center' }));
-        await capture('people-mv-真实计算数值与偏差');
-      }
+      await expect(page.getByLabel('厂家独立核验总览', { exact: true })).toContainText('载流量可对照 0 个');
+      await expect(page.getByRole('button', { name: '研究参考情景结果', exact: true })).toHaveCount(0);
+      await page.getByRole('table', { name: '载流量逐规格对照', exact: true }).locator('thead').evaluate(element => element.scrollIntoView({ block: 'start' }));
+      await capture(`${sample.id}-厂家载流量缺项拒算`);
       await page.getByRole('tab', { name: '外径', exact: true }).click();
       await capture(`${sample.id}-外径输入保真非独立验证`);
       await page.getByRole('tab', { name: '重量', exact: true }).click();
       await capture(`${sample.id}-重量缺少独立数据`);
       await page.getByRole('tab', { name: '导体直流电阻', exact: true }).click();
       await capture(`${sample.id}-电阻来源与限制`);
+
+      const comparisonRequests = () => report.requests.filter(item => item.viewport === viewport.width && item.method === 'POST' && item.url.endsWith(`/catalogue-comparison/${sample.id}`)).length;
+      const beforeConfirmation = comparisonRequests();
+      await page.getByRole('button', { name: '查看研究参考情景', exact: true }).click();
+      const assumptionsDialog = page.getByRole('dialog', { name: '研究参考情景与完整假设', exact: true });
+      const confirmReference = assumptionsDialog.getByRole('button', { name: '确认研究假设并计算', exact: true });
+      const assumptionsTable = assumptionsDialog.getByRole('table', { name: '研究参考情景完整假设', exact: true });
+      await expect(confirmReference).toBeDisabled();
+      await expect(assumptionsDialog.getByLabel('确认研究参考假设', { exact: true })).not.toBeChecked();
+      await expect(assumptionsTable.getByRole('row')).toHaveCount(compared.reference_scenario.assumptions.length + 1);
+      for (const [index, assumption] of compared.reference_scenario.assumptions.entries()) {
+        assert.deepEqual([assumption.confidence, assumption.manufacturer_data], ['reference', false]);
+        assert.ok(assumption.source.reference && assumption.source.version && /^[a-f0-9]{64}$/.test(assumption.source.file_sha256));
+        const cells = assumptionsTable.getByRole('row').nth(index + 1).getByRole('cell');
+        await expect(cells.nth(0)).toHaveText(assumption.label);
+        if (typeof assumption.value === 'number') await expect(cells.nth(1)).toHaveText(String(assumption.value));
+        else if (assumption.value === null) await expect(cells.nth(1)).toHaveText('未提供');
+        else await expect(cells.nth(1).getByRole('textbox')).toHaveValue(typeof assumption.value === 'string' ? assumption.value : JSON.stringify(assumption.value, null, 2));
+        await expect(cells.nth(2)).toHaveText(assumption.unit ?? '不适用');
+        await expect(cells.nth(3)).toContainText(assumption.source.reference);
+        await expect(cells.nth(3)).toContainText(assumption.source.version);
+        await expect(cells.nth(3)).toContainText(assumption.source.file_sha256);
+      }
+      await expect(assumptionsTable.locator('thead')).toBeInViewport({ ratio: 1 });
+      await capture(`${sample.id}-研究参考完整假设顶部`);
+      await assumptionsTable.getByRole('row').last().evaluate(element => element.scrollIntoView({ block: 'center' }));
+      await capture(`${sample.id}-研究假设末尾与版本`);
+      await assumptionsDialog.getByText('展开完整原始声明', { exact: true }).click();
+      const rawDeclaration = assumptionsDialog.getByRole('textbox', { name: '完整原始研究声明 JSON', exact: true });
+      await expect(rawDeclaration).toHaveValue(JSON.stringify(compared.reference_scenario.raw_assumptions, null, 2));
+      await rawDeclaration.evaluate(element => element.scrollIntoView({ block: 'start' }));
+      await capture(`${sample.id}-完整原始研究声明`);
+      assert.equal(comparisonRequests(), beforeConfirmation, '查看假设和原始声明不得触发参考计算');
+      await assumptionsDialog.getByText('展开完整原始声明', { exact: true }).click();
+      await assumptionsDialog.getByLabel('确认研究参考假设', { exact: true }).check();
+      await expect(confirmReference).toBeEnabled();
+      await capture(`${sample.id}-人工确认研究假设`);
+      assert.equal(comparisonRequests(), beforeConfirmation, '仅勾选也不得提前提交参考计算');
+      const referenceResponse = await afterAction(page.waitForResponse(response => response.url().endsWith(`/catalogue-comparison/${sample.id}`) && response.request().method() === 'POST', { timeout: 300000 }),
+        () => confirmReference.click());
+      assert.equal(referenceResponse.ok(), true, await referenceResponse.text());
+      const reference = await referenceResponse.json();
+      await recordResponse(`${sample.id}-reference-scenario`, referenceResponse, reference);
+      assert.deepEqual(referenceResponse.request().postDataJSON(), { reference_scenario_confirmed: true });
+      assert.deepEqual(reference.rows, compared.rows, '参考计算不能改变厂家原值、缺项或拒算');
+      assert.deepEqual(reference.summary, compared.summary, '研究结果不能计入厂家独立核验通过数');
+      assert.deepEqual(reference.reference_scenario.assumptions, compared.reference_scenario.assumptions, '执行的参考情景必须保留刚刚逐项确认的假设');
+      assert.deepEqual(reference.reference_scenario.raw_assumptions, compared.reference_scenario.raw_assumptions, '执行的原始声明必须与人工查看的一致');
+      assert.deepEqual([reference.reference_scenario.confirmed, reference.reference_scenario.executed, reference.reference_scenario.manufacturer_data], [true, true, false]);
+      const calculated = reference.reference_calculation;
+      assert.ok(calculated && calculated.manufacturer_comparison === false && calculated.human_reviewed === false);
+      assert.equal(calculated.rows.length, sample.count);
+      assert.deepEqual([calculated.summary.ampacity_compared, calculated.summary.ampacity_refused], [sample.referenceCount, sample.count - sample.referenceCount]);
+      for (const row of calculated.rows) {
+        const ampacity = row.metrics.ampacity;
+        if (ampacity.status === 'compared') {
+          assert.ok(Number.isFinite(ampacity.value) && ampacity.value > 0 && ampacity.published > 0, row.key);
+          assert.ok(Math.abs(ampacity.difference - (ampacity.value - ampacity.published)) < 1e-9, row.key);
+          assert.ok(Math.abs(ampacity.relative_difference - ampacity.difference / ampacity.published) < 1e-12, row.key);
+          assert.ok(ampacity.method && ampacity.tier && ampacity.reason, row.key);
+        } else assert.deepEqual([ampacity.status, ampacity.value, ampacity.difference, ampacity.relative_difference], ['refused', null, null, null], row.key);
+        assert.deepEqual([row.metrics.weight.value, row.metrics.weight.status], [null, 'refused'], row.key);
+      }
+      await expect(assumptionsDialog).toBeHidden();
+      await page.getByRole('tab', { name: '载流量', exact: true }).click();
+      await expect(page.getByRole('button', { name: '研究参考情景结果', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByLabel('厂家独立核验总览', { exact: true })).toContainText('载流量可对照 0 个');
+      await page.getByRole('heading', { name: '研究参考情景结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+      await capture(`${sample.id}-研究参考结果单列`);
+      const firstCalculated = calculated.rows.findIndex(row => row.metrics.ampacity.status === 'compared');
+      assert.ok(firstCalculated >= 0, '明确确认的参考情景须保留真实方法数值');
+      const calculatedRow = page.getByRole('table', { name: '研究情景载流量逐规格对照', exact: true }).getByRole('row').nth(firstCalculated + 1);
+      await expect(calculatedRow).toContainText(calculated.rows[firstCalculated].metrics.ampacity.value.toLocaleString('zh-CN', { maximumFractionDigits: 3, useGrouping: false }));
+      await expect(calculatedRow).toContainText('研究参考值，非厂家核验');
+      await expect(calculatedRow).toContainText('厂家核验仍为拒绝计算');
+      await calculatedRow.evaluate(element => element.scrollIntoView({ block: 'center' }));
+      await capture(`${sample.id}-研究参考数值差异与厂家拒绝并列`);
+      await page.getByRole('button', { name: '厂家数据与缺项', exact: true }).click();
+      const manufacturerTable = page.getByRole('table', { name: '载流量逐规格对照', exact: true });
+      await expect(manufacturerTable.getByRole('row').nth(1)).toContainText('未给出结果');
+      await expect(manufacturerTable.getByRole('row').nth(1)).toContainText('拒绝计算');
+      await manufacturerTable.locator('thead').evaluate(element => element.scrollIntoView({ block: 'start' }));
+      await capture(`${sample.id}-参考计算后厂家仍缺项拒算`);
     }
-    report.checks.push(`${viewport.width}：人民46规格与Bahra13规格逐一公开样本对照，四项指标分别截图；重量缺独立数据，输入回读不冒充独立验证`);
+    report.checks.push(`${viewport.width}：人民46规格与Bahra13规格默认厂家条件缺项全部拒算；四项原值与原因分别截图；全部研究假设及原始声明逐字核对，人工明确确认后单列21/13项参考数值与差异，厂家拒绝与零真实通过数保持不变；两份完整JSON已保存`);
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});
     await fs.writeFile(path.join(out, `${viewport.width}-failure.txt`), await page.locator('body').innerText().catch(() => '页面已关闭'));
     console.error(error);
-  } finally { await context.close(); }
+  } finally {
+    try { await context.close(); }
+    catch (error) { report.failures.push({ viewport: viewport.width, phase: '浏览器上下文关闭', message: String(error) }); }
+    await saveReport();
+  }
 }
-await browser.close();
+try { await browser.close(); }
+catch (error) { report.failures.push({ phase: '浏览器关闭', message: String(error) }); }
+await saveReport();
 if (exchangeTasks.length) {
   await fs.writeFile(path.join(out, 'exchange-tasks.json'), JSON.stringify(exchangeTasks, null, 2));
   const emptyDatabase = path.join(out, 'empty-target.sqlite');

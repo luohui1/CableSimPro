@@ -12,8 +12,12 @@ const out = process.env.LIBRARY_IMPORT_EVIDENCE;
 const tasks = JSON.parse(await fs.readFile(process.env.E2E_EXCHANGE_TASKS, 'utf8'));
 const expect = baseExpect.configure({ timeout: 30000 });
 const report = { checks: [], screenshots: [], requests: [], errors: [], failures: [], layout_failures: [] };
+const saveReport = () => fs.writeFile(path.join(out, 'exchange-report.json'), JSON.stringify(report, null, 2));
+await saveReport();
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-const browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+let browser;
+try { browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] }); }
+catch (error) { report.failures.push({ phase: '浏览器启动', message: String(error) }); await saveReport(); throw error; }
 for (const task of tasks) {
   const context = await browser.newContext({ viewport: task.viewport, locale: 'zh-CN' });
   const page = await context.newPage();
@@ -35,6 +39,7 @@ for (const task of tasks) {
     report.screenshots.push(name);
     try { await assertLayout(page, `${width} ${label}`); }
     catch (error) { report.layout_failures.push({ viewport: width, screenshot: name, message: String(error) }); }
+    await saveReport();
     console.log(`${width} ${label}`);
   }
   try {
@@ -47,9 +52,10 @@ for (const task of tasks) {
     await capture('新库交换内容预览');
     await expect(page.getByRole('button', { name: '确认导入型号交换文件', exact: true })).toBeDisabled();
     await page.getByRole('checkbox', { name: '确认交换文件来源', exact: true }).check();
-    const importedPromise = page.waitForResponse(response => response.url().endsWith('/api/type-library/exchange/import') && response.request().method() === 'POST', { timeout: 180000 });
-    await page.getByRole('button', { name: '确认导入型号交换文件', exact: true }).click();
-    const response = await importedPromise;
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.url().endsWith('/api/type-library/exchange/import') && response.request().method() === 'POST', { timeout: 180000 }),
+      Promise.resolve().then(() => page.getByRole('button', { name: '确认导入型号交换文件', exact: true }).click()),
+    ]);
     assert.equal(response.ok(), true, await response.text());
     const receipt = await response.json();
     assert.equal(receipt.created, task.specs.length);
@@ -80,10 +86,15 @@ for (const task of tasks) {
     await page.screenshot({ path: path.join(out, `exchange-${width}-failure.png`) }).catch(() => {});
     await fs.writeFile(path.join(out, `exchange-${width}-failure.txt`), await page.locator('body').innerText().catch(() => '页面已关闭'));
     console.error(error);
-  } finally { await context.close(); }
+  } finally {
+    try { await context.close(); }
+    catch (error) { report.failures.push({ viewport: width, phase: '浏览器上下文关闭', message: String(error) }); }
+    await saveReport();
+  }
 }
-await browser.close();
-await fs.writeFile(path.join(out, 'exchange-report.json'), JSON.stringify(report, null, 2));
+try { await browser.close(); }
+catch (error) { report.failures.push({ phase: '浏览器关闭', message: String(error) }); }
+await saveReport();
 assert.deepEqual(report.errors, [], '交换导入控制台或网络错误');
 assert.deepEqual(report.failures, [], '全新库真实交换流程未通过');
 assert.deepEqual(report.layout_failures, [], '交换页面截图布局或可见名称未通过');
