@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-from studio.core.studio_core import structure
+from .catalogue_core import structure
 
 IMPORT_METHOD = {'name': '厂家结构表导入', 'version': '1.1.0'}
 MAX_BYTES, MAX_ROWS, MAX_COLUMNS = 10 * 1024 * 1024, 2000, 80
@@ -191,7 +191,7 @@ def vocabulary():
 
 
 def inspect(upload, designation=None):
-    from studio.core.studio_core.tables import _layout
+    from .catalogue_core.tables import _layout
     inspected = []
     for sheet in upload['sheets']:
         grid = sheet['grid']

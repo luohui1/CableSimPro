@@ -30,7 +30,7 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机；首页是 Agent 
 
 | 目录 | 内容 |
 | --- | --- |
-| `core/studio_core/` | Python 计算核心，不含算法：`runner.py` 按 `cablesim.run/2` 在独立进程里运行 `plugins/` 下的插件，运行前核对封签；`library.py` 型号库；`layouts.py` 敷设模板；`scene.py` 把型号、敷设、工况组成 `cablesim.domain/1` 文档；`study.py` 校核、扫描、选型；`methods.py` 方法卡与可信分档；`__main__.py` 给宿主用的本机服务（标准输入输出，每行一个 JSON） |
+| `core/studio_core/` | Python CLI 与兼容入口；共享运行实现和原始目录位于 `../backend/kernel/catalogue_core/`，不含算法：`runner.py` 按 `cablesim.run/2` 在独立进程里运行 `plugins/` 下的插件，运行前核对封签；`library.py` 型号库；`layouts.py` 敷设模板；`scene.py` 把型号、敷设、工况组成 `cablesim.domain/1` 文档；`study.py` 校核、扫描、选型；`methods.py` 方法卡与可信分档；`__main__.py` 给宿主用的本机服务（标准输入输出，每行一个 JSON） |
 | `host/` | Node 宿主（TypeScript，由 Node 直接运行）：`store.ts` 工程文件夹；`operations.ts` 操作层；`products.ts` 产品库的操作；`agent.ts` Agent 服务（pi 会话层、写操作的审阅关口、对话落盘）；`agent-tools.ts` 把操作变成工具、只能读技能文件的 `read`；`chat-view.ts` 把会话文件还原成对话页要显示的消息；`report.ts` 计算书；`server.ts` HTTP 与界面 |
 | `skills/` | Agent 的技能，每类工作一份 `skills/<名称>/SKILL.md`：载流量校核与选型、型号导入与标准核对、新建型号、按标准生成初始结构、型号改版、载流量表、GB 50217 校正、规格书与计算书、电缆三维结构建模 |
 | `shared/` | 宿主与界面共用的类型、数值写法和绘图几何 |
@@ -130,7 +130,7 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 
 ## 可信分档
 
-每条结果带分档和方法卡（方法、适用范围、假设、验证依据）。分档由实际计算的敷设形式决定，与结果数值无关，规则在 `core/studio_core/methods.py`：
+每条结果带分档和方法卡（方法、适用范围、假设、验证依据）。分档由实际计算的敷设形式决定，与结果数值无关，规则在 `../backend/kernel/catalogue_core/methods.py`：
 
 - **可交付**：单回路、单芯、光滑金属套，直埋或穿管。依据是 CIGRE TB 880 算例 0-1（接触品字形直埋）、0-2（接触品字形穿管）、0-3（平排穿管加包封）的整链对照。直埋水平和留间隔品字形没有单独的整链公开算例，方法卡里写明了这一点。
 - **参考**：多回路、矩形回填与包封、三芯、皱纹金属套、外部给定损耗系数。只有手算或解析自洽检查。
@@ -140,7 +140,7 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 
 ## 参数覆盖与核实
 
-下表是技术参数表里每一类数现在的来路，以及用公开厂家手册核实的结果。对照源是 Bahra 的中压铅套电缆手册（CU/XLPE/LC/PVC 3.6/6 kV 单芯，13 个截面，`core/studio_core/catalogues/bahra_mv_lead_sheathed.json`，写明了页码和文件摘要）。
+下表是技术参数表里每一类数现在的来路，以及用公开厂家手册核实的结果。对照源是 Bahra 的中压铅套电缆手册（CU/XLPE/LC/PVC 3.6/6 kV 单芯，13 个截面，`../backend/kernel/catalogue_core/catalogues/bahra_mv_lead_sheathed.json`，写明了页码和文件摘要）。
 
 | 参数 | 来路 | 与手册对照（13 个截面） | 说明 |
 | --- | --- | --- | --- |

@@ -18,7 +18,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from studio.core.studio_core import catalogue
+from .catalogue_core import catalogue
 from .factory_tables import SOURCE_ONLY_FIELDS
 
 

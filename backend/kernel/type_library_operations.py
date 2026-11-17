@@ -16,7 +16,7 @@ from . import factory_tables as tables
 from .type_versions import Adopt, Submit, Approval, Publish
 from .rating_conditions import RatingTableDefinition, table_definition
 from .rating_table import rating_rows
-from studio.core.studio_core import CoreError, library as studio_library, product
+from .catalogue_core import CoreError, library as studio_library, product
 
 
 def encode(value):

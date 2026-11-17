@@ -14,7 +14,7 @@ from pydantic import Field, ValidationError, field_validator, model_validator
 from backend.schemas import StrictModel
 from .candidates import CableModelVersion
 from . import factory_tables as tables
-from studio.core.studio_core import CoreError, designation, structure
+from .catalogue_core import CoreError, designation, structure
 
 
 class DeclaredParameter(StrictModel):
@@ -249,7 +249,7 @@ def build_rows(upload, sheet, rows, series, mapping):
     parts = parts_of(series)
     rows = deepcopy(rows)
     if series.get('resistance_basis') == 'standard_limit':
-        from studio.core.studio_core import basis
+        from .catalogue_core import basis
         queries = {str(index): {'schema_version': 'cablesim.standards-query/1', 'standard': 'GB/T 3956', 'edition': '2008',
             'locator': '表 2', 'quantity': 'resistance_20_max', 'conditions': {
                 'area_m2': row['values']['area'] * 1e-6, 'conductor_class': 2,

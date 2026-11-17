@@ -779,7 +779,7 @@ def build_release_seed(staged, database, identity):
                 result['chengnan_engineering_evidence_availability'] = evidence_availability(scope='chengnan')
                 chengnan_evidence=release_chengnan_input(api,hv_workspace)
             if chengnan_evidence:result['studies'].append(chengnan_evidence)
-            from frontend.scripts.catalogue_seed import import_public_catalogues, calculate_factory_series
+            from backend.kernel.catalogue_seed import import_public_catalogues, calculate_factory_series
             result['public_catalogues'] = import_public_catalogues(client)
             result['factory_series_calculations'] = calculate_factory_series(client, result['public_catalogues'])
             save_factory_analyses(api, result['factory_series_calculations'])

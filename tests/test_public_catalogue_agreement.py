@@ -337,7 +337,7 @@ def test_people_every_size_keeps_real_refusals_and_missing_reference_values(agre
 def test_public_samples_import_into_canonical_models_without_synthetic_facts(tmp_path, monkeypatch, agreement):
     from backend.main import create_app
     from backend.kernel.type_versions import declared_execution_standards
-    from frontend.scripts.catalogue_seed import import_public_catalogues, calculate_factory_series
+    from backend.kernel.catalogue_seed import import_public_catalogues, calculate_factory_series
     monkeypatch.setenv('CABLESIM_DATASETS_DIR', str(tmp_path / 'datasets'))
     monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'library'))
     with TestClient(create_app(tmp_path / 'engineering.sqlite')) as client:

@@ -163,7 +163,7 @@ class TypeLibrary:
         return value
 
     def vocabulary(self):
-        from studio.core.studio_core import structure
+        from .catalogue_core import structure
         return {'fields': tables.vocabulary(), 'modelling': [{'key': k, 'label': v[0], 'unit': v[1]} for k, v in structure.MODELLING.items()],
                 'reference_modelling': structure.reference_modelling(), 'mappings': self.mappings(),
                 'method': tables.IMPORT_METHOD,

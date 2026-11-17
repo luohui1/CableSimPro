@@ -8,7 +8,7 @@ from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 
-from studio.core.studio_core import catalogue, library, product, structure
+from .catalogue_core import catalogue, library, product, structure
 
 from .public_catalogues import _data, _sheet_name, BAHRA_SHEET, SAMPLES, catalogue_reference
 

@@ -2,6 +2,8 @@
 
 型号库复用 `domain_cable_models`、`Types` 工作空间、型号方案/审核/发布表及普通 `Study`/`Run`。系列表只保存成员关系、原始结构表、固定预览和版本引用，不另存计算结果。发布与批准仍通过原有型号门禁。界面入口为 `/resources/cables/structure-import`。
 
+旧宿主与 Studio 共用的纯 Python 运行实现位于 `backend/kernel/catalogue_core/`，两份原始厂家目录 JSON 也只保存在其 `catalogues/` 内；系列播种入口位于 `backend/kernel/catalogue_seed.py`。这些文件随发行器现有的 `backend/` 源码范围进入离线包，无需依赖未打包的 Studio 目录。`studio.core.studio_core` 和 `studio_core` 保留同一模块对象及 `CoreError` 身份的兼容导入，Studio CLI 与专用入口继续使用这份实现；不复制算法或新增型号存储。
+
 ## 结构表导入
 
 1. `POST /api/type-library/imports/upload`：multipart `file`，支持 XLSX、CSV 和旧 XLS；非空原件不超过 10 MiB，界面与接口使用相同限制。返回 `upload_id`、原件 SHA-256、工作表、表头与建议列映射。仅完全匹配随附样本内容摘要时提供样本声明。
