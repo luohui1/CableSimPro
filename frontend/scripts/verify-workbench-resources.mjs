@@ -448,6 +448,20 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     check('真实执行版本声明产生可绑定目标', !!target,
       { declaration: selected.declaration, targets: view.targets.filter(item => item.role === 'standard') });
     trace.target = target.id;
+    const checkEntry = page.getByRole('button', { name: '去标准核对', exact: true });
+    await expect(checkEntry).toBeVisible();
+    const navigationWrites = report.writes.length;
+    await checkEntry.focus(); await checkEntry.press('Enter');
+    await expect(page).toHaveURL(new RegExp('/types/' + referenceWorkspace.id + '/standard-check/results'));
+    await expect(page.locator('[data-type-page="standard-check-results"]')).not.toHaveAttribute('data-type-state', 'loading');
+    await expect(page.getByRole('button', { name: '执行标准核对', exact: true })).toBeVisible();
+    await capture('standard-empty-state-opens-real-check');
+    await page.getByRole('button', { name: '要求与批准记录', exact: true }).click();
+    await page.getByRole('tab', { name: '执行标准', exact: true }).click();
+    await expect(page.getByLabel('已声明执行标准', { exact: true })).toBeVisible();
+    await expect(checkEntry).toBeVisible();
+    check('执行标准空状态可用键盘进入核对并返回且没有写入', report.writes.length === navigationWrites,
+      { workspace: referenceWorkspace.id, writes: report.writes.slice(navigationWrites) });
     return { ...selected, target: target.id, originals: trace.sources.map(item => item.source) };
   }
 

@@ -605,7 +605,7 @@
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  font-size: var(--text-note);
+  font-size: var(--text-body);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
