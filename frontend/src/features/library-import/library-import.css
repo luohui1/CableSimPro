@@ -1,9 +1,15 @@
 .library-import-page { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
-.library-import-page h2 { font-size: var(--text-subheading); font-weight: var(--weight-strong); margin: 0; line-height: 1.5; }
-.library-import-page p { margin: 0; line-height: 1.7; overflow-wrap: anywhere; }
+.library-import-page h2, .library-import-dialog h2 { font-size: var(--text-subheading); font-weight: var(--weight-strong); margin: 0; line-height: 1.5; }
+.library-import-page p, .library-import-dialog p { margin: 0; line-height: 1.7; overflow-wrap: anywhere; }
+.library-import-dialog { width: min(calc(var(--space-12) * 21), calc(100vw - var(--space-8))); overflow: hidden; }
+.library-import-dialog:focus { outline: none; }
+.library-import-dialog > :first-child, .library-import-dialog > .dialog-actions { flex-shrink: 0; }
+.library-import-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.library-import-dialog .dialog-title { font-size: var(--text-heading); }
 .library-import-page .tabs-content[hidden] { display: none; }
 .library-import-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .library-import-wizard { display: flex; flex-direction: column; gap: var(--space-4); max-width: 1120px; margin-inline: auto; }
+.library-import-wizard h2[tabindex="-1"]:focus { outline: none; }
 .library-import-progress { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
 .library-import-progress ol { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-4); padding: 0; margin: 0; }
 .library-import-progress li { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--text-note); padding-block: var(--space-2); }
@@ -21,6 +27,7 @@
 .library-import-details { border-top: 1px solid var(--line); padding-top: var(--space-4); }
 .library-import-details > summary { cursor: pointer; padding-bottom: var(--space-4); font-weight: var(--weight-strong); }
 .library-import-source { color: var(--text-secondary); font-size: var(--text-note); }
+.library-import-digest { font-size: var(--text-note); overflow-wrap: anywhere; word-break: break-all; white-space: normal; }
 .library-import-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .library-import-mapping-save { display: flex; align-items: flex-end; gap: var(--space-3); }
 .library-import-mapping-save > label { flex: 1; max-width: 400px; }

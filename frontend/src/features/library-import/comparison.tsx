@@ -4,8 +4,7 @@ import { DataTable } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { displayText } from '@/lib/display-names';
-import { confidenceText, libraryPost, methodText } from './api';
+import { confidenceText, displayLibraryText, libraryPost, methodText } from './api';
 
 interface Metric {
   published: number | null; value: number | null; unit: string;
@@ -54,17 +53,17 @@ export function CatalogueComparison() {
     {report && <>
       <p className="library-import-source">来源：{text(source.title) || '厂家公开手册'}{text(source.location) && `；${text(source.location)}`}{/^https?:\/\//.test(url) && <> · <a className="object-link" href={url} target="_blank" rel="noreferrer">查看公开原文</a></>}</p>
       <p>{report.summary.specifications} 个规格；载流量可对照 {report.summary.ampacity_compared} 个，方法拒绝 {report.summary.ampacity_refused} 个。可对照部分的平均绝对相对偏差 {percent(report.summary.ampacity_mean_absolute_relative_difference)}，最大 {percent(report.summary.ampacity_max_absolute_relative_difference)}。</p>
-      <p className="muted">{displayText(report.scope)} 全部结果均为参考，尚未人工审核。</p>
+      <p className="muted">{displayLibraryText(report.scope)} 全部结果均为参考，尚未人工审核。</p>
       <Tabs value={metric} onValueChange={setMetric}>
         <TabsList aria-label="对照指标">{METRICS.map(item => <TabsTrigger key={item.key} value={item.key}>{item.label}</TabsTrigger>)}</TabsList>
         {METRICS.map(item => <TabsContent key={item.key} value={item.key} className="library-import-stack">
           <DataTable label={`${item.label}逐规格对照`} showGroups={false} groups={[{ id: 'comparison', label: item.label, rows: report.rows.map(row => ({ ...row, id: row.key, metric: row.metrics[item.key] })) }]} rowLabel={row => `${row.designation} ${row.area_mm2} mm²`} columns={[
-            { id: 'spec', label: '规格', wrap: true, render: row => <div>{displayText(row.designation.replaceAll('/', ' / '))} · {row.area_mm2} mm²<br /><span className="muted">{row.sheet}</span></div> },
+            { id: 'spec', label: '规格', wrap: true, render: row => <div>{displayLibraryText(row.designation.replaceAll('/', ' / '))} · {row.area_mm2} mm²<br /><span className="muted">{row.sheet}</span></div> },
             { id: 'published', label: '样本值', unit: item.unit, numeric: true, render: row => row.metric.published === null ? '原表未给出' : number(row.metric.published, item.key === 'r20' ? 6 : 3) },
             { id: 'computed', label: '计算或回读值', unit: item.unit, numeric: true, render: row => row.metric.value === null ? '未给出结果' : number(row.metric.value, item.key === 'r20' ? 6 : 3) },
             { id: 'difference', label: '偏差', wrap: true, numeric: true, render: row => row.metric.status === 'declared_input' ? '不作独立偏差' : row.metric.difference === null ? '不可对照' : `${number(row.metric.difference, item.key === 'r20' ? 6 : 3)} ${item.unit}（${percent(row.metric.relative_difference)}）` },
             { id: 'status', label: '判定', wrap: true, render: row => STATUS[row.metric.status] },
-            { id: 'reason', label: '原因、方法与可信分档', wrap: true, render: row => <div className="library-import-issues"><span>{displayText(row.metric.reason)}</span>{!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}<span className="muted">本次样本对照：参考</span>{!!row.metric.tier && <span className="muted">方法覆盖分档：{confidenceText(row.metric.tier)}</span>}</div> },
+            { id: 'reason', label: '原因、方法与可信分档', wrap: true, render: row => <div className="library-import-issues"><span>{displayLibraryText(row.metric.reason)}</span>{!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}<span className="muted">本次样本对照：参考</span>{!!row.metric.tier && <span className="muted">方法覆盖分档：{confidenceText(row.metric.tier)}</span>}</div> },
           ]} />
         </TabsContent>)}
       </Tabs>

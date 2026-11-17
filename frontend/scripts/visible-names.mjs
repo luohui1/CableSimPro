@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { displayNames } from "../src/lib/display-names.ts";
 // Engineering notation and document references are deliberately narrow exceptions.
 const allowed =
-  /^(?:GB\/T|GBZ\/T|K(?:·m)?\/W|W\/m|W\/km|W\/K|m\/s|A\/m|A\/km|V\/m|Ω\/m|Ω\/km|S\/m|J\/kg|kg\/m|F\/m|H\/m|μF\/km|mH\/km|[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d+(?:\.\d+)?\/\d+(?:\.\d+)?)$/;
+  /^(?:GB\/T|GBZ\/T|K(?:·m)?\/W|W\/m|W\/km|W\/K|m\/s|A\/m|A\/km|V\/m|Ω\/m|Ω\/km|S\/m|J\/kg|kg\/m|F\/m|H\/m|μF\/km|mH\/km|CU\/XLPE\/LC\/PVC-3\.6\/6|[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d+(?:\.\d+)?\/\d+(?:\.\d+)?)$/;
 export function internalTokens(text) {
   if (
     displayNames[text.trim()] &&

@@ -1,4 +1,5 @@
 import { ApiError, optionalRecord, text } from '@/api/client';
+import { displayText } from '@/lib/display-names';
 
 export interface Field { key: string; label: string; unit: string }
 export interface GivenParameter { value: number | string; unit?: string; reference: string }
@@ -40,6 +41,7 @@ export interface PreviewRow {
 export interface Preview {
   preview_id: string; preview_digest: string; file: string; sha256: string; sheet: string;
   series: SeriesDeclaration; rows: PreviewRow[]; valid_count: number; error_count: number; incomplete_count: number;
+  execution_standards?: { items: { declared: string; standard: string; edition: string; source_digest: string; method: unknown }[]; missing: { declared: string; reason: string }[] };
 }
 export interface CommitReceipt {
   series_id: string; created: number; skipped?: number;
@@ -93,6 +95,9 @@ export function methodText(method: unknown): string {
   return [text(value.name) || text(value.method_name) || names[text(value.plugin_id)], text(value.method_version) || text(value.version) || text(value.plugin_version)].filter(Boolean).join(' · ') || '方法版本未登记';
 }
 export function issueText(value: string | ImportIssue): string { return typeof value === 'string' ? value : value.message; }
+export function displayLibraryText(value: string): string {
+  return displayText(value.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻'));
+}
 export function confidenceText(value?: unknown): string {
   const key = typeof value === 'string' ? value : text(optionalRecord(value).tier);
   return ({ manufacturer: '厂家资料', public: '公开资料', reference: '参考', reference_only: '参考', reviewed: '已人工核对', unverified: '待核对', incomplete: '缺项', deliverable: '可交付', exploratory: '探索' } as Record<string, string>)[key] || '待核对';

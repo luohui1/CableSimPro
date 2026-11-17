@@ -7,18 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
-import { displayText } from '@/lib/display-names';
-import { confidenceText, issueText, libraryPost, libraryRequest, type LibrarySpec, type SeriesDetail, type SeriesSummary, type ValueSource } from './api';
+import { confidenceText, displayLibraryText, issueText, libraryPost, libraryRequest, type LibrarySpec, type SeriesDetail, type SeriesSummary, type ValueSource } from './api';
 import { emptyRating, ratingReady, ratingRequest, RatingForm } from './rating-form';
 import { ValueTable } from './value-table';
 import { downloadSeries } from './exchange';
+import { LibraryDialog } from './dialog';
 
 const STATES: Record<string, string> = { draft: '草稿', incomplete: '资料缺项', submitted: '待审核', reviewed: '已审核', approved: '已批准', adopted: '已采纳', confirmed: '已人工核对', published: '已发布', rejected: '已退回', unverified: '待核对', ready: '结构完整' };
 const OPERATIONS = { check: '批量标准核对', calculate: '批量计算', review: '批量人工审核' };
 type Operation = keyof typeof OPERATIONS;
-interface BatchItem { spec_id?: string; name?: string; status?: string; message?: string; error?: unknown; method_name?: string; method_version?: string; confidence?: string; checks?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; workspace_id?: string }
+interface BatchItem { spec_id?: string; name?: string; status?: string; message?: string; error?: unknown; errors?: unknown[]; method_name?: string; method_version?: string; confidence?: string; checks?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; workspace_id?: string }
 interface BatchReceipt { items?: BatchItem[]; results?: BatchItem[]; [key: string]: unknown }
 
 export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: string; onSelect: (id: string) => void; onImport: () => void }) {
@@ -41,6 +40,8 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
   const details = useQuery({ queryKey: ['type-library', 'series', selected], queryFn: ({ signal }) => libraryRequest<SeriesDetail>(`/series/${encodeURIComponent(selected!)}`, { signal }), enabled: !!selected });
   useEffect(() => { setSelectedSpecs(new Set()); setBatch(null); setError(''); }, [selected]);
   const series = details.data?.series;
+  const seriesOptions = (list.data?.items || []).map(item => ({ value: item.id, label: item.name }));
+  if (series && !seriesOptions.some(item => item.value === series.id)) seriesOptions.unshift({ value: series.id, label: series.name });
   const specs = details.data?.specs || [];
   const checked = specs.filter(spec => selectedSpecs.has(spec.id));
   const rows = (list.data?.items || []).filter(item => [item.name, item.manufacturer, item.designation].join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
@@ -75,7 +76,7 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
   }
 
   return <div className="library-import-stack library-import-series">
-    <div className="library-import-series-heading"><h2>{series ? series.name : '型号系列'}</h2><Button onClick={onImport}>导入结构表</Button></div>
+    <div className="library-import-series-heading"><h2>{series ? series.name : '型号系列'}</h2><div className="library-import-series-actions">{selected && <Button onClick={() => onSelect('')}>全部系列</Button>}<Button onClick={onImport}>导入结构表</Button></div></div>
     {!selected ? <>
       <label className="text-field">查找系列<Input aria-label="查找系列" value={query} onChange={event => setQuery(event.target.value)} placeholder="系列名称、制造商或型号" /></label>
       {list.isPending ? <LoadingState title="正在读取型号系列" /> : list.isError ? <ErrorState description={message(list.error)} action={<Button onClick={() => void list.refetch()}>重新读取</Button>} /> : !rows.length ? <InlineEmpty title={query ? '没有匹配的系列。清空检索后可查看全部系列。' : '还没有系列。导入结构表后，规格将在这里集中核对与计算。'} /> : <DataTable label="型号系列" showGroups={false} groups={[{ id: 'series', label: '系列', rows }]} rowLabel={row => row.name} onActivate={row => onSelect(row.id)} columns={[
@@ -89,7 +90,7 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
       {query && !rows.length && <div><Button onClick={() => setQuery('')}>清空检索</Button></div>}
     </> : details.isPending ? <LoadingState title="正在读取系列与规格" /> : details.isError ? <ErrorState description={message(details.error)} action={<Button onClick={() => void details.refetch()}>重新读取系列</Button>} /> : <>
       <div className="library-import-series-toolbar">
-        <Select label="型号系列" value={selected} onChange={onSelect} options={(list.data?.items || []).map(item => ({ value: item.id, label: item.name }))} />
+        <Select label="型号系列" value={selected} onChange={onSelect} options={seriesOptions} />
         <div className="library-import-series-actions"><Button disabled={!checked.length || busy} onClick={() => showBatch('check')}>批量核对</Button><Button disabled={!checked.length || busy} onClick={() => showBatch('calculate')}>批量计算</Button><Button disabled={!checked.length || busy} onClick={() => showBatch('review')}>批量审核</Button></div>
       </div>
       <div className="library-import-series-actions"><Button disabled={busy} onClick={() => void exportCurrent('json')}>导出系列 JSON</Button><Button disabled={busy} onClick={() => void exportCurrent('xlsx')}>导出系列 Excel</Button><span className="muted">当前版本及其来源原件</span></div>
@@ -114,7 +115,7 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
         ]} />
       </section>}
     </>}
-    <Dialog open={operation !== null} onOpenChange={closeBatch} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
+    <LibraryDialog open={operation !== null} onOpenChange={closeBatch} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
       <div className="library-import-stack">
         <p>{checked.map(spec => `${spec.name}（第 ${spec.version} 版）`).join('；')}</p>
         {operation === 'review' && <>
@@ -126,17 +127,19 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
         <label className="library-import-confirm"><Checkbox checked={confirmed} onCheckedChange={value => setConfirmed(value === true)} aria-label="确认所选规格与版本" /><span>我已核对所选规格与版本，确认执行本次操作。缺项、方法限制与审核门禁由系统逐项检查。</span></label>
         {error && <p className="field-error" role="alert">{error}</p>}
       </div>
-    </Dialog>
+    </LibraryDialog>
     {specDetail && <SpecSources key={specDetail.id} spec={specDetail} onClose={() => setSpecDetail(null)} />}
   </div>;
 }
 
 function BatchOutcome({ row }: { row: BatchItem }) {
   const verdicts = Object.entries((row.checks || []).reduce<Record<string, number>>((counts, check) => { const key = text(check.verdict) || 'missing'; counts[key] = (counts[key] || 0) + 1; return counts; }, {}));
+  const errors = (row.errors || []).filter(Boolean).map(error => typeof error === 'string' ? error : text(optionalRecord(error).message) || '方法没有提供可读的失败说明，请打开型号与运行查看详情。');
   return <div className="library-import-issues">
-    <span>{displayText(row.message || text(optionalRecord(row.error).message) || (typeof row.error === 'string' ? row.error : '') || '—')}</span>
+    <span>{displayLibraryText(row.message || text(optionalRecord(row.error).message) || (typeof row.error === 'string' ? row.error : '') || '—')}</span>
+    {errors.map((error, index) => <span key={index}>{displayLibraryText(error)}</span>)}
     {!!verdicts.length && <span>{verdicts.map(([verdict, count]) => `${({ passed: '符合', failed: '不符合', missing: '缺项', uncovered: '依据未收录', not_applicable: '不适用' } as Record<string, string>)[verdict] || '待核对'} ${count} 项`).join(' · ')}</span>}
-    {row.rows?.map((item, index) => <span key={index}>{text(item.name)}：{typeof item.value_a === 'number' ? `${Number(item.value_a.toPrecision(6))} A` : '拒算'}{text(item.reason) && `；${displayText(text(item.reason))}`}</span>)}
+    {row.rows?.map((item, index) => <span key={index}>{text(item.name)}：{typeof item.value_a === 'number' ? `${Number(item.value_a.toPrecision(6))} A` : '拒算'}{text(item.reason) && `；${displayLibraryText(text(item.reason))}`}</span>)}
     {row.workspace_id && <a className="object-link" href={`/types/${encodeURIComponent(row.workspace_id)}/structure/section`}>查看型号与运行</a>}
   </div>;
 }
@@ -167,7 +170,7 @@ function SpecSources({ spec, onClose }: { spec: LibrarySpec; onClose: () => void
       await Promise.all([client.invalidateQueries({ queryKey: ['type-library', 'spec', spec.id] }), client.invalidateQueries({ queryKey: ['type-library', 'series'] })]);
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
-  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title={spec.name} description={`第 ${version} 版 · ${STATES[current.state] || '待核对'}`} initialFocus="form">
+  return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title={spec.name} description={`第 ${version} 版 · ${STATES[current.state] || '待核对'}`} initialFocus="form">
     {detail.isPending ? <LoadingState title="正在读取来源与版本" /> : detail.isError ? <ErrorState description={message(detail.error)} action={<Button onClick={() => void detail.refetch()}>重新读取来源</Button>} /> : <div className="library-import-stack">
       <Select label="查看规格版本" value={String(version)} onChange={next => setVersion(Number(next))} options={(detail.data?.versions || [spec]).map(item => ({ value: String(item.version), label: `第 ${item.version} 版 · ${STATES[item.state] || '待核对'}` }))} />
       <p className="muted">以下是该版本保存的原始导入数值。{current.has_design_changes ? '型号设计已有后续修改，请打开型号设计核对当前结构。' : '原始文件摘要与每个单元格的出处已随版本保留。'}</p>
@@ -185,5 +188,5 @@ function SpecSources({ spec, onClose }: { spec: LibrarySpec; onClose: () => void
         </div>
       </details>}
     </div>}
-  </Dialog>;
+  </LibraryDialog>;
 }

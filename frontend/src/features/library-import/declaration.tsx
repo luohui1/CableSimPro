@@ -21,6 +21,7 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
   value: SeriesDeclaration; onChange: (value: SeriesDeclaration) => void; vocabulary: Vocabulary; mapped: Set<string>;
 }) {
   const [part, setPart] = useState('conductor');
+  const originalStandards = Array.isArray(value.reference?.original_standards) ? value.reference.original_standards.filter((item): item is string => typeof item === 'string') : [];
   const set = (values: Partial<SeriesDeclaration>) => onChange({ ...value, ...values });
   const common = (key: string, text: string) => {
     const next = { ...value.common }, number = numberOf(text);
@@ -40,9 +41,9 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
       <label className="text-field">型号<Input aria-label="型号" required maxLength={60} value={value.designation} onChange={event => set({ designation: event.target.value })} /></label>
       <label className="text-field">额定相电压 U₀ / kV<Input aria-label="额定相电压 kV" required type="number" min="0.001" step="any" value={value.u0_v ? value.u0_v / 1000 : ''} onChange={event => set({ u0_v: (numberOf(event.target.value) ?? 0) * 1000 })} /></label>
       <label className="text-field">额定线电压 U / kV<Input aria-label="额定线电压 kV" required type="number" min="0.001" step="any" value={value.u_v ? value.u_v / 1000 : ''} onChange={event => set({ u_v: (numberOf(event.target.value) ?? 0) * 1000 })} /></label>
-      <Select label="芯数" value={String(value.cores)} onChange={cores => set({ cores: Number(cores) })} options={[1, 2, 3, 4, 5].map(cores => ({ value: String(cores), label: `${cores} 芯` }))} />
+      <Select label="芯数" value={String(value.cores)} onChange={cores => set({ cores: Number(cores) })} options={Array.from({ length: 16 }, (_, index) => index + 1).map(cores => ({ value: String(cores), label: `${cores} 芯` }))} />
       <Select label="数据身份" value={value.origin} onChange={origin => set({ origin: origin as SeriesDeclaration['origin'] })} options={[{ value: 'factory', label: '本厂结构表' }, { value: 'public', label: '公开厂家资料' }, { value: 'demo', label: '结构演示' }]} />
-      <Select label="铠装材料类别" value={value.armour_material || ''} onChange={armour_material => set({ armour_material: armour_material || undefined })} options={[{ value: '', label: '未声明或无铠装' }, { value: 'steel_galvanized', label: '镀锌钢' }, { value: 'steel_stainless_nonmagnetic', label: '非磁性不锈钢' }]} />
+      <Select label="铠装材料类别" value={value.armour_material || ''} onChange={armour_material => set({ armour_material: armour_material || undefined })} options={[{ value: '', label: '未声明具体钢材' }, { value: 'steel_galvanized', label: '镀锌钢' }, { value: 'steel_stainless_nonmagnetic', label: '非磁性不锈钢' }]} />
       <label className="text-field">最高系统电压 Uₘ / kV<Input aria-label="最高系统电压 kV" type="number" min="0.001" step="any" value={value.um_v ? value.um_v / 1000 : ''} onChange={event => set({ um_v: numberOf(event.target.value) === undefined ? undefined : Number(event.target.value) * 1000 })} /></label>
       <Select label="导体材料" value={value.conductor || ''} onChange={next => set({ conductor: next as SeriesDeclaration['conductor'] || undefined })} options={[{ value: '', label: '按明确型号识别' }, { value: 'copper', label: '铜' }, { value: 'aluminium', label: '铝' }]} />
       <Select label="绝缘材料" value={value.insulation || ''} onChange={next => set({ insulation: next as SeriesDeclaration['insulation'] || undefined })} options={[{ value: '', label: '按明确型号识别' }, { value: 'XLPE', label: '交联聚乙烯' }, { value: 'PVC', label: '聚氯乙烯' }]} />
@@ -52,6 +53,7 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
     <Select label="原表缺少导体电阻时" value={value.resistance_basis || 'stated'} onChange={next => set({ resistance_basis: next as SeriesDeclaration['resistance_basis'] })} options={[{ value: 'stated', label: '保留缺项，等待厂家提供' }, { value: 'standard_limit', label: '采用 GB/T 3956 表 2 标准上限' }]} />
     {value.resistance_basis === 'standard_limit' && <p className="library-import-source">明确采用 GB/T 3956—2008 表 2 的导体直流电阻上限。它是标准上限，不是厂家实测值；表外规格保持缺项。</p>}
     <label className="text-field">执行标准（每行一项，包含年号）<Textarea aria-label="执行标准" value={value.standards.join('\n')} onChange={event => set({ standards: event.target.value.split('\n') })} onBlur={() => set({ standards: value.standards.map(item => item.trim()).filter(Boolean) })} /></label>
+    {originalStandards.length > 0 && <p className="library-import-source">原手册声明：{originalStandards.join('；')}。本次采用的执行标准列在上方，请核对版本变化及其适用范围。</p>}
     {!value.source?.sha256 && <div className="library-import-fields library-import-fields-pair">
       <label className="text-field">资料名称<Input aria-label="资料名称" placeholder="厂家结构表或产品手册全名" value={value.source?.title || ''} onChange={event => set({ source: { ...value.source, title: event.target.value } })} /></label>
       <label className="text-field">资料位置<Input aria-label="资料位置" placeholder="原始表号、版本或页码" value={value.source?.location || ''} onChange={event => set({ source: { ...value.source, location: event.target.value } })} /></label>

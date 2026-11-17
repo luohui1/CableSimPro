@@ -46,17 +46,48 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
   let shot = 0;
   async function capture(label) {
     await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => [...document.querySelectorAll('.dialog-stage')].every(stage => Number(getComputedStyle(stage).opacity) >= .999));
     const name = `${viewport.width}-${String(++shot).padStart(2, '0')}-${label}.png`;
     await page.screenshot({ path: path.join(out, name) });
     await fs.writeFile(path.join(out, name.replace('.png', '.txt')), await page.locator('body').innerText());
     report.screenshots.push(name);
-    try { await assertLayout(page, `${viewport.width} ${label}`); }
+    try {
+      const dialog = page.getByRole('dialog');
+      if (await dialog.count()) {
+        await expect(dialog.locator('.dialog-title')).toBeInViewport({ ratio: 1 });
+        for (const action of await dialog.locator('.dialog-actions button').all()) await expect(action).toBeInViewport({ ratio: 1 });
+      }
+      await assertLayout(page, `${viewport.width} ${label}`);
+    }
     catch (error) { report.layout_failures.push({ viewport: viewport.width, screenshot: name, message: String(error) }); }
     console.log(`${viewport.width} ${label}`);
   }
   async function select(label, option) {
-    await page.getByRole('combobox', { name: label, exact: true }).click();
-    await page.getByRole('option', { name: option, exact: true }).click();
+    const field = page.getByRole('combobox', { name: label, exact: true });
+    if (viewport.width === 1920) {
+      await field.click();
+      await page.getByRole('option', { name: option, exact: true }).click();
+      return;
+    }
+    await field.focus();
+    await page.keyboard.press('Enter');
+    const choices = page.getByRole('option');
+    await expect(page.getByRole('option', { name: option, exact: true })).toBeVisible();
+    await expect(page.locator('[role="option"]:focus')).toHaveCount(1);
+    const index = await choices.evaluateAll((items, label) => items.findIndex(item => item.textContent.replace(/✓/g, '').trim() === label), option);
+    assert.ok(index >= 0, `键盘选择缺少选项：${label} / ${option}`);
+    await page.keyboard.press('Home');
+    await expect(choices.first()).toBeFocused();
+    for (let i = 1; i <= index; i++) {
+      await page.keyboard.press('ArrowDown');
+      await expect(choices.nth(i)).toBeFocused();
+    }
+    await page.keyboard.press('Enter');
+    await expect(field).toHaveText(option);
+    await expect(field).toBeFocused();
+  }
+  async function recordResponse(name, response, body) {
+    await fs.writeFile(path.join(out, `${viewport.width}-${name}.json`), JSON.stringify({ request: response.request().postDataJSON(), status: response.status(), response: body }, null, 2));
   }
   async function advanceSheet() {
     await page.getByRole('button', { name: '确认工作表，设置列映射', exact: true }).click();
@@ -73,6 +104,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
   try {
     await page.goto(base + '/resources/cables/structure-import');
     await expect(page.getByRole('button', { name: '选择结构表文件', exact: true })).toBeEnabled();
+    await expect(page.getByText('读取中', { exact: true })).toHaveCount(0);
     await capture('选择文件');
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('link', { name: '下载人民电缆示例结构表', exact: true }).click();
@@ -80,6 +112,20 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const samplePath = path.join(out, `people-mv-${viewport.width}.xlsx`);
     await download.saveAs(samplePath);
     assert.equal(await download.failure(), null);
+
+    const uploadCount = () => report.requests.filter(item => item.viewport === viewport.width && item.method === 'POST' && item.url.endsWith('/api/type-library/imports/upload')).length;
+    const beforeInvalid = uploadCount();
+    for (const [name, buffer, reason] of [
+      ['unsupported.tsv', Buffer.from('截面\t外径\n25\t10'), '.xlsx、.xls 或 .csv'],
+      ['oversized.csv', Buffer.alloc(10 * 1024 * 1024 + 1, 32), '不超过 10 MiB'],
+      ['empty.csv', Buffer.alloc(0), '非空'],
+    ]) {
+      await page.getByLabel('结构表文件', { exact: true }).setInputFiles({ name, mimeType: 'text/plain', buffer });
+      await expect(page.getByRole('alert')).toContainText(reason);
+      assert.equal(uploadCount(), beforeInvalid, '不支持的格式、超限或空文件不应提交给服务器');
+    }
+    await capture('格式大小与空文件边界');
+    report.checks.push(`${viewport.width}：文件选择与后端统一为xlsx/xls/csv、10 MiB；格式不支持、超限及空文件在上传前准确拒绝`);
 
     // Keep all original cells except this explicitly invalid diameter. The test
     // checks that the importer names the actual source row and column.
@@ -125,6 +171,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(page.getByRole('status').filter({ hasText: '已保存“' })).toBeVisible();
     await select('复用已保存映射', mapName);
     await expect(page.getByRole('status').filter({ hasText: '已复用“' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: '复用已保存映射', exact: true })).toHaveText(mapName);
+    await page.getByRole('heading', { name: '确认列映射', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('映射保存与复用');
     await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
     await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`人民 YJV22 公开样本 ${viewport.width} ${stamp}`);
@@ -133,10 +181,18 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     assert.equal(built.error_count, 0, '原始公开样本不应有解析错误');
     assert.equal(built.rows.length, 11);
     await capture('逐规格预览');
-    await page.getByRole('table', { name: '逐行入库预览', exact: true }).getByRole('button', { name: built.rows[0].name, exact: true }).click();
+    const sourceOpener = page.getByRole('table', { name: '逐行入库预览', exact: true }).getByRole('button', { name: built.rows[0].name, exact: true });
+    await sourceOpener.focus();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('table', { name: '逐项来源', exact: true })).toBeVisible();
+    await expect(page.getByRole('table', { name: '逐项来源', exact: true }).getByRole('columnheader', { name: '参数', exact: true })).toBeInViewport();
     await capture('预览数值与逐项出处');
     await page.keyboard.press('Escape');
+    await expect(sourceOpener).toBeFocused();
+    assert.ok(built.execution_standards?.items.length, '已声明的执行标准须返回精确来源，供人工确认');
+    assert.ok(built.execution_standards.items.every(item => /^[0-9a-f]{64}$/.test(item.source_digest)));
+    await page.getByRole('heading', { name: '执行标准版本与来源', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await capture('执行标准完整来源确认');
     const commitButton = page.getByRole('button', { name: '确认入库 11 个规格', exact: true });
     await expect(commitButton).toBeDisabled();
     await page.getByRole('checkbox', { name: '确认来源与系列声明', exact: true }).check();
@@ -158,6 +214,14 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await page.getByRole('button', { name: '打开系列，核对与计算', exact: true }).click();
     await expect(page.getByRole('table', { name: '系列规格', exact: true })).toBeVisible();
     await capture('系列与规格');
+    await page.getByRole('button', { name: '全部系列', exact: true }).click();
+    await page.getByLabel('查找系列', { exact: true }).fill(detail.series.name);
+    const seriesOpener = page.getByRole('table', { name: '型号系列', exact: true }).getByRole('button', { name: detail.series.name, exact: true });
+    await expect(seriesOpener).toBeVisible();
+    await capture('返回全库查找系列');
+    await seriesOpener.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('table', { name: '系列规格', exact: true })).toBeVisible();
     await page.getByRole('checkbox', { name: '选择全部规格', exact: true }).check();
     await page.getByRole('button', { name: '批量核对', exact: true }).click();
     await capture('批量核对版本确认');
@@ -169,9 +233,10 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const batchResponse = await batchPromise;
     assert.equal(batchResponse.ok(), true, await batchResponse.text());
     const batch = await batchResponse.json();
+    await recordResponse('batch-check', batchResponse, batch);
     assert.equal(batch.items.length, 11);
     await expect(page.getByRole('table', { name: '批量操作结果', exact: true })).toBeVisible();
-    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('真实批量核对结果');
     assert.ok(batch.items.some(item => item.run_id && item.checks?.length), '批量核对须保存真实标准核对运行');
 
@@ -181,24 +246,34 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     for (const [label, value] of [
       ['工况名称', '公开样本同工况直埋对照'], ['中心埋深 m', '0.7'], ['土壤热阻率 K·m/W', '1.0'],
       ['环境温度 °C', '25'], ['交流频率 Hz', '50'], ['集肤效应系数 kₛ 1', '1'], ['邻近效应系数 kₚ 1', '1'],
+      ['护套初始温度 °C', '70'], ['电流收敛容差 A', '0.00000001'], ['最大迭代次数 次', '300'],
       ['工况来源', '人民电器集团公开样本直埋条件：土壤25 °C，热阻率1.0 K·m/W。原表未列埋深，验收明确采用0.7 m，两端接地；50 Hz来自原PDF使用特性。'],
-      ['方法参数来源', 'IEC 60287公开样本回归条件；kₛ=1、kₚ=1，涡流损耗明确忽略。本轮只验证真实方法运行和缺项拒算，不作为厂家试验数据。'],
+      ['方法参数来源', 'IEC 60287公开样本回归条件：kₛ=1、kₚ=1、土壤热阻精确式，涡流损耗明确忽略；迭代护套初值70 °C、电流容差1×10⁻⁸ A、上限300次来自库内公开样本回归设置。初值不是实测温度；本轮验证真实方法运行和缺项拒算，不作为厂家试验数据。'],
     ]) await calculation.getByLabel(label, { exact: true }).fill(value);
     await select('金属套接地', '两端接地');
     await select('护套涡流损耗', '明确忽略（须核对适用条件）');
-    await calculation.getByRole('heading', { name: '统一计算工况', exact: true }).scrollIntoViewIfNeeded();
+    await select('土壤热阻公式', '精确式');
+    await calculation.getByRole('heading', { name: '统一计算工况', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('批量计算明确工况');
+    await calculation.getByRole('heading', { name: '求解初值与收敛控制', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await capture('批量计算显式求解控制');
     await calculation.getByLabel('确认所选规格与版本', { exact: true }).check();
     const ratedPromise = page.waitForResponse(response => response.url().includes(`/series/${saved.series_id}/batch`) && response.request().method() === 'POST', { timeout: 300000 });
     await calculation.getByRole('button', { name: '确认执行 11 个规格', exact: true }).click();
     const ratedResponse = await ratedPromise;
     assert.equal(ratedResponse.ok(), true, await ratedResponse.text());
     const rated = await ratedResponse.json();
-    assert.equal(rated.items.length, 11);
-    assert.ok(rated.items.some(item => item.run_id && item.rows?.some(row => typeof row.value_a === 'number' && row.value_a > 0)), '批量计算须保存真实载流量结果');
+    await recordResponse('batch-calculate', ratedResponse, rated);
     await expect(calculation).toBeHidden();
-    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('真实批量载流量结果');
+    assert.equal(rated.items.length, 11);
+    const calculated = rated.items.filter(item => item.run_id && item.rows?.some(row => typeof row.value_a === 'number' && row.value_a > 0));
+    assert.equal(calculated.length, 10, 'YJV22原表11规格须保存10个真实载流量结果，3×50保留方法适用域拒算');
+    const refused = rated.items.filter(item => !calculated.includes(item));
+    assert.equal(refused.length, 1);
+    assert.match(refused[0].name, /3\s*×\s*50$/);
+    assert.match([refused[0].message, ...((refused[0].rows || []).map(row => row.reason))].join('；'), /填充|图6|SL_FILLER_GEOMETRY_RANGE/);
 
     await page.getByRole('button', { name: '批量审核', exact: true }).click();
     const review = page.getByRole('dialog', { name: '批量人工审核', exact: true });
@@ -212,11 +287,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const reviewedResponse = await reviewedPromise;
     assert.equal(reviewedResponse.ok(), true, await reviewedResponse.text());
     const reviewed = await reviewedResponse.json();
+    await recordResponse('batch-review', reviewedResponse, reviewed);
     assert.ok(reviewed.items.every(item => item.status === 'failed' && /尚未提交|未提交审核/.test(item.message)), '未经提交的草稿须整批拒绝批准');
     const afterReview = await readApi(`/api/type-library/series/${saved.series_id}`);
     assert.ok(afterReview.specs.every(spec => spec.state !== 'approved' && spec.state !== 'published'));
     await expect(review).toBeHidden();
-    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('审核门禁真实拒绝');
     report.checks.push(`${viewport.width}：真实Excel上传→工作表→列映射保存复用→系列声明→11规格预览→人工确认入库→型号库→真实批量标准核对与载流量计算→未提交草稿整批拒绝批准，保存版本/来源可回读`);
     await page.reload();
@@ -236,7 +312,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const revision = await revisionResponse.json();
     assert.equal(revision.version, 2);
     await expect(sourceDialog.getByRole('status').filter({ hasText: '已建立独立新版本草稿' })).toBeVisible();
-    await sourceDialog.getByRole('combobox', { name: '查看规格版本', exact: true }).scrollIntoViewIfNeeded();
+    await sourceDialog.getByRole('combobox', { name: '查看规格版本', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
     await capture('独立新版本与旧版保留');
     await select('查看规格版本', '第 1 版 · 草稿');
     await expect(sourceDialog.getByRole('table', { name: '逐项来源', exact: true })).toBeVisible();
@@ -275,6 +351,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await page.getByRole('tab', { name: '载流量', exact: true }).click();
       await expect(page.getByRole('table', { name: '载流量逐规格对照', exact: true })).toBeVisible();
       await capture(`${sample.id}-载流量逐规格偏差`);
+      if (sample.id === 'people-mv') {
+        const firstCalculated = compared.rows.findIndex(row => row.metrics.ampacity.status === 'compared');
+        assert.ok(firstCalculated >= 0, '人民样本须有真实可对照规格');
+        await page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('row').nth(firstCalculated + 1).evaluate(element => element.scrollIntoView({ block: 'center' }));
+        await capture('people-mv-真实计算数值与偏差');
+      }
       await page.getByRole('tab', { name: '外径', exact: true }).click();
       await capture(`${sample.id}-外径输入保真非独立验证`);
       await page.getByRole('tab', { name: '重量', exact: true }).click();

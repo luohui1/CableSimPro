@@ -9,15 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DeclarationForm, emptyDeclaration } from './declaration';
 import { SeriesLibrary } from './series';
 import { CatalogueComparison } from './comparison';
 import { ValueTable } from './value-table';
 import { ExchangeImport } from './exchange';
+import { LibraryDialog } from './dialog';
 import { displayUnit } from '@/lib/display-names';
-import { issueText, libraryPost, libraryRequest, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
+import { issueText, libraryPost, libraryRequest, methodText, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
 import './library-import.css';
 
 const STEPS = ['选择文件', '选择工作表', '列映射', '系列声明', '预览入库'];
@@ -29,7 +29,7 @@ export function LibraryImportPage() {
   const [tab, setTab] = useState(search.item ? 'series' : 'import');
   const openSeries = (id: string) => {
     setTab('series');
-    void navigate({ to: '.', search: (previous: Record<string, unknown>) => ({ ...previous, item: id }), replace: true });
+    void navigate({ to: '.', search: (previous: Record<string, unknown>) => ({ ...previous, item: id || undefined }), replace: true });
   };
   return <CatalogShell title="结构表导入与系列" path="电缆型号库" actions={<Button asChild><a href="/resources/cables">电缆型号版本</a></Button>}>
     <Tabs value={tab} onValueChange={setTab} className="library-import-page">
@@ -52,6 +52,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
   const [first, setFirst] = useState(1);
   const [mapping, setMapping] = useState<Record<string, number>>({});
   const [mappingName, setMappingName] = useState('');
+  const [activeMapping, setActiveMapping] = useState('');
   const [mappingNotice, setMappingNotice] = useState('');
   const [series, setSeries] = useState<SeriesDeclaration>(emptyDeclaration);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -86,13 +87,13 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     try { await action(); } catch (cause) { setError(message(cause)); } finally { setBusy(''); }
   }
   function reset() {
-    setStep(0); setUpload(null); setSheetName(''); setFirst(1); setMapping({}); setMappingName(''); setMappingNotice('');
+    setStep(0); setUpload(null); setSheetName(''); setFirst(1); setMapping({}); setMappingName(''); setMappingNotice(''); setActiveMapping('');
     setSeries(emptyDeclaration()); setReceipt(null); setFileName(''); setError(''); invalidatePreview();
   }
   function chooseFile(file: File) {
     void run('正在上传并检查结构表', async () => {
-      if (!/\.(xlsx|xls|csv|tsv)$/i.test(file.name)) throw new Error('请选择 Excel 或 CSV 结构表。');
-      if (file.size > 25 * 1024 * 1024) throw new Error('结构表超过 25 MB，请拆分后重新选择。');
+      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw new Error('请选择 .xlsx、.xls 或 .csv 结构表。');
+      if (!file.size || file.size > 10 * 1024 * 1024) throw new Error('请选择非空且不超过 10 MiB 的结构表，请拆分过大的文件后重新选择。');
       setFileName(file.name);
       const body = new FormData(); body.append('file', file);
       const result = await libraryRequest<Upload>('/imports/upload', { method: 'POST', body });
@@ -101,7 +102,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       if (!sheet) throw new Error('文件中没有可以读取的工作表。');
       setSheetName(sheet.name); setFirst(sheet.first_data_row || 1);
       setSeries(result.declarations?.find(item => item.sheet === sheet.name)?.series || { ...emptyDeclaration(), name: file.name.replace(/\.[^.]+$/, ''), source: { title: file.name } });
-      setReceipt(null); setMapping({}); setMappingNotice(''); invalidatePreview(); setStep(1);
+      setReceipt(null); setMapping({}); setMappingNotice(''); setActiveMapping(''); invalidatePreview(); setStep(1);
     });
   }
   function chooseSheet() {
@@ -110,6 +111,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     if (declaration) setSeries(structuredClone(declaration.series));
     setFirst(declaration?.first_data_row || selectedSheet.first_data_row || 1);
     setMapping(declaration?.mapping || Object.fromEntries(columns.filter(column => column.suggested).map(column => [column.suggested!, column.index])));
+    setActiveMapping('');
     invalidatePreview(); changeStep(2);
   }
   function applyMapping(name: string) {
@@ -117,7 +119,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     if (!saved) return;
     const mismatch = Object.entries(saved.mapping).filter(([field, index]) => saved.headers[field] !== columns.find(column => column.index === index)?.header);
     if (mismatch.length) { setError('该映射与当前表头不一致，请逐列核对后保存新的映射。'); return; }
-    setMapping({ ...saved.mapping }); setMappingName(saved.name); setMappingNotice(`已复用“${saved.name}”，请核对各列。`); setError(''); invalidatePreview();
+    setMapping({ ...saved.mapping }); setMappingName(saved.name); setActiveMapping(saved.name); setMappingNotice(`已复用“${saved.name}”，请核对各列。`); setError(''); invalidatePreview();
   }
   const headers = () => Object.fromEntries(Object.entries(mapping).map(([key, index]) => [key, columns.find(column => column.index === index)?.header || '']));
 
@@ -139,10 +141,10 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       <h2 ref={heading} tabIndex={-1}>选择厂家结构表</h2>
       <div className="library-import-drop" onDragOver={event => { event.preventDefault(); }} onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file && !busy) chooseFile(file); }}>
         <p>拖入 Excel 或 CSV 文件，每行一个规格。</p>
-        <p className="muted">支持 .xlsx、.xls、.csv、.tsv，最大 25 MB。上传后选择工作表、确认列映射与来源，再预览入库。</p>
+        <p className="muted">支持 .xlsx、.xls、.csv，最大 10 MiB。上传后选择工作表、确认列映射与来源，再预览入库。</p>
         <Button variant="primary" loading={!!busy} disabled={vocabularyQuery.isPending || vocabularyQuery.isError} onClick={() => picker.current?.click()}>选择结构表文件</Button>
         {fileName && <p role="status">{fileName}</p>}
-        <Input ref={picker} type="file" hidden tabIndex={-1} aria-label="结构表文件" accept=".xlsx,.xls,.csv,.tsv" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) chooseFile(file); }} />
+        <Input ref={picker} type="file" hidden tabIndex={-1} aria-label="结构表文件" accept=".xlsx,.xls,.csv" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) chooseFile(file); }} />
       </div>
       <section className="library-import-stack">
         <h2>公开样本</h2>
@@ -168,7 +170,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       <p className="muted">{Object.keys(mapping).length} 列已对应。每个字段只使用一列；请按原表单位选择目标字段。</p>
       <div className="library-import-fields library-import-fields-pair">
         <label className="text-field">数据起始行<Input aria-label="数据起始行" type="number" min={1} step={1} value={first || ''} onChange={event => { setFirst(Number(event.target.value)); invalidatePreview(); }} /></label>
-        <Select label="复用已保存映射" value="" onChange={applyMapping} options={[{ value: '', label: '选择列映射模板' }, ...vocabulary.mappings.map(item => ({ value: item.name, label: item.name }))]} />
+        <Select label="复用已保存映射" value={activeMapping} onChange={applyMapping} options={[{ value: '', label: '选择列映射模板' }, ...vocabulary.mappings.map(item => ({ value: item.name, label: item.name }))]} />
       </div>
       <DataTable label="列映射" showGroups={false} groups={[{ id: 'columns', label: '列映射', rows: columns.map(column => ({ ...column, id: String(column.index) })) }]} rowLabel={row => `${row.letter} 列映射`} columns={[
         { id: 'column', label: '原表列名', wrap: true, render: row => `${row.letter} · ${row.header || '无列名'}` },
@@ -176,7 +178,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
         { id: 'field', label: '目标字段与单位', render: row => <Select label={`${row.letter} 列对应`} value={Object.entries(mapping).find(([, index]) => index === row.index)?.[0] || ''} options={[{ value: '', label: '不导入此列' }, ...fields.map(field => ({ value: field.key, label: `${field.label} / ${displayUnit(field.unit)}` }))]} onChange={field => {
           const next = Object.fromEntries(Object.entries(mapping).filter(([key, index]) => key !== field && index !== row.index));
           if (field) next[field] = row.index;
-          setMapping(next); setMappingNotice(''); invalidatePreview();
+          setMapping(next); setMappingNotice(''); setActiveMapping(''); invalidatePreview();
         }} /> },
       ]} />
       <div className="library-import-mapping-save">
@@ -214,10 +216,25 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
         { id: 'issues', label: '问题列与原因', wrap: true, render: row => <div className="library-import-issues">{row.issues.map((issue, index) => <span key={index}>{issue.column ? `${issue.column} 列 · ` : ''}{issue.field ? `${fields.find(field => field.key === issue.field)?.label || issue.field}：` : ''}{issue.message}</span>)}{row.missing.map((missing, index) => <span key={`missing-${index}`}>{issueText(missing)}</span>)}{!row.issues.length && !row.missing.length ? '—' : null}</div> },
       ]} />
       <p className="library-import-source">来源：{preview.file} · {preview.sheet}。每个数保留原表行列、来源、方法版本与可信分档。</p>
+      <section className="library-import-stack" aria-label="执行标准来源确认">
+        <h2>执行标准版本与来源</h2>
+        {preview.execution_standards ? <>
+          {!!preview.execution_standards.items.length && <>
+            <p className="muted">确认入库会登记以下执行标准版本与来源摘要，作为后续标准核对的依据。型号与数值仍保留草稿身份。</p>
+            <DataTable label="执行标准来源" showGroups={false} groups={[{ id: 'standards', label: '标准', rows: preview.execution_standards.items.map((item, index) => ({ ...item, id: String(index) })) }]} rowLabel={row => row.declared} columns={[
+              { id: 'name', label: '执行标准版本', wrap: true, render: row => row.standard.endsWith(row.edition) ? row.standard : `${row.standard}—${row.edition}` },
+              { id: 'source', label: '完整来源摘要（SHA-256）', wrap: true, render: row => <code className="library-import-digest">{row.source_digest}</code> },
+              { id: 'method', label: '来源核对方法版本', wrap: true, render: row => methodText(row.method) },
+            ]} />
+          </>}
+          {preview.execution_standards.missing.map((item, index) => <p className="field-error" key={index}>{item.declared}：{item.reason}</p>)}
+          {!preview.execution_standards.items.length && !preview.execution_standards.missing.length && <p className="muted">本次未声明执行标准，后续标准核对将保留缺项。</p>}
+        </> : <p className="field-error">执行标准来源尚未返回，请重新预览后核对。</p>}
+      </section>
       {preview.error_count > 0 && <label className="library-import-confirm"><Checkbox checked={skipErrors} onCheckedChange={value => setSkipErrors(value === true)} aria-label="明确跳过错误行" /><span>明确跳过 {preview.error_count} 个错误行，仅保存其余 {importable} 个规格；错误行需回原表更正。</span></label>}
-      <label className="library-import-confirm"><Checkbox checked={confirmed} onCheckedChange={value => setConfirmed(value === true)} aria-label="确认来源与系列声明" /><span>我已核对原始资料、列映射与系列声明，确认将本次预览保存为未发布草稿。</span></label>
+      <label className="library-import-confirm"><Checkbox checked={confirmed} onCheckedChange={value => setConfirmed(value === true)} aria-label="确认来源与系列声明" /><span>我已核对原始资料、列映射、系列声明与执行标准来源，确认将本次预览保存为未发布草稿。</span></label>
       {!importable && <p className="field-error">没有可入库的规格，请返回修正列映射或原始结构表。</p>}
-      <div className="library-import-actions"><Button disabled={!!busy} onClick={() => changeStep(3)}>返回修改声明</Button><Button variant="primary" loading={!!busy} disabled={!importable || !confirmed || (preview.error_count > 0 && !skipErrors)} onClick={() => void run('正在保存型号草稿', async () => {
+      <div className="library-import-actions"><Button disabled={!!busy} onClick={() => changeStep(3)}>返回修改声明</Button><Button variant="primary" loading={!!busy} disabled={!importable || !confirmed || !preview.execution_standards || (preview.error_count > 0 && !skipErrors)} onClick={() => void run('正在保存型号草稿', async () => {
         const result = await libraryPost<CommitReceipt>('/imports/commit', { preview_id: preview.preview_id, preview_digest: preview.preview_digest, request_id: requestId.current, human_confirmed: true, skip_errors: skipErrors });
         setReceipt(result); await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
       })}>确认入库 {importable} 个规格</Button></div>
@@ -234,8 +251,8 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     {error && <p role="alert" className="field-error library-import-error">{error}</p>}
     {busy && <p role="status" className="muted">{busy}…</p>}
     {body}
-    <Dialog open={!!previewRow} onOpenChange={open => { if (!open) setPreviewRow(null); }} title={previewRow ? `原表第 ${previewRow.row_number} 行 · ${previewRow.name || '数值预览'}` : '数值预览'} description="确认入库前逐项核对数值、原表位置、方法版本与可信分档。" initialFocus="form">
+    <LibraryDialog open={!!previewRow} onOpenChange={open => { if (!open) setPreviewRow(null); }} title={previewRow ? `原表第 ${previewRow.row_number} 行 · ${previewRow.name || '数值预览'}` : '数值预览'} description="确认入库前逐项核对数值、原表位置、方法版本与可信分档。" initialFocus="form">
       <div className="library-import-stack"><ValueTable values={previewRow?.values || []} />{previewRow?.missing.map((value, index) => <p className="muted" key={index}>缺项：{issueText(value)}</p>)}</div>
-    </Dialog>
+    </LibraryDialog>
   </div>;
 }
