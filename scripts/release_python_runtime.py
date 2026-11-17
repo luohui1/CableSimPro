@@ -62,7 +62,7 @@ def _member_name(raw: str) -> str:
     return str(path)
 
 
-def extract_runtime(archive: Path, destination: Path) -> None:
+def extract_runtime(archive: Path, destination: Path, *, case_sensitive: bool | None = None) -> None:
     """Materialize in-archive links as ordinary files; never create host links.
 
     A flat copy is deliberate: ZIP extraction on Windows does not preserve
@@ -71,17 +71,31 @@ def extract_runtime(archive: Path, destination: Path) -> None:
     """
     if destination.exists():
         raise RuntimeError("Python staging destination already exists")
+    # POSIX distributions legitimately contain case-distinct paths (terminfo,
+    # for example). Windows must reject aliases, including implicit parents.
+    if case_sensitive is None:
+        case_sensitive = sys.platform != "win32"
+    identity = (lambda name: name) if case_sensitive else str.casefold
     with tarfile.open(archive, "r:gz") as source:
         members: dict[str, tarfile.TarInfo] = {}
-        folded: set[str] = set()
+        identities: dict[str, str] = {}
         for member in source:
             name = _member_name(member.name)
-            if name.casefold() in folded or len(members) >= MAX_MEMBERS:
-                raise RuntimeError("Duplicate or excessive Python archive members")
+            if name in members:
+                raise RuntimeError("Duplicate Python archive member: " + name)
+            if len(members) >= MAX_MEMBERS:
+                raise RuntimeError("Python archive exceeds member count limit")
+            for part in (PurePosixPath(name), *PurePosixPath(name).parents):
+                if str(part) == ".":
+                    continue
+                key = identity(str(part))
+                prior = identities.get(key)
+                if prior is not None and prior != str(part):
+                    raise RuntimeError("Case-alias Python archive members: " + prior + " / " + str(part))
+                identities[key] = str(part)
             if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
                 raise RuntimeError("Unsupported Python archive member: " + name)
             members[name] = member
-            folded.add(name.casefold())
 
         def resolve(name: str) -> tarfile.TarInfo:
             seen: set[str] = set()
