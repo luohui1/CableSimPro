@@ -110,6 +110,14 @@ def test_fixed_basis_pages_and_pass_fail(tmp_path,hv,area,nominal,page,pdf,r20):
             reordered=deepcopy(params)
             reordered['basis_references']['annex_screen_table']['records'].reverse()
             assert plugin.check(document,reordered)['fictitious_diameter_trace']==trace
+            for field, value in [('citation','伪造的来源与页码'),('record_sha256','0'*64)]:
+                tampered=deepcopy(params)
+                record=next(record for record in tampered['basis_references']['annex_screen_table']['records']
+                            if record['id']==selected['id'])
+                record[field]=value
+                with pytest.raises(BasisIntegrityError,match='封签'):
+                    plugin.check(document,tampered)
+                cases.append({'case_id':'list-'+field,'input':document,'parameters':tampered})
             # The real plugin process must reject the whole case without a
             # partial requirements artifact, not turn bad evidence into gaps.
             rejected=app.state.research.executor.run('cablesim.standard-check','dimensions',cases)

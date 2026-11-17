@@ -68,25 +68,9 @@ def plan(checker, row):
     if key in ('armour-material','armour-tape-measured','armour-tape-count','armour-tape-gap') and item.get('form') != 'tape': return None
     if key=='screen-area' and item.get('form')=='tape' and checker.materials.get(item.get('material'),{}).get('standard_kind') in ('copper_bare','copper_coated'):
         mapped[key]=('10.2.3','screen_nominal_area_requirement',{'screen_kind':'copper_tape'})
-    if key=='armour-separation':
-        spec=field(checker,row,'longitudinal_water_barrier','金属层间纵向阻水隔层',kind='boolean')
-        water=read(checker,spec)
-        row['engineering_inputs']=[spec]
-        if water is None:
-            row['basis_missing_fields'].append(spec)
-        common=checker.cable['common_layers']
-        metals=[l for c in checker.cable['cores'] for l in c['layers'] if l['role']=='metallic_screen']+[l for l in common if l['role']=='metallic_sheath']
-        armour_kind=checker.materials.get(item.get('material'),{}).get('standard_kind')
-        kinds=[checker.materials.get(l.get('material'),{}).get('standard_kind') for l in metals]
-        if not armour_kind or armour_kind=='other' or not kinds or any(not k or k=='other' for k in kinds):
-            spec={'field':'/materials/'+item.get('material','').replace('/','~1')+'/standard_kind','label':'铠装及相邻金属材料标准类别','type':'material'}
-            row['basis_missing_fields'].append(spec)
-            return None
-        # Compare elemental identities; bare and coated copper are both copper.
-        elemental=lambda k:'copper' if k.startswith('copper_') else 'steel' if k.startswith('steel_') else k
-        relation='same' if all(elemental(k)==elemental(armour_kind) for k in kinds) else 'different'
-        mapped[key]=('13.3.3','separation_sheath_application',{'metal_layer_relation':relation,
-            'longitudinal_water_barrier':water,'lead_sheath_present':'lead' in kinds})
+    if key in ('armour-separation', 'armour-separation-relation'):
+        from .separation import plan as separation_plan
+        return separation_plan(checker, row)
     if key not in mapped: return None
     locator,quantity,conditions=mapped[key]
     return {'schema_version':'cablesim.standards-query/1','standard':'GB/T 12706.2','edition':'2020',
@@ -167,23 +151,20 @@ def execute(checker, row, record):
         verdict('missing','需工程输入与短路容量依据；'+('待补：'+'、'.join(missing)+'。' if missing else '工程输入已记录，须按独立短路容量结果完成校核。')+'标准未规定固定截面，不据此判为通过。')
     elif quantity=='armour_inner_covering_rule':
         if value!='required_conforming_8.2': raise ValueError('当前内衬适用分支未实现。')
-        bedding=next((l for l in checker.cable['common_layers'] if l['role']=='bedding'),None)
+        from .separation import replacement, structure
+        context=structure(checker)
+        bedding=(context['common'][context['bedding']] if context['bedding'] is not None
+                 and context['armour_index'] is not None and context['bedding']<context['armour_index'] else None)
         dependencies=[r for r in checker.rows if r['target'].get('role')=='bedding' and r['id'].rsplit(':',1)[-1] in ('bedding-nominal','bedding-minimum','bedding-filled')]
         row.update(limit=None,rule_requirement='内衬须符合 8.2',actual=None,comparison=None)
+        if not bedding and replacement(checker,row): return True
         if not bedding: verdict('missing','缺字段：铠装下内衬；如拟用挤包隔离套替代，须按 13.3.3 独立核对。')
         elif not dependencies or any(r['verdict']!='passed' for r in dependencies):
             verdict('failed' if any(r['verdict']=='failed' for r in dependencies) else 'missing','内衬已声明；其标称厚度、最薄点和适用构造仍须全部核对。')
         else: verdict('passed');row['rule_actual']='内衬尺寸已满足已核验判据'
-    elif quantity=='separation_sheath_application':
-        row.update(limit=None,comparison=None,actual=None,rule_requirement='按金属层、阻水层及铅套条件核对隔离套')
-        if value!='extruded_required':
-            verdict('uncovered','依据已核验；当前隔离套适用分支尚未实现，保留本项。');return True
-        separating=next((l for l in checker.cable['common_layers'] if l['role'] in ('bedding','separator') and l.get('form')=='smooth'),None)
-        # Bedding dimensions remain checked separately; do not infer compound properties.
-        spec=field(checker,row,'separator_compound_confirmed','隔离层材料已确认符合隔离套要求',kind='boolean')
-        confirmed=read(checker,spec);row['engineering_inputs']=[*row.get('engineering_inputs',[]),spec]
-        verdict('missing' if not separating or confirmed is None else 'passed' if confirmed else 'failed',
-                '缺字段：声明金属层间挤包隔离层及其材料符合性；不把任意内衬自动等同隔离套。' if not separating or confirmed is None else None)
+    elif quantity in ('separation_sheath_application','separation_sheath_water_barrier_exception'):
+        from .separation import execute as separation_execute
+        separation_execute(checker,row,record)
     else: return False
     return True
 

@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.8.3",
+      "method_version": "1.8.4",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,7 +227,7 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.8.3",
+      "method_version": "1.8.4",
       "analysis": "geometry_proposal",
       "solver": "local",
       "input_schema": "cablesim.cable-design-request/2",
@@ -759,8 +759,8 @@
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "4210047aa8b5aea567d127b6fffbeee8009dac53e6beed650ad198990bbcb4d1",
-      "size_bytes": 15512
+      "sha256": "7f8f243e99533f88c2c64e248f0caf778f06a8ad9076686f427b10756865306b",
+      "size_bytes": 17248
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -784,18 +784,23 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "d1e4849a7ce4d73a84fb500296bb39ee1eaa8d24e361c80da857c1ad1cc139b3",
-      "size_bytes": 65157
+      "sha256": "4b7d100b111fb39c397b24a82eccc5c4be9bbbf8c3c4c08c08390b4aaba53532",
+      "size_bytes": 65477
     },
     {
       "path": "src/cablesim_standard_check/manufacturing.py",
-      "sha256": "825a02ce883b19a953d96a82e07aa8cd503f1ab1ba7360e48dd0fcd3d718aa88",
-      "size_bytes": 15742
+      "sha256": "23ec2778b3d167f1f403dd9dcf4c6d49b8de724334c1512bcc20963c4f6504a0",
+      "size_bytes": 13779
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",
       "sha256": "118b239d35cd5ebcd9d1d8206b4165c40d85a82acedf85e9dd5a204ecb9b2d71",
       "size_bytes": 16424
+    },
+    {
+      "path": "src/cablesim_standard_check/separation.py",
+      "sha256": "7e39ad615967c11b624de6bcac7a8780439b324e0a1855199ced7957a6cbb42a",
+      "size_bytes": 14673
     },
     {
       "path": "src/cablesim_standard_check/sources.json",

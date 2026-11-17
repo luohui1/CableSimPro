@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.8.3'
+VERSION = '1.8.4'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -802,8 +802,11 @@ class _Check:
             actual=int(bool(underlayer) and underlayer.get('form') in ('smooth','tape')),
             reason=None if underlayer else '铠装前须有内衬层；符合13.3.3的挤包隔离套可代替内衬层。')
         if self.family=='mv2':
-            self.row('armour-separation','金属层间挤包隔离套适用条件',lp+'.form',unit='1',
+            self.row('armour-separation','金属层间隔离套适用条件',lp+'.form',unit='1',
                 rule_key='armour-underlayer',reason='请明确金属层、纵向阻水及隔离层材料条件。')
+            if any(value['role']=='separator' for value, _ in common):
+                self.row('armour-separation-relation','隔离套与内衬的配置关系',lp+'.form',unit='1',
+                    rule_key='armour-underlayer',reason='隔离套可替代内衬或与其同时设置；须另行核对隔离套符合性。')
         declared = layer.get(form['field'])
         declared_mm = declared*1000 if declared is not None else None
         details = {'wires':self.armour_wires,'tape':self.armour_tapes}
