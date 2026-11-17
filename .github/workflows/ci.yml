@@ -159,6 +159,8 @@ jobs:
       - name: Walk type design at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
+        env:
+          WORKBENCH_PHASE: after
         run: npm run test:workbench-types 2>&1 | tee ../.data/workbench-walk/logs/types.log
       - name: Preserve the type walkthrough before continuing
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}

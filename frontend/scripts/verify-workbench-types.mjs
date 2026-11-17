@@ -14,6 +14,21 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   const layers = () => page.getByRole('table', { name: '型号分层', exact: true });
   const dirty = async () => await toolbar().locator('.command-state').count() > 0
     && (await toolbar().locator('.command-state').innerText()).includes('未保存');
+  let teachingSource;
+  async function teachingDesign() {
+    if (teachingSource) return teachingSource;
+    const candidates = (await api('/api/design/type-workspaces')).filter(item => item.name === 'YJV22-8.7/15 3×300');
+    for (const seed of candidates) {
+      const original = await workspace(seed.id);
+      // A previous viewport's independent copy retains the engineering model
+      // name. Resolve the actual seed identity, never that more-recent copy.
+      if (original.type_plan_source) continue;
+      const studies = await api(`/api/workspaces/${seed.id}/studies`);
+      if (!studies.some(item => item.definition.driver.kind === 'batch' && /教学/.test(item.definition.parameters?.source || ''))) continue;
+      teachingSource = { seed, original, studies }; return teachingSource;
+    }
+    return null;
+  }
 
   async function dismissDialog() {
     for (let count = 0; count < 3 && await page.getByRole('dialog').count(); count++) {
@@ -27,7 +42,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   async function attempt(label, action) {
     try { return await step(label, action); }
     catch (error) {
-      check(label, false, { error: error.message, state: await visibleText() });
+      check(label, false, { error: error.message, state: await visibleText() }, { fatal: false });
       await dismissDialog();
       return undefined;
     } finally { await recoverSavedDraft(label); }
@@ -37,22 +52,25 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     if (!await dirty()) return;
     const id = new URL(page.url()).pathname.split('/')[2];
     const saved = await workspace(id);
-    // Structure's existing Undo discards all unsaved input; analysis Undo only
-    // discards that method. Recovery must not carry a failed draft to a new step.
-    await module('结构 ·');
-    const undo = await command('撤销');
+    // Undo the active module's unsaved commands one at a time. Do not switch to
+    // structure and accidentally undo a saved domain version for a method draft.
     let restored = false;
-    if (undo && await undo.isEnabled()) {
+    for (let count = 0; count < 64 && await dirty(); count++) {
+      const undo = await command('撤销');
+      if (!undo || !await undo.isEnabled()) break;
+      const previous = await toolbar().locator('.command-state').innerText();
       await undo.click();
-      try { await expect.poll(dirty, { timeout: 10000 }).toBe(false); restored = true; }
-      catch { /* Keep the failed UI recovery in the report before reloading. */ }
+      try {
+        await expect.poll(async () => await dirty() ? toolbar().locator('.command-state').innerText() : '', { timeout: 10000 }).not.toBe(previous);
+      } catch { break; }
     }
+    restored = !await dirty();
     check(label + '之后可用撤销恢复已保存输入', restored, await visibleText());
     if (!restored) {
       const leave = dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss();
       page.on('dialog', leave);
       try { await page.reload(); } finally { page.off('dialog', leave); }
-      await expect(layers()).toBeVisible();
+      await expect(page.getByRole('navigation', { name: '型号浏览器', exact: true })).toBeVisible();
       await expect.poll(dirty).toBe(false);
     }
     const current = await workspace(id);
@@ -69,7 +87,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     return response.json();
   }
   async function field(label, value, scope = page) {
-    const input = scope.getByLabel(label, { exact: true });
+    // BuzzForm includes the visible required marker in the accessible name.
+    const input = scope.getByLabel(new RegExp('^(?:\\*\\s*)?' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'));
     await expect(input).toBeVisible();
     await input.fill(String(value));
     await input.press('Tab');
@@ -142,11 +161,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator(`[data-type-page="${resultPage}"]`)).not.toHaveAttribute('data-type-state', 'loading');
     const button = await command(label, true);
     if (!check(label + '可从当前页面启动', button && await button.isEnabled(), await visibleText())) return false;
-    const [response] = await Promise.all([
+    const [response] = await recordShortCircuitTransfer(label, () => Promise.all([
       page.waitForResponse(value => value.request().method() === 'GET'
         && /^\/api\/workspaces\/[^/]+\/studies\/[^/]+\/preflight$/.test(new URL(value.url()).pathname), { timeout: 90000 }),
       button.click(),
-    ]);
+    ]));
     expect(response.ok()).toBeTruthy();
     const preflight = await response.json();
     (report.preflights ||= []).push({ label, ...size, path: new URL(response.url()).pathname, payload: preflight });
@@ -170,6 +189,35 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator(`[data-type-page="${resultPage}"]`)).toHaveAttribute('data-type-state', 'success', { timeout: 180000 });
     check(label + '取得当前保存结果', true);
     return true;
+  }
+  async function recordShortCircuitTransfer(label, action) {
+    if (label !== '计算短路容量') return action();
+    const sequence = (report.shortCircuitTransfers ||= []).length + 1;
+    const prefix = `short-circuit-${size.width}-${tag}-${sequence}`;
+    const trace = { label, ...size, files: [] }, writes = [];
+    const onResponse = response => {
+      const endpoint = new URL(response.url()).pathname;
+      if (response.request().method() !== 'POST' || !/^\/api\/types\/[^/]+\/short-circuit-basis$/.test(endpoint)) return;
+      const file = prefix + '-prepare-response.json';
+      writes.push(response.text().then(raw => fs.writeFile(path.join(out, file), raw)));
+      trace.files.push({ kind: 'raw preparation response', path: endpoint, status: response.status(), file });
+    };
+    const onRequest = request => {
+      const endpoint = new URL(request.url()).pathname;
+      if (request.method() !== 'POST' || !/^\/api\/workspaces\/[^/]+\/studies$/.test(endpoint)) return;
+      const raw = request.postData();
+      if (!raw || JSON.parse(raw).method?.capability !== 'short-circuit') return;
+      const file = prefix + '-study-request.json';
+      writes.push(fs.writeFile(path.join(out, file), raw));
+      trace.files.push({ kind: 'actual UI study request', path: endpoint, file });
+    };
+    page.on('response', onResponse); page.on('request', onRequest);
+    try { return await action(); }
+    finally {
+      page.off('response', onResponse); page.off('request', onRequest);
+      await Promise.all(writes);
+      report.shortCircuitTransfers.push(trace);
+    }
   }
   async function generateSpecification(id, label, suffix, expectedIncomplete = false) {
     await module('规格书');
@@ -325,6 +373,111 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     return create(dialog, 'standard');
   });
 
+  await attempt('04b-批量建立方案下载审核稿并核对真实门禁', async () => {
+    if (!check('批量走查具有两个独立的真实创建对象', Boolean(library && standard))) return;
+    const sources = await Promise.all([workspace(library.id), workspace(standard.id)]);
+    await page.goto(base + '/types?theme=light');
+    await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
+    const preview = page.getByRole('button', { name: '预览批量操作', exact: true });
+    await expect(preview).toBeDisabled();
+    check('未选择型号时批量入口说明开始方式', (await visibleText()).includes('先勾选列表中的型号，再预览操作。'));
+    const sourceRow = id => page.locator(`[id="row-型号-${id}"]`);
+    const first = sourceRow(sources[0].id).getByRole('checkbox');
+    await first.focus(); await page.keyboard.press('Space'); await expect(first).toBeChecked();
+    await sourceRow(sources[1].id).getByRole('checkbox').check();
+    await choose('批量操作', '建立方案'); await preview.click();
+    let dialog = page.locator('.type-batch-dialog');
+    await expect(page.getByRole('dialog', { name: '建立方案 · 操作预览', exact: true })).toBeVisible();
+    await expect(dialog.locator('[data-batch-state="ready"]')).toHaveCount(2);
+    const requested = sources.map((source, index) => ({ source, name: name('批量方案' + (index + 1)) }));
+    for (const entry of requested) {
+      const input = dialog.locator(`[data-batch-workspace="${entry.source.id}"]`).getByRole('textbox', { name: /^新方案名称：/ });
+      await input.fill(entry.name); await input.press('Tab');
+    }
+    const acknowledge = () => dialog.getByRole('checkbox', { name: '已核对所选对象与操作内容，同意执行勾选项。', exact: true });
+    const confirm = dialog.getByRole('button', { name: '确认建立方案（2 项）', exact: true });
+    await expect(confirm).toBeDisabled(); await acknowledge().check();
+    await capture('批量方案-真实对象与新方案名确认');
+    const responses = await Promise.all([
+      ...requested.map(entry => page.waitForResponse(response => response.request().method() === 'POST'
+        && new URL(response.url()).pathname === `/api/types/${entry.source.id}/plans`, { timeout: 180000 })),
+      confirm.click(),
+    ]);
+    const copies = [];
+    for (let index = 0; index < requested.length; index++) {
+      expect(responses[index].ok()).toBeTruthy();
+      const result = await responses[index].json(), copied = await workspace(result.workspace_id), original = await workspace(requested[index].source.id);
+      check('批量方案' + (index + 1) + '真实建立且保留原型号', copied.id !== original.id
+        && copied.type_lifecycle?.name === requested[index].name && copied.type_lifecycle?.status === 'draft'
+        && JSON.stringify(copied.domain) === JSON.stringify(requested[index].source.domain)
+        && original.revision === requested[index].source.revision && JSON.stringify(original.domain) === JSON.stringify(requested[index].source.domain), { source: original.id, copy: copied.id, lifecycle: copied.type_lifecycle });
+      copies.push(copied);
+    }
+    await expect(dialog.locator('[data-batch-state="success"]')).toHaveCount(2);
+    await capture('批量方案-两项真实执行结果');
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await page.reload();
+    for (const copied of copies) {
+      await field('查找型号', copied.type_lifecycle.name);
+      await expect(sourceRow(copied.id)).toContainText('方案：' + copied.type_lifecycle.name);
+      await expect(sourceRow(copied.id).getByRole('button', { name: copied.domain.name, exact: true })).toBeVisible();
+    }
+    check('列表重载后可按实际方案名查找并区分对象', true);
+    await capture('批量方案-重载后按真实方案名查找');
+    await field('查找型号', '');
+    for (const copied of copies) await sourceRow(copied.id).getByRole('checkbox').check();
+    await choose('批量操作', '下载规格书'); await choose('批量文档版本', '内部审核版'); await preview.click();
+    dialog = page.locator('.type-batch-dialog');
+    await expect(dialog.locator('[data-batch-state="ready"]')).toHaveCount(2);
+    await acknowledge().check();
+    const downloads = [], onDownload = download => downloads.push(download);
+    page.on('download', onDownload);
+    try {
+      await dialog.getByRole('button', { name: '确认下载规格书（2 项）', exact: true }).click();
+      await expect(dialog.locator('[data-batch-state="success"]')).toHaveCount(2, { timeout: 180000 });
+      await expect.poll(() => downloads.length, { timeout: 60000 }).toBe(2);
+      for (let index = 0; index < downloads.length; index++) {
+        const filename = path.join(out, `types-${size.width}-${tag}-batch-internal-${index + 1}.pdf`);
+        await downloads[index].saveAs(filename);
+        const bytes = await fs.readFile(filename);
+        check('批量内部审核稿' + (index + 1) + '实际下载有效PDF', bytes.subarray(0, 5).toString() === '%PDF-', { file: path.basename(filename), bytes: bytes.length });
+      }
+    } finally { page.off('download', onDownload); }
+    await capture('批量下载-两份内部审核PDF与逐项结果');
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click(); await expect(dialog).toBeHidden();
+    await choose('批量操作', '生成规格书'); await choose('批量文档版本', '客户版'); await preview.click();
+    await expect(dialog.locator('[data-batch-state="ready"]')).toHaveCount(2);
+    await expect(dialog.locator('.type-batch-scope')).toHaveCount(2);
+    for (const scope of await dialog.locator('.type-batch-scope').all()) {
+      await expect(scope).toHaveAttribute('open', '');
+      for (const channel of ['结构与用料', '电气参数', '载流量表', '短路容量', '标准核对']) await expect(scope).toContainText(channel);
+    }
+    await dialog.getByRole('checkbox', { name: '已核对各型号的补算范围与保存条件，同意预检通过后计算。', exact: true }).check();
+    await capture('批量生成-明确核对五通道补算范围');
+    const generated = await Promise.all([
+      ...copies.map(copied => page.waitForResponse(response => response.request().method() === 'POST'
+        && new URL(response.url()).pathname === `/api/types/${copied.id}/specification/generate`, { timeout: 360000 })),
+      dialog.getByRole('button', { name: '确认生成规格书（2 项）', exact: true }).click(),
+    ]);
+    for (let index = 0; index < copies.length; index++) {
+      expect(generated[index].ok()).toBeTruthy();
+      const result = await generated[index].json();
+      check('批量缺项对象' + (index + 1) + '仅因真实用料缺项停止', result.status === 'blocked' && result.channel === 'geometry'
+        && result.details === '结构外径或用料缺少完整输入。', result);
+    }
+    await expect(dialog.locator('[data-batch-state="failed"]')).toHaveCount(2);
+    check('批量生成逐项显示真实拒绝并保留修正入口', await dialog.getByRole('button', { name: '查看相关输入', exact: true }).count() === 2);
+    await capture('批量生成-保留两项真实用料缺项与定位入口');
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click(); await expect(dialog).toBeHidden();
+    await choose('批量操作', '提交审核'); await preview.click();
+    await expect(dialog.locator('[data-batch-state="blocked"]')).toHaveCount(2);
+    check('批量审核保留人工采纳门禁并说明每项原因', await dialog.getByText('请先在方案对比中采纳为新版本草稿。', { exact: true }).count() === 2
+      && await dialog.getByRole('button', { name: '确认提交审核', exact: true }).isDisabled());
+    await capture('批量审核-未采纳草稿的真实门禁与修正入口');
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click(); await expect(dialog).toBeHidden();
+  });
+
   const main = library || standard;
   if (!check('至少一个真实起点进入后续型号设计', Boolean(main), '型号库引用与标准提案均未建立草稿')) return;
   await page.goto(base + `/types/${main.id}/structure/section?theme=light`);
@@ -342,7 +495,19 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(toolbar().locator('.command-state')).toContainText('未保存');
     check('编辑时不隐式写入保存版本', (await workspace(main.id)).revision === before.revision);
     await capture('结构编辑-未保存的尺寸');
-    check('待保存区域给出修改数量', /(?:\d+\s*项.*(?:待保存|修改)|(?:修改|待保存).*\d+\s*项)/.test(await visibleText()), await visibleText());
+    check('单个尺寸和其来源合并为一处未保存', /^1 处未保存$/.test(await toolbar().locator('.command-state').innerText()), await visibleText());
+    const problem = page.locator('[data-geometry-problem]').filter({ visible: true }).first();
+    const located = check('几何重叠以中文说明并提供真实位置入口', await problem.isVisible()
+      && /芯\s*2/.test(await problem.innerText()) && await problem.getByRole('button', { name: /^定位芯\s*2位置$/ }).isVisible(), await visibleText());
+    if (located) {
+      await problem.getByRole('button', { name: /^定位芯\s*2位置$/ }).click();
+      await expect(page).toHaveURL(/\/structure\/table.*field=/);
+      const target = new URL(page.url()).searchParams.get('field');
+      await expect.poll(() => page.locator(':focus').evaluate(element => element.closest('[data-field-path]')?.getAttribute('data-field-path'))).toBe(target);
+      const focused = await page.locator(':focus').evaluate(element => element.closest('[data-field-path]')?.getAttribute('data-field-path'));
+      check('几何错误定位到对应芯位置输入', /\/cores\/[^/]+\/x$/.test(target || '') && focused === target, { target, focused });
+      await capture('结构编辑-中文错误定位真实芯位置');
+    }
     // Blur the editor: Ctrl+Z must undo a design command, not an input's text.
     await page.getByRole('navigation', { name: '型号浏览器', exact: true }).click({ position: { x: 12, y: 12 } });
     await page.keyboard.press('Control+z');
@@ -379,6 +544,23 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const changed = Math.max(Number(original) - 0.1, Number(original) * 0.9).toFixed(3);
     await input.fill(changed);
     await input.press('Tab');
+    const second = layers().getByRole('textbox', { name: '绝缘厚度', exact: true }).nth(1);
+    let secondOriginal, secondChanged;
+    if (before.domain.cable_types[0].cores.length > 1) {
+      secondOriginal = await second.inputValue();
+      secondChanged = Math.max(Number(secondOriginal) - 0.1, Number(secondOriginal) * 0.9).toFixed(3);
+      await second.fill(secondChanged); await second.press('Tab');
+      check('两处尺寸编辑准确显示两处未保存', (await toolbar().locator('.command-state').innerText()) === '2 处未保存', await visibleText());
+      await page.getByRole('navigation', { name: '型号浏览器', exact: true }).click({ position: { x: 12, y: 12 } });
+      await page.keyboard.press('Control+z');
+      await expect(second).toHaveValue(secondOriginal);
+      await expect.poll(async () => Number(await input.inputValue())).toBe(Number(changed));
+      check('逐步撤销只恢复最后一处尺寸', (await toolbar().locator('.command-state').innerText()) === '1 处未保存');
+      await page.keyboard.press('Control+Shift+z');
+      await expect.poll(async () => Number(await second.inputValue())).toBe(Number(secondChanged));
+      check('键盘重做恢复刚撤销的尺寸', (await toolbar().locator('.command-state').innerText()) === '2 处未保存');
+      await capture('结构编辑-两处修改逐步撤销并重做');
+    }
     await save(main.id);
     await expect.poll(async () => (await workspace(main.id)).revision).toBeGreaterThan(before.revision);
     await capture('结构编辑-合法尺寸已保存');
@@ -388,6 +570,15 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(input).toHaveValue(original);
     await expect.poll(async () => (await workspace(main.id)).domain).toEqual(before.domain);
     check('尺寸可保存且撤销保留原工程输入与来源', true);
+    const redo = await command('重做');
+    await expect(redo).toBeEnabled(); await redo.click();
+    await expect.poll(async () => Number(await input.inputValue())).toBe(Number(changed));
+    if (secondOriginal !== undefined) await expect.poll(async () => Number(await second.inputValue())).toBe(Number(secondChanged));
+    check('已保存型号版本也可通过真实服务重做', (await workspace(main.id)).revision > before.revision);
+    await capture('结构编辑-保存版本重做');
+    await (await command('撤销')).click();
+    await expect.poll(async () => (await workspace(main.id)).domain).toEqual(before.domain);
+    await expect(input).toHaveValue(original);
   });
 
   await attempt('06-添加结构层并查找删除入口', async () => {
@@ -416,6 +607,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       const confirm = page.getByRole('dialog').getByRole('button', { name: /确认删除|删除/, exact: false });
       if (await confirm.isVisible()) await confirm.click();
       await expect(added).toHaveCount(0);
+      await (await command('撤销')).click();
+      await expect(added).toHaveCount(1);
+      const redo = await command('重做');
+      await expect(redo).toBeEnabled(); await redo.click();
+      await expect(added).toHaveCount(0);
+      check('删除结构层可撤销重做且恢复后没有虚假修改', !await dirty(), await visibleText());
+      await capture('结构编辑-删除层撤销重做后恢复原结构');
     } else {
       const undo = await command('撤销');
       if (undo && await undo.isEnabled()) await undo.click();
@@ -506,10 +704,23 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await page.getByRole('tab', { name: '方法参数', exact: true }).click();
     await expect(page.locator('.parameter-form .buzzform-contract')).toBeVisible();
     await advanced(page.locator('.parameter-form'));
-    for (const [label, value] of [['集肤效应系数', '1'], ['邻近效应系数', '1'], ['初始护套温度', '70']]) await field(label, value);
+    const teaching = await teachingDesign();
+    expect(teaching, '方法条件须能追溯到发布种子的教学型号').toBeTruthy();
+    const teachingSeed = teaching.seed;
+    const parameters = teaching.studies.find(item => item.definition.driver.kind === 'batch'
+      && /教学/.test(item.definition.parameters?.source || ''))?.definition.parameters;
+    expect(parameters?.duct, '教学种子须提供合同要求的管内换热条件').toBeTruthy();
+    for (const [label, value] of [['集肤效应系数', parameters.ks], ['邻近效应系数', parameters.kp],
+      ['护套迭代初温', Number((parameters.solver.initial_sheath_temperature_k - 273.15).toPrecision(12))],
+      ['最大迭代次数', parameters.solver.max_iterations], ['电流容差', parameters.solver.current_tolerance_a],
+      ['排管系数 u', parameters.duct.u], ['管内热阻直径系数', parameters.duct.v_per_m],
+      ['管内热阻温径系数', parameters.duct.y_per_m_k],
+      ['管内平均空气初温', Number((parameters.duct.initial_mean_air_temperature_k - 273.15).toPrecision(12))]]) await field(label, value);
     await choose('外部热阻形式', '精确形式');
     await choose('涡流损耗处理', '忽略');
-    await field('来源', 'T1 隔离走查明示教学条件：ks=kp=1，精确外部热阻，忽略涡流，初始护套温度70°C；不是厂家默认值、现场测量或批准数据。');
+    await choose('参考依据', 'IEC 2023 依据');
+    await field('来源', `T1 隔离走查：复用发布教学型号 ${teachingSeed.name} 已保存的方法参数（${parameters.source}）；直埋工况未启用排管分支，管内参数仅按方法合同保留，非现场测量或批准数据。`);
+    (report.ratingSources ||= []).push({ ...size, copy: main.id, source: teachingSeed.id, parameters });
     await save(main.id);
     const ratingStudy = (await api(`/api/workspaces/${main.id}/studies`))
       .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];
@@ -575,8 +786,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       source: main.id, originalRevision: original.revision, savedRevision: source.revision,
       branch: branch.workspace_id, lifecycle: branched.type_lifecycle,
     });
-    check('独立改版的型号名可与原型号区分', branched.domain.name === name('改版'), {
-      requested: name('改版'), saved: branched.domain.name, original: original.domain.name,
+    check('独立改版在详情中以真实方案名区分', branched.type_lifecycle?.name === name('改版')
+      && (await page.locator('.topbar h1').innerText()).includes(name('改版')), {
+      requested: name('改版'), plan: branched.type_lifecycle?.name, model: branched.domain.name, original: original.domain.name,
     });
     const input = layers().getByRole('textbox', { name: '绝缘厚度', exact: true }).first();
     const originalValue = Number(await input.inputValue());
@@ -603,11 +815,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   // Read the release demo's saved teaching conditions, then enter them through
   // real forms in an independent plan. No evidence or approval is fabricated.
   const delivery = await attempt('13-打开来源完整的教学型号并建立独立交付方案', async () => {
-    const candidates = await api('/api/design/type-workspaces');
-    const seed = candidates.find(item => item.name === 'YJV22-8.7/15 3×300');
-    if (!check('发布种子提供独立的三芯教学型号', Boolean(seed), candidates.map(item => item.name))) return null;
-    const original = await workspace(seed.id);
-    const studies = await api(`/api/workspaces/${seed.id}/studies`);
+    const teaching = await teachingDesign();
+    if (!check('发布种子提供独立的三芯教学型号', Boolean(teaching), '按真实型号名、非方案副本及已保存教学条件定位原始种子')) return null;
+    const { seed, original, studies } = teaching;
     const conditions = parameters => parameters && Object.fromEntries(Object.entries(parameters)
       .filter(([key]) => !['basis_references', 'cable_type_id', 'circuit_id'].includes(key)));
     const electrical = conditions(studies.find(item => item.definition.parameters?.temperature_k
@@ -626,7 +836,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await page.goto(base + '/types?theme=light');
     await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
     await field('查找型号', seed.name);
-    await page.getByRole('table', { name: '型号', exact: true }).getByRole('button', { name: seed.name, exact: true }).click();
+    await page.locator(`[id="row-型号-${seed.id}"]`).getByRole('button', { name: seed.name, exact: true }).click();
     await expect(layers()).toBeVisible();
     await capture('教学交付-已保存的来源完整型号');
     await module('方案对比');
@@ -637,16 +847,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const branch = await responseFor('POST', `/api/types/${seed.id}/plans`, () => dialog.getByRole('button', { name: '建立方案', exact: true }).click());
     await expect(page).toHaveURL(new RegExp('/types/' + branch.workspace_id + '/structure/section'));
     await expect(layers()).toBeVisible();
-    // Rename through the existing editor, independently of the plan-name defect
-    // recorded in step 12; retain the source's proven geometry for calculation.
-    await page.getByRole('button', { name: '修改型号名称', exact: true }).click();
-    const rename = page.getByRole('dialog', { name: '修改型号名称', exact: true });
-    await field('新的型号名称', title, rename);
-    await rename.getByRole('button', { name: '确认', exact: true }).click();
-    await expect(rename).toBeHidden();
-    await save(branch.workspace_id);
+    // The plan name distinguishes this copy; preserve its engineering model
+    // identity, geometry and source facts for the genuine calculation workflow.
     const copied = await workspace(branch.workspace_id), source = await workspace(seed.id);
-    check('教学交付副本独立保存且保留源型号和来源', branch.workspace_id !== seed.id && copied.domain.name === title
+    check('教学交付副本独立保存且保留源型号和来源', branch.workspace_id !== seed.id && copied.type_lifecycle?.name === title
+      && (await page.locator('.topbar h1').innerText()).includes(title) && copied.domain.name === original.domain.name
       && JSON.stringify(copied.domain.cable_types) === JSON.stringify(original.domain.cable_types)
       && JSON.stringify(copied.domain.materials) === JSON.stringify(original.domain.materials)
       && source.revision === original.revision && JSON.stringify(source.domain) === JSON.stringify(original.domain), {
@@ -732,8 +937,10 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator('.parameter-form .buzzform-contract')).toBeVisible();
     await advanced(page.locator('.parameter-form'));
     for (const [label, value] of [['集肤效应系数', parameters.ks], ['邻近效应系数', parameters.kp],
-      ['初始护套温度', celsius(parameters.solver.initial_sheath_temperature_k)], ['最大迭代次数', parameters.solver.max_iterations],
-      ['电流容差', parameters.solver.current_tolerance_a]]) await field(label, value);
+      ['护套迭代初温', celsius(parameters.solver.initial_sheath_temperature_k)], ['最大迭代次数', parameters.solver.max_iterations],
+      ['电流容差', parameters.solver.current_tolerance_a], ['排管系数 u', parameters.duct.u],
+      ['管内热阻直径系数', parameters.duct.v_per_m], ['管内热阻温径系数', parameters.duct.y_per_m_k],
+      ['管内平均空气初温', celsius(parameters.duct.initial_mean_air_temperature_k)]]) await field(label, value);
     expect(parameters.t4_form).toBe('exact'); expect(parameters.eddy).toBe('ignored'); expect(parameters.reference_basis).toBe('iec2023');
     await choose('外部热阻形式', '精确形式'); await choose('涡流损耗处理', '忽略'); await choose('参考依据', 'IEC 2023 依据');
     await field('来源', parameters.source);

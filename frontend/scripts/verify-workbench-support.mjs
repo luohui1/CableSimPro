@@ -54,9 +54,9 @@ export async function walkthrough(name, scenario) {
     await save();
     return entry;
   }
-  function check(label, passed, details = '') {
+  function check(label, passed, details = '', options = {}) {
     report.checks.push({ label, ...currentSize, passed: Boolean(passed), details, url: page.url() });
-    if (!passed && phase === 'after') assert.fail(label + ': ' + (typeof details === 'string' ? details : JSON.stringify(details)));
+    if (!passed && phase === 'after' && options.fatal !== false) assert.fail(label + ': ' + (typeof details === 'string' ? details : JSON.stringify(details)));
     return Boolean(passed);
   }
   async function step(label, action) {
