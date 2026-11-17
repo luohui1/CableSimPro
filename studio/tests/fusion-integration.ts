@@ -175,7 +175,7 @@ test('modify a saved condition, recompute and compare real runs without replacin
   const section = workspace.domain.sections[0];
   const escape = (value: string) => value.replace(/~/g, '~0').replace(/\//g, '~1');
   const path = `/sections/${escape(section.id)}/medium/surface_temperature`;
-  const state = installConditionWorkflow(faux, { workspace: fixture.workspace, study: workflow.study!, run: workflow.run!, path, value: 26, unit: '°C' });
+  const state = installConditionWorkflow(faux, { workspace: fixture.workspace, study: workflow.study!, run: workflow.run!, path, value: 26 });
   const { session } = await sidecar.agent.send(studyConversation, '把地表温度改为26 °C，重算并与刚才那次比较',
     { workspace_id: fixture.workspace, study_id: fixture.study, label: '当前研究详情' });
   const view = await acceptEach(session);

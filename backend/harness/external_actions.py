@@ -139,7 +139,7 @@ class ExternalActions:
         action = deepcopy(args)
         checks = ['只有人在对话中接受后才执行；接受时重新核对保存修订与来源。',
                   '接受该操作不等于工程结果核准或型号发布。']
-        changes = []
+        changes, assumptions = [], []
         title = tools()[name].title.removeprefix('提出')
         def change(label, after, unit=None, before=None, path=''):
             changes.append({'path': path, 'label': label, 'before': before, 'after': after, 'unit': unit})
@@ -191,7 +191,7 @@ class ExternalActions:
             checks.extend(['接受后先执行原后端预检；缺项或范围不通过时停止。',
                            '保存一次不可变运行，保留输入、方法版本及失败诊断；不修改工程输入。'])
             for limit in getattr(capability, 'limitations', []) or []:
-                if isinstance(limit, str): checks.append(limit)
+                if isinstance(limit, str): assumptions.append(limit)
         elif name == 'propose_delivery':
             runs = self.research.verified_runs(task['workspace_id'], args['run_ids'])
             if any(run['status'] != 'succeeded' or run['freshness'] != 'current' for run in runs):
@@ -251,7 +251,8 @@ class ExternalActions:
         proposal = {'id': pid, 'kind': 'external_action', 'action': name,
             'arguments': action, 'workspace_revision': task['workspace_revision'], 'expires': time() + 3600,
             'public': {'id': pid, 'kind': 'external_action', 'action': name, 'title': title,
-                       'base_revision': task['workspace_revision'], 'changes': changes, 'checks': checks}}
+                       'base_revision': task['workspace_revision'], 'changes': changes, 'checks': checks,
+                       'assumptions': assumptions}}
         self.proposals.persist(task, proposal)
         return ToolResult(status='ok', summary='待审方案已生成；接受前没有执行业务写入。', data={'proposal': proposal['public']},
             next_actions=['等待人在对话中接受或拒绝；接受后根据真实回执继续下一步。'])
@@ -285,10 +286,13 @@ class ExternalActions:
             # The human accepted an intent, not a guarantee of execution. Record
             # deterministic refusal durably so reconnect/retry cannot leave an
             # ambiguous pending card or repeatedly attempt a stale operation.
+            details = {}
             if isinstance(error, HTTPException):
                 detail = error.detail
                 code = detail.get('code', 'ACTION_REJECTED') if isinstance(detail, dict) else 'ACTION_REJECTED'
                 message = detail.get('message', str(detail)) if isinstance(detail, dict) else str(detail)
+                if isinstance(detail, dict):
+                    details = {key: detail[key] for key in ('path', 'issues', 'diagnostics', 'workbench_path', 'next_actions', 'input_digest') if key in detail}
             elif isinstance(error, PluginHostError):
                 code, message = error.code, error.message
             else:
@@ -302,8 +306,10 @@ class ExternalActions:
             receipt = self.recover(task, proposal)
             recorded_decision = 'approved' if receipt is not None else decision
             if receipt is None:
-                receipt = {'status': 'failed', 'executed': False, 'error': {'code': code, 'message': redact(message)},
+                receipt = {'status': 'failed', 'executed': False, 'error': redact({'code': code, 'message': message, **details}),
                            'workspace_id': task['workspace_id']}
+                if proposal['action'] == 'propose_study_run':
+                    receipt['study_id'] = proposal['arguments']['study_id']
             with self.store.db(True) as db:
                 return self.complete(task, proposal, recorded_decision, marker, receipt, db)
 
@@ -396,9 +402,8 @@ class ExternalActions:
                 fail('PROPOSAL_STALE', '研究配置在审阅期间已变化；未运行。', status=409)
             checked = self.research.preflight(wid, saved['id'], task['workspace_revision'], saved['revision'], args.get('module'))
             if not checked['ready'] or checked.get('partial'):
-                failures = [(case.get('error') or {}).get('message') for case in checked['cases'] if case['status'] != 'succeeded']
-                details = '；'.join(str(message) for message in failures if message)
-                fail('MISSING_INPUT', '研究预检未通过：' + details if details else '研究预检未通过；请补齐必需输入后重试。')
+                from .external_preflight import refusal
+                raise HTTPException(422, refusal(self.research, wid, saved, selected, checked))
             run = self.research.execute(wid, saved['id'], RunStudy(request_id=UUID(pid),
                 expected_revision=task['workspace_revision'], expected_study_revision=saved['revision'],
                 lock_digest=checked['lock_digest'], scope_acknowledged=True, module=args.get('module')), checked_preflight=checked)

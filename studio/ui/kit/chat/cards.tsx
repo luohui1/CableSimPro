@@ -176,6 +176,7 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
   busy?: boolean;
 }) {
   const list = <ChangeList changes={changes} />;
+  const effects = consequence && <div className="flex items-start gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name="status/warning" className="mt-1 text-attention" /><div className="min-w-0 flex-1">{consequence}</div></div>;
   if (phase === 'accepted' || phase === 'rejected') {
     const accepted = phase === 'accepted';
     return <Collapsible className="rounded-card border border-line bg-surface" data-card="proposal" data-phase={phase}>
@@ -189,7 +190,7 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
         <Icon name="action/chevron-right" className="text-ink-2 transition-transform duration-std group-data-panel-open:rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
-        <div className="border-t border-line px-4 py-3">{list}</div>
+        <div className="flex flex-col gap-3 border-t border-line px-4 py-3">{list}{effects}</div>
       </CollapsibleContent>
     </Collapsible>;
   }
@@ -200,7 +201,7 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
     </header>
     <div className="flex flex-col gap-3 px-4 pt-3 pb-4">
       {list}
-      {consequence && <div className="flex items-start gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name="status/warning" className="mt-1 text-attention" /><div className="min-w-0">{consequence}</div></div>}
+      {effects}
     </div>
     <footer className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
       {phase === 'pending'

@@ -209,7 +209,7 @@ async function shot(page: Page, frame: Frame | undefined, name: string, detail: 
   const visible = clean(text, 'browser/dom');
   assert.ok(!secrets.some(secret => text.includes(secret)), '页面包含凭据，已停止保存截图；只记录泄漏位置，不保存凭据值。');
   await page.screenshot({ path: join(out, filename), fullPage: false });
-  screenshots.push({ file: filename, state: name, viewport: page.viewportSize(), url: page.url(), frame: frame?.url(), layout, visibleText: visible, ...detail });
+  screenshots.push({ ...detail, file: filename, state: name, viewport: page.viewportSize(), url: page.url(), frame: frame?.url(), layout, visibleText: visible });
   record(`${filename}/layout`, layout.length === 0, layout);
 }
 
@@ -321,7 +321,28 @@ try {
       await pending(frame);
       const runsBefore = await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${flow.study}/runs`);
       record(`${viewport.width}/unapproved-run-does-not-write`, runsBefore.items.length === 0, { createdStudy: flow.study, runs: runsBefore.items.length });
-      await frame.locator('[data-card="proposal"][data-phase="pending"]').last().scrollIntoViewIfNeeded();
+      const runProposal = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
+      const assumptions = await frame.evaluate(async () => {
+        const session = decodeURIComponent(location.hash.split('/')[2]);
+        const response = await fetch('/agent-sidecar/api/chat/sessions/' + encodeURIComponent(session));
+        return (await response.json()).waiting.at(-1)?.assumptions ?? [];
+      }) as string[];
+      const disclosure = runProposal.getByRole('button', { name: /^方法适用范围与限制/ });
+      assert.ok(assumptions.length > 0, '运行提案必须保留真实方法的适用范围');
+      assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+      await disclosure.click();
+      await until(async () => { const text = await runProposal.innerText(); return assumptions.every(limit => text.includes(limit)); }, '展开完整方法适用范围');
+      await disclosure.click();
+      await until(async () => {
+        await runProposal.scrollIntoViewIfNeeded();
+        return runProposal.evaluate(element => {
+          const input = document.querySelector('textarea[aria-label="给 Agent 的消息"]');
+          const bottom = (input?.closest('form') ?? input)?.getBoundingClientRect().top ?? innerHeight;
+          const decisions = [...element.querySelectorAll('button')].filter(button => ['接受', '拒绝'].includes(button.textContent!.trim()));
+          return decisions.length === 2 && decisions.every(button => { const box = button.getBoundingClientRect(); return box.top >= 0 && box.bottom <= bottom; });
+        });
+      }, '待审操作按钮在输入框上方完整可见');
+      record(`${viewport.width}/review-limitations-and-actions`, true, { fullLimitations: assumptions.length, initiallyCollapsed: true, allTextPreserved: true, actionsVisible: true });
       await shot(page, frame, 'accepted-continues', { createdStudy: flow.study, pendingRun: true });
       await accept(frame);
       await until(() => Boolean(flow.run) || Boolean(flow.failure), '真实计算后继续', 90_000);
@@ -354,7 +375,7 @@ try {
       const downloaded = await downloadEvent;
       record(`${viewport.width}/report-download`, await downloaded.failure() === null, { url: downloaded.url(), filename: downloaded.suggestedFilename() });
       await fileCard.scrollIntoViewIfNeeded();
-      await shot(page, frame, 'saved-report', { run: flow.run, file: flow.file });
+      await shot(page, frame, 'saved-report', { run: flow.run, download: flow.file });
 
       stage = 'rejection';
       await newChat(frame);
@@ -379,8 +400,9 @@ try {
       await waitFlow(missingFlow, '缺数据拒算');
       await frame.locator('[data-card="refusal"]').waitFor();
       const refusedRuns = await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${missing.id}/runs`);
-      record(`${viewport.width}/missing-data-refuses`, refusedRuns.items.length === 0, { study: missing.id, runCount: refusedRuns.items.length,
-        reason: await frame.locator('[data-card="refusal"]').innerText() });
+      const missingReason = await frame.locator('[data-card="refusal"]').innerText();
+      record(`${viewport.width}/missing-data-refuses`, refusedRuns.items.length === 0 && /R20|20\s*°C.*电阻/.test(missingReason) && /工作台|输入/.test(missingReason) && !/Input should be/.test(missingReason),
+        { study: missing.id, runCount: refusedRuns.items.length, reason: missingReason });
       await frame.locator('[data-card="refusal"]').scrollIntoViewIfNeeded();
       await shot(page, frame, 'missing-data-refusal', { study: missing.id, runCount: refusedRuns.items.length });
 
@@ -390,15 +412,25 @@ try {
       const soilId = currentWorkspace.domain.sections[0].medium.material;
       const soil = currentWorkspace.domain.materials.find((item: any) => item.id === soilId);
       const soilPath = '/materials/' + String(soilId).replaceAll('~', '~0').replaceAll('/', '~1') + '/thermal_resistivity';
-      const nextSoil = Number(soil.thermal_resistivity) + 0.1;
+      const nextSoil = Number((Number(soil.thermal_resistivity) + 0.1).toFixed(1));
       const condition = installConditionWorkflow(model.faux, { workspace: source.workspace, study: source.study, run: source.run,
-        path: soilPath, value: nextSoil, unit: 'K*m/W' });
+        path: soilPath, value: nextSoil });
       await speak(frame, `把城南土壤热阻率改为 ${nextSoil.toFixed(1)} K·m/W，重算后和最初保存的记录比较。`);
       const conditionApprovals = await approveAll(frame, condition);
       record(`${viewport.width}/conditions-recalculate-compare`, conditionApprovals === 2 && Boolean(condition.comparison && condition.run),
         { approvals: conditionApprovals, newRun: condition.run, originalRun: source.run, comparison: condition.comparison });
       await frame.locator('[data-role="assistant"]').last().scrollIntoViewIfNeeded();
       await shot(page, frame, 'conditions-compared', { run: condition.run, originalRun: source.run });
+      const changedAmpacity = condition.result!.headlines.find((row: any) => row.key === 'ampacity').display_value.toFixed(1);
+      await frame.locator('[data-card="rating"]').last().getByRole('button', { name: '在工作台打开', exact: true }).click();
+      await page.waitForURL(url => url.searchParams.get('run') === condition.run);
+      const soilInput = page.getByRole('textbox', { name: '介质热阻率', exact: true });
+      await until(async () => (await page.locator('body').innerText()).includes(changedAmpacity)
+        && Math.abs(Number(await soilInput.inputValue()) - nextSoil) < 1e-9, '批准后工作台显示同一运行和更新的条件');
+      record(`${viewport.width}/changed-workbench-current`, true, { run: condition.run, ampacityA: changedAmpacity, soilResistivity: await soilInput.inputValue() });
+      await shot(page, undefined, 'workbench-updated-conditions', { run: condition.run, ampacityA: changedAmpacity, soilResistivity: nextSoil });
+      await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
+      frame = await agentFrame(page);
 
       stage = 'type-workflow';
       await newChat(frame);
@@ -417,7 +449,7 @@ try {
         { type: typeFlow.typeId, approvals: typeApprovals, study: typeFlow.study, run: typeFlow.run, file: typeFlow.file,
           artifactDigest: specification.headers.get('x-artifact-sha256'), downloadedBytes: pdf.length });
       await frame.locator('[data-card="file"]').last().scrollIntoViewIfNeeded();
-      await shot(page, frame, 'type-specification', { type: typeFlow.typeId, run: typeFlow.run, file: typeFlow.file });
+      await shot(page, frame, 'type-specification', { type: typeFlow.typeId, run: typeFlow.run, download: typeFlow.file });
 
       stage = 'import-unavailable';
       await newChat(frame);

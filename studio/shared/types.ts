@@ -298,6 +298,8 @@ export interface Proposal {
   changes: Change[];
   /** The platform's checks, scope and effects; accepting a change never certifies an engineering result. */
   checks?: string[];
+  /** The selected method's declared limitations, kept verbatim and separate from execution effects. */
+  assumptions?: string[];
   preview?: Preview | null;
   issue?: Issue | null;
   status: 'pending' | 'accepted' | 'rejected';

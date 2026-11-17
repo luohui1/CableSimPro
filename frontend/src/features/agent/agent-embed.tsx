@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { EmptyState, InlineEmpty } from '@/components/states';
 import { Button } from '@/components/ui/button';
+import { AGENT_MESSAGE_SOURCE as SOURCE, readAgentMessage, refreshAgentFacts } from '@/lib/agent-cache';
 import './agent.css';
 
-const SOURCE = 'cablesim-agent';
 const PAGE = '/agent-app/fusion.html';
 type Theme = 'light' | 'dark';
 interface SidecarStatus { agent: { configured: boolean; model?: string; provider?: string; hint?: string } }
@@ -27,6 +27,7 @@ export function AgentEmbed({ theme, workspaceId, studyId, context, compact = fal
   theme: Theme; workspaceId?: string; studyId?: string; context?: string; compact?: boolean; sessionId?: string;
 }) {
   const navigate = useNavigate();
+  const queries = useQueryClient();
   const frame = useRef<HTMLIFrameElement>(null);
   const status = useAgentSidecarStatus();
   const storageKey = `cablesim.agent.navigation:${workspaceId || 'all'}:${studyId || ''}`;
@@ -46,22 +47,25 @@ export function AgentEmbed({ theme, workspaceId, studyId, context, compact = fal
 
   useEffect(() => {
     const listen = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow) return;
-      const message = event.data as { source?: string; type?: string; href?: unknown; session?: unknown };
-      if (message?.source !== SOURCE) return;
-      if (message.type === 'session' && (typeof message.session === 'string' || message.session === null)) {
+      const message = readAgentMessage(event, frame.current?.contentWindow || null, window.location.origin);
+      if (!message) return;
+      if (message.type === 'session') {
         try {
           if (message.session) sessionStorage.setItem(storageKey, message.session);
           else sessionStorage.removeItem(storageKey);
         } catch { /* Navigation preferences are optional. */ }
         return;
       }
-      if (message.type !== 'open' || typeof message.href !== 'string') return;
+      if (message.type === 'changed') { void refreshAgentFacts(queries, message.workspace); return; }
       const match = /^cablesim:([a-z_]+)\/([^?]+)(?:\?(.*))?$/.exec(message.href);
       if (!match) return;
       let id: string;
       try { id = decodeURIComponent(match[2]); } catch { return; }
       const query = new URLSearchParams(match[3] || '');
+      // Navigation also covers restored conversations and writes made by another session.
+      // Invalidation marks every dependency synchronously, before route loaders read it.
+      if (['study', 'project', 'type', 'delivery'].includes(match[1]))
+        void refreshAgentFacts(queries, ['project', 'type'].includes(match[1]) ? id : query.get('workspace') || undefined);
       if (match[1] === 'study') void navigate({ to: '/studies/$sid', params: { sid: id }, search: { theme, workspace: query.get('workspace') || '', run: query.get('run') || '', delivery: '' } });
       else if (match[1] === 'project') void navigate({ to: '/studies', search: { theme, workspace: id } });
       else if (match[1] === 'type') void navigate({ to: '/types/$wid/$module/$tab', params: { wid: id, module: 'structure', tab: 'section' }, search: { theme } });
@@ -72,7 +76,7 @@ export function AgentEmbed({ theme, workspaceId, studyId, context, compact = fal
     };
     window.addEventListener('message', listen);
     return () => window.removeEventListener('message', listen);
-  }, [navigate, theme, storageKey]);
+  }, [navigate, queries, theme, storageKey]);
 
   if (status.isPending) return <InlineEmpty title="正在连接 Agent" />;
   if (status.isError) return <EmptyState title="Agent 对话服务未连接" description={status.error.message}

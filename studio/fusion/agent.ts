@@ -265,7 +265,7 @@ export class FusionAgent {
       operation: call.tool.name, title: call.proposal.title,
       changes: call.proposal.changes.map(change => ({ part: '平台改动', field: change.path, label: change.label,
         before: valueText(change.before, change.unit), after: valueText(change.after, change.unit) })),
-      checks: call.proposal.checks, status: 'pending',
+      checks: call.proposal.checks, assumptions: call.proposal.assumptions, status: 'pending',
     }, [this.home]);
     return new Promise<ReviewDecision>(settle => {
       const waiting: Waiting = { proposal, scope: { ...call.scope }, live, settle: decision => {
