@@ -134,8 +134,9 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 
 - **后端工具桥**：`GET /api/agent/external/tools` 返回明确白名单、参数结构和全局 / 工程 / 型号作用域；`POST /api/agent/external/calls` 必须经过 `ToolBroker.execute`。工程相关调用沿用会话、回合、修订校验、预算、脱敏和步骤留痕；全局检索也有独立的持久审计与预算，不为搜索创建虚构工程。批准、拒绝、任意接口、原生求解器不作为模型工具。
 - **提案与继续**：写工具只保存固定提案，卡片列出改前、改后和影响。人的接受 / 拒绝经现有 `POST /api/agent/proposals/{id}/approve` 或 `/reject` 处理；接受后的真实回执交回 pi，才继续下一步。工具顺序执行；等待审阅不消耗执行时间，也不补充调用预算。过期修订、拒绝、停止、重启后尚未确认的决定都不能默默执行写入。
-- **已接入的多步操作**：从保存工况或完整方法参数建立研究、计算、改条件、比较保存运行、导出计算书；从型号库或标准结构提案建立型号、改结构、保存标准依据、核对并生成内部规格书。每次建立、修改、运行和导出各自需要接受。缺少工程输入、材料属性、标准依据或有效结果时，明确拒绝并说明缺项。
-- **能力边界**：老平台当前没有厂家 CSV / XLSX 结构表的预检、提交与行级核对接口，`structure_import_inspect` 明确返回尚未接入，不把拒绝当作导入成功。T3 需要提供这一契约后再接提案；不搬入 Studio 的另一套型号存储。载流量表、国标校正、CAD 等技能也先核对工具清单，未接入的写能力不伪装执行。工程交付格式沿用老平台：计算书为 HTML，内部规格书为 PDF；客户发布要求仍由平台决定。
+- **已接入的多步操作**：从保存工况或完整方法参数建立研究、计算、改条件、比较保存运行、导出计算书；从型号库或标准结构提案建立型号、改结构、保存标准依据、核对并生成内部规格书。整张载流量表复用老平台的工况编译：`propose_rating_table` 保存逐行条件，另行接受运行后读取确切表记录。GB 校正须有工程师明确确认的基准、来源和页码；单次 CAD 须具备插件声明的环境。每次建立、修改、运行和导出各自需要接受，待审卡保留完整参数及来源。缺少工程输入、材料属性、标准依据或有效结果时，明确拒绝并说明缺项。
+- **资源与表结果**：`resource_read` 仅开放现有资产、厂家资料页、保存提取记录和本工作区的载流量表 JSON 接口；不接受任意 URL 或接口名。分页续读固定响应摘要，资源变化时拒绝混读。载流量表卡逐行显示保存结果、单位、口径和失败原因，跳转到老型号工作台的同一运行。
+- **能力边界**：老平台当前没有厂家 CSV / XLSX 结构表的预检、提交与行级核对接口，`structure_import_inspect` 明确返回尚未接入，不把拒绝当作导入成功。T3 需要提供这一契约后再接提案；已有 PDF 提取审阅能力不替代结构表导入。GB 与单次 CAD 的正式本地能力按方法清单和宿主路由核对，不以是否支持 preview 判断；有限元、原生仿真与超算任务仍须在工作台确认。工程交付格式沿用老平台：计算书为 HTML，内部规格书为 PDF；客户发布要求仍由平台决定。
 - **模型密钥只在老后端**：沿用设置页的模型配置，后备为 `CABLESIM_LLM_*`，再后备为 `CABLE_STUDIO_MODEL_BASE_URL`、`CABLE_STUDIO_MODEL_ID`、`CABLE_STUDIO_MODEL_API_KEY`。Node 只调用后端 `/internal/llm/v1/chat/completions`；模型请求的凭据由 Python 加入，响应和分块流都要脱敏。演示启动器会从 Node 子进程环境中移除模型密钥。无配置、后端不可达和边车未运行分别显示原因。
 - **结果与跳转**：载流量卡直接读取保存运行中的数值和方法版本，型号卡直接读取老平台结构，文件卡预览 / 下载实际存档。卡片不使用模型生成的数字。没有保存可信等级的旧结果明确注明“未声明”，不能套用独立 Studio 的分档规则。对象的“在工作台打开”通过校验来源的 `postMessage` 跳到老前端对应路由。
 - **页面**：`npm run build:fusion` 把 `ui/fusion/` 构建到 `dist-fusion/`，后端 `/agent-app/` 提供静态入口，老前端 iframe 嵌入。配色、字体和圆角共用 `design/tokens.css`；切换主题同步到 iframe，保留当前对话。
@@ -147,7 +148,7 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 ```sh
 # 仓库根目录；声明的 CAD 环境用于生成真实发布演示，不运行有限元。
 python scripts/prepare_plugin_environment.py cablesim.cable-geometry --with-tests
-python -m pytest tests/test_harness_external.py tests/test_harness_external_actions.py tests/test_harness_external_credentials.py tests/test_harness_sidecar_launch.py -n 0
+python -m pytest tests/test_harness_external.py tests/test_harness_external_actions.py tests/test_harness_external_platform.py tests/test_harness_external_credentials.py tests/test_harness_sidecar_launch.py -n 0
 cd studio
 npm ci --ignore-scripts
 npm test
@@ -156,7 +157,7 @@ npm run test:fusion
 npm run walk:fusion
 ```
 
-`test:fusion` 用脚本化模型接真实 FastAPI、ToolBroker 和独立演示库，检查每次批准前后实际研究、运行和文件的变化，覆盖建研究 / 重算对比 / 型号核对及明确拒绝。`walk:fusion` 另启动老前端 Vite，通过 Playwright 真正发送对话和点击待审卡，在 1366×768、1920×1080 截图；输出网络、控制台、后端日志及验收记录到 `.tmp/fusion-walk/`。首次运行先在 `frontend/` 安装依赖，并在 `studio/` 运行 `npx playwright install chromium`。已有系统浏览器可设置 `PLAYWRIGHT_EXECUTABLE_PATH`；独立宿主 Python 可设置 `CABLE_STUDIO_PYTHON`。截图与日志只作为 CI 产物，不提交仓库。这些脚本化模型结果不能替代六句话的真实模型验收。
+`test:fusion` 用脚本化模型接真实 FastAPI、ToolBroker 和独立演示库，检查每次批准前后实际研究、运行和文件的变化，覆盖建研究 / 重算对比 / 型号核对 / 载流量表 / GB 校正及明确拒绝。`walk:fusion` 另启动老前端 Vite，通过 Playwright 真正发送对话和点击待审卡，在 1366×768、1920×1080 截图；输出网络、控制台、后端日志及验收记录到 `.tmp/fusion-walk/`。首次运行先在 `frontend/` 安装依赖，并在 `studio/` 运行 `npx playwright install chromium`。已有系统浏览器可设置 `PLAYWRIGHT_EXECUTABLE_PATH`；独立宿主 Python 可设置 `CABLE_STUDIO_PYTHON`。截图与日志只作为 CI 产物，不提交仓库。这些脚本化模型结果不能替代六句话的真实模型验收。
 
 ## 可信分档
 
