@@ -13,7 +13,8 @@ import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
-from backend.kernel.resource_exchange import PROJECT_KEYS, PROJECT_LIMIT, TRANSFER_SHEET, encoded, parse_file
+from backend.kernel.resource_exchange import PROJECT_KEYS, PROJECT_LIMIT, TRANSFER_SHEET, encoded, parse_file, workbook_bytes
+from backend.kernel.project_exchange import LEGACY_SOURCE_SCHEMA, SOURCE_SCHEMA
 from backend.kernel.workspace import fingerprint
 from backend.main import create_app
 
@@ -62,7 +63,7 @@ def study(client):
     return response.json()
 
 
-def candidate_study(client):
+def candidate_study(client, references=None):
     """Use actual model APIs and existing explicit teaching inputs, not a solver fixture."""
     model = next(item for item in client.get('/api/design/cable-models').json()
                  if item['id'] == 'system.cu-xlpe-al-240')
@@ -70,12 +71,13 @@ def candidate_study(client):
     # An unused material proves that a study projection is not the full version.
     payload['materials'].append({**deepcopy(payload['materials'][0]),
                                  'id': 'material/unbound', 'label': '未引用的演示材料'})
+    # Deliberately retain an order different from canonical exchange JSON.
+    references = references or {'/materials/material~1cu': model['source'],
+        '/': f"系统演示 {model['id']} @{model['version']} sha256:{model['content_sha256']}；仅验证输入搬运。"}
     response = client.post('/api/domain-cable-models', json={
         'name': '传输演示', 'version': '1.0.0', **payload,
-        # Deliberately retain an order different from canonical exchange JSON.
-        'sources': {'/materials/material~1cu': {'kind': 'demo', 'reviewed': False,
-            'reference': model['source']}, '/': {'kind': 'demo', 'reviewed': False,
-            'reference': f"系统演示 {model['id']} @{model['version']} sha256:{model['content_sha256']}；仅验证输入搬运。"}},
+        'sources': {key: {'kind': 'demo', 'reviewed': False, 'reference': value}
+                    for key, value in references.items()},
         'confirmed': False})
     assert response.status_code == 201, response.text
     candidate = response.json()
@@ -106,6 +108,33 @@ def upload(client, filename, data, *, request_id=None, reviewed=None, actor='hum
         data={'request_id': request_id or str(uuid4()), 'reviewed_sha256': reviewed or preview.json()['sha256'],
               'confirmed': confirmed}, headers={'X-CableSim-Actor': actor} if actor else {})
     return preview.json(), response
+
+
+def project_wire(bundle, format, *, legacy=False):
+    """Encode the real inputs, optionally as the previously emitted /1 proof."""
+    bundle = deepcopy(bundle)
+    for project in bundle['projects']:
+        proof = project['inputs']['study_cable_reference']['source_snapshot']
+        if legacy:
+            proof['schema'] = LEGACY_SOURCE_SCHEMA
+            proof.pop('source_reference_order', None)
+        project['input_sha256'] = fingerprint(project['inputs'])
+    bundle['sha256'] = fingerprint({key: value for key, value in bundle.items() if key != 'sha256'})
+    return (workbook_bytes(bundle) if format == 'xlsx' else encoded(bundle)), bundle
+
+
+def refuse_project(target, data, bundle, format, code):
+    before = target.get('/api/workspaces').json()
+    for route in ('preview', 'import'):
+        response = target.post('/api/library/exchange/' + route,
+            files={'file': ('data.' + format, data)},
+            data={'request_id': str(uuid4()), 'reviewed_sha256': bundle['sha256'], 'confirmed': 'true'},
+            headers={'X-CableSim-Actor': 'human'})
+        assert response.status_code == 422, (route, response.text)
+        assert response.json()['detail']['code'] == code, (route, response.text)
+        assert target.get('/api/workspaces').json() == before
+        assert target.get('/api/domain-cable-models').json() == []
+        assert target.get('/api/types/library').json()['items'] == []
 
 
 @pytest.mark.parametrize('format', ['json', 'xlsx'])
@@ -302,11 +331,14 @@ def test_invalid_file_is_explained_without_creating_data(clients, filename, data
 
 
 @pytest.mark.parametrize('format', ['json', 'xlsx'])
-def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_path, format):
+@pytest.mark.parametrize('legacy', [False, True])
+def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_path, format, legacy):
     source_path, target_path = tmp_path / 'source.sqlite', tmp_path / 'target.sqlite'
     with TestClient(create_app(source_path)) as source:
         candidate, project = candidate_study(source)
         data, bundle = export(source, project=project, format=format)
+        assert bundle['projects'][0]['inputs']['study_cable_reference']['source_snapshot']['source_reference_order'] == list(candidate['payload']['sources'])
+        data, bundle = project_wire(bundle, format, legacy=legacy)
         inputs = bundle['projects'][0]['inputs']
         binding = inputs['study_cable_reference']
         assert len(encoded(inputs)) <= PROJECT_LIMIT
@@ -314,6 +346,8 @@ def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_
         assert binding['payload'] == project['study_cable_reference']['payload']
         assert binding['source_snapshot']['payload'] == candidate['payload']
         assert list(binding['source_snapshot']['payload']['sources']) != list(candidate['payload']['sources'])
+        assert binding['source'] == project['study_cable_reference']['source']
+        assert binding['source'] != '；'.join(item['reference'] for item in binding['source_snapshot']['payload']['sources'].values())
         assert binding['source_snapshot']['origin_id'] == 'candidate:' + candidate['id']
         assert binding['source_snapshot']['origin_state'] == candidate['state']
         assert binding['id'].startswith('exchange-model:') and binding['state'] == 'draft'
@@ -336,7 +370,11 @@ def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_
         assert restored['exchange_origin']['approval_inherited'] is False
         assert target.get('/api/domain-cable-models').json() == []
         _, exported_again = export(target, project=restored, format=format)
-        assert exported_again['projects'][0]['inputs'] == inputs
+        expected = deepcopy(inputs)
+        expected['study_cable_reference']['source_snapshot'].update(
+            schema=SOURCE_SCHEMA, source_reference_order=list(candidate['payload']['sources']))
+        assert exported_again['projects'][0]['inputs'] == expected
+        assert target.get('/api/workspaces/' + target_id).json() == restored
         # Portability does not weaken the existing immutable-model guards.
         changed = deepcopy(restored['domain'])
         changed['cable_types'][0]['cores'][0]['conductor']['r20'] *= 2
@@ -344,6 +382,63 @@ def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_
             'expected_revision': restored['revision'], 'document': changed})
         assert response.status_code == 422
         assert target.get('/api/workspaces/' + target_id).json()['domain'] == restored['domain']
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
+@pytest.mark.parametrize('legacy', [False, True])
+def test_candidate_source_clauses_cannot_be_reassigned_between_whole_references(clients, format, legacy):
+    source, target = clients
+    candidate, project = candidate_study(source, {
+        '/materials/material~1cu': '原件A；已核验', '/': '原件B；未核验'})
+    _, original = export(source, project=project, format=format)
+    data, original = project_wire(original, format, legacy=legacy)
+    response = target.post('/api/library/exchange/preview', files={'file': ('data.' + format, data)})
+    assert response.status_code == 200, response.text
+    assert target.get('/api/workspaces').json() == []
+    forged = deepcopy(original)
+    binding = forged['projects'][0]['inputs']['study_cable_reference']
+    assert binding['source'] == '原件A；已核验；原件B；未核验'
+    binding['source'] = '原件A；未核验；原件B；已核验'
+    assert binding['source_snapshot']['payload'] == candidate['payload']
+    assert binding['content_sha256'] == candidate['digest']
+    data, forged = project_wire(forged, format)
+    refuse_project(target, data, forged, format, 'EXCHANGE_CABLE_SOURCE')
+    assert source.get('/api/workspaces/' + project['id']).json() == project
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
+def test_legacy_whole_reference_matching_preserves_duplicates_and_bounds_search(clients, monkeypatch, format):
+    source, target = clients
+    # The first complete reference is a prefix of another; choosing that longer
+    # reference first cannot complete the string. Two distinct keys share text.
+    references = {'/cable_type': '原件A', '/materials/material~1xlpe': '原件B；附录C',
+                  '/materials/material~1cu': '原件A；原件B', '/materials/material~1al': '原件A'}
+    candidate, project = candidate_study(source, references)
+    current_data, current = export(source, project=project, format=format)
+    data, legacy = project_wire(current, format, legacy=True)
+    source_text = project['study_cable_reference']['source']
+    assert source_text != '；'.join(item['reference'] for item in
+        legacy['projects'][0]['inputs']['study_cable_reference']['source_snapshot']['payload']['sources'].values())
+    with monkeypatch.context() as limited:
+        limited.setattr('backend.kernel.project_exchange.MAX_LEGACY_SOURCE_STATES', 1)
+        refuse_project(target, data, legacy, format, 'EXCHANGE_CABLE_SOURCE_ORDER_LIMIT')
+        # An explicit order never needs ambiguous legacy matching.
+        response = target.post('/api/library/exchange/preview', files={'file': ('data.' + format, current_data)})
+        assert response.status_code == 200, response.text
+    _, imported = upload(target, 'data.' + format, data)
+    assert imported.status_code == 201, imported.text
+    copied = target.get('/api/workspaces/' + imported.json()['projects'][0]['id']).json()
+    assert copied['study_cable_reference']['source'] == source_text
+    assert copied['study_cable_reference']['source_snapshot']['payload'] == candidate['payload']
+    _, exported_again = export(target, project=copied, format=format)
+    proof = exported_again['projects'][0]['inputs']['study_cable_reference']['source_snapshot']
+    assert proof['schema'] == SOURCE_SCHEMA
+    assert proof['source_reference_order'] == list(references)
+    assert copied == target.get('/api/workspaces/' + copied['id']).json()
+    shortened = deepcopy(legacy)
+    shortened['projects'][0]['inputs']['study_cable_reference']['source'] = source_text.removesuffix('；原件A')
+    data, shortened = project_wire(shortened, format)
+    refuse_project(target, data, shortened, format, 'EXCHANGE_CABLE_SOURCE')
 
 
 def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_changes(clients):
@@ -365,6 +460,13 @@ def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_c
         ('system_published_without_proof', 'EXCHANGE_PUBLISHED_MODEL_PROOF'),
         ('system_source_with_proof', 'EXCHANGE_CABLE_SOURCE'),
         ('published_with_proof', 'EXCHANGE_PUBLISHED_MODEL_PROOF'),
+        ('source_clauses_reordered', 'EXCHANGE_CABLE_SOURCE'),
+        ('source_clauses_reordered_legacy', 'EXCHANGE_CABLE_SOURCE'),
+        ('reference_order_missing', 'EXCHANGE_CABLE_SOURCE'),
+        ('reference_order_duplicate', 'EXCHANGE_CABLE_SOURCE'),
+        ('reference_order_unknown', 'EXCHANGE_CABLE_SOURCE'),
+        ('reference_order_wrong', 'EXCHANGE_CABLE_SOURCE'),
+        ('reference_order_type', 'EXCHANGE_CABLE_SOURCE'),
     ]
     for change, code in cases:
         bundle = deepcopy(original)
@@ -402,6 +504,24 @@ def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_c
                                      if model['id'] == 'system.cu-xlpe-al-240')
         elif change == 'published_with_proof':
             binding['source'] = 'published_type'
+        elif change.startswith('source_clauses_reordered'):
+            binding['source'] = '；'.join(reversed(binding['source'].split('；')))
+            if change.endswith('_legacy'):
+                binding['source_snapshot']['schema'] = LEGACY_SOURCE_SCHEMA
+                binding['source_snapshot'].pop('source_reference_order')
+        elif change.startswith('reference_order_'):
+            proof = binding['source_snapshot']
+            order = proof['source_reference_order']
+            if change == 'reference_order_missing':
+                proof.pop('source_reference_order')
+            elif change == 'reference_order_duplicate':
+                order[1] = order[0]
+            elif change == 'reference_order_unknown':
+                order[0] = '/unknown-source'
+            elif change == 'reference_order_wrong':
+                order.reverse()
+            else:
+                proof['source_reference_order'] = '；'.join(order)
         else:
             binding.pop('source_snapshot')
         item['input_sha256'] = fingerprint(item['inputs'])
@@ -454,3 +574,35 @@ def test_candidate_source_must_match_pinned_version_and_project_limit_stays_in_f
     assert response.status_code == 422
     assert response.json()['detail']['code'] == 'EXCHANGE_CABLE_SOURCE'
     assert target.get('/api/workspaces').json() == []
+
+
+def test_candidate_export_validates_damaged_binding_before_building_source_order(tmp_path):
+    with TestClient(create_app(tmp_path / 'damaged-binding.sqlite')) as client:
+        candidate, project = candidate_study(client)
+        export(client, project=project)
+        store = client.app.state.workspace_store
+        with store.db() as db:
+            _, original = store.load(db, project['id'])
+        for corruption in ('missing_source', 'null_source', 'invalid_embedded_sources'):
+            damaged = deepcopy(original)
+            binding = damaged['study_cable_reference']
+            if corruption == 'missing_source':
+                binding.pop('source')
+            elif corruption == 'null_source':
+                binding['source'] = None
+            else:
+                # Preserve a self-consistent full snapshot digest so export
+                # validates this damaged embedded source, not the local model.
+                binding['payload'] = deepcopy(candidate['payload'])
+                binding['payload']['sources'] = None
+                binding['content_sha256'] = fingerprint(binding['payload'])
+            with store.db(True) as db:
+                db.execute('UPDATE workspaces SET state=? WHERE id=?',
+                           (json.dumps(damaged), project['id']))
+            before = client.get('/api/workspaces/' + project['id']).json()
+            response = client.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
+            assert response.status_code == 422, (corruption, response.text)
+            expected = 'EXCHANGE_CABLE_SOURCE' if corruption == 'invalid_embedded_sources' else 'EXCHANGE_CABLE_REFERENCE'
+            assert response.json()['detail']['code'] == expected, (corruption, response.text)
+            assert client.get('/api/workspaces/' + project['id']).json() == before
+            assert client.get('/api/domain-cable-models').json() == [candidate]

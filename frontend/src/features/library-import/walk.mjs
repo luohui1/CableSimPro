@@ -71,6 +71,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     return result;
   }
   async function positionDialogContent(locator) {
+    await page.waitForFunction(() => [...document.querySelectorAll('.dialog-stage')].every(stage => Number(getComputedStyle(stage).opacity) >= .999));
     const position = await locator.evaluate(element => {
       const container = element.closest('.library-import-dialog-body');
       if (!(container instanceof HTMLElement)) throw new Error('来源内容没有对应的对话框滚动区域');
@@ -238,8 +239,10 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
         await expect(page.getByRole('alert')).toContainText('本次旧预览已作废');
         await expect(page.getByRole('heading', { name: action === 'edit' ? '填写系列声明与来源' : '确认列映射', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: /^确认入库/ })).toHaveCount(0);
-        await page.getByRole('alert').scrollIntoViewIfNeeded();
+        await page.getByRole('list', { name: '导入进度', exact: true }).evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
         await expect(page.getByRole('alert')).toBeInViewport({ ratio: 1 });
+        await expect(page.getByRole('heading', { name: action === 'edit' ? '填写系列声明与来源' : '确认列映射', exact: true })).toBeInViewport({ ratio: 1 });
+        await expect(page.locator('[aria-label="导入进度"] [aria-current="step"]')).toBeInViewport({ ratio: 1 });
         await capture(action === 'edit' ? '修改声明后旧预览拒绝生效' : '返回列映射后旧预览拒绝跳转');
         if (action === 'back') await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
         await expect(page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true })).toHaveValue(`人民 YJV22 已核对 ${viewport.width} ${stamp}`);
@@ -625,7 +628,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const bahraMapping = Object.fromEntries(bahraColumns.map(([key], index) => [key, index]));
     assert.deepEqual(bahraDeclaration.mapping, bahraMapping, '19个原表列均须可导入，不能悄悄遗漏性能列');
     await select('工作表', `${bahraSheet.name} · ${bahraSheet.data_rows ?? bahraSheet.rows} 行`);
-    await expect(page.getByRole('table', { name: '工作表原始列', exact: true })).toContainText('电容 μF/km');
+    assert.equal(bahraSheet.columns[10].header, '电容 uF/km');
+    await expect(page.getByRole('table', { name: '工作表原始列', exact: true }).getByRole('row', { name: 'K 列 电容 μF/km', exact: true })).toContainText('电容 μF/km');
     await capture('Bahra上传后选择工作表');
     await advanceSheet();
     for (const [index, [key, unit]] of bahraColumns.entries()) {
@@ -718,6 +722,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     }
     await page.getByRole('button', { name: '打开系列，核对与计算', exact: true }).click();
     const bahraFirst = bahraSeries.specs.find(spec => spec.area_m2 === bahraOriginal.rows[0][0] * 1e-6);
+    const missingDetails = page.getByRole('table', { name: '系列规格', exact: true }).getByRole('row', { name: bahraFirst.name, exact: true }).getByRole('cell').last();
+    for (const label of ['结构尺寸：导体屏蔽厚度', '结构尺寸：绝缘屏蔽厚度', '计算用参数：导体构造', '计算用参数：正常运行温限（K）',
+      '材料物性：导体20 °C 电阻温度系数', '材料物性：绝缘热阻率', '材料物性：绝缘相对介电常数', '材料物性：绝缘介质损耗角正切',
+      '材料物性：金属套20 °C 电阻率', '材料物性：金属套20 °C 电阻温度系数', '材料物性：外护套热阻率']) await expect(missingDetails).toContainText(label);
+    await expect(missingDetails).not.toContainText(/conductor_screen_thickness|insulation_screen_thickness|conductor_form|normal_temperature_k|thermal_resistivity|temperature_coefficient_20|electrical_resistivity_20|relative_permittivity|loss_tangent/);
+    await capture('Bahra系列规格缺项与下一步');
     await page.getByRole('table', { name: '系列规格', exact: true }).getByRole('button', { name: bahraFirst.name, exact: true }).click();
     const bahraSources = page.getByRole('dialog', { name: bahraFirst.name, exact: true });
     const bahraValues = bahraSources.getByRole('table', { name: '逐项来源', exact: true });
