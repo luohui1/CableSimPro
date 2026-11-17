@@ -1,9 +1,10 @@
 .study-method-config > .select-field {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: var(--space-2);
-  min-height: var(--space-8);
+  min-width: 0;
+  width: 100%;
 }
 .study-method-config > .select-field label {
   font-size: var(--text-note);
@@ -32,6 +33,26 @@
 .study-method-config .select-trigger { white-space: nowrap; height: var(--control-standard); min-height: var(--control-standard); }
 .study-method-config .parameter-structured-label { white-space: normal; overflow-wrap: anywhere; }
 .study-inspector .study-method-config .select-trigger { height: var(--control-compact); min-height: var(--control-compact); }
+.study-method-config > .select-field > .select-trigger {
+  width: 100%;
+  max-width: 100%;
+}
+.study-method-config > .select-field > .select-trigger > span:first-child {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+  text-align: left;
+}
+body:has(.study-method-config > .select-field > .select-trigger[data-state="open"]) .select-content {
+  width: var(--radix-select-trigger-width);
+  max-width: var(--radix-select-content-available-width);
+}
+body:has(.study-method-config > .select-field > .select-trigger[data-state="open"]) .select-item > span:first-child {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .study-method-workspace .parameter-group .parameter-fields,.type-method-fields .parameter-group .parameter-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,calc(var(--space-12) * 9)),1fr)); }
 .create-study-form .parameter-group .parameter-fields { grid-template-columns: minmax(0,1fr); }
 .structured-table :is(.cell-number input,.cell-text,.cell-select) { height: var(--control-compact); }
