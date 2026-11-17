@@ -103,12 +103,17 @@ export async function assertLayout(page, label, nameOptions) {
     const collapsed = [...document.querySelectorAll(".property-collapsed")].map(
       (node) => ({ width: node.clientWidth, scrollWidth: node.scrollWidth }),
     );
-    const primaryScope = document.querySelector('[role="dialog"]') || document;
-    const primary = [
+    const painted = node => {
+      if (node.closest('[aria-hidden="true"],[inert]') || !node.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return false;
+      const box = node.getBoundingClientRect();
+      return box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < innerWidth && box.top < innerHeight;
+    };
+    const primaryScope = [...document.querySelectorAll('[role="dialog"]')].find(painted) || document;
+    const primaryLabels = [
       ...primaryScope.querySelectorAll(".button-primary,.button-run"),
-    ].filter(
-      (node) => node.getBoundingClientRect().height && !node.disabled,
-    ).length;
+    ].filter(node => painted(node) && !node.disabled)
+      .map(node => node.textContent.trim() || node.getAttribute('aria-label'));
+    const primary = primaryLabels.length;
     return {
       overflow:
         document.documentElement.scrollWidth > innerWidth + 1 ||
@@ -118,6 +123,7 @@ export async function assertLayout(page, label, nameOptions) {
       overlap,
       collapsed,
       primary,
+      primaryLabels,
     };
   });
   assert.equal(result.overflow, false, label + ": 页面越界");
@@ -132,7 +138,7 @@ export async function assertLayout(page, label, nameOptions) {
     result.collapsed.every((value) => value.scrollWidth <= value.width),
     label + ": 收起属性栏横向溢出",
   );
-  assert.ok(result.primary <= 1, label + ": 多个主操作");
+  assert.ok(result.primary <= 1, label + ": 多个主操作 " + JSON.stringify(result.primaryLabels));
   return result;
 }
 

@@ -4,3 +4,4 @@
 .sweep-critical { flex-basis: 100%; margin: 0; font-size: var(--text-note); }
 .study-workbench .study-sweep-results .data-table .data-row { height: var(--table-compact); }
 .study-inspector .study-sweep-settings .text-field input { height: var(--control-compact); }
+.study-inspector .study-sweep-settings .input-form-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }

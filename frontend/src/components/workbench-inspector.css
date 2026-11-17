@@ -42,7 +42,7 @@
 .explorer-group-toggle[aria-expanded="false"]::after { content: ' +'; }
 .explorer-group-toggle[aria-expanded="true"]::after { content: ' −'; }
 .project-explorer .explorer-calc > .explorer-study-name { min-width: 0; }
-.project-explorer .explorer-calc > .explorer-study-name b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-explorer .explorer-calc > .explorer-study-name b { display: block; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .project-explorer .explorer-calc > .explorer-state { grid-column: 2; justify-self: start; white-space: nowrap; font-weight: var(--weight-normal); }
 .project-explorer .explorer-item > span, .project-explorer .explorer-item b, .project-explorer header strong { white-space: normal; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; }
 .study-inspector .inspector-lead { white-space: normal; overflow-wrap: anywhere; }

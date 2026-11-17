@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:workbench-research": "node scripts/isolated-e2e.mjs verify-workbench-research.mjs",
+    "test:workbench-types": "node scripts/isolated-e2e.mjs verify-workbench-types.mjs",
+    "test:workbench-resources": "node scripts/isolated-e2e.mjs verify-workbench-resources.mjs",
+    "test:workbench-simulation": "node scripts/isolated-e2e.mjs verify-workbench-simulation.mjs",
     "test:real-use": "node scripts/isolated-e2e.mjs verify-real-use.mjs",
     "test:forms-real-use": "node scripts/isolated-e2e.mjs verify-form-real-use.mjs",
     "test:client-real-use": "node scripts/isolated-e2e.mjs verify-client-real-use.mjs",

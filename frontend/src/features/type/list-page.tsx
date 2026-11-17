@@ -25,7 +25,7 @@ export function TypeListPage() {
   const [picked, setPicked] = useState(''), [statusFilter, setStatusFilter] = useState('all'), [groupBy, setGroupBy] = useState('status');
   const rows = (types.data || []).filter(row => row.name.toLowerCase().includes(filter.trim().toLowerCase()) && (statusFilter === 'all' || row.status === statusFilter)).map(row => ({ ...row, card: designSummary(row.document, row.raw) }));
   const current = types.data?.find(row => row.id === picked);
-  return <CatalogShell title="型号设计" status={<span className="muted">{types.data?.length ?? 0} 项</span>}
+  return <CatalogShell title="型号设计" status={<span className="muted">{types.isPending ? '正在读取型号' : types.isError ? '读取失败' : `${types.data.length} 项`}</span>}
     property={current ? <DesignCard document={current.document} raw={current.raw} onClose={() => setPicked('')} /> : undefined}
     actions={<Button variant="primary" onClick={() => setOpen(true)}>新建型号</Button>}>
     <div className="type-list-toolbar" role="group" aria-label="型号目录筛选"><label htmlFor="type-search">查找型号</label><Input id="type-search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="型号名称" type="search" />

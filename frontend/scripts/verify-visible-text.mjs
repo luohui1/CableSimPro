@@ -17,7 +17,7 @@ if (requestedPhase && !/^[a-z-]+$/.test(requestedPhase)) throw Error('文字巡�
 const phase = requestedPhase || (performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after');
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/visible-text', phase);
 await fs.mkdir(out, { recursive: true });
-const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe', routeGuard: !performanceMode });
+const session = await openHeadlessBrowser({ routeGuard: !performanceMode });
 const { page, context } = session;
 const performanceAudit = performanceMode ? await (await import('./performance-audit.mjs')).createPerformanceAudit({ page, context, root: repositoryRoot, base }) : null;
 if (!performanceMode) await installReadinessObserver(page);
