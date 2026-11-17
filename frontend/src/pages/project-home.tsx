@@ -58,7 +58,10 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const catalog = useQuery(methodCardsQuery());
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId).sort((a, b) => b.updated.localeCompare(a.updated));
   // latest_run 已由宿主在同一只读快照核验；首页不为结论逐项下载运行历史。
-  const latest = new Map(rows.map(row => [row.id, optionalRecord(row.raw.latest_run)]));
+  const latest = new Map(rows.map(row => {
+    const run = optionalRecord(row.raw.latest_run);
+    return [row.id, run.id ? run : undefined] as const;
+  }));
   const name = text((projects.data || []).find((row) => text(row.id) === workspaceId)?.name) || "工程";
   const document = workspace.data?.domain as DomainDocument | undefined;
   const reference = optionalRecord(workspace.data?.study_cable_reference);

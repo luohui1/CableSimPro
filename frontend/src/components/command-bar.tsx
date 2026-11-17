@@ -33,6 +33,7 @@ export function CommandBar({ actions, leading, status, label = '研究操作' }:
     const leadingElement = target.querySelector<HTMLElement>('.command-leading');
     const widths = new Map<string, number>();
     let available: number | undefined, fixed = 0, more: number | undefined;
+    let statusWidth: number | undefined = status ? undefined : 0;
     const fit = (entries: ResizeObserverEntry[]) => {
       // ResizeObserver runs after layout and supplies sizes. Reading clientWidth /
       // getBoundingClientRect here used to repeat the entire workbench's layout.
@@ -42,16 +43,18 @@ export function CommandBar({ actions, leading, status, label = '研究操作' }:
         if (node === target) available = entry.contentRect.width;
         else if (node === leadingElement) fixed = width;
         else if (node.dataset.more !== undefined) more = width;
+        else if (node.dataset.commandStatus !== undefined) statusWidth = width;
         else if (node.dataset.commandId) widths.set(node.dataset.commandId, width);
       }
       const actions = geometry.current;
-      if (available === undefined || more === undefined || actions.some(action => !widths.has(action.id))) return;
+      if (available === undefined || more === undefined || statusWidth === undefined || actions.some(action => !widths.has(action.id))) return;
       const moreWidth = more;
       const gap = parseFloat(getComputedStyle(target).columnGap) || 0;
       const visible = [...actions];
       const removed: string[] = [];
-      const size = () => fixed + visible.reduce((sum, item) => sum + (widths.get(item.id) || 0), 0) + (removed.length ? moreWidth : 0)
-        + gap * Math.max(0, visible.length + (leading ? 1 : 0) + (removed.length ? 1 : 0) - 1);
+      const stateWidth = statusWidth;
+      const size = () => fixed + stateWidth + visible.reduce((sum, item) => sum + (widths.get(item.id) || 0), 0) + (removed.length ? moreWidth : 0)
+        + gap * Math.max(0, visible.length + (leading ? 1 : 0) + (status ? 1 : 0) + (removed.length ? 1 : 0) - 1);
       const candidates = actions.filter(action => !action.role).sort((a, b) => (a.priority || 0) - (b.priority || 0));
       while (size() > available && candidates.length) {
         const next = candidates.shift()!;
@@ -62,10 +65,10 @@ export function CommandBar({ actions, leading, status, label = '研究操作' }:
     };
     const observer = new ResizeObserver(fit);
     observer.observe(target);
-    for (const node of sample.querySelectorAll('[data-command-id],[data-more]')) observer.observe(node);
+    for (const node of sample.querySelectorAll('[data-command-id],[data-more],[data-command-status]')) observer.observe(node);
     if (leadingElement) observer.observe(leadingElement);
     return () => observer.disconnect();
-  }, [layoutKey, !!leading]);
+  }, [layoutKey, !!leading, status]);
   const button = (action: CommandAction, measuring = false) => {
     const control = <Button key={action.id} size="compact" variant={action.variant || (action.role === 'primary' ? 'primary' : 'outline')}
       data-command-id={action.id} data-command-role={action.role} disabled={!!action.disabledReason} loading={action.loading}
@@ -82,6 +85,7 @@ export function CommandBar({ actions, leading, status, label = '研究操作' }:
     {status && <span className="command-state" title={status}>{status}</span>}
     <div ref={measure} className="command-measure" aria-hidden="true" inert>
       {actions.map(action => button(action, true))}<Button data-more size="compact" variant="ghost">更多<Icon name="action/chevron-down" /></Button>
+      {status && <span data-command-status className="command-state-measure">{status}</span>}
     </div>
   </div>;
 }

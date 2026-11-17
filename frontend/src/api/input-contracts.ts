@@ -29,6 +29,7 @@ export function capabilityInputContracts(selector: ContractSelector, signal?: Ab
 export function inputContractQuery(method: components["schemas"]["Method"]) {
   return {
     queryKey: ["input-contracts", method.plugin_id, method.capability, method.version, method.release_digest],
+    staleTime: 30000,
     queryFn: async ({ signal }: { signal: AbortSignal }) =>
       exactContract(await capabilityInputContracts(method, signal), method),
   };

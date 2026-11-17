@@ -93,6 +93,7 @@ function GenericCreateStudyDialog({
     (item) => item.id === trainedModelId && item.availability === "available",
   );
   const [title, setTitle] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [target, setTarget] = useState<number | null>(null);
   const [error, setError] = useState("");
   const allocated = useRef<Record<string, unknown> | null>(null);
@@ -186,6 +187,7 @@ function GenericCreateStudyDialog({
           tasks.error ? message(tasks.error) : "正式宿主尚未提供所选仿真任务",
         );
       if (!title.trim()) throw new ApiError(422, "请填写研究名称");
+      if (task !== 'hybrid' && !projectName.trim()) throw new ApiError(422, '请填写工程名称');
       if (task === "hybrid") {
         if (!trainedModel) throw new ApiError(422, "请选择可用的准确模型版本");
         if (!allocated.current)
@@ -300,6 +302,7 @@ function GenericCreateStudyDialog({
               body: {
                 model_id: text(model.id),
                 content_sha256: text(model.content_sha256),
+                project_name: projectName.trim(),
                 ...(task === "selection" ? { target_current_a: target! } : {}),
               },
             }),
@@ -478,6 +481,13 @@ function GenericCreateStudyDialog({
           }}
         >
           {workspacePicker}
+          {!!allocated.current && <p className="muted">工程已建立，工程名称与型号已固定；重试会在同一工程继续创建研究。</p>}
+          {task !== 'hybrid' && <label className="text-field">
+            工程名称
+            <input value={projectName} maxLength={120} required disabled={!!allocated.current}
+              aria-invalid={!!error && !projectName.trim()}
+              onChange={event => { setProjectName(event.target.value); setError(''); }} />
+          </label>}
           <Select
             label="研究任务"
             value={task || undefined}
@@ -583,6 +593,13 @@ function GenericCreateStudyDialog({
                   label: `${text(item.name)} · ${text(item.version)}${item.state === "incomplete" ? " · 工程参数缺项" : ""}`,
                 }))}
               />
+              <div className="source-line">
+                <Button type="button" size="compact" disabled={!!allocated.current} title={allocated.current ? '工程已建立，正在使用已选型号继续创建研究' : undefined} onClick={() => {
+                  onOpenChange(false);
+                  void navigate({to:'/types',search:{theme,create:true}});
+                }}>新建型号</Button>
+                <span className="muted">保存型号后，可在型号工作区“建立研究”。</span>
+              </div>
               {model && (
                 <div className="source-line">
                   {sourceKind(

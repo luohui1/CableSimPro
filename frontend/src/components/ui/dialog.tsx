@@ -6,6 +6,13 @@ import { ErrorState } from '@/components/states';
 import { InformationNotice } from '@/components/information-notice';
 import { isResultInformation } from '@/lib/notice-level';
 
+function availableFocus(node: HTMLElement | null): node is HTMLElement {
+  return !!node?.isConnected && !node.matches(':disabled,[aria-disabled="true"],[type="hidden"]')
+    && !node.closest('[hidden],[inert],[aria-hidden="true"]') && node.getClientRects().length > 0
+    && !['hidden', 'collapse'].includes(getComputedStyle(node).visibility)
+    && getComputedStyle(node).opacity !== '0';
+}
+
 function AppDialog({
   open,
   onOpenChange,
@@ -14,6 +21,7 @@ function AppDialog({
   children,
   actions,
   initialFocus = "action",
+  fallbackFocus,
   variant = "dialog",
 }: {
   open: boolean;
@@ -23,6 +31,7 @@ function AppDialog({
   children?: ReactNode;
   actions?: ReactNode;
   initialFocus?: "action" | "form" | "preserve";
+  fallbackFocus?: () => HTMLElement | null;
   variant?: "dialog" | "drawer";
 }) {
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -63,18 +72,19 @@ function AppDialog({
               // A deferred dialog's loading shell retains the opener until the real
               // form mounts, so swapping shells does not capture a discarded button.
               if (initialFocus === "preserve") return;
-              const first = content.current
-                ?.querySelector<HTMLElement>(
+              const candidates = content.current
+                ?.querySelectorAll<HTMLElement>(
                   initialFocus === "form"
-                    ? 'input, [role="combobox"], .data-row button:not([disabled]), .dialog-actions button:not([disabled])'
+                    ? 'input, textarea, select, [role="combobox"], .data-row button, .dialog-actions button'
                     : ".dialog-actions button:not([disabled])",
                 );
-              (first || content.current?.querySelector<HTMLElement>('.drawer-close'))?.focus();
+              const first = [...(candidates || [])].find(node => node.tabIndex >= 0 && availableFocus(node));
+              (first || content.current?.querySelector<HTMLElement>('.drawer-close') || content.current)?.focus();
             }}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              if (previousFocus.current?.isConnected)
-                previousFocus.current.focus();
+              const target = availableFocus(previousFocus.current) ? previousFocus.current : fallbackFocus?.();
+              if (target && availableFocus(target)) target.focus();
             }}
           >
             {variant === 'drawer' && <DialogPrimitive.Close asChild><IconButton variant="ghost" icon="action/close" label="关闭运行记录" className="drawer-close" /></DialogPrimitive.Close>}

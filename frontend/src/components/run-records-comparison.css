@@ -3,3 +3,8 @@
 .run-comparison { min-width: 0; margin-top: var(--space-4); }
 .run-comparison .reference-list dd, .run-comparison td { overflow-wrap: anywhere; }
 .run-comparison td { font-variant-numeric: tabular-nums; }
+.study-compare-module .table-scroll:has(table[aria-label="方法结果差异"]) { min-width: 0; }
+.study-compare-module .data-table[aria-label="方法结果差异"] { width: 100%; min-width: 0; table-layout: fixed; }
+.study-compare-module .data-table[aria-label="方法结果差异"] .cell-wrap { min-width: 0; max-width: none; overflow-wrap: anywhere; }
+.study-compare-module .data-table[aria-label="方法结果差异"] .numeric { white-space: normal; overflow-wrap: anywhere; }
+.study-compare-module .data-table[aria-label="方法结果差异"] .unit { display: inline-block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
