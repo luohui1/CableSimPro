@@ -64,7 +64,6 @@ const itemSearch = (search: Record<string, unknown>): { theme: "light" | "dark";
 const documentSearch = (search: Record<string, unknown>): { theme: 'light' | 'dark'; document?: string; extraction?: string; proposal?: string; batch?:string } => ({ ...themeSearch(search), document: typeof search.document === 'string' ? search.document : '', extraction: typeof search.extraction === 'string' ? search.extraction : '', proposal: typeof search.proposal === 'string' ? search.proposal : '', batch:typeof search.batch === 'string' ? search.batch : '' });
 // 资源（FRONTEND_REQUIREMENTS §2.2 / §2.3）：电缆型号版本及其厂家资料导入；材料与部件、模板与计算方案、标准与规则
 const cableVersionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables", validateSearch: itemSearch, component: CableVersionsPage });
-const structureImportRoute = createRoute({ getParentRoute: () => rootRoute, path: '/resources/cables/structure-import', validateSearch: itemSearch, component: lazyRouteComponent(() => import('./features/library-import/page'), 'LibraryImportPage') });
 const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables/imports", validateSearch: documentSearch, component: DocumentsPage });
 const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: itemSearch, beforeLoad: ({ params, context }) => {
   if (!["materials", "templates", "standards"].includes(params.group)) throw notFound();
@@ -210,7 +209,7 @@ const sampleEntryRoute = createRoute({
 });
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    structureImportRoute,
+    (() => { const route = createRoute({ getParentRoute: () => rootRoute, path: '/resources/cables/structure-import', validateSearch: itemSearch, component: lazyRouteComponent(() => import('./features/library-import/page'), 'LibraryImportPage') }); return route; })(),
     homeRoute,
     cableVersionsRoute, documentsRoute, assetGroupRoute, runsRoute, deliveriesRoute, inboxRoute,
     pluginsRoute, pluginDetailRoute, settingsRoute, computeSettingsRoute, agentRoute,
