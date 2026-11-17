@@ -112,9 +112,12 @@ async function observe(page: Page): Promise<() => Promise<void>> {
   });
   page.on('pageerror', error => browserErrors.push({ stage, type: 'pageerror', text: clean(error.message, 'browser/pageerror'), expected: false }));
   page.on('request', request => {
-    if (!/\/(api|agent-sidecar)\//.test(request.url())) return;
-    network.push({ stage, type: 'request', method: request.method(), url: request.url(),
-      headers: clean(JSON.stringify(request.headers()), 'browser/request-headers'), body: clean(request.postData() || '', 'browser/request-body') });
+    const at = stage;
+    track((async () => {
+      const headers = await request.allHeaders().catch(() => request.headers());
+      network.push({ stage: at, type: 'request', method: request.method(), url: clean(request.url(), 'browser/request-url'),
+        headers: clean(JSON.stringify(headers), 'browser/request-headers'), body: clean(request.postData() || '', 'browser/request-body') });
+    })());
   });
   page.on('requestfailed', request => {
     const reason = request.failure()?.errorText || 'request failed';
@@ -122,16 +125,22 @@ async function observe(page: Page): Promise<() => Promise<void>> {
     browserErrors.push({ stage, type: 'requestfailed', url: request.url(), reason, expected });
   });
   page.on('response', response => {
-    if (!/\/(api|agent-sidecar)\//.test(response.url())) return;
     const at = stage;
     const header = response.headers()['content-type'] || '';
     const expected = at === 'sidecar-down' && response.url().includes('/agent-sidecar/api/status') && [502, 503].includes(response.status());
     if (response.status() >= 400) browserErrors.push({ stage: at, type: 'http', url: response.url(), status: response.status(), expected });
-    if (header.includes('text/event-stream')) return;
     track((async () => {
-      const body = header.includes('json') || header.includes('text/') ? await response.text().catch(() => '[response closed during navigation]') : '[binary file]';
-      network.push({ stage: at, type: 'response', url: response.url(), status: response.status(), contentType: header,
-        body: clean(body, 'browser/response-body') });
+      const headers = await response.allHeaders().catch(() => response.headers());
+      const item = { stage: at, type: 'response', url: clean(response.url(), 'browser/response-url'), status: response.status(), contentType: header,
+        headers: clean(JSON.stringify(headers), 'browser/response-headers') };
+      // Stream data is captured by CDP below; its headers still need to be scanned immediately.
+      if (header.includes('text/event-stream')) { network.push({ ...item, body: '[SSE events recorded separately]' }); return; }
+      const bytes = await response.body().catch(() => undefined);
+      if (!bytes) { network.push({ ...item, body: '[response closed during navigation]' }); return; }
+      const body = clean(bytes.toString('utf8'), 'browser/response-body');
+      // Inspect assets and binary downloads too, without writing megabytes of built JavaScript or fonts to the evidence.
+      network.push({ ...item, scannedBytes: bytes.length, body: /\/(api|agent-sidecar)\//.test(response.url()) && (header.includes('json') || header.includes('text/'))
+        ? body : '[body scanned; asset or binary content omitted]' });
     })());
   });
   const cdp = await page.context().newCDPSession(page);
@@ -196,7 +205,9 @@ async function shot(page: Page, frame: Frame | undefined, name: string, detail: 
   if (frame) await frame.evaluate(() => document.fonts.ready);
   const layout = [...await page.evaluate(probe), ...frame ? await frame.evaluate(probe) : []];
   const filename = `${page.viewportSize()!.width}x${page.viewportSize()!.height}-${name}.png`;
-  const visible = clean((frame ? await frame.locator('body').innerText() : await page.locator('body').innerText()), 'browser/dom');
+  const text = [await page.locator('body').innerText(), ...(frame ? [await frame.locator('body').innerText()] : [])].join('\n');
+  const visible = clean(text, 'browser/dom');
+  assert.ok(!secrets.some(secret => text.includes(secret)), '页面包含凭据，已停止保存截图；只记录泄漏位置，不保存凭据值。');
   await page.screenshot({ path: join(out, filename), fullPage: false });
   screenshots.push({ file: filename, state: name, viewport: page.viewportSize(), url: page.url(), frame: frame?.url(), layout, visibleText: visible, ...detail });
   record(`${filename}/layout`, layout.length === 0, layout);
@@ -288,6 +299,7 @@ try {
       await page.waitForURL(/\/studies\//);
       await until(() => page.locator('body').innerText().then(text => text.includes(current)), '工作台显示同一保存数值', 90_000);
       record(`${viewport.width}/same-workbench-result`, page.url().includes(source.run), { run: source.run, ampacityA: current, workbenchUrl: page.url() });
+      await shot(page, undefined, 'workbench-saved-result', { run: source.run, ampacityA: current });
       await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
       frame = await agentFrame(page);
       await frame.locator('[data-card="rating"]').waitFor();
@@ -437,20 +449,25 @@ try {
         { actualServiceStopped: true, visible: await page.locator('.agent-page').innerText() });
     } finally { await flush(); await context.close(); }
   }
-  checks.push({ id: 'manufacturer-structure-import', status: '未通过', evidence: 'T3 结构表预览、列映射与批量草稿提交接口尚未接入；浏览器如实拒绝，没有写入型号库。' });
-  checks.push({ id: 'real-model-six-phrases', status: '云端无法验证', evidence: configuredRealModel
-    ? '检测到真实模型配置；本脚本只验脚本化模型，请另附真实模型六句话走查证据。'
-    : '三项 CABLE_STUDIO_MODEL_* 环境配置不齐全；本轮未调用真实模型，也没有把脚本化模型结果标成真实模型验收。' });
   record('browser-console-network', browserErrors.every(item => item.expected === true), { unexpected: browserErrors.filter(item => !item.expected),
     expected: browserErrors.filter(item => item.expected), policy: '仅忽略导航取消请求，以及主动停止边车阶段的 502/503 和断连；其余错误失败。' });
 } catch (error) {
   failure = clean(error instanceof Error ? error.stack || error.message : String(error), 'walk/failure');
   checks.push({ id: 'walk-completion', status: '未通过', evidence: failure });
 } finally {
+  // Capability limits remain visible even when an earlier browser scenario fails.
+  checks.push({ id: 'manufacturer-structure-import', status: '未通过', evidence: 'T3 Excel/CSV 结构表上传、列映射预览与固定摘要批量草稿提交接口尚未接入；已有 PDF 提取审阅流程不能替代此验收。' });
+  checks.push({ id: 'real-model-six-phrases', status: '云端无法验证', evidence: configuredRealModel
+    ? '检测到真实模型配置；本脚本只验脚本化模型，请另附真实模型六句话走查证据。'
+    : '三项 CABLE_STUDIO_MODEL_* 环境配置不齐全；本轮未调用真实模型，也没有把脚本化模型结果标成真实模型验收。' });
   if (browser) await browser.close().catch(() => undefined);
   if (sidecar) await sidecar.close().catch(() => undefined);
   await Promise.all(children.map(stop));
   for (const [label, content] of Object.entries(processLogs)) writeFileSync(join(out, `${label}.log`), clean(content, `process/${label}`));
+  // Inspect the complete records before deriving the verdict, including URLs and locations outside response bodies.
+  const safeNetwork = clean(JSON.stringify(network, null, 2), 'artifact/network');
+  const safeConsole = clean(JSON.stringify({ consoles, errors: browserErrors }, null, 2), 'artifact/console');
+  clean(JSON.stringify({ checks, screenshots }), 'artifact/acceptance');
   const browserObserved = network.some(item => item.type === 'request') && network.some(item => item.type === 'sse');
   const secretCheck = { passed: browserObserved && leakLocations.size === 0, browserObserved,
     credentialsExamined: 'in-memory model sentinel, sidecar token, and any supplied model keys',
@@ -458,8 +475,8 @@ try {
     browserResponses: network.filter(item => item.type === 'response').length, browserSseEvents: network.filter(item => item.type === 'sse').length,
     processLogs: Object.keys(processLogs), actualSecretValuesSaved: false };
   checks.push({ id: 'model-keys-absent-from-network-and-logs', status: leakLocations.size ? '未通过' : browserObserved ? '通过' : '云端无法验证', evidence: secretCheck });
-  writeFileSync(join(out, 'browser-network.json'), clean(JSON.stringify(network, null, 2), 'artifact/network'));
-  writeFileSync(join(out, 'browser-console.json'), clean(JSON.stringify({ consoles, errors: browserErrors }, null, 2), 'artifact/console'));
+  writeFileSync(join(out, 'browser-network.json'), safeNetwork);
+  writeFileSync(join(out, 'browser-console.json'), safeConsole);
   writeFileSync(join(out, 'acceptance.json'), clean(JSON.stringify({ testedAt: new Date().toISOString(), mode: 'scripted-model-real-platform',
     serverTopology: ['real FastAPI backend with fresh release seed', 'real pi sidecar with scripted model provider', 'old frontend Vite server'],
     visualReview: '截图已生成，必须由操作者逐张打开检查后才可在 PR 标为通过。', failure, checks, screenshots, secretCheck }, null, 2), 'artifact/acceptance'));
