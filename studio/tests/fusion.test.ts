@@ -97,7 +97,7 @@ test('a question about a study reaches the platform through a session of its own
   // question as it was asked, and the call inside it without the project id the platform's contract does not know; then the turn ended.
   assert.equal(seen.calls[0].tool, 'object_find');
   assert.ok(!('session' in seen.calls[0]));
-  assert.deepEqual(seen.opened, [{ workspace_id: 'w-1', message: question }]);
+  assert.deepEqual(seen.opened, [{ workspace_id: 'w-1', message: question, conversation_id: session }]);
   assert.deepEqual(seen.calls[1], { tool: 'run_read', arguments: { study_id: 'st-1', run_id: 'r-1' }, session: 's-1', turn: 't-1' });
   assert.deepEqual(seen.finished, ['s-1/turns/t-1/finish']);
   assert.ok(seen.headers.every(header => header === `Bearer ${TOKEN}`), 'every call carries the token');

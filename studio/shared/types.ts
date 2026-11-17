@@ -326,6 +326,9 @@ export type CardRef =
   | { kind: 'saved_run'; href: string; view: SavedRunView }
   | { kind: 'saved_type'; href: string; view: import('./fusion-types.ts').SavedTypeView }
   | { kind: 'saved_rating_table'; href: string; view: import('./fusion-types.ts').SavedRatingTableView }
+  | { kind: 'structure_preview'; view: import('./fusion-types.ts').SavedStructurePreviewView }
+  | { kind: 'structure_import'; view: import('./fusion-types.ts').SavedStructureImportView }
+  | { kind: 'structure_check'; view: import('./fusion-types.ts').SavedStructureCheckView }
   | { kind: 'saved_file'; title: string; document_kind: '计算书' | '规格书'; format: 'pdf' | 'html'; href: string; download_url: string; preview_url?: string };
 
 export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';

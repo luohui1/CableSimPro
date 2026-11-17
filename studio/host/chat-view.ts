@@ -32,7 +32,7 @@ export interface ViewInput {
   error?: string;
 }
 
-const ATTACHMENT = /\n*\[附件：([^\]\n（）]+)（upload (u-[0-9a-f]{8})）\]/g;
+const ATTACHMENT = /\n*\[附件：([^\]\n（）]+)（upload (u-[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})）\]/g;
 
 /** The note the page appends to a message that carries uploaded files; the model reads it, the person sees chips instead. */
 export function attachmentNote(attachments: ChatAttachment[]): string {

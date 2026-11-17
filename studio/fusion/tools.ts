@@ -7,6 +7,7 @@ import type { Schema } from '@earendil-works/pi-schema';
 import { failureText, scrubValue } from '../host/agent-tools.ts';
 import { Backend, BackendError, type BackendProposal, type BackendTool, type ToolResult, type WorkbenchContext } from './backend.ts';
 import { describeResult, remember } from './cards.ts';
+import { createdTypeScopes, savedStructureCheck, unfinishedStructureCheck } from './structure-import.ts';
 
 export interface Entry { session: string; turn: string }
 export interface AdoptedScopes { types: Set<string>; studies: Map<string, string> }
@@ -29,16 +30,18 @@ export class ScopeBook {
   #open = new Map<string, Promise<Entry>>();
   #adopted: AdoptedScopes;
   #onAdopt: () => void;
+  #conversation?: string;
   readonly context?: WorkbenchContext;
   readonly discovery = randomUUID();
 
   constructor(backend: Backend, message: string, context?: WorkbenchContext,
-    adopted: AdoptedScopes = { types: new Set(), studies: new Map() }, onAdopt: () => void = () => undefined) {
+    adopted: AdoptedScopes = { types: new Set(), studies: new Map() }, onAdopt: () => void = () => undefined, conversation?: string) {
     this.#backend = backend;
     this.#message = message;
     this.context = context;
     this.#adopted = adopted;
     this.#onAdopt = onAdopt;
+    this.#conversation = conversation;
   }
 
   for(workspace: string): Promise<Entry> {
@@ -46,7 +49,7 @@ export class ScopeBook {
     if (!entry) {
       // Only the session and turn: the call the platform's contract takes has no other field.
       const study = this.#adopted.studies.get(workspace) ?? (this.context?.workspace_id === workspace ? this.context.study_id : undefined);
-      entry = this.#backend.open(workspace, this.#message, study).then(({ session, turn }) => ({ session, turn }));
+      entry = this.#backend.open(workspace, this.#message, study, this.#conversation).then(({ session, turn }) => ({ session, turn }));
       this.#open.set(workspace, entry);
       entry.catch(() => this.#open.delete(workspace));
     }
@@ -66,11 +69,10 @@ export class ScopeBook {
     }
   }
 
-  async adoptCreated(receipt: Record<string, any>): Promise<void> {
-    if (receipt.kind === 'type' && typeof receipt.type_id === 'string' && receipt.workspace_id === receipt.type_id) {
-      this.#adopted.types.add(receipt.type_id);
-      this.#onAdopt();
-    }
+  async adoptCreated(receipt: Record<string, any>, operation: string): Promise<void> {
+    const types = createdTypeScopes(operation, receipt).filter(type => !this.#adopted.types.has(type));
+    for (const type of types) this.#adopted.types.add(type);
+    if (types.length) this.#onAdopt();
     if (receipt.kind === 'study' && typeof receipt.workspace_id === 'string' && typeof receipt.study_id === 'string') {
       const workspace = receipt.workspace_id;
       const prior = this.#adopted.studies.get(workspace) ?? (this.context?.workspace_id === workspace ? this.context.study_id : undefined);
@@ -162,24 +164,37 @@ export function backendTools(backend: Backend, catalog: readonly BackendTool[], 
         if (result.data.proposal) {
           if (!review || !workspace || !scope) throw new BackendError('REVIEW_UNAVAILABLE', '这项改动尚未批准；请在对话中审阅后再执行。', 409);
           const decision = await review({ id, tool, proposal: result.data.proposal as BackendProposal, workspace, scope, signal });
+          // The creation is already committed. Save its exact authorized workspaces before a later resume can fail or exhaust
+          // the current budget; a failed continuation must not erase the accepted creation's conversation scope.
+          if (decision.accepted && decision.receipt && createdTypeScopes(tool.name, decision.receipt).length)
+            await scopes().adoptCreated(decision.receipt, tool.name);
           if (!signal?.aborted) await scopes().resume(workspace);
           if (decision.error) throw new BackendError('PROPOSAL_NOT_EXECUTED', decision.error, 409);
           if (!decision.accepted) throw new BackendError('PROPOSAL_REJECTED', `工程师拒绝了这项改动${decision.note ? '：' + decision.note : ''}；没有执行。不要重复提出同样的改动。`, 409);
           const receipt = decision.receipt ?? {};
-          if (receipt.status === 'failed' || receipt.error) {
+          if (receipt.status === 'uncertain' || (receipt.may_have_written === true && !savedStructureCheck(receipt))) {
+            throw new BackendError('IMPORT_ACTION_UNCERTAIN', '已接受，但结果尚不能确定：' + (receipt.error?.message ?? '可能已保存原件或预览；请核对平台记录，不得自动重复执行。'), 409);
+          }
+          if ((receipt.status === 'failed' && !savedStructureCheck(receipt)) || receipt.executed === false || receipt.error) {
             throw new BackendError('PROPOSAL_NOT_EXECUTED', '已接受，但平台未完成执行：' + (receipt.error?.message ?? '请在工作台查看保存诊断；没有替代结果。'), 422);
           }
-          await scopes().adoptCreated(receipt);
+          await scopes().adoptCreated(receipt, tool.name);
           result.data = { ...result.data, proposal: { ...result.data.proposal, status: 'approved' }, receipt };
-          result.summary = '工程师已接受，平台返回了执行回执。请按回执确认结果；未核对、未发布的对象仍保持原状态。';
+          if (unfinishedStructureCheck(receipt)) result.status = 'error';
+          result.summary = unfinishedStructureCheck(receipt)
+            ? `已接受，但批量核对${receipt.status === 'running' ? '仍在运行' : '已中断'}，尚未完成。已保存的逐项结果保留在回执中；不得自动重新运行，请先核对保存批次。`
+            : savedStructureCheck(receipt)
+            ? '工程师已接受，平台已保存批量核对记录；逐项结果以回执的真实状态为准，计算完成不代表标准符合或人工批准。'
+            : '工程师已接受，平台返回了执行回执。请按回执确认结果；未核对、未发布的对象仍保持原状态。';
         }
         const shown = await describeResult(backend, tool.name, rest, result, workspace, signal);
         // Method discovery must retain the exact sealed identity the next tool requires; result-only prose uses method names.
-        const keepIdentity = ['method_list', 'plugin_inspect', 'plugin_query', 'study_read'].includes(tool.name);
+        const keepIdentity = ['method_list', 'plugin_inspect', 'plugin_query', 'study_read', 'structure_import_read',
+          'propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check'].includes(tool.name);
         const told = JSON.stringify(scrubValue(named(brief(result), await namesOfMethods(backend), keepIdentity), roots)) ?? 'null';
         // The backend owns bounded/paginated projections. Cutting serialized JSON breaks numeric evidence and can hide the
         // exact method identity required by the next step; preserve the complete structured result supplied by that contract.
-        return { content: [{ type: 'text' as const, text: told }], details: shown };
+        return { content: [{ type: 'text' as const, text: told }], details: shown, ...(result.status === 'error' ? { isError: true } : {}) };
       } catch (error) {
         throw new Error(failureText(error, roots));
       }

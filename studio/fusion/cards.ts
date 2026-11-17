@@ -6,6 +6,7 @@ import type { SavedRunView } from '../shared/fusion-types.ts';
 import { compact, fixed } from '../shared/format.ts';
 import type { Backend, ToolResult } from './backend.ts';
 import { savedRatingTable } from './rating-table.ts';
+import { structureImportCard } from './structure-import.ts';
 
 export interface Shown { card?: CardRef; notes?: string[]; target?: string }
 
@@ -176,6 +177,10 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
   const shown: Shown = target ? { target } : {};
   const study = typeof args.study_id === 'string' ? args.study_id : undefined;
   try {
+    const structure = structureImportCard(tool, args, result);
+    if (structure) return { ...shown, card: structure };
+    if (result.data.receipt?.kind === 'structure_preview' && result.data.receipt.preview_omitted === true)
+      return { ...shown, notes: ['预览已保存，但完整字段尚未读取；请按平台给出的 next_read 和摘要逐段读取。当前没有可据以核对全部规格的结果卡。'] };
     if (tool === 'resource_read' && result.data.resource?.kind === 'rating_table' && (args.offset === undefined || args.offset === 0)) {
       const table = await savedRatingTable(backend, result.data.resource, signal);
       if (table) return { ...shown, ...table };

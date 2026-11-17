@@ -13,17 +13,18 @@ import { StudioError } from '../host/core.ts';
 import { FusionAgent } from './agent.ts';
 import { Backend, BackendError, type WorkbenchContext } from './backend.ts';
 import { TOKEN_VARIABLE } from './model.ts';
+import { attachmentInputs } from './attachments.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export interface Sidecar { agent: FusionAgent; server: Server; close(): Promise<void> }
 
-async function body(request: IncomingMessage): Promise<any> {
+async function body(request: IncomingMessage, maxBytes = 1_000_000): Promise<any> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     size += (chunk as Buffer).length;
-    if (size > 1_000_000) throw new StudioError({ code: 'REQUEST_TOO_LARGE', message: '内容太大。' }, 413);
+    if (size > maxBytes) throw new StudioError({ code: 'REQUEST_TOO_LARGE', message: '内容太大；结构表附件合计不能超过 1 MiB。' }, 413);
     chunks.push(chunk as Buffer);
   }
   if (!chunks.length) return {};
@@ -73,8 +74,9 @@ export function createSidecar(options: { backendUrl: string; token: string; home
       if (method === 'GET' && id === 'sessions' && !section) return send(response, 200, await agent.list());
       if (method === 'GET' && id === 'sessions' && section) return send(response, 200, await agent.view(section));
       if (method === 'POST' && id === 'messages') {
-        const message = await body(request);
-        if (typeof message.text !== 'string' || !message.text.trim()) throw new StudioError({ code: 'INPUT_INVALID', message: '请写下要交办的事。', path: '/text' });
+        const message = await body(request, 2_000_000);
+        const attachments = attachmentInputs(message.attachments);
+        if (typeof message.text !== 'string' || (!message.text.trim() && !attachments.length)) throw new StudioError({ code: 'INPUT_INVALID', message: '请写下要交办的事，或附上结构表。', path: '/text' });
         if (message.text.length > 8000) throw new StudioError({ code: 'INPUT_INVALID', message: '消息过长，请把任务拆成两段。', path: '/text' });
         if (message.session !== undefined && typeof message.session !== 'string') throw new StudioError({ code: 'INPUT_INVALID', message: '对话标识不对。', path: '/session' });
         let context: WorkbenchContext | undefined;
@@ -88,7 +90,7 @@ export function createSidecar(options: { backendUrl: string; token: string; home
           }
           context = { workspace_id: value.workspace_id, ...(value.study_id ? { study_id: value.study_id } : {}), ...(value.label ? { label: value.label } : {}) };
         }
-        return send(response, 200, await agent.send(message.session, message.text, context));
+        return send(response, 200, await agent.send(message.session, message.text, context, attachments));
       }
       if (method === 'POST' && id === 'sessions' && section && item === 'stop') { await agent.stop(section); return send(response, 200, { stopped: true }); }
     }

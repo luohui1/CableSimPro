@@ -10,6 +10,7 @@ import { TierMark } from '@/kit/marks';
 import { useOpen } from './open';
 import { ProposalBlock } from './proposal';
 import { SavedRatingTable } from './rating-table';
+import { SavedStructureCheck, SavedStructureImport, SavedStructurePreview } from './structure-import';
 
 function SavedRun({ view, href }: { view: SavedRunView; href: string }) {
   const open = useOpen();
@@ -105,13 +106,18 @@ function SavedType({ card }: { card: Extract<CardRef, { kind: 'saved_type' }> })
 }
 
 export function StepCards({ step }: { step: ChatStep }) {
-  const card = step.status === 'done' ? step.card : undefined;
+  const unfinishedCheck = step.proposal?.status === 'accepted' && step.card?.kind === 'structure_check'
+    && ['running', 'interrupted'].includes(step.card.view.status);
+  const card = step.status === 'done' || unfinishedCheck ? step.card : undefined;
   return <>
     {step.proposal && <ProposalBlock proposal={step.proposal} step={step} />}
     {card?.kind === 'saved_run' && <SavedRun view={card.view} href={card.href} />}
     {card?.kind === 'saved_rating_table' && <SavedRatingTable card={card} />}
     {card?.kind === 'saved_type' && <SavedType card={card} />}
     {card?.kind === 'saved_file' && <SavedFile card={card} />}
+    {card?.kind === 'structure_preview' && <SavedStructurePreview card={card} />}
+    {card?.kind === 'structure_import' && <SavedStructureImport card={card} />}
+    {card?.kind === 'structure_check' && <SavedStructureCheck card={card} />}
     {card?.kind === 'open' && <OpenResult card={card} />}
     {!step.proposal && step.status === 'failed' && step.reason && <RefusalCard kind="refused" title={step.label} reason={step.reason} />}
   </>;

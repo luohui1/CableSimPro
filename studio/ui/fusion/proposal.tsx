@@ -9,6 +9,16 @@ import { api } from '@/state/api';
 import { queryClient } from '@/state/queries';
 import { notifyPlatformChanged } from './open';
 
+/** Interrupted batch tools retain their full saved receipt for the model and result card; the warning itself stays readable. */
+function failureSummary(reason: string | undefined): string | undefined {
+  if (!reason) return reason;
+  try {
+    const result = JSON.parse(reason);
+    if (result?.status === 'error' && result?.data?.receipt?.kind === 'structure_check' && typeof result.summary === 'string') return result.summary;
+  } catch { /* Ordinary platform refusals are already plain text. */ }
+  return reason;
+}
+
 /** The human decision is sent to the existing platform proposal; the model has no decision tool. */
 export function ProposalBlock({ proposal, step }: { proposal: Proposal; step: ChatStep }) {
   const { sessionId } = useParams({ strict: false }) as { sessionId?: string };
@@ -23,15 +33,16 @@ export function ProposalBlock({ proposal, step }: { proposal: Proposal; step: Ch
   const subject = rest.join(' · ') || step.target || '';
   const title = subject ? `${action} · ${subject}` : action;
   if (proposal.status === 'accepted' && ['failed', 'rejected', 'interrupted'].includes(step.status)) {
-    const reason = step.reason?.startsWith('已接受') ? step.reason
-      : `已接受，但执行未完成：${step.reason || '对话已中断，请在工作台核对保存记录。'}`;
+    const failure = failureSummary(step.reason);
+    const reason = failure?.startsWith('已接受') ? failure
+      : `已接受，但执行未完成：${failure || '对话已中断，请在工作台核对保存记录。'}`;
     return <RefusalCard kind="error" title={title} reason={reason} />;
   }
   const executing = proposal.status === 'accepted' && step.status === 'running';
   const phase: ProposalPhase = executing || proposal.status === 'pending' ? (rejecting ? 'rejecting' : 'pending') : proposal.status;
   return <>
     <ProposalCard action={action} subject={subject} phase={phase} busy={decide.isPending || executing || !sessionId} collapseChangesAfter={8}
-      changes={proposal.changes.map(change => ({ id: `${change.part}/${change.field}`, label: change.label, before: change.before, after: change.after }))}
+      changes={proposal.changes.map((change, index) => ({ id: `${index}/${change.part}/${change.field}`, label: change.label, before: change.before, after: change.after }))}
       consequence={proposal.checks?.length || proposal.assumptions?.length ? <>
         {proposal.checks?.length ? <ul className="m-0 list-disc space-y-1 pl-4">{proposal.checks.map((check, index) => <li key={index}>{check}</li>)}</ul> : null}
         {proposal.assumptions?.length ? <Disclosure title="方法适用范围与限制" aside={<span className="text-sm text-ink-2">{proposal.assumptions.length} 项</span>} className="-mx-3 mt-2 border-t border-line">

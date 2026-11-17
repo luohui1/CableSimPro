@@ -2,6 +2,7 @@
 // model it holds. Every call carries the shared token; the model key is never on this side (model requests go to the platform's
 // own proxy, which adds it).
 import type { Schema } from '@earendil-works/pi-schema';
+import type { StructureAttachment } from '../shared/fusion-types.ts';
 
 export interface Diagnostic { code: string; message: string; path?: string | null; recoverable?: boolean }
 export interface ToolResult {
@@ -74,7 +75,9 @@ export class Backend {
 
   tools = () => this.#send<BackendTool[]>('/api/agent/external/tools');
   model = () => this.#send<BackendModel>('/internal/agent/model');
-  open = (workspace_id: string, message: string, study_id?: string) => this.#send<Opened>('/api/agent/external/sessions', { body: { workspace_id, message, ...(study_id ? { study_id } : {}) } });
+  open = (workspace_id: string, message: string, study_id?: string, conversation_id?: string) => this.#send<Opened>('/api/agent/external/sessions', { body: { workspace_id, message, ...(study_id ? { study_id } : {}), ...(conversation_id ? { conversation_id } : {}) } });
+  stageAttachment = (conversation_id: string, filename: string, content_base64: string) =>
+    this.#send<StructureAttachment>('/api/agent/external/attachments', { body: { conversation_id, filename, content_base64 } });
   resume = (session: string, message: string) => this.#send<Opened>(`/api/agent/external/sessions/${encodeURIComponent(session)}/resume`, { body: { message } });
   finish = (session: string, turn: string) => this.#send<{ finished: boolean }>(`/api/agent/external/sessions/${session}/turns/${turn}/finish`, { body: {} });
   call = (body: { tool: string; arguments: Record<string, unknown>; session?: string; turn?: string; discovery?: string }, signal?: AbortSignal) =>

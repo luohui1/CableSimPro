@@ -1,15 +1,15 @@
 // The conversation, put together from assistant-ui's primitives, which hold the behaviour (scrolling, the composer, suggestions, copy and
 // retry), and the kit's parts, which hold the look. Nothing here is styled: what the agent did arrives as steps and cards (steps.tsx), what
-// it wrote as Markdown (the Cable Studio page's own renderer). Same page as Cable Studio's, without the structure-table attachments.
+// it wrote as Markdown (the Cable Studio page's own renderer). Attachments are staged by the platform when the user sends the message.
 import {
-  ActionBarPrimitive, AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, SuggestionPrimitive, ThreadPrimitive,
-  groupPartByType, useAuiState, type AssistantState,
+  ActionBarPrimitive, AttachmentPrimitive, AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, SuggestionPrimitive, ThreadPrimitive,
+  groupPartByType, useAui, useAuiState, type AssistantState,
 } from '@assistant-ui/react';
 import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AgentEmpty, ChatNotice, TaskStarter } from '@/kit/chat/empty';
-import { ComposerBar, ComposerFrame, ComposerSend, ComposerStop, composerInputClass } from '@/kit/chat/composer';
+import { ComposerAttach, ComposerBar, ComposerFrame, ComposerSend, ComposerStop, FileChip, composerInputClass } from '@/kit/chat/composer';
 import { AssistantMessage, ThreadColumn, Typing, UserMessage, threadViewportClass } from '@/kit/chat/messages';
 import { Icon } from '@/kit/icon';
 import { MarkdownText } from '../agent/markdown';
@@ -80,15 +80,30 @@ function Starter() {
 
 function Composer({ placeholder = '问研究结论，或描述要完成的任务' }: { placeholder?: string }) {
   return <ComposerPrimitive.Root>
-    <ComposerFrame>
+    <ComposerPrimitive.AttachmentDropzone render={<ComposerFrame />}>
+      <div className="flex w-full flex-row flex-wrap items-center gap-2 px-1 empty:hidden">
+        <ComposerPrimitive.Attachments>{() => <ComposerChip />}</ComposerPrimitive.Attachments>
+      </div>
       <ComposerPrimitive.Input className={composerInputClass} placeholder={placeholder} rows={1} autoFocus enterKeyHint="send" aria-label="给 Agent 的消息" />
       <ComposerBar
+        start={<><ComposerPrimitive.AddAttachment render={<ComposerAttach title="附上 CSV/XLSX 结构表；每条消息合计不超过 1 MiB" />} />
+          <span className="text-xs text-ink-3">CSV / XLSX · 合计 1 MiB</span></>}
         end={<>
           <AuiIf condition={state => state.thread.isRunning && state.thread.capabilities.cancel}><ComposerPrimitive.Cancel render={<ComposerStop />} /></AuiIf>
           <ComposerPrimitive.Send render={<ComposerSend title="发送；任务进行中发送会在当前一步做完后插话" />} />
         </>} />
-    </ComposerFrame>
+    </ComposerPrimitive.AttachmentDropzone>
   </ComposerPrimitive.Root>;
+}
+
+function ComposerChip() {
+  const aui = useAui();
+  const name = useAuiState(state => state.attachment.name);
+  const status = useAuiState(state => state.attachment.status.type);
+  return <AttachmentPrimitive.Root render={<span className="inline-flex" />}>
+    <FileChip name={name} detail={status === 'running' ? '读取文件中' : status === 'incomplete' ? '请重新选择文件' : '随消息发送，写入另行接受'}
+      state={status === 'running' ? 'uploading' : status === 'incomplete' ? 'error' : 'done'} onRemove={() => aui.attachment().remove()} />
+  </AttachmentPrimitive.Root>;
 }
 
 function ThreadMessage() {
@@ -99,12 +114,18 @@ function ThreadMessage() {
 function PersonMessage() {
   // A message sent while the agent was busy waits for the current step; say so, so it is not mistaken for ignored.
   const queued = useAuiState(state => Boolean(state.message.metadata.custom?.queued));
+  const hasFiles = useAuiState(state => (state.message.attachments?.length ?? 0) > 0);
   return <MessagePrimitive.Root data-turn-start className="pt-8">
-    <UserMessage>
+    <UserMessage attachments={hasFiles ? <MessagePrimitive.Attachments>{() => <SentChip />}</MessagePrimitive.Attachments> : undefined}>
       <MessagePrimitive.Parts />
       {queued && <Badge variant="outline">排队中，当前一步做完后处理</Badge>}
     </UserMessage>
   </MessagePrimitive.Root>;
+}
+
+function SentChip() {
+  const name = useAuiState(state => state.attachment.name);
+  return <AttachmentPrimitive.Root render={<span className="inline-flex" />}><FileChip name={name} detail="本对话附件" /></AttachmentPrimitive.Root>;
 }
 
 function AgentMessage() {

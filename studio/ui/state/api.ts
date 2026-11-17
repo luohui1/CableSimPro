@@ -1,4 +1,5 @@
 import type { AgentStatus, ChatAttachment, ChatSummary, ChatView, Issue, LibraryEntry, Proposal, ProjectMeta, ProjectView, RunRecord, StudioEvent } from '@shared/types';
+import type { StructureAttachmentInput } from '@shared/fusion-types';
 
 export class ApiError extends Error {
   issue: Issue;
@@ -40,7 +41,7 @@ export const api = {
   chats: () => request<ChatSummary[]>('/api/chat/sessions'),
   chat: (id: string) => request<ChatView>(`/api/chat/sessions/${id}`),
   /** Starts a conversation (no session yet), adds to one, or steers an agent that is busy. */
-  send: (text: string, session?: string, attachments?: ChatAttachment[], context?: { workspace_id: string; study_id?: string; label?: string }) =>
+  send: (text: string, session?: string, attachments?: ChatAttachment[] | StructureAttachmentInput[], context?: { workspace_id: string; study_id?: string; label?: string }) =>
     post<{ session: string; accepted: 'started' | 'steered' }>('/api/chat/messages', { session, text, attachments, context }),
   stop: (session: string) => post(`/api/chat/sessions/${session}/stop`),
   decide: (proposal: string, accept: boolean, note?: string, session?: string) => post<Proposal>(`/api/proposals/${proposal}/decision`, { accept, note, session }),
