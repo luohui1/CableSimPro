@@ -5,13 +5,16 @@ import argparse
 from email.parser import Parser
 import json
 from pathlib import Path
+import re
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def is_notice(name: str) -> bool:
-    return Path(name).name.lower().startswith(('license', 'licence', 'copying', 'notice', 'ofl'))
+    basename = Path(name).name.lower()
+    return basename.startswith(('license', 'licence', 'copying', 'notice', 'ofl')) or bool(
+        re.search(r'(?:^|[._ -])(?:licen[cs]e|copyright|copying|notice|ofl)(?:$|[._ -])', basename))
 
 
 def collect(wheels: Path, output: Path, node_modules: Path | None = None) -> None:

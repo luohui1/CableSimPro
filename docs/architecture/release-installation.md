@@ -7,6 +7,7 @@
 
 为 Windows 10 / 11 x64 和 Linux x86_64 分别构建 ZIP。安装端预装 **64 位 CPython 3.12**，
 不需要 Node、npm、编译器、Git 或管理员权限；Python 安装须含标准库 `venv` / `ensurepip`。
+Windows 的命令和双击入口使用 Python Launcher（`py`）；安装 CPython 时保留该组件。
 Linux 使用兼容 wheel 的 glibc 系统；发行包包含 CAD 需要的图形运行库和对应许可证，
 `runtime/native-manifest.json` 记录实际依赖的最低 glibc，安装前核对当前系统版本。
 发行包不替换系统 glibc、动态加载器或硬件驱动。CI 的干净 Ubuntu / Windows runner
