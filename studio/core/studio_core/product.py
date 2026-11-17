@@ -159,7 +159,7 @@ def _edition(text):
     return re.sub(r'\s+', '', text).replace('—', '-').replace(':', '-')
 
 
-def standard_check_batch(items):
+def standard_check_batch(items, *, prepare_only=False, documents=None):
     """Conformity of each structure with its declared product standards, requirement by requirement.
 
     `items` maps a key to (cable, standards); the standards are the editions the product declares, written as in
@@ -168,7 +168,7 @@ def standard_check_batch(items):
     """
     state = {}
     for key, (cable, standards) in items.items():
-        document = document_of(cable)
+        document = documents[key] if documents is not None else document_of(cable)
         state[key] = {'document': document, 'cable_type_id': document['cable_types'][0]['id'], 'declared': {_edition(item) for item in standards},
                       'auxiliary': {}, 'artifact': None, 'pending': True}
     results = {}
@@ -232,6 +232,10 @@ def standard_check_batch(items):
         references = {pair[1]: answered[name] for name, pair in names.items() if pair[0] == key and name in answered}
         final[key] = {'input': item['document'], 'parameters': {'cable_type_id': item['cable_type_id'], 'basis_references': {**item['auxiliary'], **references},
                                                                 'basis_cable_sha256': item['artifact']['basis_cable_sha256']}}
+    if prepare_only:
+        return {**results, **{key: {'parameters': case['parameters'], 'input': case['input'],
+            'basis_missing': [{**item, 'key': names[item['key']][1]} for item in missing if names[item['key']][0] == key],
+            'undeclared_standards': undeclared[key]} for key, case in final.items()}}
     if final:
         identity, by = _run(CHECK, 'dimensions', final)
         for key, case in by.items():
