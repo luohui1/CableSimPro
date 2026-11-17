@@ -9,6 +9,7 @@ import { typeComparison, typeSpecification } from './version-api';
 import {preloadTypeModule} from './module-loader';
 import { isRatingDefinition, typeStudies } from './rating-api';
 import { inputContractQuery } from '@/api/input-contracts';
+import { contractFields } from '@/lib/heavy-components';
 const TypeListPage = lazyWorkbenchRoute(() => import('./list-page'), 'TypeListPage');
 const TypeProvider = lazyWorkbenchRoute(() => import('./provider'), 'TypeProvider');
 const TypeWorkspace = lazyWorkbenchRoute(() => import('./workspace'), 'TypeWorkspace');
@@ -41,6 +42,8 @@ export function createTypeRoutes(root: AnyRootRoute) {
     void workspace.catch(()=>{ /* The provider retains its loading/error state. */ });
     const module=location.pathname.split('/')[3]||'structure';
     const tab=location.pathname.split('/')[4]||typeModules.find(item=>item.id===module)?.tabs[0][0]||'section';
+    if(tab==='parameters'&&['electrical','short-circuit','rating-table'].includes(module))
+      void contractFields.preload().catch(()=>{ /* The form keeps its normal load/error state. */ });
     if(module!=='structure')void preloadTypeModule(module);
     void TypeProvider.preload?.();
     void TypeWorkspace.preload?.();
