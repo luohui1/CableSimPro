@@ -20,6 +20,7 @@ export interface BackendProposal {
   title: string;
   changes: { path: string; label: string; before: unknown; after: unknown; unit?: string | null }[];
   checks: string[];
+  assumptions?: string[];
   status?: 'pending' | 'approved' | 'rejected';
 }
 export interface DecisionReceipt { status: 'approved' | 'rejected'; receipt?: Record<string, any> }

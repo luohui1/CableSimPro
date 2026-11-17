@@ -148,6 +148,7 @@ class Proposal(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
+    assumptions: list[str] = Field(default_factory=list, description='Declared method limits, separate from the operation effects.')
     status: Literal['pending','approved','rejected'] = 'pending'
     kind: Literal['domain','parameters','study','type','draft_workflow','external_action'] | None = None
     action: str | None = None
@@ -232,6 +233,7 @@ class ProposalCreated(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
+    assumptions: list[str] = Field(default_factory=list, description='Declared method limits, separate from the operation effects.')
     kind: Literal['domain','parameters','study','type','draft_workflow','external_action'] | None = None
     action: str | None = None
     type_id: UUID | None = None

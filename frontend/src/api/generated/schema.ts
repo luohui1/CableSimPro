@@ -6932,6 +6932,11 @@ export interface components {
             /** Checks */
             checks: string[];
             /**
+             * Assumptions
+             * @description Declared method limits, separate from the operation effects.
+             */
+            assumptions?: string[];
+            /**
              * Status
              * @default pending
              * @enum {string}
