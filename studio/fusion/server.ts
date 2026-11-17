@@ -111,7 +111,7 @@ export function createSidecar(options: { backendUrl: string; token: string; home
       if (error instanceof StudioError) return send(response, error.status, { error: error.issue() });
       if (error instanceof BackendError) return send(response, error.status || 503, { error: { code: error.code, message: failureText(error, [options.home]) } });
       // Do not print arbitrary upstream errors or echo them to the browser: they can contain private URLs or credentials.
-      send(response, 500, { error: { code: 'INTERNAL', message: '对话服务未能完成请求，请重试；已保存的工程数据保持原状。' } });
+      send(response, 500, { error: { code: 'INTERNAL', message: '对话服务未能完成请求；请刷新查看待审状态和平台保存结果后继续。' } });
     });
   });
 

@@ -106,8 +106,12 @@ class ExternalActions:
 
     def dispatch(self, task, name, args):
         if name == 'method_list':
-            methods = self.research.methods(summary=True)
-            return ToolResult(status='ok', summary='已读取当前安装的方法与准确版本。', data={'methods': methods})
+            methods = [{**{key: row[key] for key in ('method', 'name', 'description', 'platform_supported')},
+                        'capabilities': [{key: cap[key] for key in ('id', 'title', 'description', 'preview', 'parameter_fields') if key in cap}
+                                         for cap in row['capabilities']]}
+                       for row in self.research.methods(summary=True)]
+            return ToolResult(status='ok', summary='已读取当前安装的方法与准确版本；详细范围和参数须继续读取插件契约。',
+                              data={'methods': methods, 'next_read': 'plugin_inspect'})
         if name == 'type_creation_options':
             return ToolResult(status='ok', summary='已读取型号库版本与标准结构契约。', data=self.types.creation_options())
         if name == 'structure_import_inspect':
@@ -296,11 +300,12 @@ class ExternalActions:
             # Reconcile its existing idempotency record before claiming that no
             # business write occurred. Recovery never executes a second action.
             receipt = self.recover(task, proposal)
+            recorded_decision = 'approved' if receipt is not None else decision
             if receipt is None:
                 receipt = {'status': 'failed', 'executed': False, 'error': {'code': code, 'message': redact(message)},
                            'workspace_id': task['workspace_id']}
             with self.store.db(True) as db:
-                return self.complete(task, proposal, decision, marker, receipt, db)
+                return self.complete(task, proposal, recorded_decision, marker, receipt, db)
 
     def run_receipt(self, task, proposal, run):
         receipt = {'workspace_id': task['workspace_id'], 'study_id': proposal['arguments']['study_id'],
@@ -363,11 +368,14 @@ class ExternalActions:
         with self.store.db() as db:
             task, proposal, previous = self.tasks.proposal(db, pid)
         if previous: return {'status': previous['status'], 'receipt': previous.get('receipt', {})}
-        if decision == 'rejected':
-            with self.store.db(True) as db: return self.complete(task, proposal, decision, marker, {}, db)
         existing = self.recover(task, proposal)
         if existing is not None:
-            with self.store.db(True) as db: return self.complete(task, proposal, decision, marker, existing, db)
+            # A previously accepted action can already be durable when its
+            # decision response was lost. Even a later rejection must report
+            # that completed approval truthfully instead of claiming no write.
+            with self.store.db(True) as db: return self.complete(task, proposal, 'approved', marker, existing, db)
+        if decision == 'rejected':
+            with self.store.db(True) as db: return self.complete(task, proposal, decision, marker, {}, db)
         self.current(task)
         name, args, wid = proposal['action'], proposal['arguments'], task['workspace_id']
         if name not in ACTION_SCOPES: fail('ACTION_NOT_ALLOWED', '此方案的操作不在已审查白名单。', status=403)

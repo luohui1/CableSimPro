@@ -49,7 +49,8 @@ before(async () => {
         // The platform's request model forbids any other field (pydantic StrictModel): a call with one is refused, as here.
         if (Object.keys(body).some(key => !['tool', 'arguments', 'session', 'turn', 'discovery'].includes(key))) return reply({ detail: [{ msg: 'Extra inputs are not permitted' }] }, 422);
         seen.calls.push(body);
-        if (body.tool === 'object_find') return reply(ok({ items: [{ id: 'st-1', name: STUDY, parent: { kind: 'project', id: 'w-1', name: '城南线路 · 110 kV 直埋单回' } }] }));
+        if (body.tool === 'object_find') return reply(ok({ items: [{ id: 'st-1', name: STUDY, parent: { kind: 'project', id: 'w-1', name: '城南线路 · 110 kV 直埋单回' } }],
+          ...(body.arguments.q === '完整证据' ? { saved_evidence: '保存输入与限制。'.repeat(4000), final_value: 612.3456 } : {}) }));
         if (body.arguments.run_id === 'r-bad') return reply({ status: 'error', summary: '没有取得结果。', data: {}, diagnostics: [{ code: 'RUN_NOT_FOUND', message: '本工程中没有此保存运行。' }], next_actions: [] });
         return reply(ok({ run_id: 'r-1', study_id: 'st-1', status: 'succeeded', method: { plugin_id: 'cablesim.other', capability: 'x', version: '1.0.0', release_digest: 'abc' }, headlines: [], cases: [] }));
       }
@@ -139,6 +140,30 @@ test('without the platform the Agent says so, not that no model is configured', 
   } finally {
     await lonely.close();
   }
+});
+
+test('a structured tool result beyond 24k remains complete JSON including its final saved value', async () => {
+  let parsed: any;
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('object_find', { q: '完整证据' })], { stopReason: 'toolUse' }),
+    context => { parsed = JSON.parse(toolText(context)); return fauxAssistantMessage([fauxText('完整证据已读到。')]); },
+  ]);
+  const { session } = await sidecar.agent.send(undefined, '读取完整保存证据');
+  await sidecar.agent.idle(session);
+  assert.equal(parsed.data.saved_evidence.length, '保存输入与限制。'.length * 4000);
+  assert.equal(parsed.data.final_value, 612.3456);
+  assert.ok(steps(await sidecar.agent.view(session)).every(step => step.status === 'done'));
+});
+
+test('workbench scope reaches the model without being appended as machine identifiers in the user message', async () => {
+  let contextSent = '';
+  faux.setResponses([context => { contextSent = JSON.stringify(context); return fauxAssistantMessage([fauxText('已定位当前研究。')]); }]);
+  const question = '读取当前研究';
+  const { session } = await sidecar.agent.send(undefined, question, { workspace_id: 'workbench-workspace', study_id: 'workbench-study', label: '当前工作台' });
+  await sidecar.agent.idle(session);
+  assert.ok(contextSent.includes('workbench-workspace') && contextSent.includes('workbench-study'));
+  const user = (await sidecar.agent.view(session)).items.find(item => item.role === 'user')!;
+  assert.deepEqual(user.parts, [{ type: 'text', text: question }]);
 });
 
 test('a historical result card retains the saved method version and never infers engineering confidence from geometry', async () => {

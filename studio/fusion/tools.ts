@@ -4,11 +4,12 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { randomUUID } from 'node:crypto';
 import type { Schema } from '@earendil-works/pi-schema';
-import { failureText, scrubValue, shortened } from '../host/agent-tools.ts';
+import { failureText, scrubValue } from '../host/agent-tools.ts';
 import { Backend, BackendError, type BackendProposal, type BackendTool, type ToolResult, type WorkbenchContext } from './backend.ts';
 import { describeResult, remember } from './cards.ts';
 
 export interface Entry { session: string; turn: string }
+export interface AdoptedScopes { types: Set<string>; studies: Map<string, string> }
 export interface ReviewCall {
   id: string;
   tool: BackendTool;
@@ -26,21 +27,26 @@ export class ScopeBook {
   #backend: Backend;
   #message: string;
   #open = new Map<string, Promise<Entry>>();
-  #created = new Set<string>();
+  #adopted: AdoptedScopes;
+  #onAdopt: () => void;
   readonly context?: WorkbenchContext;
   readonly discovery = randomUUID();
 
-  constructor(backend: Backend, message: string, context?: WorkbenchContext) {
+  constructor(backend: Backend, message: string, context?: WorkbenchContext,
+    adopted: AdoptedScopes = { types: new Set(), studies: new Map() }, onAdopt: () => void = () => undefined) {
     this.#backend = backend;
     this.#message = message;
     this.context = context;
+    this.#adopted = adopted;
+    this.#onAdopt = onAdopt;
   }
 
   for(workspace: string): Promise<Entry> {
     let entry = this.#open.get(workspace);
     if (!entry) {
       // Only the session and turn: the call the platform's contract takes has no other field.
-      entry = this.#backend.open(workspace, this.#message, this.context?.workspace_id === workspace ? this.context.study_id : undefined).then(({ session, turn }) => ({ session, turn }));
+      const study = this.#adopted.studies.get(workspace) ?? (this.context?.workspace_id === workspace ? this.context.study_id : undefined);
+      entry = this.#backend.open(workspace, this.#message, study).then(({ session, turn }) => ({ session, turn }));
       this.#open.set(workspace, entry);
       entry.catch(() => this.#open.delete(workspace));
     }
@@ -55,13 +61,28 @@ export class ScopeBook {
   }
 
   assertTarget(workspace: string, tool: BackendTool): void {
-    if (tool.kind !== 'read' && this.context && this.context.workspace_id !== workspace && !this.#created.has(workspace)) {
+    if (tool.kind !== 'read' && this.context && this.context.workspace_id !== workspace && !this.#adopted.types.has(workspace)) {
       throw new BackendError('SCOPE_VIOLATION', '当前对话绑定了另一个工作台对象；请在目标工程或型号中另开对话后提出改动。', 403);
     }
   }
 
-  adoptCreated(receipt: Record<string, any>): void {
-    if (receipt.kind === 'type' && typeof receipt.type_id === 'string' && receipt.workspace_id === receipt.type_id) this.#created.add(receipt.type_id);
+  async adoptCreated(receipt: Record<string, any>): Promise<void> {
+    if (receipt.kind === 'type' && typeof receipt.type_id === 'string' && receipt.workspace_id === receipt.type_id) {
+      this.#adopted.types.add(receipt.type_id);
+      this.#onAdopt();
+    }
+    if (receipt.kind === 'study' && typeof receipt.workspace_id === 'string' && typeof receipt.study_id === 'string') {
+      const workspace = receipt.workspace_id;
+      const prior = this.#adopted.studies.get(workspace) ?? (this.context?.workspace_id === workspace ? this.context.study_id : undefined);
+      if (prior && prior !== receipt.study_id) {
+        // A clone accepted in a study-bound conversation is a new object. End the original scope and explicitly open the accepted
+        // study on the next call; never broaden the backend's study boundary to allow a foreign study in the original session.
+        const current = this.#open.get(workspace);
+        if (current) { const entry = await current; await this.#backend.finish(entry.session, entry.turn); this.#open.delete(workspace); }
+        this.#adopted.studies.set(workspace, receipt.study_id);
+        this.#onAdopt();
+      }
+    }
   }
 
   async close(): Promise<void> {
@@ -112,10 +133,12 @@ function named(value: unknown, names: Map<string, string>, keepIdentity = false)
   if (!value || typeof value !== 'object') return value;
   const converted = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, named(item, names, keepIdentity)])) as Record<string, unknown>;
   if (typeof converted.plugin_id !== 'string') return converted;
+  // This is an exact sealed input for a subsequent tool. An added display-only property would fail the backend's strict Method
+  // schema if the model copies it; discovery records already carry human-readable names next to their identities.
+  if (keepIdentity) return converted;
   const { plugin_id: identity, release_digest: _digest, ...rest } = converted;
   const name = names.get(identity as string);
-  return { ...(keepIdentity ? { plugin_id: identity, release_digest: _digest } : {}), ...rest,
-    method_name: name ? `${name}${typeof rest.version === 'string' ? ' ' + rest.version : ''}` : '某个方法' };
+  return { ...rest, method_name: name ? `${name}${typeof rest.version === 'string' ? ' ' + rest.version : ''}` : '某个方法' };
 }
 
 const refusalText = (result: ToolResult) => [result.summary, ...result.diagnostics.map(item => item.message).filter(message => message !== result.summary), ...result.next_actions].join(' ');
@@ -146,15 +169,17 @@ export function backendTools(backend: Backend, catalog: readonly BackendTool[], 
           if (receipt.status === 'failed' || receipt.error) {
             throw new BackendError('PROPOSAL_NOT_EXECUTED', '已接受，但平台未完成执行：' + (receipt.error?.message ?? '请在工作台查看保存诊断；没有替代结果。'), 422);
           }
-          scopes().adoptCreated(receipt);
+          await scopes().adoptCreated(receipt);
           result.data = { ...result.data, proposal: { ...result.data.proposal, status: 'approved' }, receipt };
           result.summary = '工程师已接受，平台返回了执行回执。请按回执确认结果；未核对、未发布的对象仍保持原状态。';
         }
         const shown = await describeResult(backend, tool.name, rest, result, workspace, signal);
-        // Method discovery must retain the sealed identity the next tool requires; screen prose still uses method_name.
+        // Method discovery must retain the exact sealed identity the next tool requires; result-only prose uses method names.
         const keepIdentity = ['method_list', 'plugin_inspect', 'plugin_query', 'study_read'].includes(tool.name);
         const told = JSON.stringify(scrubValue(named(brief(result), await namesOfMethods(backend), keepIdentity), roots)) ?? 'null';
-        return { content: [{ type: 'text' as const, text: shortened(told) }], details: shown };
+        // The backend owns bounded/paginated projections. Cutting serialized JSON breaks numeric evidence and can hide the
+        // exact method identity required by the next step; preserve the complete structured result supplied by that contract.
+        return { content: [{ type: 'text' as const, text: told }], details: shown };
       } catch (error) {
         throw new Error(failureText(error, roots));
       }

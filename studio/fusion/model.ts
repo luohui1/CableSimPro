@@ -26,7 +26,7 @@ export async function agentStatus(backend: Backend): Promise<AgentStatus> {
   return { configured: false, hint: NOT_CONFIGURED };
 }
 
-/** The model for a conversation: through the platform's proxy when it holds one, else from this process's environment, else none. */
+/** The model for a conversation comes only from the platform's resolved configuration and always uses its credential proxy. */
 export async function resolveModel(backend: Backend): Promise<ModelConfig | null> {
   let held: BackendModel | undefined;
   try {

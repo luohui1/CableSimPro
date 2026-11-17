@@ -15,11 +15,12 @@ import { targetFor } from './cards.ts';
 import { agentStatus, NOT_CONFIGURED, resolveModel } from './model.ts';
 import { noPaths, pi, type ModelConfig } from './pi.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
-import { backendTools, ScopeBook, type Entry, type ReviewCall, type ReviewDecision } from './tools.ts';
+import { backendTools, ScopeBook, type AdoptedScopes, type Entry, type ReviewCall, type ReviewDecision } from './tools.ts';
 
 const SKILLS = resolve(dirname(fileURLToPath(import.meta.url)), '../skills');
 const PROPOSAL_ENTRY = 'cablesim.fusion.proposal';
 const CONTEXT_ENTRY = 'cablesim.fusion.context';
+const ADOPTED_ENTRY = 'cablesim.fusion.created';
 interface RecordedProposal { proposal: Proposal; scope: Entry }
 interface Waiting extends RecordedProposal {
   live: Live;
@@ -49,6 +50,7 @@ interface Live {
   /** The platform sessions of the question being answered. */
   scopes?: ScopeBook;
   context?: WorkbenchContext;
+  adopted: AdoptedScopes;
   unsubscribe(): void;
 }
 
@@ -121,6 +123,18 @@ export class FusionAgent {
     }
     return { label: this.#titles.get(tool) ?? tool, target: targetFor(tool, args) };
   };
+
+  #scopes(live: Live, message: string): ScopeBook {
+    return new ScopeBook(this.#backend, message, live.context, live.adopted, () => {
+      live.manager.appendCustomEntry(ADOPTED_ENTRY, { types: [...live.adopted.types], studies: [...live.adopted.studies] });
+    });
+  }
+
+  #activeContext(live: Live): WorkbenchContext | undefined {
+    if (!live.context) return undefined;
+    const study = live.adopted.studies.get(live.context.workspace_id);
+    return study ? { workspace_id: live.context.workspace_id, study_id: study, label: '本对话已接受创建的研究' } : live.context;
+  }
 
   #recorded(manager?: SessionManager): Map<string, RecordedProposal> {
     const records = new Map<string, RecordedProposal>();
@@ -274,10 +288,15 @@ export class FusionAgent {
   // ---- running ----
 
   /** What the model is given of the platform's tools, and no tool outside them. */
-  #guard(names: () => ReadonlySet<string>): ExtensionFactory {
+  #guard(names: () => ReadonlySet<string>, context: () => WorkbenchContext | undefined): ExtensionFactory {
     return pi_ => {
       // The model has no use for the machine's paths: the working folder is left out of what it is told.
-      pi_.on('before_agent_start', event => ({ systemPrompt: noPaths(event.systemPrompt) }));
+      pi_.on('before_agent_start', event => {
+        const current = context();
+        return { systemPrompt: noPaths(event.systemPrompt) + (current
+          ? `\n当前工作台对象：${JSON.stringify(current)}。先用工具核对对象；只能向此对象或本任务中已接受创建的对象提出改动。`
+          : '') };
+      });
       pi_.on('tool_call', event => (names().has(event.toolName) ? undefined : { block: true, reason: `没有工具 ${event.toolName}。` }));
     };
   }
@@ -316,8 +335,15 @@ export class FusionAgent {
       manager = SessionManager.create(this.#cwd, this.#sessions);
     }
     await this.#recover(manager);
-    const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, revision: 0, unsubscribe: () => undefined };
-    for (const entry of manager.getEntries()) if (entry.type === 'custom' && entry.customType === CONTEXT_ENTRY) live.context = entry.data as WorkbenchContext;
+    const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, revision: 0,
+      adopted: { types: new Set(), studies: new Map() }, unsubscribe: () => undefined };
+    for (const entry of manager.getEntries()) if (entry.type === 'custom') {
+      if (entry.customType === CONTEXT_ENTRY) live.context = entry.data as WorkbenchContext;
+      if (entry.customType === ADOPTED_ENTRY) {
+        const saved = entry.data as { types: string[]; studies: [string, string][] };
+        live.adopted = { types: new Set(saved.types), studies: new Map(saved.studies) };
+      }
+    }
     const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: true, maxRetries: 2 }, enableInstallTelemetry: false });
     const names = new Set(catalog.map(tool => tool.name));
     names.add('read');
@@ -325,11 +351,11 @@ export class FusionAgent {
       cwd: this.#cwd, agentDir: this.#agentDir, settingsManager,
       // Nothing is discovered: not the repository's AGENTS.md or CLAUDE.md, not a user's own extensions, skills, themes or prompts.
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-      additionalSkillPaths: [SKILLS], extensionFactories: [this.#guard(() => names)], systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
+      additionalSkillPaths: [SKILLS], extensionFactories: [this.#guard(() => names, () => this.#activeContext(live))], systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
     });
     await loader.reload();
     const { skills } = loader.getSkills();
-    const tools = [...backendTools(this.#backend, catalog, () => (live.scopes ??= new ScopeBook(this.#backend, '继续当前任务', live.context)), [this.home], call => this.#review(live, call)),
+    const tools = [...backendTools(this.#backend, catalog, () => (live.scopes ??= this.#scopes(live, '继续当前任务')), [this.home], call => this.#review(live, call)),
       skillReader(skills, path => readFileSync(path, 'utf-8'))];
     const { session } = await createAgentSession({
       cwd: this.#cwd, agentDir: this.#agentDir, modelRuntime: config.models, model: config.model, thinkingLevel: config.thinking,
@@ -366,7 +392,7 @@ export class FusionAgent {
         live.manager.appendCustomEntry(CONTEXT_ENTRY, context);
       }
     }
-    const message = text.trim() + (live.context ? `\n[当前工作台对象：${JSON.stringify(live.context)}。先用工具核对对象；仅可向此对象提出改动。]` : '');
+    const message = text.trim();
     if (live.running) {
       await live.session.prompt(message, { streamingBehavior: 'steer', expandPromptTemplates: false });
       this.#changed(live, true);
@@ -375,7 +401,7 @@ export class FusionAgent {
     live.running = true;
     live.error = undefined;
     // A question gets sessions of its own on the platform, so the project's revision is the one in force when it was asked.
-    live.scopes = new ScopeBook(this.#backend, message.slice(0, 8000), live.context);
+    live.scopes = this.#scopes(live, message.slice(0, 8000));
     live.run = live.session.prompt(message, { expandPromptTemplates: false }).catch(error => {
       live.error = failureText(error, [this.home]);
     }).finally(async () => {

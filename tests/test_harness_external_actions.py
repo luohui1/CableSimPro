@@ -168,7 +168,8 @@ def test_type_edit_and_internal_specification_are_reviewed_and_exact(client):
     assert customer['status'] == 'error' and customer['diagnostics'][0]['code'] == 'SPECIFICATION_EVIDENCE_REQUIRED'
 
 
-def test_created_type_is_idempotent_after_lost_receipt_without_silent_scope_change(client, monkeypatch):
+@pytest.mark.parametrize('retry_accept', [True, False])
+def test_created_type_is_idempotent_after_lost_receipt_without_silent_scope_change(client, monkeypatch, retry_accept):
     w, _ = study(client)
     scope = open_session(client, w)
     before = counts(client)
@@ -187,7 +188,8 @@ def test_created_type_is_idempotent_after_lost_receipt_without_silent_scope_chan
     edit = client.post(f'/api/workspaces/{w["id"]}/edit', json={'expected_revision': w['revision'],
                       'changes': [{'path': 'installation.depth_m', 'value': 1.1}]})
     assert edit.status_code == 200
-    saved = decide(client, proposal)
+    saved = decide(client, proposal, retry_accept)
+    assert saved['status'] == 'approved'  # recovery cannot turn an executed approval into a rejection
     assert saved['receipt']['type_id'] != w['id']
     assert counts(client)['workspaces'] == before['workspaces'] + 1
     assert decide(client, proposal) == saved
@@ -206,6 +208,8 @@ def test_scope_and_discovery_budget_and_missing_import_contract(client):
     assert result['status'] == 'error' and 'proposal' not in result['data']
     result = call(client, 'propose_type_changes', {'type_id': other['id'], 'changes': [], 'reason': '越界'}, scope['session'], scope['turn']).json()
     assert result['status'] == 'error'
+    result = call(client, 'type_read', {'type_id': other['id']}, scope['session'], scope['turn']).json()
+    assert result['status'] == 'error' and result['diagnostics'][0]['code'] == 'TOOL_ARGUMENTS_INVALID'
     result = call(client, 'propose_study', {'title': '缺少必要输入'}, scope['session'], scope['turn']).json()
     assert result['status'] == 'error' and result['diagnostics'][0]['code'] == 'STUDY_INPUT_REQUIRED'
     assert counts(client) == before

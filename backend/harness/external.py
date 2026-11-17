@@ -8,6 +8,7 @@ adds the key, so neither the browser nor the kernel ever holds it.
 
 Everything is off until CABLESIM_AGENT_SIDECAR_TOKEN is set; the token is what the kernel presents on every call it makes here.
 """
+from copy import deepcopy
 from dataclasses import dataclass
 import hmac
 import json
@@ -31,7 +32,7 @@ from .contracts import CreateSession
 from .recipe_compiler import compile_calls
 from .security import redact, remember_secret
 from .tool_broker import ToolBroker, failure
-from .external_actions import SCOPES as ACTION_SCOPES, tools as action_tools, initialize as initialize_files
+from .external_actions import SCOPES as ACTION_SCOPES, tools as action_tools
 from .external_stream import safe_sse, MAX_RESPONSE
 from backend.kernel.workspace import stamp
 
@@ -213,6 +214,11 @@ class ExternalTools:
         visible = harness.registry.visible(record)
         tools = {name: visible.get(name, tool) for name, tool in self.hosts.items() if name in TOOL_SCOPES}
         tools.update(action_tools())
+        if name in ('type_read', 'propose_type_changes'):
+            # Cross-type inspection remains possible through its own explicitly
+            # bound session; one external call cannot borrow a foreign scope.
+            tools[name] = deepcopy(tools[name])
+            tools[name].parameters['properties']['type_id']['const'] = task['workspace_id']
         plan = compile_calls([{'id': 'external-' + uuid4().hex[:12], 'name': name, 'arguments': arguments}],
                              tools, record['workspace_id'], record['workspace_revision'])
         node = plan['nodes'][0]['id']
@@ -278,8 +284,9 @@ def make_router(harness, link):
     def file(pid: UUID):
         from hashlib import sha256
         from fastapi.responses import Response
-        initialize_files(harness.research.store)
         with harness.research.store.db() as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_external_files'").fetchone():
+                raise HTTPException(404, '没有此已生成文件。')
             row = db.execute('SELECT * FROM agent_external_files WHERE proposal_id=?', (str(pid),)).fetchone()
         if not row: raise HTTPException(404, '没有此已生成文件。')
         with harness.tasks.db() as db:
