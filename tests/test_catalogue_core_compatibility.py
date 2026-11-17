@@ -60,10 +60,11 @@ print('canonical identities, legacy CLI handlers and 59 source rows verified')
     assert '59 source rows verified' in result.stdout
 
 
-def test_catalogue_files_have_one_physical_copy_and_preserve_original_bytes():
+def test_catalogue_files_have_one_physical_copy_and_pinned_canonical_bytes():
+    """Pin canonical JSON, including audited guidance; original PDF identity is checked separately."""
     expected = {
         'people_mv_xlpe.json': 'a910d968e6144fbb175239b95d1da9efe0da2df372a1e18da0f1dc5aebaad3fd',
-        'bahra_mv_lead_sheathed.json': '3f6e934f16f86dd7748359e50c2aea9ea86aa3feb1e5f593f5080e3067ed70b2',
+        'bahra_mv_lead_sheathed.json': 'd4b4f93b280288ef1b4f53ef2258ffffd659bf8f842cbbf1858d0caf6499ce69',
     }
     for filename, digest in expected.items():
         assert sha256((ROOT / 'backend/kernel/catalogue_core/catalogues' / filename).read_bytes()).hexdigest() == digest
