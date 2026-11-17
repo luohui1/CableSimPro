@@ -124,6 +124,7 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
             notices.write(runtime["url"] + "\nSHA256 " + runtime["sha256"] + "\n")
             notices.write("Original runtime and dependency notices (preserved verbatim):\n"
                           + "\n".join(runtime["license_files"]) + "\n")
+        release_python_runtime.prune_bytecode(staged / "runtime/python")
         files = {path.relative_to(staged).as_posix(): {"size_bytes": path.stat().st_size, "sha256": digest(path)}
                  for path in sorted(staged.rglob("*")) if path.is_file() and path.name != "release.toml"}
         value = {"format": FORMAT, "target": target(), "git_commit": commit,
