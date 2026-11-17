@@ -243,3 +243,33 @@ def test_windows_rejects_case_aliases_in_files_and_implicit_parents(tmp_path, na
     with pytest.raises(RuntimeError, match="Case-alias"):
         runtime.extract_runtime(archive, target, case_sensitive=False)
     assert not target.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Linux venv base interpreter alias")
+def test_runtime_identity_accepts_two_embedded_linux_executable_names(tmp_path, monkeypatch):
+    from scripts import release_runtime_verification as verification
+    root = tmp_path / "installed"
+    base = root / "runtime/python/bin"
+    base.mkdir(parents=True)
+    for name in ("python", "python3.12"):
+        (base / name).write_bytes(b"copied embedded CPython")
+    (root / "runtime/python-runtime.json").write_text(json.dumps({
+        "version": "3.12.15", "format": "cablesim.python-runtime/1",
+        "executable": "runtime/python/bin/python3.12"}))
+    venv = root / ".venv/bin/python"
+    venv.parent.mkdir(parents=True)
+    venv.write_bytes(b"venv launch")
+    observed = {"executable": str(venv), "base_executable": str(base / "python"),
+        "base_prefix": str(root / "runtime/python"), "prefix": str(root / ".venv"),
+        "stdlib": str(root / "runtime/python/lib/python3.12"), "version": [3, 12, 15]}
+    monkeypatch.setattr(verification.subprocess, "run",
+                        lambda *a, **k: type("Result", (), {"stdout": json.dumps(observed)})())
+    result = verification.runtime_identity(root, {"PATH": str(tmp_path / "empty-bin")})
+    assert result["base_executable"] == str(base / "python")
+    assert result["uses_evidence_driver"] is False
+    outside = tmp_path / "outside-python"
+    outside.write_bytes(b"outside interpreter")
+    (base / "python").unlink()
+    (base / "python").symlink_to(outside)
+    with pytest.raises(RuntimeError, match="outside"):
+        verification.runtime_identity(root, {"PATH": str(tmp_path / "empty-bin")})
