@@ -80,7 +80,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await search.fill(name);
     const table = main.getByRole('table', { name: groupTitles[group], exact: true });
     const matching = table.getByRole('row', { name, exact: true });
-    const row = (version ? matching.filter({ has: page.getByRole('cell', { name: version, exact: true }) }) : matching).first();
+    const row = (version ? matching.filter({ has: page.getByRole('checkbox', { name: `选择资源 ${name} ${version}`, exact: true }) }) : matching).first();
     await expect(row).toBeVisible();
     await row.focus();
     await row.press('Enter');
@@ -343,17 +343,30 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     const browser = page.locator('[data-page="standards-basis"]');
     const table = main.getByRole('table', { name: groupTitles.standards, exact: true });
     const versionRow = table.getByRole('row', { name: before.name, exact: true }).filter({
-      has: page.getByRole('cell', { name: before.version, exact: true }),
+      has: page.getByRole('checkbox', { name: `选择资源 ${before.name} ${before.version}`, exact: true }),
     });
+    const sourceEditions = before.release.sources.flatMap(source => {
+      try { const value = JSON.parse(source.reference); return value.schema === 'cablesim.reference-data/1' && typeof value.edition === 'string' ? [value.edition] : []; }
+      catch { return []; }
+    });
+    check('标准资源显示的版次来自真实保存的标准出处', sourceEditions.length > 0,
+      { id: before.id, version: before.version, editions: sourceEditions });
     const expectVersion = async () => {
       await expect(resourcesTab).toHaveAttribute('aria-selected', 'true');
       await expect(browser).toBeHidden();
       await expect(properties.getByRole('heading', { name: before.name, exact: true })).toBeVisible();
       await expect(properties).toContainText(knownStatuses[before.status]);
       await expect(versionRow).toHaveCount(1);
-      await expect(versionRow.getByRole('cell', { name: before.version, exact: true })).toHaveText(before.version);
+      const displayedVersion = versionRow.locator('[data-resource-version]');
+      await expect(displayedVersion).toHaveAttribute('data-resource-version', before.version);
+      await expect(displayedVersion).toHaveText(sourceEditions[0]);
+      await expect(properties).toContainText(sourceEditions[0]);
+      await displayedVersion.focus();
+      await expect(page.getByRole('tooltip')).toHaveText(`资源版本 ${before.version} · 第 ${before.revision} 修订`);
+      await displayedVersion.press('Escape');
+      await expect(page.getByRole('tooltip')).toHaveCount(0);
       check('标准资源页完整显示所指名称和版次', new URL(page.url()).searchParams.get('item') === before.id,
-        { id: before.id, name: before.name, version: before.version, url: page.url() });
+        { id: before.id, name: before.name, version: before.version, edition: sourceEditions[0], url: page.url() });
     };
     const expectBasis = async () => {
       await expect(basisTab).toHaveAttribute('aria-selected', 'true');
@@ -387,14 +400,24 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await capture('standard-fixed-link-resource-mouse');
     const saved = await api(`/api/foundation/assets/${before.id}`);
     const workspaceAfter = await api(`/api/workspaces/${referenceWorkspace.id}`);
-    check('标准深链接刷新与键鼠页签往返不写入或漂移固定引用', report.writes.length === writesBefore
+    const requests = report.writes.slice(writesBefore);
+    // This exact POST is the sealed read_only lookup in plugin_host/query_router.py,
+    // also admitted by the existing read-only audits. Keep every raw request;
+    // no other POST (including previews, saves or approvals) is a read here.
+    const isReadOnlyLookup = request => request.method === 'POST'
+      && request.path === '/api/plugin-queries/cablesim.standards-basis/lookup';
+    const readOnlyQueries = requests.filter(isReadOnlyLookup);
+    const mutations = requests.filter(request => !isReadOnlyLookup(request));
+    check('标准深链接刷新与键鼠页签往返不写入或漂移固定引用', mutations.length === 0
       && saved.id === before.id && saved.version === before.version && saved.revision === before.revision
       && saved.status === before.status && saved.content_sha256 === before.content_sha256
       && JSON.stringify(saved.release) === JSON.stringify(before.release) && JSON.stringify(saved.events) === JSON.stringify(before.events)
       && workspaceAfter.revision === workspaceBefore.revision
       && JSON.stringify(workspaceAfter.domain) === JSON.stringify(workspaceBefore.domain)
       && JSON.stringify(workspaceAfter.type_resource_bindings) === JSON.stringify(workspaceBefore.type_resource_bindings),
-    { writes: report.writes.slice(writesBefore), resource: before.id, version: before.version, digest: saved.content_sha256,
+    { writes: requests, readOnlyQueries, mutations,
+      readOnlyQueryReason: '标准库查询核对 read_only 声明与发行摘要，仅返回依据和查询工件；不保存资源、工程或批准要求。',
+      resource: before.id, version: before.version, digest: saved.content_sha256,
       beforeRevision: workspaceBefore.revision, afterRevision: workspaceAfter.revision });
   }
 
@@ -533,6 +556,51 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await expect(checkEntry).toBeVisible();
     check('执行标准空状态可用键盘进入核对并返回且没有写入', report.writes.length === navigationWrites,
       { workspace: referenceWorkspace.id, writes: report.writes.slice(navigationWrites) });
+    const approvalBefore = await api(`/api/types/${referenceWorkspace.id}/standards-summary`);
+    expect(approvalBefore.revision).toBe(saved.revision);
+    expect(approvalBefore.standards, '刚声明执行版本，没有代替工程师批准要求').toEqual([]);
+    const directory = page.locator('.workbench-sidebar').getByRole('link', { name: '型号设计', exact: true });
+    if (size.width === 1366) { await directory.focus(); await directory.press('Enter'); }
+    else await directory.click();
+    await page.waitForURL(url => url.pathname === '/types' && url.searchParams.get('theme') === 'light');
+    const names = [...new Set(savedDeclaration.items.map(item => item.standard.trim()))];
+    const catalogStandard = page.locator(`[data-type-execution-standards="${referenceWorkspace.id}"]`);
+    for (const reload of [false, true]) {
+      if (reload) await page.reload();
+      await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
+      await expect(catalogStandard).toHaveAttribute('data-declaration-state', 'declared');
+      await expect(catalogStandard).toHaveAttribute('data-approval-state', 'ready');
+      await expect(catalogStandard).toHaveText(names.join('、'));
+      await catalogStandard.scrollIntoViewIfNeeded();
+      await expect(catalogStandard).toBeInViewport({ ratio: 1 });
+      await capture(reload ? 'standard-declaration-catalog-after-refresh' : 'standard-declaration-catalog-without-approval');
+    }
+    const catalogRow = page.getByRole('table', { name: '型号', exact: true })
+      .locator('[id="row-型号-' + referenceWorkspace.id + '"]');
+    const openType = catalogRow.locator('button.object-link');
+    if (size.width === 1920) { await openType.focus(); await openType.press('Enter'); }
+    else await openType.click();
+    await page.waitForURL(url => url.pathname === `/types/${referenceWorkspace.id}/structure/section`
+      && !url.searchParams.get('run') && !url.searchParams.get('revision'));
+    await expect(page.locator('.type-root .topbar h1')).toContainText(referenceWorkspace.name);
+    await page.getByRole('navigation', { name: '型号浏览器', exact: true }).getByRole('button', { name: /^要求与标准/ }).click();
+    const executionTab = page.getByRole('tab', { name: '执行标准', exact: true });
+    if (size.width === 1920) { await executionTab.focus(); await executionTab.press('Enter'); }
+    else await executionTab.click();
+    const declared = page.getByLabel('已声明执行标准', { exact: true });
+    await expect(declared).toBeVisible();
+    for (const name of names) await expect(declared).toContainText(name);
+    await capture('standard-declaration-catalog-returned-to-same-input');
+    const [afterCatalog, approvalAfter] = await Promise.all([
+      api(`/api/workspaces/${referenceWorkspace.id}`), api(`/api/types/${referenceWorkspace.id}/standards-summary`),
+    ]);
+    check('真实声明保存后目录刷新与键鼠往返保留版本且不自动批准', report.writes.length === navigationWrites
+      && afterCatalog.revision === saved.revision && JSON.stringify(afterCatalog.domain) === JSON.stringify(saved.domain)
+      && JSON.stringify(afterCatalog.type_resource_bindings) === JSON.stringify(saved.type_resource_bindings)
+      && JSON.stringify(approvalAfter) === JSON.stringify(approvalBefore),
+    { workspace: referenceWorkspace.id, names, revision: afterCatalog.revision,
+      declaration: savedDeclaration, approvalBefore, approvalAfter, writes: report.writes.slice(navigationWrites) });
+    trace.catalog = { names, revision: afterCatalog.revision, approvedStandards: approvalAfter.standards, url: page.url() };
     return { ...selected, target: target.id, originals: trace.sources.map(item => item.source) };
   }
 
@@ -664,6 +732,21 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       await rows.first().press('Enter');
       await expect(properties).toBeVisible();
       await expect(properties).toContainText('来源');
+      const badges = properties.locator('.source-badge');
+      check('固定型号名片有真实来源说明可核对', await badges.count() > 0);
+      for (const badge of await badges.all()) {
+        await badge.scrollIntoViewIfNeeded();
+        await expect(badge).toBeInViewport({ ratio: 1 });
+        const bounds = await badge.evaluate(node => {
+          const rect = node.getBoundingClientRect(), panel = node.closest('.property-panel').getBoundingClientRect();
+          const range = document.createRange(); range.selectNodeContents(node);
+          const text = [...range.getClientRects()].filter(box => box.width && box.height);
+          return { label: node.textContent, insidePanel: rect.left >= panel.left && rect.right <= panel.right,
+            completeText: text.every(box => box.left >= rect.left - 1 && box.right <= rect.right + 1) };
+        });
+        check('固定型号来源徽标完整显示且不被名片边界裁切', bounds.insidePanel && bounds.completeText, bounds);
+      }
+      await capture('cable-version-source-badges-readable');
     }
     const search = main.getByRole('textbox', { name: /检索|查找型号|搜索/ }).or(main.getByRole('searchbox')).first();
     await check('电缆型号版本提供名称检索', await search.isVisible(), '目录目前只有来源筛选；型号数量多时不能按名称直接定位。');

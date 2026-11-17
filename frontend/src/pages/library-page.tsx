@@ -13,6 +13,7 @@ import { Toolbar } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { propertyLabel, referenceCitation, referenceData, referenceNumber, rightsLabel } from "@/lib/reference-data";
 import { StandardsBrowser } from '@/features/standards/browser';
@@ -196,9 +197,10 @@ export function AssetsPage() {
     queryFn: ({ signal }) => getAsset(selected, signal),
     enabled: !!selected && !browsingBasis,
   });
-  const materialRows = groupId === 'materials' ? rows.filter(row => row.kind === 'material') : [];
-  const coverageQueries = useQueries({ queries: materialRows.map(row => ({ queryKey: ['asset-detail', row.id], queryFn: ({ signal }: { signal: AbortSignal }) => assetDetail(row.id, signal), retry: false })) });
-  const coverage = new Map(materialRows.map((row, index) => [row.id, coverageQueries[index]]));
+  const inspectedRows = rows.filter(row => groupId === 'materials' ? row.kind === 'material' : groupId === 'standards' && row.kind === 'rule');
+  const inspectionQueries = useQueries({ queries: inspectedRows.map(row => ({ queryKey: ['asset-detail', row.id], enabled: !browsingBasis,
+    queryFn: ({ signal }: { signal: AbortSignal }) => row.kind === 'rule' ? getAsset(row.id, signal) : assetDetail(row.id, signal), retry: false })) });
+  const inspections = new Map(inspectedRows.map((row, index) => [row.id, inspectionQueries[index]]));
   const importing = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -402,14 +404,27 @@ export function AssetsPage() {
                   { id: 'selected', label: '选择', render: row => <span className="resource-selection" onClick={event => event.stopPropagation()}><Checkbox aria-label={`选择资源 ${text(row.name)} ${text(row.version)}`} checked={!!chosen[row.id]} disabled={!chosen[row.id] && selectedCount >= 50} title={!chosen[row.id] && selectedCount >= 50 ? '每批最多 50 项，请先完成当前批次' : undefined} onCheckedChange={value => choose(row.id, text(row.name), value === true)} /></span> },
                   { id: "name", label: "名称", wrap: true, render: (row) => text(row.name) },
                   ...(group.kinds.length > 1 ? [{ id: "kind", label: "类别", render: (row: (typeof rows)[number]) => kinds[text(row.kind)] || text(row.kind) }] : []),
-                  { id: "version", label: "版本", render: (row) => text(row.version) },
+                  { id: "version", label: "版本", wrap: true, render: (row) => {
+                    if (row.kind !== 'rule') return text(row.version);
+                    const query = inspections.get(row.id);
+                    if (query?.isPending) return <span aria-busy="true">正在读取版本</span>;
+                    const changed = query?.data && (query.data.revision !== row.revision || query.data.content_sha256 !== row.content_sha256);
+                    if (!query?.data || query.isError || changed) return <button className="settings-link" onClick={event => {
+                      event.stopPropagation(); void Promise.all([query?.refetch(), ...pages.map(page => page.refetch())]);
+                    }}>{changed ? '版本已变化 · 重读目录' : '版本读取失败 · 重试'}</button>;
+                    // The source supplies the standard edition. The resource's
+                    // immutable version stays available for exact identification;
+                    // a local derived version does not become a new standard edition.
+                    const edition = referenceData(optionalRecord(query.data.release).sources).editions[0]?.edition;
+                    return <Tooltip content={`资源版本 ${text(row.version)} · 第 ${numeric(row.revision) ?? '—'} 修订`}><span tabIndex={0} data-resource-version={text(row.version)}>{edition || text(row.version)}</span></Tooltip>;
+                  } },
                   {
                     id: "status",
                     label: "状态",
                     wrap: true,
                     render: (row) => {
                       if (groupId !== 'materials' || row.kind !== 'material') return <StatusMark kind={row.status === "published" ? "saved" : row.status === "deprecated" ? "historical" : "draft"} label={statuses[text(row.status)] || text(row.status)} />;
-                      const query = coverage.get(row.id);
+                      const query = inspections.get(row.id);
                       const values = query?.data ? assetCoverage(optionalRecord(query.data.release)) : undefined;
                       return <div className="asset-state"><StatusMark
                         kind={row.status === "published" ? "saved" : row.status === "deprecated" ? "historical" : "draft"}
