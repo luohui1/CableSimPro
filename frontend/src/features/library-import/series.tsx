@@ -115,7 +115,7 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
         ]} />
       </section>}
     </>}
-    <LibraryDialog open={operation !== null} onOpenChange={closeBatch} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
+    <LibraryDialog open={operation !== null} onOpenChange={closeBatch} busy={busy} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
       <div className="library-import-stack">
         <p>{checked.map(spec => `${spec.name}（第 ${spec.version} 版）`).join('；')}</p>
         {operation === 'review' && <>
@@ -170,9 +170,10 @@ function SpecSources({ spec, onClose }: { spec: LibrarySpec; onClose: () => void
       await Promise.all([client.invalidateQueries({ queryKey: ['type-library', 'spec', spec.id] }), client.invalidateQueries({ queryKey: ['type-library', 'series'] })]);
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
-  return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title={spec.name} description={`第 ${version} 版 · ${STATES[current.state] || '待核对'}`} initialFocus="form">
+  return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} busy={busy} title={spec.name} description={`第 ${version} 版 · ${STATES[current.state] || '待核对'}`} initialFocus="form">
     {detail.isPending ? <LoadingState title="正在读取来源与版本" /> : detail.isError ? <ErrorState description={message(detail.error)} action={<Button onClick={() => void detail.refetch()}>重新读取来源</Button>} /> : <div className="library-import-stack">
-      <Select label="查看规格版本" value={String(version)} onChange={next => setVersion(Number(next))} options={(detail.data?.versions || [spec]).map(item => ({ value: String(item.version), label: `第 ${item.version} 版 · ${STATES[item.state] || '待核对'}` }))} />
+      <Select label="查看规格版本" disabled={busy} value={String(version)} onChange={next => setVersion(Number(next))} options={(detail.data?.versions || [spec]).map(item => ({ value: String(item.version), label: `第 ${item.version} 版 · ${STATES[item.state] || '待核对'}` }))} />
+      {busy && <p role="status">{notice ? '正在刷新版本与系列，完成后可切换版本或关闭…' : '正在保存独立新版本…'}</p>}
       <p className="muted">以下是该版本保存的原始导入数值。{current.has_design_changes ? '型号设计已有后续修改，请打开型号设计核对当前结构。' : '原始文件摘要与每个单元格的出处已随版本保留。'}</p>
       <ValueTable values={values} />
       {current.workspace_id && <div><Button asChild><a href={`/types/${encodeURIComponent(current.workspace_id)}/structure/section`}>打开型号设计</a></Button></div>}
