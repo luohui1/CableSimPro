@@ -784,7 +784,7 @@ def build_release_seed(staged, database, identity):
             result['factory_series_calculations'] = calculate_factory_series(client, result['public_catalogues'])
             save_factory_analyses(api, result['factory_series_calculations'])
             result['examples'] = {
-                'factory': {'title':'电缆厂 · 8.7/15 kV 完整系列',
+                'factory': {'title':'电缆厂 · 8.7/15 kV 全规格来源与研究草稿',
                             'series_ids':[item['series_id'] for item in result['public_catalogues'] if item['sample_id']=='people-mv'],
                             'calculated_series_id':result['factory_series_calculations']['series_id'],
                             'workspace':workspace['id'], 'scope':'原厂公开表完整规格；工程补充逐项声明，导入版本保持草稿。'},
