@@ -24,17 +24,18 @@ from .security import redact
 from .session_scope import is_type
 from .tool_registry import Tool, TEXT, object_schema
 from .external_parameters import review_points
+from .external_imports import ACTION_SCOPES as IMPORT_ACTIONS, READ_SCOPES as IMPORT_READS, StructureImports
 
 
 READ_SCOPES = {
     'method_list': 'global', 'type_creation_options': 'global',
-    'structure_import_inspect': 'global', 'study_compare': 'workspace', 'resource_read': 'workspace',
+    'structure_import_inspect': 'global', 'study_compare': 'workspace', 'resource_read': 'workspace', **IMPORT_READS,
 }
 ACTION_SCOPES = {
     'propose_study': 'workspace', 'propose_study_run': 'workspace',
     'propose_delivery': 'workspace', 'propose_type_create': 'workspace',
     'propose_standard_structure': 'workspace', 'propose_type_basis': 'type',
-    'propose_type_specification': 'type', 'propose_rating_table': 'type',
+    'propose_type_specification': 'type', 'propose_rating_table': 'type', **IMPORT_ACTIONS,
 }
 SCOPES = {**READ_SCOPES, **ACTION_SCOPES}
 RUN_IDS = {'type': 'array', 'minItems': 1, 'maxItems': 2,
@@ -44,10 +45,11 @@ RUN_IDS = {'type': 'array', 'minItems': 1, 'maxItems': 2,
 def tools():
     from .external_rating import schema as rating_schema
     from .external_resources import schema as resource_schema
+    from .external_imports import tools as import_tools
     definitions = [
         ('method_list', '读取计算方法', 'read', '读取已安装方法的准确版本和能力；参数须继续用 plugin_inspect 读取，不猜方法标识或缺失数据。', object_schema()),
         ('type_creation_options', '读取型号创建起点', 'read', '读取旧平台实际型号版本及其摘要、标准结构输入契约。不会新建型号。', object_schema()),
-        ('structure_import_inspect', '检查结构表导入能力', 'read', '检查老平台是否接入厂家 Excel/CSV 结构表。未接入时明确拒绝，不调用另一套产品库。', object_schema({'filename': {'type': 'string', 'maxLength': 255}})),
+        ('structure_import_inspect', '检查结构表导入能力', 'read', '读取当前型号库实际结构表契约、字段与限制。必须实际选择附件，文件名不能代替文件。上传、预览、入库和核对分别须人接受。', object_schema({'filename': {'type': 'string', 'maxLength': 255}})),
         ('study_compare', '比较保存运行', 'read', '比较同工程内两条真实保存运行，先看输入差异，再看同量纲结果；不重新计算。', object_schema({'run_ids': {**RUN_IDS, 'minItems': 2}}, ['run_ids'])),
         ('resource_read', '读取资源正文', 'read', '仅读取旧平台资产定义、厂家资料页或保存提取结果，以及本工作区的载流量表。固定资源白名单、准确对象标识、摘要与分页；不上传、不运行，不接受URL或任意接口。', resource_schema()),
         ('propose_rating_table', '提出保存载流量表研究', 'propose', '仅本型号：按旧平台工况契约编译并提议保存载流量表研究。逐行明确条件、口径、单位与来源，不补默认工程值。人接受只保存定义；运行与导出分别另行接受。', rating_schema()),
@@ -69,7 +71,7 @@ def tools():
         ('propose_type_basis', '提出查询型号标准依据', 'propose', '按当前型号声明的标准查询封签依据并保存查询回执；不批准标准要求、不修改结构、不运行核对研究。', object_schema()),
         ('propose_type_specification', '提出导出规格书', 'propose', '只用当前型号的保存结构及真实保存运行导出 PDF。客户版缺证据拒绝；内部版保留缺项。不会暗中建研究、重算或发布。', object_schema({'audience': {'enum': ['internal', 'customer']}}, ['audience'])),
     ]
-    return {entry[0]: Tool(*entry) for entry in definitions}
+    return {**{entry[0]: Tool(*entry) for entry in definitions}, **import_tools()}
 
 
 def fail(code, message, path=None, status=422):
@@ -110,6 +112,8 @@ class ExternalActions:
         return study, selected
 
     def dispatch(self, task, name, args):
+        if name == 'structure_import_read':
+            return StructureImports(self).read(task, args)
         if name == 'resource_read':
             from .external_resources import read
             return read(self, task, args)
@@ -123,11 +127,7 @@ class ExternalActions:
         if name == 'type_creation_options':
             return ToolResult(status='ok', summary='已读取型号库版本与标准结构契约。', data=self.types.creation_options())
         if name == 'structure_import_inspect':
-            return ToolResult(status='error', summary='老平台尚未接入厂家 Excel/CSV 结构表的预览与批量入库接口，不能导入或核对这张表。',
-                diagnostics=[{'code': 'STRUCTURE_IMPORT_UNAVAILABLE', 'message': '缺少结构表上传、列映射预览与批量草稿提交接口。原始文件未写入型号库。', 'recoverable': True}],
-                data={'available': False, 'formats': ['xlsx', 'csv'], 'workbench_path': '/resources/cables/imports',
-                      'required_contract': ['upload: immutable file id and SHA256', 'preview: rows, sources, missing fields and preview digest', 'commit: exact preview digest and human proposal id; atomic version drafts']},
-                next_actions=['请在资源库核对已有厂家 PDF 导入能力；Excel/CSV 结构表须待批量导入接口接入后重试。'])
+            return StructureImports(self).inspect()
         if name == 'study_compare':
             runs = self.research.verified_runs(task['workspace_id'], args['run_ids'])
             if task.get('study_id') and any(run['study'] != task['study_id'] for run in runs):
@@ -140,6 +140,8 @@ class ExternalActions:
     def prepare(self, task, name, args):
         if name not in ACTION_SCOPES:
             fail('TOOL_NOT_ALLOWED', '此动作不在已审查白名单。', '/tool', 403)
+        if name in IMPORT_ACTIONS:
+            return StructureImports(self).prepare(task, name, args)
         _, state = self.current(task)
         if ACTION_SCOPES[name] == 'type' and not is_type(task):
             fail('SCOPE_VIOLATION', '此动作须在目标型号的会话中提出。', '/workspace_id')
@@ -336,6 +338,8 @@ class ExternalActions:
     def recover(self, task, proposal):
         """Use the old services' durable operation IDs after a lost receipt."""
         pid, name, args, wid = proposal['id'], proposal['action'], proposal['arguments'], task['workspace_id']
+        if name in IMPORT_ACTIONS:
+            return StructureImports(self).recover(task, proposal)
         with self.store.db() as db:
             if name == 'propose_study_run':
                 row = db.execute('SELECT id,study FROM study_runs WHERE workspace=? AND request_id=?', (wid, pid)).fetchone()
@@ -394,6 +398,9 @@ class ExternalActions:
         self.current(task)
         name, args, wid = proposal['action'], proposal['arguments'], task['workspace_id']
         if name not in ACTION_SCOPES: fail('ACTION_NOT_ALLOWED', '此方案的操作不在已审查白名单。', status=403)
+        if name in IMPORT_ACTIONS:
+            receipt = StructureImports(self).execute(task, proposal)
+            with self.store.db(True) as db: return self.complete(task, proposal, decision, marker, receipt, db)
         if name in ('propose_study', 'propose_rating_table'):
             if args.get('source_study_id'):
                 original, _ = self.study(task, args['source_study_id'])

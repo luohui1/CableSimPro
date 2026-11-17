@@ -238,7 +238,7 @@ def test_created_type_is_idempotent_after_lost_receipt_without_silent_scope_chan
     assert created['domain']['cable_types'][0]['cores'][0]['conductor']['diameter'] is None
 
 
-def test_scope_and_discovery_budget_and_missing_import_contract(client):
+def test_scope_and_discovery_budget_and_import_contract_requires_attachment(client):
     w, s = study(client)
     other, foreign_study = study(client)
     scope = open_session(client, w)
@@ -253,8 +253,9 @@ def test_scope_and_discovery_budget_and_missing_import_contract(client):
     assert result['status'] == 'error' and result['diagnostics'][0]['code'] == 'STUDY_INPUT_REQUIRED'
     assert counts(client) == before
     importer = call(client, 'structure_import_inspect', {'filename': 'manufacturer.csv'}).json()
-    assert importer['status'] == 'error' and importer['data']['available'] is False
-    assert importer['diagnostics'][0]['code'] == 'STRUCTURE_IMPORT_UNAVAILABLE'
+    assert importer['status'] == 'ok' and importer['data']['available'] is True
+    assert importer['data']['attachment_required'] is True
+    assert counts(client) == before
     discovery = str(uuid4())
     client.app.state.harness.tasks.limits = replace(client.app.state.harness.tasks.limits, max_tool_calls=1)
     body = {'tool': 'workspace_list', 'arguments': {}, 'discovery': discovery}

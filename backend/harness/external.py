@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from pydantic import Field, JsonValue
+from pydantic import Field, JsonValue, ValidationError
 from starlette.staticfiles import StaticFiles
 
 from backend.schemas import StrictModel
@@ -34,6 +34,7 @@ from .security import redact, remember_secret
 from .tool_broker import ToolBroker, failure
 from .external_actions import SCOPES as ACTION_SCOPES, tools as action_tools
 from .external_stream import safe_sse, MAX_RESPONSE
+from .external_imports import AttachmentInput, stage_attachment
 from backend.kernel.workspace import stamp
 
 # The tools offered, and where the scope of each comes from: nothing (global), a project (workspace) or a cable-type design (type).
@@ -70,6 +71,7 @@ class Link:
 class OpenSession(StrictModel):
     workspace_id: UUID
     study_id: UUID | None = None
+    conversation_id: UUID | None = None
     message: str = Field(min_length=1, max_length=8000)
 
 
@@ -145,7 +147,9 @@ class ExternalTools:
     def open(self, body):
         """One question, one session on one project: the project's revision is pinned when the question starts, not when the chat did."""
         created = self.harness.create(CreateSession(workspace_id=body.workspace_id, study_id=body.study_id))
-        self.harness.tasks.emit(created['id'], 'external.session.opened', {'workspace_id': str(body.workspace_id), 'study_id': str(body.study_id) if body.study_id else None})
+        self.harness.tasks.emit(created['id'], 'external.session.opened', {'workspace_id': str(body.workspace_id),
+            'study_id': str(body.study_id) if body.study_id else None,
+            **({'conversation_id': str(body.conversation_id)} if body.conversation_id else {})})
         turn = self.harness.tasks.begin_turn(created['id'], redact(body.message))
         return {'session': created['id'], 'turn': turn, 'context': created['context']}
 
@@ -271,6 +275,22 @@ def make_router(harness, link):
     @router.post('/api/agent/external/sessions', dependencies=[Depends(authorized)])
     def open_session(body: OpenSession):
         return tools.open(body)
+
+    @router.post('/api/agent/external/attachments', dependencies=[Depends(authorized)])
+    async def attachment(request: Request):
+        raw = await request.body()
+        if len(raw) > MAX_FORWARD_BODY:
+            raise HTTPException(413, {'code': 'IMPORT_ATTACHMENT_SIZE', 'message': '附件请求过大；请选择不超过 1 MiB 的 CSV 或 XLSX 文件。'})
+        try:
+            body = AttachmentInput.model_validate_json(raw)
+        except ValidationError as error:
+            # FastAPI's default validation detail echoes `input`, which may be
+            # the complete base64 file. Neither errors nor the model get bytes.
+            fields = ['/'.join(map(str, item['loc'])) or 'body' for item in error.errors(include_input=False, include_url=False)]
+            raise HTTPException(422, {'code': 'IMPORT_ATTACHMENT_INVALID',
+                'message': '附件字段不合法，请重新选择原始文件；单个文件不得超过 1 MiB。', 'fields': fields}) from None
+        from starlette.concurrency import run_in_threadpool
+        return await run_in_threadpool(stage_attachment, harness.research.store, body)
 
     @router.post('/api/agent/external/sessions/{session}/resume', dependencies=[Depends(authorized)])
     def resume(session: UUID, body: ResumeSession):
