@@ -351,5 +351,34 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await typeName.fill('研究转型号 · ' + tag);
     await expect(typeName).toHaveValue('研究转型号 · ' + tag);
     check('研究入口实际打开可编辑的型号创建表单', await typeCreate.isVisible() && await typeName.isEditable());
+    if (report.phase === 'after') {
+      const submit = typeCreate.getByRole('button', {name:'建立草稿',exact:true});
+      await expect(typeCreate.getByRole('combobox', {name:'型号版本',exact:true})).toBeVisible();
+      await expect(submit).toBeDisabled();
+      const reason = typeCreate.getByRole('status').filter({hasText:'请选择一个可复制的型号版本'});
+      await expect(reason).toBeVisible();
+      check('型号创建禁用时就地说明缺少固定版本', await submit.getAttribute('aria-describedby') === await reason.getAttribute('id'));
+      await capture('09-create-type-disabled-reason');
+      const options = await api('/api/types/creation-options');
+      const selected = options.library.find(item => /结构演示/.test(item.name)) || options.library[0];
+      expect(selected, '必须选择真实型号起点，不伪造候选').toBeTruthy();
+      const version = selected.version.replace(/\+engineering$/, '（工程版）').replace(/\+[^\s]+$/, '（定制版）');
+      await choose('型号版本', selected.name + ' · ' + version, typeCreate);
+      await expect(submit).toBeEnabled();
+      await capture('09-create-type-selected-version');
+      const [response] = await Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname === '/api/types' && response.request().method() === 'POST'),
+        submit.click(),
+      ]);
+      expect(response.ok()).toBe(true);
+      const created = await response.json();
+      await page.waitForURL(next => next.pathname === `/types/${created.id}/structure/section`);
+      await expect(page.getByRole('navigation', {name:'型号浏览器',exact:true})).toBeVisible();
+      const saved = await api(`/api/types/${created.id}/workspace`), pin = saved.type_origin_reference;
+      check('从研究入口建立真实独立草稿并保留固定版本来源', saved.id !== wid && saved.domain.name === '研究转型号 · ' + tag
+        && saved.type_creation?.kind === 'library' && saved.type_lifecycle?.status === 'draft'
+        && pin?.id === selected.id && pin?.version === selected.version && pin?.content_sha256 === selected.content_sha256,
+      {workspace:saved.id, source:pin, lifecycle:saved.type_lifecycle});
+    }
   });
 });

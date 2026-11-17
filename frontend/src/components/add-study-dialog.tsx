@@ -6,7 +6,7 @@ import type { components } from "@/api/generated/schema";
 import { inputContractQuery } from "@/api/input-contracts";
 import { studyIndex, type StudyDefinition } from "@/api/research";
 import { methodCardsQuery } from '@/lib/study-queries';
-import { displayName } from "@/lib/display-names";
+import { displayName, displayText } from "@/lib/display-names";
 import { committedParameter, rootModule, studyEntryTab, type ParameterDraft } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
 import { Icon } from "./icon";
@@ -106,7 +106,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
   const inherit = parameterSource === 'recent' && !!same;
   const iecSources=(studies.data || []).filter(row=>row.workspace===workspaceId && row.definition.method.plugin_id==='cablesim.iec60287' && row.definition.driver?.kind==='single').sort((a,b)=>Number(b.id===sourceStudyId)-Number(a.id===sourceStudyId));
   const iecSource=chosen?.method.capability==='iec-fem-comparison' ? iecSources.find(row=>parameterSource==='iec:'+row.id) : undefined;
-  const origin = inherit ? `沿用本工程研究「${same.title}」修订 ${same.revision} 的已保存同版本方法参数（包含显式边界）` : iecSource ? `IEC 输入来自「${iecSource.title}」修订 ${iecSource.revision}；有限元边界与控制参数仍需逐项填写。` : "采用当前插件契约声明的默认值；没有默认值的工程输入需填写";
+  const origin = inherit ? `沿用本工程研究「${same.title}」修订 ${same.revision} 的已保存同版本方法参数（包含显式边界）` : iecSource ? `IEC 输入来自「${iecSource.title}」修订 ${iecSource.revision}；有限元边界与控制参数仍需逐项填写` : "采用当前插件契约声明的默认值；没有默认值的工程输入需填写";
   useEffect(()=>{
     if(!open || !contract.data)return;
     const schema=contract.data.parameter_schema;
@@ -182,7 +182,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
             options={[{value:'defaults',label:'插件声明的默认值（缺项需填写）'},...(same ? [{value:'recent',label:`沿用最近同版本研究 · ${same.title}`}] : []),...(chosen.method.capability==='iec-fem-comparison' ? iecSources.map(row=>({value:'iec:'+row.id,label:`沿用已保存 IEC 参数 · ${row.title}`})) : [])]} />
             <p className="muted">{origin}；旧研究与运行保持原值。</p></>}
           {!!chosen?.limitations?.length && <section aria-label="方法适用范围"><h4>先核对基准与敷设条件</h4>
-            {chosen.limitations.map((limit,index)=><p key={index}>{limit}</p>)}
+            {chosen.limitations.map((limit,index)=><p key={index}>{displayText(limit)}</p>)}
           </section>}
           {chosen && <MethodParameterFields key={chosenKey+':'+parameterSource} method={chosen.method} namespace="create-study" values={parameters} references={references} fieldErrors={fieldErrors} draftFields={draftFields} readOnly={create.isPending}
             onDraftChange={(field,key)=>setDraftFields(current=>{const next={...current};if(field)next[key]=field;else delete next[key];return next;})}
