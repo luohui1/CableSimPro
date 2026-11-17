@@ -36,6 +36,24 @@ def base_python(root: Path) -> Path:
     return root / relative
 
 
+def bundled_base_is_local(root: Path, reported: str, metadata: dict) -> bool:
+    """A venv can report bin/python while the locked launcher is bin/python3.12.
+
+    Both must remain inside the immutable installed runtime; disallow arbitrary
+    external interpreters, including symlinks that escape the install prefix.
+    """
+    locked = base_python(root).resolve()
+    actual = Path(reported).resolve()
+    prefix = (root / "runtime/python").resolve()
+    if not locked.is_file() or not actual.is_file():
+        return False
+    if os.name == "nt":
+        return actual == locked
+    major, minor, *_ = metadata["version"].split(".")
+    return (actual.parent == prefix / "bin"
+            and actual.name in {"python", "python" + major, "python" + major + "." + minor})
+
+
 def runtime_identity(root: Path, environment: dict[str, str]) -> dict:
     """Observe the actual venv's executable, base, stdlib and native imports."""
     interpreter = root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
@@ -52,7 +70,7 @@ def runtime_identity(root: Path, environment: dict[str, str]) -> dict:
     prefix = (root / "runtime/python").resolve()
     metadata = json.loads((root / "runtime/python-runtime.json").read_text("utf-8"))
     if (Path(observed["executable"]).resolve() != interpreter.resolve()
-            or Path(observed["base_executable"]).resolve() != base_python(root).resolve()
+            or not bundled_base_is_local(root, observed["base_executable"], metadata)
             or Path(observed["base_prefix"]).resolve() != prefix
             or Path(observed["prefix"]).resolve() != (root / ".venv").resolve()
             or prefix not in Path(observed["stdlib"]).resolve().parents
