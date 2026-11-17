@@ -19,10 +19,21 @@ const REFERENCE_EXPLANATIONS = new Map([
   ["IEC 60287-1-1:2023 Table 3, unfilled XLPE up to 18 kV; standard reference values, not the manufacturer's", 'IEC 60287-1-1:2023 表 3，18 kV 及以下的未填充型 XLPE；标准参考值，不是厂家给定值。'],
   ['IEC 60287-1-1:2023 Table 1', 'IEC 60287-1-1:2023 表 1'],
 ]);
+const ASSUMPTION_VALUES = new Map([
+  ['both_ends', '两端接地'], ['trefoil', '品字形排列'], ['three_core_buried_single', '三芯直埋单回路'],
+  ['stranded_round_compacted', '紧压圆形绞合导体'], ['continuous_contact', '连续接触模型'],
+  ['standard_limit', '标准电阻上限'], ['exact', '精确形式'], ['ignored', '忽略'],
+  ["the difference between the catalogue's overall diameter and the listed layers (screens and tapes) is lumped into the insulation screen", '将样本总外径与已列各层（屏蔽和包带）的尺寸差额归入绝缘屏蔽层。'],
+]);
 
 function AssumptionValue({ assumption }: { assumption: ReferenceAssumption }) {
   if (typeof assumption.value === 'number') return <span>{String(assumption.value)}</span>;
   if (assumption.value === null) return <span>未提供</span>;
+  if (typeof assumption.value === 'string' && ASSUMPTION_VALUES.has(assumption.value)) return <span>{ASSUMPTION_VALUES.get(assumption.value)}</span>;
+  const layout = optionalRecord(assumption.value);
+  if (assumption.key === 'installation.layout' && Object.keys(layout).length === 2
+    && layout.single_core === 'trefoil' && layout.three_core === 'three_core_buried_single')
+    return <span>单芯：品字形排列；三芯：直埋单回路。</span>;
   return <Textarea aria-label={`${assumption.label}原始值`} readOnly rows={1} spellCheck={false}
     value={typeof assumption.value === 'string' ? assumption.value : JSON.stringify(assumption.value, null, 2)} />;
 }
@@ -111,8 +122,8 @@ export function CatalogueComparison() {
           <p>{methodText(report.reference_scenario.method)}；可信分档：参考；厂家数据：否。</p>
           <DataTable label="研究参考情景完整假设" showGroups={false} groups={[{ id: 'assumptions', label: '完整假设', rows: report.reference_scenario.assumptions.map(assumption => ({ ...assumption, id: assumption.key })) }]} rowLabel={row => row.label} columns={[
             { id: 'parameter', label: '研究假设或参数', wrap: true, render: row => row.label },
-            { id: 'value', label: '原始值', wrap: true, render: row => <AssumptionValue assumption={row} /> },
-            { id: 'unit', label: '单位', wrap: true, render: row => row.unit ?? '不适用' },
+            { id: 'value', label: '声明值', wrap: true, render: row => <AssumptionValue assumption={row} /> },
+            { id: 'unit', label: '单位', wrap: true, render: row => row.unit === '1' ? typeof row.value === 'number' ? '无量纲' : '不适用' : row.unit ?? '不适用' },
             { id: 'source', label: '原始出处与版本', wrap: true, render: row => <div className="library-import-issues"><span>{REFERENCE_EXPLANATIONS.get(row.source.reference) ?? row.source.reference}</span><span>版本：{row.source.version}</span>{row.source.file_sha256 && <span className="library-import-digest">资料 SHA-256：{row.source.file_sha256}</span>}<span className="muted">研究参考声明，非厂家数据</span></div> },
           ]} />
           <details className="library-import-details">

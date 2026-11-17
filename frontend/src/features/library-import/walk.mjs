@@ -9,6 +9,7 @@ import { chromium, expect as baseExpect } from '@playwright/test';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 import { walkShortBasis } from './short-basis-walk.mjs';
 import { walkManufacturer } from './manufacturer-walk.mjs';
+import { walkResources } from './resource-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -674,6 +675,11 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
         ["IEC 60287-1-1:2023 Table 3, unfilled XLPE up to 18 kV; standard reference values, not the manufacturer's", 'IEC 60287-1-1:2023 表 3，18 kV 及以下的未填充型 XLPE；标准参考值，不是厂家给定值。'],
         ['IEC 60287-1-1:2023 Table 1', 'IEC 60287-1-1:2023 表 1'],
       ] : []);
+      const translatedAssumptions = new Map([
+        ['both_ends', '两端接地'], ['trefoil', '品字形排列'], ['stranded_round_compacted', '紧压圆形绞合导体'],
+        ['continuous_contact', '连续接触模型'], ['standard_limit', '标准电阻上限'], ['exact', '精确形式'], ['ignored', '忽略'],
+        ["the difference between the catalogue's overall diameter and the listed layers (screens and tapes) is lumped into the insulation screen", '将样本总外径与已列各层（屏蔽和包带）的尺寸差额归入绝缘屏蔽层。'],
+      ]);
       for (const [index, assumption] of compared.reference_scenario.assumptions.entries()) {
         assert.deepEqual([assumption.confidence, assumption.manufacturer_data], ['reference', false]);
         assert.ok(assumption.source.reference && assumption.source.version && /^[a-f0-9]{64}$/.test(assumption.source.file_sha256));
@@ -681,8 +687,13 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
         await expect(cells.nth(0)).toHaveText(assumption.label);
         if (typeof assumption.value === 'number') await expect(cells.nth(1)).toHaveText(String(assumption.value));
         else if (assumption.value === null) await expect(cells.nth(1)).toHaveText('未提供');
+        else if (typeof assumption.value === 'string' && translatedAssumptions.has(assumption.value)) await expect(cells.nth(1)).toHaveText(translatedAssumptions.get(assumption.value));
+        else if (assumption.key === 'installation.layout' && sample.id === 'people-mv') {
+          assert.deepEqual(assumption.value, { single_core: 'trefoil', three_core: 'three_core_buried_single' });
+          await expect(cells.nth(1)).toHaveText('单芯：品字形排列；三芯：直埋单回路。');
+        }
         else await expect(cells.nth(1).getByRole('textbox')).toHaveValue(typeof assumption.value === 'string' ? assumption.value : JSON.stringify(assumption.value, null, 2));
-        await expect(cells.nth(2)).toHaveText(assumption.unit ?? '不适用');
+        await expect(cells.nth(2)).toHaveText(assumption.unit === '1' ? typeof assumption.value === 'number' ? '无量纲' : '不适用' : assumption.unit ?? '不适用');
         await expect(cells.nth(3)).toContainText(translatedReferences.get(assumption.source.reference) ?? assumption.source.reference);
         await expect(cells.nth(3)).toContainText(assumption.source.version);
         await expect(cells.nth(3)).toContainText(assumption.source.file_sha256);
@@ -1006,6 +1017,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；未声明的计算参数保持为空。逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
     await walkShortBasis({ page, base, viewport, out, capture, expect, report, readApi });
     await walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report });
+    await walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report });
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});
