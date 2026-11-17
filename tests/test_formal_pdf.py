@@ -1,4 +1,7 @@
-"""Print-only contract fixtures: no fixture value is an engineering result."""
+"""Print contracts and a saved-IEC pagination regression; no FEM is executed.
+
+Synthetic print fixture values are never presented as engineering results.
+"""
 from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
@@ -135,6 +138,43 @@ def test_long_tables_repeat_headers_and_preserve_all_values_without_clipping():
         for value in model['sources']['fixture']['payload']['values']:
             assert text.splitlines().count(raw_text(value)) == 1
         assert text.count('K·m/W') == 90
+        _check_bounds(pdf)
+
+
+def test_saved_iec_parameter_label_survives_table_row_pagination(tmp_path):
+    """A real three-line label used to reflow to two lines while splitting a cell."""
+    from fastapi.testclient import TestClient
+    from backend.main import create_app
+    from backend.kernel.formal_contracts import PreviewRequest
+    from backend.kernel.formal_deliveries import FormalDeliveries
+    from test_research import study, request as execution_request
+
+    with TestClient(create_app(tmp_path / 'engineering.sqlite')) as client:
+        workspace, definition = study(client)
+        prefix, body = execution_request(client, workspace, definition)
+        response = client.post(prefix + '/runs', json=body)
+        assert response.status_code == 200, response.text
+        run = response.json()
+        assert run['status'] == 'succeeded' and run['integrity'] == 'verified'
+        request = PreviewRequest.model_validate({
+            'kind': 'calculation',
+            'source': {'workspace_id': workspace['id'], 'expected_revision': workspace['revision'],
+                       'runs': [{'run_id': run['id'], 'input_digest': run['input_digest'],
+                                 'output_digest': run['output_digest']}]},
+            'document': {'organization': '批量独立验收单位', 'number': '同一编号-001',
+                         'revision': 'A', 'header': '实际保存的 IEC 运行',
+                         'footer': '完整来源与精确数值核验', 'issued_on': '2026-01-01'},
+        })
+        model = FormalDeliveries(client.app.state.research, client.app.state.types).build(request)
+
+    with fitz.open(stream=render_pdf(model), filetype='pdf') as pdf:
+        text = ''.join(_text(pdf).split())
+        assert '导体温度系数α20' in text
+        assert '采用值' in text and '追溯记录' in text
+        caption_page = next(page.number for page in pdf if '保存的材料常数与依据值' in page.get_text())
+        first_row_page = next(page.number for page in pdf if '导体温度系数' in page.get_text())
+        assert caption_page == first_row_page
+        assert pdf.embfile_get('formal-model.json') == canonical_bytes(model)
         _check_bounds(pdf)
 
 
