@@ -180,6 +180,8 @@ jobs:
       - name: Walk simulation preflight without submitting a solver
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
+        env:
+          WORKBENCH_PHASE: after
         run: npm run test:workbench-simulation 2>&1 | tee ../.data/workbench-walk/logs/simulation.log
       - name: Upload the four walkthroughs before the broader audits
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}

@@ -738,7 +738,7 @@ export function StudyWorkspace() {
           />
         </label>
       </Dialog>
-      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} />
+      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} sourceStudyId={study.id} />
       <StudyGeometryProposal proposal={geometryProposal} onClose={()=>setGeometryProposal(undefined)} />
       <RunRecordsDrawer
         workspace={study.workspace}
