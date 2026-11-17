@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
+import { studySweep } from '@/lib/heavy-components';
 import { displayName } from '@/lib/display-names';
 import { countInputChanges } from '@/lib/input-changes';
 import { Redirect } from "@/components/redirect";
@@ -72,7 +73,7 @@ const AgentPanel = lazy(() => import('@/features/agent/agent-panel').then(m => (
 const StudyHybrid = lazy(() => import('@/components/study-hybrid').then(m => ({ default: m.StudyHybrid })));
 const StudyTemperature = lazy(() => import('@/components/study-temperature').then(m => ({ default: m.StudyTemperature })));
 const StudyNativeArtifact = lazy(() => import('@/components/study-native-artifact').then(m => ({ default: m.StudyNativeArtifact })));
-const StudySweep = lazy(() => import('@/components/study-sweep').then(m => ({ default: m.StudySweep })));
+const StudySweep = studySweep.Component;
 const StudyBatch = lazy(() => import('@/components/study-batch').then(m => ({ default: m.StudyBatch })));
 const StudyCompare = lazy(() => import('@/components/study-compare').then(m => ({ default: m.StudyCompare })));
 const StudySimulation = lazy(() => import('@/components/study-simulation').then(m => ({ default: m.StudySimulation })));
