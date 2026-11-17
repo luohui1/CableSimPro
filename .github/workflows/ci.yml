@@ -72,6 +72,15 @@ jobs:
           path: .data/occt-toolchain/viewer/
           key: occt-runtime-${{ hashFiles('frontend/src/features/cad/native/**') }}
           enableCrossOsArchive: true
+      - name: Restore the verified release toolchain when the viewer cache is empty
+        if: ${{ matrix.os == 'windows-latest' && steps.occt-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .data/occt-toolchain
+            .data/occt-downloads
+            frontend/src/features/cad/node_modules/.cache/cablesim-occt
+          key: release-occt-${{ runner.os }}-${{ hashFiles('frontend/src/features/cad/native/**', 'frontend/src/features/cad/prepare-runtime.mjs', 'scripts/prepare_release_frontend.py', 'scripts/release_toolchains.json') }}
       - name: Build and validate OCCT from the locked sources
         if: ${{ matrix.os == 'windows-latest' }}
         id: occt-runtime
