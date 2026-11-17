@@ -511,6 +511,184 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await capture(`${sample.id}-参考计算后厂家仍缺项拒算`);
     }
     report.checks.push(`${viewport.width}：人民46规格与Bahra13规格默认厂家条件缺项全部拒算；四项原值与原因分别截图；全部研究假设及原始声明逐字核对，人工明确确认后单列21/13项参考数值与差异，厂家拒绝与零真实通过数保持不变；两份完整JSON已保存`);
+
+    // Import the complete, unchanged Bahra workbook through the visible entry.
+    // Catalogue performance values remain evidence, never engineering inputs.
+    await page.getByRole('tab', { name: '导入结构表', exact: true }).click();
+    const restart = page.getByRole('button', { name: '重新开始', exact: true });
+    if (await restart.isVisible()) await restart.click();
+    const bahraDownload = await afterAction(page.waitForEvent('download'),
+      () => page.getByRole('link', { name: '下载 Bahra 示例结构性能表', exact: true }).click());
+    assert.equal(bahraDownload.suggestedFilename(), 'bahra-mv.xlsx');
+    const bahraPath = path.join(out, `bahra-mv-${viewport.width}.xlsx`);
+    await bahraDownload.saveAs(bahraPath);
+    assert.equal(await bahraDownload.failure(), null);
+    const bahraDigest = createHash('sha256').update(await fs.readFile(bahraPath)).digest('hex');
+    const bahraManifest = (await readApi('/api/type-library/samples')).find(sample => sample.id === 'bahra-mv');
+    assert.equal(bahraManifest?.sha256, bahraDigest, '下载字节须匹配本次服务发布的原件摘要');
+    const bahraOriginal = JSON.parse(await fs.readFile(path.join(root, 'studio/core/studio_core/catalogues/bahra_mv_lead_sheathed.json'), 'utf8'));
+    const bahraColumns = [
+      ['area', 'mm²', 'm2', 1e-6], ['conductor_diameter', 'mm', 'm', 1e-3],
+      ['insulation_thickness', 'mm', 'm', 1e-3], ['metallic_sheath_thickness', 'mm', 'm', 1e-3],
+      ['oversheath_thickness', 'mm', 'm', 1e-3], ['outer_diameter', 'mm', 'm', 1e-3],
+      ['weight', 'kg/km', 'kg/m', 1e-3], ['r20', 'Ω/km', 'ohm/m', 1e-3],
+      ['r_ac_90', 'Ω/km', 'ohm/m', 1e-3], ['inductance', 'mH/km', 'H/m', 1e-6],
+      ['capacitance', 'uF/km', 'F/m', 1e-9], ['short_circuit_conductor', 'kA', 'A', 1e3],
+      ['short_circuit_sheath', 'kA', 'A', 1e3], ['ampacity', 'A', 'A', 1],
+      ['rating_ground_flat', 'A', 'A', 1], ['rating_air_trefoil', 'A', 'A', 1],
+      ['rating_air_flat', 'A', 'A', 1], ['voltage_drop', 'V/(A km)', 'V/(A m)', 1e-3],
+      ['minimum_bending_radius', 'mm', 'm', 1e-3],
+    ];
+    const bahraAliases = { lead_sheath_thickness: 'metallic_sheath_thickness', r_dc_20: 'r20', rating_ground_trefoil: 'ampacity' };
+    assert.deepEqual(bahraOriginal.columns.map(([key]) => bahraAliases[key] ?? key), bahraColumns.map(([key]) => key));
+    assert.equal(bahraOriginal.rows.length, 13);
+    const catalogueResults = new Set(bahraColumns.slice(8).map(([key]) => key));
+    const bahraUploaded = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/upload') && response.request().method() === 'POST'),
+      () => page.getByLabel('结构表文件', { exact: true }).setInputFiles(bahraPath));
+    assert.equal(bahraUploaded.ok(), true, await bahraUploaded.text());
+    const bahraInspection = await bahraUploaded.json();
+    await recordResponse('bahra-upload', bahraUploaded, bahraInspection);
+    assert.equal(bahraInspection.sha256, bahraDigest);
+    const bahraSheet = bahraInspection.sheets.find(sheet => sheet.name === 'Bahra CU XLPE LC PVC');
+    const bahraDeclaration = bahraInspection.declarations.find(item => item.sheet === bahraSheet?.name);
+    assert.ok(bahraSheet && bahraDeclaration, '完整原件应识别公开样本工作表与声明');
+    assert.equal(bahraSheet.columns.length, 19);
+    assert.deepEqual([bahraSheet.first_data_row, bahraSheet.rows, bahraSheet.data_rows], [5, 19, 15], '原表数据区包含13个规格、空行及页尾说明，预览须准确分辨');
+    const bahraMapping = Object.fromEntries(bahraColumns.map(([key], index) => [key, index]));
+    assert.deepEqual(bahraDeclaration.mapping, bahraMapping, '19个原表列均须可导入，不能悄悄遗漏性能列');
+    await select('工作表', `${bahraSheet.name} · ${bahraSheet.data_rows ?? bahraSheet.rows} 行`);
+    await capture('Bahra上传后选择工作表');
+    await advanceSheet();
+    for (const [index, [key, unit]] of bahraColumns.entries()) {
+      const field = bahraInspection.fields.find(item => item.key === key);
+      assert.ok(field, `导入字段缺少 ${key}`);
+      assert.equal(field.unit, unit);
+      await expect(page.getByRole('combobox', { name: `${String.fromCharCode(65 + index)} 列对应`, exact: true })).toHaveText(`${field.label} / ${unit.replace('uF', 'μF')}`);
+    }
+    await select('L 列对应', '样本导体短路电流（1 s） / kA');
+    await page.getByRole('combobox', { name: 'I 列对应', exact: true }).evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await capture('Bahra十九列映射与性能字段');
+    await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
+    await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`Bahra 公开结构与性能 ${viewport.width} ${stamp}`);
+    const bahraPreviewResponse = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 }),
+      () => page.getByRole('button', { name: '逐行校验并预览', exact: true }).click());
+    assert.equal(bahraPreviewResponse.ok(), true, await bahraPreviewResponse.text());
+    assert.deepEqual(bahraPreviewResponse.request().postDataJSON().mapping, bahraMapping);
+    const bahraPreview = await bahraPreviewResponse.json();
+    await recordResponse('bahra-preview', bahraPreviewResponse, bahraPreview);
+    assert.deepEqual([bahraPreview.rows.length, bahraPreview.error_count, bahraPreview.incomplete_count], [13, 0, 13]);
+    const checkBahraFacts = (facts, originalIndex) => {
+      assert.deepEqual(facts.map(fact => fact.key).sort(), bahraColumns.map(([key]) => key).sort());
+      for (const [column, [key, displayUnit, unit, scale]] of bahraColumns.entries()) {
+        const fact = facts.find(item => item.key === key);
+        const original = bahraOriginal.rows[originalIndex][column];
+        assert.deepEqual([fact.display_value, fact.display_unit, fact.value, fact.unit], [original, displayUnit, original * scale, unit], `${originalIndex + 5}行 ${key}`);
+        assert.equal(fact.label, bahraInspection.fields.find(item => item.key === key).label);
+        assert.deepEqual(fact.method, { name: '厂家结构表导入', version: '1.1.0' });
+        assert.equal(fact.confidence, 'reference');
+        assert.equal(fact.usage, catalogueResults.has(key) ? 'catalogue_result' : undefined);
+        assert.equal(fact.source.usage, fact.usage);
+        if (catalogueResults.has(key)) assert.deepEqual(fact.source.conditions, bahraOriginal.conditions, '目录工况与1s短路时间须保留，不补接地或平排间距');
+        assert.deepEqual([fact.source.file, fact.source.file_sha256, fact.source.sheet, fact.source.row, fact.source.column, fact.source.field],
+          [bahraInspection.file, bahraDigest, bahraSheet.name, originalIndex + 5, String.fromCharCode(65 + column), key]);
+        assert.deepEqual([fact.source.kind, fact.source.origin, fact.source.confidence, fact.source.reviewed], ['manufacturer', 'table', 'reference', false]);
+        assert.deepEqual(fact.source.method, fact.method);
+        for (const sourceKey of ['title', 'location', 'sha256']) assert.equal(fact.source.catalogue[sourceKey], bahraOriginal.source[sourceKey]);
+        assert.equal(fact.source.catalogue.url, 'https://www.bahra-electric.com/Downloads/MV_Lead_Sheathed.pdf');
+      }
+    };
+    for (const [index, row] of bahraPreview.rows.entries()) {
+      assert.equal(row.row_number, index + 5);
+      assert.equal(row.status, 'incomplete');
+      assert.ok(row.missing.length > 0, '样本性能列不得补成未公布的结构');
+      checkBahraFacts(row.values, index);
+    }
+    await expect(page.getByRole('heading', { name: '核对入库预览', exact: true })).toBeVisible();
+    await capture('Bahra十三规格预览');
+    const bahraCommit = page.getByRole('button', { name: '确认入库 13 个规格', exact: true });
+    await expect(bahraCommit).toBeDisabled();
+    await page.getByRole('checkbox', { name: '确认来源与系列声明', exact: true }).check();
+    const bahraCommitted = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/commit') && response.request().method() === 'POST', { timeout: 180000 }),
+      () => bahraCommit.click());
+    assert.equal(bahraCommitted.ok(), true, await bahraCommitted.text());
+    const bahraReceipt = await bahraCommitted.json();
+    await recordResponse('bahra-commit', bahraCommitted, bahraReceipt);
+    assert.equal(bahraReceipt.created, 13);
+    await expect(page.getByRole('heading', { name: '已保存 13 个规格草稿', exact: true })).toBeVisible();
+    await capture('Bahra十三规格人工确认入库');
+    const bahraSeries = await readApi(`/api/type-library/series/${bahraReceipt.series_id}`);
+    assert.equal(bahraSeries.specs.length, 13);
+    const bahraSpecs = await Promise.all(bahraSeries.specs.map(spec => readApi(`/api/type-library/specs/${spec.id}`)));
+    const bahraModelIds = new Set(bahraSeries.specs.map(spec => spec.model_id));
+    const bahraModels = (await readApi('/api/domain-cable-models')).filter(model => bahraModelIds.has(model.id));
+    await fs.writeFile(path.join(out, `${viewport.width}-bahra-imported-values.json`), JSON.stringify({ workbook_sha256: bahraDigest, sample: bahraManifest, series: bahraSeries, specifications: bahraSpecs, models: bahraModels }, null, 2));
+    assert.equal(bahraModels.length, 13);
+    assert.deepEqual(bahraSeries.specs.map(spec => spec.area_m2).sort((a, b) => a - b), bahraOriginal.rows.map(row => row[0] * 1e-6));
+    for (const [index, item] of bahraSpecs.entries()) {
+      const spec = bahraSeries.specs[index];
+      const originalIndex = bahraOriginal.rows.findIndex(row => row[0] * 1e-6 === spec.area_m2);
+      assert.ok(originalIndex >= 0);
+      checkBahraFacts(item.values, originalIndex);
+      assert.deepEqual(item.values, spec.values);
+      assert.deepEqual(item.values, bahraPreview.rows[originalIndex].values, '预览确认后逐项事实须完整保持');
+      assert.equal(item.spec.state, 'draft');
+      assert.ok(item.spec.missing.length > 0);
+      assert.deepEqual(item.results, [], '目录性能值不应制造计算运行');
+      const model = bahraModels.find(candidate => candidate.id === spec.model_id);
+      assert.equal(model.state, 'incomplete');
+      for (const key of catalogueResults) {
+        assert.equal(Object.hasOwn(model.payload.specification.values, key), false, `${key}不能进入工程结构输入`);
+        assert.equal(JSON.parse(model.payload.sources[key].reference).file_sha256, bahraDigest);
+      }
+    }
+    await page.getByRole('button', { name: '打开系列，核对与计算', exact: true }).click();
+    const bahraFirst = bahraSeries.specs.find(spec => spec.area_m2 === bahraOriginal.rows[0][0] * 1e-6);
+    await page.getByRole('table', { name: '系列规格', exact: true }).getByRole('button', { name: bahraFirst.name, exact: true }).click();
+    const bahraSources = page.getByRole('dialog', { name: bahraFirst.name, exact: true });
+    const bahraValues = bahraSources.getByRole('table', { name: '逐项来源', exact: true });
+    await expect(bahraValues.getByRole('row')).toHaveCount(20);
+    await expect(bahraSources.getByText('样本性能值来自厂家目录，供对照；独立计算需完整结构与工况。', { exact: true })).toBeVisible();
+    for (const fact of bahraFirst.values) {
+      const cells = bahraValues.getByRole('row', { name: fact.label, exact: true }).getByRole('cell');
+      await expect(cells.nth(1)).toHaveText(`${fact.display_value} ${fact.display_unit.replace('uF', 'μF')}`);
+      await expect(cells.nth(2)).toContainText(`${fact.source.file} · ${fact.source.sheet} · 第 ${fact.source.row} 行 · ${fact.source.column}`);
+      await expect(cells.nth(3)).toContainText('厂家结构表导入 · 1.1.0');
+      await expect(cells.nth(3)).toContainText('参考');
+      if (catalogueResults.has(fact.key)) await expect(cells.nth(0)).toContainText('厂家目录值 · 供对照');
+    }
+    const sourceScreenshots = [];
+    for (const [label, keys] of [
+      ['Bahra性能来源电阻电感电容', ['r_ac_90', 'inductance', 'capacitance']],
+      ['Bahra性能来源一秒短路电流', ['short_circuit_conductor', 'short_circuit_sheath']],
+      ['Bahra性能来源各敷设载流量', ['ampacity', 'rating_ground_flat', 'rating_air_trefoil', 'rating_air_flat']],
+      ['Bahra性能来源电压降与弯曲半径', ['voltage_drop', 'minimum_bending_radius']],
+    ]) {
+      let start = 0;
+      while (start < keys.length) {
+        const first = bahraFirst.values.find(fact => fact.key === keys[start]);
+        await bahraValues.getByRole('row', { name: first.label, exact: true }).evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+        const bounds = await bahraSources.locator('.dialog-body').boundingBox();
+        assert.ok(bounds);
+        let end = start;
+        while (end < keys.length) {
+          const fact = bahraFirst.values.find(item => item.key === keys[end]);
+          const row = bahraValues.getByRole('row', { name: fact.label, exact: true });
+          const box = await row.boundingBox();
+          if (!box || box.y < bounds.y || box.y + box.height > bounds.y + bounds.height) break;
+          await expect(row).toBeInViewport({ ratio: 1 });
+          end++;
+        }
+        assert.ok(end > start, `${first.label}的完整来源行应能在对话框中查看`);
+        await capture(label + (start ? '续页' : ''));
+        sourceScreenshots.push({ screenshot: report.screenshots.at(-1), fields: keys.slice(start, end) });
+        start = end;
+      }
+    }
+    await fs.writeFile(path.join(out, `${viewport.width}-bahra-source-screenshots.json`), JSON.stringify(sourceScreenshots, null, 2));
+    assert.deepEqual(sourceScreenshots.flatMap(item => item.fields).sort(), [...catalogueResults].sort());
+    await page.keyboard.press('Escape');
+    await expect(bahraSources).toBeHidden();
+    report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。`);
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

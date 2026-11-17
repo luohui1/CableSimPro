@@ -148,8 +148,9 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       </div>
       <section className="library-import-stack">
         <h2>公开样本</h2>
-        <p className="muted">人民电缆公开手册的结构表，包含原始来源与列名；下载后可通过上面的文件入口走完整导入流程。</p>
+        <p className="muted">人民电缆结构表与 Bahra 结构性能表保留厂家目录原值、来源与列名；下载后可通过上面的文件入口导入。独立工程计算仍需完整结构和工况。</p>
         <div><Button asChild><a href="/api/type-library/samples/people-mv.xlsx" download>下载人民电缆示例结构表</a></Button></div>
+        <div><Button asChild><a href="/api/type-library/samples/bahra-mv.xlsx" download>下载 Bahra 示例结构性能表</a></Button></div>
       </section>
     </div>;
   } else if (step === 1) {

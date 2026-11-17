@@ -31,6 +31,7 @@ export interface Upload {
 export interface ValueSource {
   key: string; label: string; value: number | string | null; unit: string;
   display_value?: number | string; display_unit?: string;
+  usage?: 'catalogue_result';
   source: unknown; confidence?: string; method_version?: string; method?: unknown;
 }
 export interface ImportIssue { column?: string; field?: string; message: string }
@@ -113,6 +114,11 @@ export function libraryPost<T>(path: string, body: unknown): Promise<T> {
 export function catalogueComparison(sample: string, referenceScenarioConfirmed = false): Promise<CatalogueComparisonReport> {
   return libraryPost(`/catalogue-comparison/${sample}`, referenceScenarioConfirmed ? { reference_scenario_confirmed: true } : {});
 }
+const SOURCE_SECTIONS: Record<string, string> = { 'construction table': '结构表', 'technical information': '技术信息', 'rating assumptions': '载流量计算假设' };
+export function sourceLocationText(value: string): string {
+  return value.replace(/(construction table|technical information|rating assumptions): printed p\. (\d+) \/ PDF p\. (\d+)/g,
+    (_match, section: string, printedPage: string, pdfPage: string) => `${SOURCE_SECTIONS[section]}：印刷第 ${printedPage} 页 / PDF 第 ${pdfPage} 页`);
+}
 export function sourceText(source: unknown): string {
   if (typeof source === 'string') return source;
   const row = optionalRecord(source);
@@ -121,7 +127,7 @@ export function sourceText(source: unknown): string {
   const record = optionalRecord(reference.record);
   const basis = text(row.reference) || text(row.title) || text(row.basis)
     || [text(reference.standard), text(reference.edition), text(reference.locator), text(record.reference)].filter(Boolean).join(' · ');
-  const original = [text(catalogue.title), text(catalogue.location)].filter(Boolean).join(' · ');
+  const original = [text(catalogue.title), sourceLocationText(text(catalogue.location))].filter(Boolean).join(' · ');
   const location = [row.file, row.sheet, row.row_number ? `第 ${row.row_number} 行` : row.row ? `第 ${row.row} 行` : '', row.column].filter(Boolean).join(' · ');
   if (row.origin === 'standard') return ['标准上限，非厂家实测值', basis, location ? `关联规格：${location}` : ''].filter(Boolean).join('；');
   return [row.kind === 'demo' ? '结构演示' : '', basis, original, location].filter(Boolean).join('；') || '来源未登记';

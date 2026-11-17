@@ -5,7 +5,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { displayUnit } from '@/lib/display-names';
-import type { Field, SeriesDeclaration, Vocabulary } from './api';
+import { sourceLocationText, type Field, type SeriesDeclaration, type Vocabulary } from './api';
 
 export function emptyDeclaration(): SeriesDeclaration {
   return { name: '', manufacturer: '', designation: '', cores: 3, u0_v: 0, u_v: 0, standards: [], origin: 'factory', common: {}, common_basis: {}, modelling: {} };
@@ -34,7 +34,7 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
     <Input aria-label={`${field.label}依据`} placeholder="原表注释、图纸编号或标准条款" required={value.common[field.key] !== undefined} value={value.common_basis[field.key] || ''} onChange={event => set({ common_basis: { ...value.common_basis, [field.key]: event.target.value } })} />
   </div>;
   return <div className="library-import-stack">
-    {value.source?.title && <p className="library-import-source">来源：{value.source.title}{value.source.location && `；${value.source.location}`}</p>}
+    {value.source?.title && <p className="library-import-source">来源：{value.source.title}{value.source.location && `；${sourceLocationText(value.source.location)}`}</p>}
     <div className="library-import-fields">
       <label className="text-field">系列名称<Input aria-label="系列名称" required maxLength={120} value={value.name} onChange={event => set({ name: event.target.value })} /></label>
       <label className="text-field">制造商<Input aria-label="制造商" maxLength={120} value={value.manufacturer} onChange={event => set({ manufacturer: event.target.value })} /></label>
