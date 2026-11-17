@@ -75,14 +75,15 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
     if (isLocked(workspace?.raw.locks, path) || readOnly) { setError('此字段已锁定，请从型号列表建立独立草稿'); return; }
     setHistory(current => domainDraftReducer(current, { type: 'set', record: true, consumed: [path], update: previous => {
       const next = previous || initial(), original = at(next.document, path);
-      if (JSON.stringify(original) === JSON.stringify(value) && !source) return previous;
+      const valueChanged = JSON.stringify(original) !== JSON.stringify(value);
+      if (!valueChanged && !source) return previous;
       const updated = change(next.document, path, value), changed = updated === next.document ? structuredClone(updated) : updated;
       // change() supplies a generic source for its path. Preserve the original
       // parent source and attach provenance only to the actual edited inputs.
       const provenance = { ...next.document.provenance };
       const paths = value && typeof value === 'object' ? inputChangePaths(original, value).map(part => path + (part === '/' ? '' : part)) : [path];
       if (source && !paths.length) paths.push(path);
-      for (const key of Object.keys(provenance)) if ((key === path || key.startsWith(path + '/')) && at(changed, key) === undefined) delete provenance[key];
+      if (valueChanged) for (const key of Object.keys(provenance)) if ((key === path || key.startsWith(path + '/')) && at(changed, key) === undefined) delete provenance[key];
       for (const key of paths) {
         if (at(changed, key) === undefined) continue;
         const originalSource = next.base.provenance?.[key];

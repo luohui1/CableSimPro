@@ -2,6 +2,8 @@
 import { displayName, displayText } from '@/lib/display-names';
 export function methodDiagnostic(error: unknown) { return error instanceof Error ? error.message : '请求失败，请重试读取。'; }
 export function methodErrorText(value: string) {
+  if (isStructureSourceError(value))
+    return '型号结构来源待补：请核对三芯尺寸、成缆绞距、屏蔽电阻与铠装绕包的真实依据，在结构页录入出处后重新计算。';
   const field = /(?:^|[：:]\s*)\/parameters\/([^：:\s]+)[：:]\s*(.*)/.exec(value);
   if (field) {
     const label = field[1].split('/').map(key => displayName(key)).join(' · ');
@@ -21,6 +23,10 @@ export function methodErrorText(value: string) {
   if (/\.(?:py|json)|cablesim\.|Traceback|\/src\//.test(value))
     return '计算方法暂时不可用，请重新读取；仍失败时联系管理员检查安装。';
   return displayText(value);
+}
+export function isStructureSourceError(value: string) {
+  return /(?:^|[：:]\s*)provenance\/cable_types[：:]/.test(value)
+    && /三芯尺寸、成缆绞距、屏蔽电阻与铠装绕包需可追溯来源/.test(value);
 }
 export function MethodErrorDetail({ value }: { value: string }) {
   return methodErrorText(value) === value ? null : <details className="type-method-error-detail">

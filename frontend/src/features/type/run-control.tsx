@@ -12,7 +12,7 @@ import { methodLabel } from './evidence';
 import { missingTypeInputs } from './missing';
 import { useTypeCommand } from './command-slot';
 import { displayName, displayText } from '@/lib/display-names';
-import { MethodErrorDetail, methodErrorText, methodDiagnostic } from './method-error';
+import { MethodErrorDetail, methodErrorText, methodDiagnostic, isStructureSourceError } from './method-error';
 
 function preflightReason(value:string) {
   if(value.includes('波纹层需专用轮廓'))return '波纹金属护套：实际波纹实体与用料尚未覆盖；三维可按等效厚度显示。';
@@ -106,7 +106,7 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
     {!inCommand && reason && <span className="muted">{reason}</span>}{error && <><p className="field-error" role="alert">{methodErrorText(error)}</p><MethodErrorDetail value={error} /></>}
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title={label + ' · 预检'} description={prepared?.preflight.ready ? '保存输入已通过预检，确认范围后运行。' : '当前输入未通过预检，修正后重新提交。'}
       actions={<Button variant="primary" loading={busy} disabled={!ack || !prepared?.preflight.ready || state.dirty || state.workspace?.revision !== prepared?.revision} onClick={() => void execute()}>确认并运行</Button>}>
-      <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => { const reason = text(optionalRecord(item.error).message) || item.status; return <div key={item.case_id}><p className="field-error">{preflightReason(reason)}</p>{locateIssue?.(reason)}<details><summary>追溯</summary><p>{reason}</p></details></div>; })}
+      <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => { const reason = text(optionalRecord(item.error).message) || item.status; return <div key={item.case_id}><p className="field-error">{preflightReason(reason)}</p>{locateIssue?.(reason)}<details><summary>追溯</summary>{isStructureSourceError(reason) ? <><p>{methodErrorText(reason)}</p><MethodErrorDetail value={reason} /></> : <p>{reason}</p>}</details></div>; })}
         {prepared && <p className="type-meta" title={[prepared.study.definition.method.plugin_id, prepared.study.definition.method.release_digest].join(' · ')}>{methodLabel({ snapshot: { definition: prepared.study.definition } })}</p>}
         <details><summary>方法适用范围</summary><ul>{prepared?.preflight.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>{prepared?.preflight.ready && <label className="type-check-label"><Checkbox aria-label="已核对输入来源与方法适用范围" checked={ack} onCheckedChange={checked => setAck(checked===true)} /> 已核对输入来源与方法适用范围</label>}</div>
     </Dialog>

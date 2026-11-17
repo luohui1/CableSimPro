@@ -119,7 +119,15 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     check(`${origin} 起点保留真实来源且建立独立草稿`, result.type_creation?.kind === origin && result.type_lifecycle?.status === 'draft', {
       workspace: result.id, creation: result.type_creation, lifecycle: result.type_lifecycle,
     });
+    await expectIdentity(result);
     return result;
+  }
+  async function expectIdentity(value) {
+    const heading = page.locator('.topbar h1');
+    await expect(heading).toContainText(value.domain.name);
+    if (value.type_lifecycle?.name) await expect(heading).toContainText(value.type_lifecycle.name);
+    check('页头同时保留真实型号与方案身份', await heading.evaluate(node => node.scrollWidth <= node.clientWidth + 1
+      && node.scrollHeight <= node.clientHeight + 1), { model: value.domain.name, plan: value.type_lifecycle?.name, heading: await heading.innerText() });
   }
   async function module(label) {
     await dismissDialog();
@@ -137,27 +145,33 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(content).not.toHaveAttribute('data-type-state', 'loading');
   }
   async function save(id) {
-    if (!await dirty()) return workspace(id);
-    await page.keyboard.press('Control+s');
-    await expect(toolbar().locator('.command-state')).not.toContainText('未保存');
-    await expect(page.getByText('结构修改待保存。', { exact: true })).toHaveCount(0);
+    if (await dirty()) await page.keyboard.press('Control+s');
+    await savedState();
     return workspace(id);
   }
+  async function savedState() {
+    await expect(toolbar().locator('.command-state')).not.toContainText('未保存');
+    await expect(page.getByText('结构修改待保存。', { exact: true })).toHaveCount(0);
+    await expect(toolbar().locator('button[aria-busy="true"]')).toHaveCount(0);
+  }
   async function command(label, required = false) {
-    if (required) await expect.poll(async () => await toolbar().getByRole('button', { name: label, exact: true }).count()
-      + await toolbar().getByRole('button', { name: '更多操作', exact: true }).count()).toBeGreaterThan(0);
+    // Dialog dismissal restores the background accessibility tree after its
+    // closing transition. Wait for the real toolbar before choosing an action.
+    await expect(toolbar()).toBeVisible();
     let button = toolbar().getByRole('button', { name: label, exact: true });
-    if (await button.isVisible()) return button;
     const more = toolbar().getByRole('button', { name: '更多操作', exact: true });
+    if (required) await expect(button.or(more).first()).toBeVisible();
+    if (await button.isVisible()) return button;
     if (await more.isVisible()) {
       await more.click();
+      await expect(page.getByRole('menu')).toBeVisible();
       const item = page.getByRole('menuitem', { name: new RegExp('^' + label) });
       if (await item.isVisible()) return item;
       await page.keyboard.press('Escape');
     }
     return null;
   }
-  async function run(label, resultPage) {
+  async function run(label, resultPage, repairRejected) {
     await expect(page.locator(`[data-type-page="${resultPage}"]`)).not.toHaveAttribute('data-type-state', 'loading');
     const button = await command(label, true);
     if (!check(label + '可从当前页面启动', button && await button.isEnabled(), await visibleText())) return false;
@@ -177,6 +191,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       }
     }
     await capture(label + '-真实预检');
+    if (!preflight.ready && repairRejected && await repairRejected({ preflight, dialog })) return run(label, resultPage);
     const ack = dialog.getByRole('checkbox', { name: '已核对输入来源与方法适用范围', exact: true });
     if (!check(label + '通过真实预检', preflight.ready && await ack.isVisible(), { visible: await dialog.innerText(), preflight })) {
       await page.keyboard.press('Escape');
@@ -599,17 +614,23 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const added = layers().getByRole('row').filter({ hasText: '隔离层' });
     await expect(added).toHaveCount(1);
     await added.click();
+    await expectIdentity(await workspace(main.id));
     await capture('结构编辑-新层与属性');
     const remove = page.getByRole('button', { name: /删除(?:所选)?结构层|删除(?:所选)?层|移除(?:所选)?层/ }).first();
     const canRemove = check('新加的结构层有删除入口', await remove.isVisible(), await visibleText());
     if (canRemove) {
       await remove.click();
-      const confirm = page.getByRole('dialog').getByRole('button', { name: /确认删除|删除/, exact: false });
-      if (await confirm.isVisible()) await confirm.click();
+      const deletion = page.getByRole('dialog', { name: '删除结构层', exact: true });
+      await expect(deletion).toBeVisible();
+      await deletion.getByRole('button', { name: '删除', exact: true }).click();
+      await expect(deletion).toBeHidden();
       await expect(added).toHaveCount(0);
-      await (await command('撤销')).click();
+      const undo = await command('撤销', true);
+      if (!check('删除新增层后仍可撤销', undo && await undo.isEnabled(), await visibleText())) return;
+      await capture('结构编辑-删除新增层后仍可撤销');
+      await undo.click();
       await expect(added).toHaveCount(1);
-      const redo = await command('重做');
+      const redo = await command('重做', true);
       await expect(redo).toBeEnabled(); await redo.click();
       await expect(added).toHaveCount(0);
       check('删除结构层可撤销重做且恢复后没有虚假修改', !await dirty(), await visibleText());
@@ -672,7 +693,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       }
       await capture(analysis.module + '-明示教学方法条件');
       await page.getByRole('button', { name: '保存方法条件', exact: true }).click();
-      await expect(toolbar().locator('.command-state')).not.toContainText('未保存');
+      await savedState();
       await page.getByRole('tab', { name: '结果', exact: true }).click();
       if (!await run('计算' + analysis.module, analysis.result)) return;
       const table = page.getByRole('table', { name: analysis.module, exact: true });
@@ -729,7 +750,43 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       && /T1 隔离走查/.test(ratingStudy?.definition.input_sources?.['/parameters/ks']?.reference || ''), ratingStudy?.definition);
     await capture('载流量表-方法参数与来源已保存');
     await page.getByRole('tab', { name: '结果表', exact: true }).click();
-    if (!await run('计算所选工况', 'rating-table-results')) return;
+    if (!await run('计算所选工况', 'rating-table-results', async ({ preflight, dialog }) => {
+      const before = await workspace(main.id), cable = before.domain.cable_types[0];
+      const escape = value => value.replaceAll('~', '~0').replaceAll('/', '~1');
+      const sourcePath = '/cable_types/' + escape(cable.id);
+      const backendPaths = ['/provenance/' + escape('/cable_types/' + cable.id), '/provenance/' + escape(sourcePath)];
+      const errors = preflight.cases.filter(item => item.status !== 'succeeded').map(item => item.error);
+      const sourceGap = errors.length > 0 && errors.every(error => error?.code === 'DOMAIN_NOT_SUPPORTED'
+        && backendPaths.includes(error.path)
+        && error.message === 'provenance/cable_types：三芯尺寸、成缆绞距、屏蔽电阻与铠装绕包需可追溯来源；请补齐型号来源。');
+      if (!sourceGap) return false;
+      const source = before.type_creation?.source?.references?.['/cable_type'];
+      if (!source?.reference?.trim()) return false;
+      const locate = dialog.getByRole('button', { name: '填写型号结构来源', exact: true });
+      if (!check('载流量结构来源缺项能定位真实出处字段', await locate.isVisible(), { errors, source })) return false;
+      await locate.click();
+      await expect(dialog).toBeHidden();
+      await expect(page).toHaveURL(/\/structure\/table.*field=/);
+      const input = page.getByRole('textbox', { name: '型号结构来源', exact: true });
+      await expect(input).toBeFocused();
+      check('缺失结构来源保持空白且没有自动确认', await input.inputValue() === '', { sourcePath });
+      await capture('载流量表-缺项定位到型号结构来源');
+      // Copy the original catalogue snapshot verbatim. It explicitly labels the
+      // model as standard-derived; no manufacturer measurement is invented.
+      await input.fill(source.reference);
+      await input.press('Tab');
+      await save(main.id);
+      const after = await workspace(main.id);
+      expect(after.domain.provenance[sourcePath]).toEqual({ kind: 'user', reference: source.reference, reviewed: false });
+      expect({ ...after.domain, provenance: before.domain.provenance }).toEqual(before.domain);
+      for (const [key, value] of Object.entries(before.domain.provenance)) if (key !== sourcePath) expect(after.domain.provenance[key]).toEqual(value);
+      (report.structureSources ||= []).push({ ...size, workspace: main.id, path: sourcePath,
+        originalSource: before.type_creation.source, enteredReference: source.reference, saved: after.domain.provenance[sourcePath] });
+      check('结构出处经真实UI保存且原尺寸与逐字段来源保留', true, { sourcePath, revision: after.revision, reference: source.reference });
+      await capture('载流量表-保留原始来源全文与待核对状态');
+      await module('载流量表');
+      return true;
+    })) return;
     const table = page.getByRole('table', { name: '载流量表', exact: true });
     const currentStudy = (await api(`/api/workspaces/${main.id}/studies`))
       .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];
@@ -790,6 +847,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       && (await page.locator('.topbar h1').innerText()).includes(name('改版')), {
       requested: name('改版'), plan: branched.type_lifecycle?.name, model: branched.domain.name, original: original.domain.name,
     });
+    await expectIdentity(branched);
     const input = layers().getByRole('textbox', { name: '绝缘厚度', exact: true }).first();
     const originalValue = Number(await input.inputValue());
     const revisedValue = Math.max(originalValue - 0.1, originalValue * 0.9).toFixed(3);
@@ -807,6 +865,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(differences.getByRole('row').filter({ hasText: /芯 1.*绝缘.*厚度/ })).toBeVisible();
     check('改版比较显示真实保存的厚度差异', (await differences.innerText()).includes(revisedValue)
       && (await differences.innerText()).includes(originalValue.toFixed(3)), await differences.innerText());
+    check('多方案比较表与完整方案标题在当前宽度内可读', await differences.evaluate(table => {
+      const box = table.getBoundingClientRect();
+      return [...table.querySelectorAll('th')].every(cell => cell.scrollWidth <= cell.clientWidth + 1)
+        && box.right <= innerWidth && [...(function* () { for (let node = table.parentElement; node; node = node.parentElement) yield node; })()]
+          .filter(node => /auto|scroll|hidden/.test(getComputedStyle(node).overflowX))
+          .every(node => node.scrollWidth <= node.clientWidth + 1);
+    }), await differences.innerText());
     await capture('改版-原型号与独立方案参数对比');
   });
 
@@ -902,7 +967,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         await choose(label, labels[analysis.parameters[key]]);
       }
       await page.getByRole('button', { name: '保存方法条件', exact: true }).click();
-      await expect.poll(dirty).toBe(false);
+      await savedState();
       await capture('教学交付-' + analysis.label + '-已有来源条件已保存');
       await page.getByRole('tab', { name: '结果', exact: true }).click();
       if (!await run('计算' + analysis.label, analysis.result)) return;
