@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useBlocker } from '@tanstack/react-router';
+import { Link, useBlocker } from '@tanstack/react-router';
 import { useStudy } from './study-provider';
 import { Button } from './ui/button';
 import { Select } from './ui/select';
@@ -59,6 +59,7 @@ function interval(value: unknown, offset = 0) { return Array.isArray(value) && v
 export function StudyHybrid({ run, tab }: { run?: Record<string, unknown>; tab: string }) {
   const context = useStudy(); const { study, workspace } = context;
   const queries = useQueryClient();
+  const predictionReasonId = useId();
   const document = optionalRecord(workspace.domain); const savedInputs = initial(document);
   const activeFields = fields.filter(field => !['neighbour', 'backfill', 'interface', 'lowerSoil'].includes(field.key)
     || field.key === 'neighbour' && scene(document) === 'direct_double'
@@ -197,6 +198,12 @@ export function StudyHybrid({ run, tab }: { run?: Record<string, unknown>; tab: 
   const modelReports = optionalRecord(validation?.models);
   const [set, setSet] = useState('validation');
   const busy = saving || running || !!run && ['accepted','queued','running','validating'].includes(text(run.status));
+  const predictionDisabledReason = busy ? saving ? '正在保存工况和模型引用，请等待完成后预测。' : '预测运行尚未完成，请等待当前运行结束。'
+    : !model ? !compatible.length ? !models.data?.length ? `尚无已登记的训练模型，当前${sceneNames[scene(document)]}场景不能预测。`
+      : `已登记模型中没有适用于${sceneNames[scene(document)]}场景的可用版本，不能预测。`
+      : modelId ? '已保存的模型引用目前不在本场景可用目录中；请选择确切的已登记适用模型，原摘要仍保留。'
+        : '请先选择确切的已登记适用模型版本，再预测。'
+    : context.dirty ? '工程或研究有未保存修改，请先保存或撤销，再预测。' : '';
   const comparison = Object.keys(payload).length ? [{ id: 'iec', name: optionalRecord(payload.baseline).kind === 'uniform_soil_counterfactual' ? '均匀土壤IEC对照' : 'IEC基线', amp: optionalRecord(payload.baseline).ampacity_a, temperature: optionalRecord(payload.baseline).temperature_k, intervals: {} },
     { id: 'hybrid', name: '混合模型', amp: payload.ampacity, temperature: payload.conductor_temperature, intervals: optionalRecord(payload.interval) }] : [];
   const columns: Column<typeof comparison[number]>[] = [
@@ -210,7 +217,15 @@ export function StudyHybrid({ run, tab }: { run?: Record<string, unknown>; tab: 
   if (models.isPending) return <LoadingState title="正在读取训练模型" />;
   if (models.error) return <ErrorState description={message(models.error)} action={<Button onClick={() => models.refetch()}>重新读取</Button>} />;
   return <div className="hybrid-study">
-    <div className="hybrid-toolbar"><Select label="模型版本" value={modelId || undefined} onChange={value => { history.current.push({ values, modelId }); setModelId(value); setError(''); }} options={compatible.map(item => ({ value: item.id, label: `${item.name} · ${item.version}` }))} /><StatusMark kind="proposal" label="仅参考" detail="仿真数据校准；工程使用需要独立实测验证与人工批准。" /><span className="spacer" /><Button variant="run" loading={busy} disabled={!model || context.dirty} onClick={execute}>{dirty ? '保存并预测' : '预测'}</Button></div>
+    <div className="hybrid-toolbar"><Select label="模型版本" value={modelId || undefined} disabled={!compatible.length} placeholder={compatible.length ? '请选择模型版本' : '当前场景暂无可用模型'} onChange={value => { history.current.push({ values, modelId }); setModelId(value); setError(''); }} options={compatible.map(item => ({ value: item.id, label: `${item.name} · ${item.version}` }))} /><StatusMark kind="proposal" label="仅参考" detail="仿真数据校准；工程使用需要独立实测验证与人工批准。" /><span className="spacer" /><Button variant="run" loading={busy} disabled={!model || context.dirty} aria-describedby={predictionDisabledReason ? predictionReasonId : undefined} title={predictionDisabledReason || undefined} onClick={execute}>{dirty ? '保存并预测' : '预测'}</Button></div>
+    {predictionDisabledReason && <p id={predictionReasonId} className="muted" role="status">{predictionDisabledReason}</p>}
+    {!compatible.length && <>
+      <p className="muted">请在混合方法的“能力”页查看样本、训练和验证要求；完成模型登记后重新读取目录，并选择确切的适用版本。此处不会自动训练模型{modelId ? '，已保存的模型摘要和历史结果仍保留' : ''}。</p>
+      <div className="hybrid-validation-toolbar" aria-label="模型准备">
+        <Link className="button button-primary button-standard" to="/plugins/$pid" params={{ pid: 'cablesim.hybrid-rating' }} search={{ theme: documentGlobal().documentElement.dataset.theme === 'dark' ? 'dark' : 'light' }}>查看混合方法与训练要求</Link>
+        <Button loading={models.isFetching} onClick={() => void models.refetch()}>{models.isFetching ? '正在读取模型目录' : '重新读取模型目录'}</Button>
+      </div>
+    </>}
     {error && !Object.keys(fieldErrors).length && <ErrorState title="预测未完成" description={error} />}
     {tab === 'results' ? <><div className="hybrid-inputs" onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); discard(); } }}>{activeFields.map(field => <NumberField key={field.key} label={field.label} value={values[field.key]} unit={field.unit} precision={field.precision} required disabled={busy} error={fieldErrors[field.key]}
       draftText={raw[field.key]} onDraftChange={value => { setFieldErrors(previous => { const next = { ...previous }; delete next[field.key]; return next; }); setError(''); setRaw(previous => { const next = { ...previous }; if (value === undefined) delete next[field.key]; else next[field.key] = value; return next; }); }} onCommit={value => update(field.key, value)} />)}</div>

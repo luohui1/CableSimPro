@@ -64,6 +64,53 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await expect(treeName).toBeVisible();
     check('工程树显示完整研究名称', await treeName.evaluate(node => node.scrollWidth <= node.clientWidth + 1
       && node.scrollHeight <= node.clientHeight + 1), { title: await treeName.innerText() });
+    if (report.phase === 'after') {
+      const createdUrl = new URL(page.url()), createdSid = createdUrl.pathname.split('/')[2], createdWid = createdUrl.searchParams.get('workspace');
+      expect(createdWid).toBeTruthy();
+      const [workspaceIndex, typeIndex, projectStudies] = await Promise.all([
+        api('/api/workspaces'), api('/api/design/type-workspaces'), api(`/api/workspaces/${createdWid}/studies`),
+      ]);
+      const typeIds = new Set(typeIndex.map(item => item.id));
+      const projectIds = new Set(workspaceIndex.filter(item => !typeIds.has(item.id)).map(item => item.id));
+      const savedProject = workspaceIndex.find(item => item.id === createdWid);
+      expect(savedProject?.name).toBe('直埋线路 · ' + tag);
+      expect(projectStudies.some(item => item.id === createdSid && item.workspace === createdWid)).toBe(true);
+      const sidebar = page.locator('.workbench-sidebar');
+      const currentProject = sidebar.locator('a.tree-object').filter({ hasText: savedProject.name });
+      await expect(currentProject).toHaveCount(1);
+      await expect(currentProject).toHaveAttribute('aria-current', 'page');
+      await expect(currentProject.locator('.tree-label')).toHaveText(savedProject.name);
+      await expect(currentProject.locator('.tree-count')).toHaveText(String(projectStudies.length));
+      await expect(currentProject).toBeInViewport({ ratio: 1 });
+      if (projectIds.size > 3) await expect(sidebar.getByRole('link', { name: `全部 ${projectIds.size} 个工程`, exact: true })).toBeVisible();
+      const objects = await sidebar.locator('a.tree-object').evaluateAll(links => links.map(link => {
+        const url = new URL(link.href);
+        return { name: link.textContent.trim(), path: url.pathname, workspace: url.searchParams.get('workspace'), current: link.getAttribute('aria-current') };
+      }));
+      const projectLinks = objects.filter(item => item.path === '/studies');
+      check('新建后工程目录立即显示当前工程、真实研究数及正确分组', projectIds.has(createdWid)
+        && projectLinks.some(item => item.workspace === createdWid && item.current === 'page')
+        && projectLinks.every(item => projectIds.has(item.workspace))
+        && objects.filter(item => item.path.startsWith('/types/')).every(item => typeIds.has(item.path.split('/')[2]))
+        && (projectIds.size > 3 || projectLinks.length === projectIds.size),
+      { workspace: createdWid, study: createdSid, studyCount: projectStudies.length, projectCount: projectIds.size, visibleObjects: objects });
+      await capture('01-created-project-navigation');
+
+      // Use the new directory entry immediately, without reloading the app or
+      // waiting for the index's stale time to hide a missing invalidation.
+      await currentProject.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForURL(next => next.pathname === '/studies' && next.searchParams.get('workspace') === createdWid);
+      const projectTable = page.getByRole('table', { name: '本工程研究', exact: true });
+      const studyLink = projectTable.getByRole('link', { name: '直埋载流量 · ' + tag, exact: true });
+      await expect(studyLink).toBeVisible();
+      await expect(projectTable.locator('tbody tr')).toHaveCount(projectStudies.length);
+      await capture('01-project-directory-keyboard-navigation');
+      await studyLink.click();
+      await page.waitForURL(next => next.pathname === `/studies/${createdSid}/ampacity/results` && next.searchParams.get('workspace') === createdWid);
+      await expect(page.getByRole('button', { name: '预检并运行', exact: true })).toBeVisible();
+      check('新工程目录可用键盘进入并用鼠标返回同一研究', new URL(page.url()).searchParams.get('workspace') === createdWid);
+    }
   });
   const url = new URL(page.url());
   const sid = url.pathname.split('/')[2], wid = url.searchParams.get('workspace');

@@ -106,7 +106,22 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
     await Promise.all(['type-evidence', 'type-specification', 'type-comparison', 'type-studies', 'type-material-comparison', 'type-resource-bindings'].map(key => queries.invalidateQueries({ queryKey: [key, wid] })));
     await queries.invalidateQueries({ queryKey: ['object-relations'] });
   }
-  async function refresh(next: Workspace) { queries.setQueryData(['type-workspace', wid, undefined, undefined], next); await refreshResults(); await queries.invalidateQueries({ queryKey: ['type-list'] }); }
+  async function refresh(next: Workspace) {
+    const renamed = workspace?.document.name !== next.document.name;
+    queries.setQueryData(['type-workspace', wid, undefined, undefined], next);
+    await refreshResults();
+    await Promise.all([
+      queries.invalidateQueries({ queryKey: ['type-list'] }),
+      ...(renamed ? [
+        // The sidebar publishes the two real indexes as a complete pair.
+        // Refresh names after a saved rename or history restore, not a draft edit.
+        queries.invalidateQueries({ queryKey: ['type-index'], refetchType: 'all' }),
+        queries.invalidateQueries({ queryKey: ['workspace-index'], refetchType: 'all' }),
+        queries.invalidateQueries({ queryKey: ['index-objects', 'type'] }),
+        queries.invalidateQueries({ queryKey: ['index-search'] }),
+      ] : []),
+    ]);
+  }
   async function commitResourceValue(action: () => Promise<unknown>, notice='已采用资源值；受影响的保存结果为历史，请重算。') {
     if (pending.current || !workspace || readOnly || dirty) throw new Error('请先保存或撤销当前修改，再采用资源值。');
     pending.current = true; setBusy(true); setError(''); setNotice('');

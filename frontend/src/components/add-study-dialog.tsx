@@ -155,9 +155,15 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
       // 宿主按方法契约逐项拒绝缺失的必填参数；翻成中文并说明为什么没有默认值
       const missing = [...message(problem).matchAll(/parameters\.([\w.]+)：Field required/g)].map((match) => displayName(match[1]));
       setError(missing.length ? `请补齐没有插件默认值的参数：${missing.join("、")}；可选择沿用已保存的同方法研究参数。` : message(problem));
-      requestAnimationFrame(()=>focusParameterField(form.current,firstError.current));
     },
   });
+  useEffect(() => {
+    // onError runs before the mutation settles. Wait for React to enable the
+    // real form controls before moving keyboard focus to the rejected input.
+    if (!open || !error || create.isPending) return;
+    const frame = requestAnimationFrame(() => focusParameterField(form.current, firstError.current));
+    return () => cancelAnimationFrame(frame);
+  }, [open, error, create.isPending]);
 
   const loading = workspace.isPending || methods.isPending || studies.isPending;
   const failure = workspace.error || methods.error || studies.error;

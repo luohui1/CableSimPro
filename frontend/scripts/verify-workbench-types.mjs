@@ -437,13 +437,28 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       && JSON.stringify(uncommitted.domain) === JSON.stringify(before.domain), { workspace: before.id, revision: before.revision });
     await capture('型号名称-键盘确认后的未保存草稿');
     const saved = await save(editFixture.id);
-    expect({ ...saved.domain, name: before.domain.name }).toEqual(before.domain);
+    const nameSource = { kind: 'user', reference: '工程师在型号工作区填写', reviewed: false };
+    // A real name edit adds its own unreviewed provenance. Every other field,
+    // source and fixed reference must remain exactly as it was before the edit.
+    expect(saved.domain).toEqual({ ...before.domain, name: title,
+      provenance: { ...before.domain.provenance, '/name': nameSource } });
     expect(saved.type_lifecycle?.name).toBe(before.type_lifecycle?.name);
     check('型号名称经键盘保存后真实回读且方案身份不变', saved.domain.name === title && saved.revision > before.revision, {
       workspace: saved.id, before: before.domain.name, after: saved.domain.name,
       revision: saved.revision, plan: saved.type_lifecycle?.name,
     });
     await expectIdentity(saved);
+    const typeIndex = await api('/api/design/type-workspaces');
+    expect(typeIndex.find(row => row.id === saved.id)?.name).toBe(title);
+    const currentLink = page.getByRole('complementary', { name: '导航', exact: true })
+      .locator('a.tree-object[aria-current="page"]');
+    await expect(currentLink).toHaveCount(1);
+    await expect(currentLink).toHaveText(title);
+    await expect(currentLink).toHaveAttribute('title', title);
+    await expect(currentLink).toBeInViewport({ ratio: 1 });
+    expect(new URL(await currentLink.getAttribute('href'), base).pathname).toBe(`/types/${saved.id}/structure/table`);
+    check('保存改名后当前导航立即采用真实目录名称', true, { workspace: saved.id,
+      name: title, source: saved.domain.provenance['/name'], href: await currentLink.getAttribute('href') });
     await primary('标准核对', '型号名称真实保存后');
     await capture('型号名称-真实保存与独立方案身份');
 
