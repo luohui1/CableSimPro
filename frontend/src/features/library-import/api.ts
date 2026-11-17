@@ -59,6 +59,40 @@ export interface LibrarySpec {
 }
 export interface SeriesDetail { series: SeriesSummary; specs: LibrarySpec[] }
 
+export interface CatalogueMetric {
+  published: number | null; value: number | null; unit: string;
+  difference: number | null; relative_difference: number | null;
+  status: 'declared_input' | 'missing' | 'refused' | 'compared'; reason: string;
+  method?: unknown; tier?: unknown; missing_fields?: { field: string; label: string; reason: string }[];
+}
+export interface CatalogueComparisonRow {
+  key: string; sheet: string; table: string; area_mm2: number; designation: string;
+  metrics: Record<string, CatalogueMetric>; source: unknown;
+}
+export interface CatalogueComparisonSummary {
+  specifications: number; ampacity_compared: number; ampacity_refused: number;
+  ampacity_mean_absolute_relative_difference: number | null;
+  ampacity_max_absolute_relative_difference: number | null; weight_compared: number; four_metric_passed?: number;
+}
+export interface ReferenceAssumption {
+  key: string; label: string; value: unknown; unit: string | null;
+  source: { kind: string; reference: string; version: string; file_sha256?: string };
+  confidence: 'reference'; manufacturer_data: false;
+}
+export interface CatalogueComparisonReport {
+  sample_id: string; source: unknown; scope: string; rows: CatalogueComparisonRow[];
+  summary: CatalogueComparisonSummary & { four_metric_passed: number };
+  reference_scenario: {
+    id: string; requires_confirmation: true; confirmed: boolean; executed: boolean;
+    manufacturer_data: false; scope: string; method: { name: string; version: string };
+    assumptions: ReferenceAssumption[]; raw_assumptions: Record<string, unknown>;
+  };
+  reference_calculation: {
+    rows: CatalogueComparisonRow[]; summary: CatalogueComparisonSummary; method: unknown;
+    scope: string; human_reviewed: false; manufacturer_comparison: false;
+  } | null;
+}
+
 const BASE = '/api/type-library';
 export async function libraryRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(BASE + path, { credentials: 'same-origin', cache: 'no-store', ...init });
@@ -75,6 +109,9 @@ export async function libraryRequest<T>(path: string, init?: RequestInit): Promi
 }
 export function libraryPost<T>(path: string, body: unknown): Promise<T> {
   return libraryRequest<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CableSim-Actor': 'human' }, body: JSON.stringify(body) });
+}
+export function catalogueComparison(sample: string, referenceScenarioConfirmed = false): Promise<CatalogueComparisonReport> {
+  return libraryPost(`/catalogue-comparison/${sample}`, referenceScenarioConfirmed ? { reference_scenario_confirmed: true } : {});
 }
 export function sourceText(source: unknown): string {
   if (typeof source === 'string') return source;

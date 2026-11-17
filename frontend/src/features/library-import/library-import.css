@@ -28,6 +28,7 @@
 .library-import-details > summary { cursor: pointer; padding-bottom: var(--space-4); font-weight: var(--weight-strong); }
 .library-import-source { color: var(--text-secondary); font-size: var(--text-note); }
 .library-import-digest { font-size: var(--text-note); overflow-wrap: anywhere; word-break: break-all; white-space: normal; }
+.library-import-raw-declaration { font-family: var(--font-code); min-height: calc(var(--space-12) * 5); overflow-wrap: anywhere; white-space: pre-wrap; }
 .library-import-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .library-import-mapping-save { display: flex; align-items: flex-end; gap: var(--space-3); }
 .library-import-mapping-save > label { flex: 1; max-width: 400px; }
