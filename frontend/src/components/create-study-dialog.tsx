@@ -411,6 +411,11 @@ function GenericCreateStudyDialog({
       });
     },
   });
+  useEffect(() => {
+    if (!open || !error || mutation.isPending || allocateNative.isPending) return;
+    const frame = requestAnimationFrame(() => focusParameterField(form.current, firstError.current));
+    return () => cancelAnimationFrame(frame);
+  }, [open, error, mutation.isPending, allocateNative.isPending]);
   async function submit() {
     if (pending.current) return;
     pending.current = true;
@@ -421,7 +426,6 @@ function GenericCreateStudyDialog({
       else await mutation.mutateAsync();
     } catch (problem) {
       setError(message(problem));
-      requestAnimationFrame(() => focusParameterField(form.current,firstError.current));
     } finally {
       pending.current = false;
     }
