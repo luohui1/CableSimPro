@@ -23,6 +23,7 @@ from reportlab.platypus import BaseDocTemplate, CondPageBreak, Flowable, Frame, 
 from reportlab.platypus.doctemplate import LayoutError
 
 from .formal_contracts import TITLES, canonical_bytes, decode_logo, fail, is_number, raw_text, referenced_value, validate_model_refs
+from .formal_presentation import cell_text, cell_unit
 
 
 _LOCK = RLock()
@@ -183,6 +184,11 @@ class _Literal(Flowable):
         return self.width, self.height
 
     def split(self, availWidth, availHeight):
+        # Tables can pass the outer column width after measuring this flowable
+        # inside cell padding. Keep the measured content width: widening here
+        # can turn a required split into one unsplit part and break row layout.
+        if self.width > 0:
+            availWidth = min(availWidth, self.width)
         self.wrap(availWidth, availHeight)
         count = int(availHeight // self.leading)
         if count >= len(self._lines):
@@ -226,9 +232,9 @@ def _table_style(*, header=True) -> TableStyle:
 
 
 def _cell_text(cell: dict, columns: list[dict]) -> str:
-    text = cell['raw_text']
-    if cell.get('unit') and not any(column.get('role') == 'unit' for column in columns):
-        text += ' ' + cell['unit']
+    text = cell_text(cell)
+    if cell_unit(cell) and not any(column.get('role') == 'unit' for column in columns):
+        text += ' ' + cell_unit(cell)
     return text
 
 
@@ -273,14 +279,25 @@ def _model_table(table: dict, width: float) -> list[Flowable]:
                                   atomic=numeric or column.get('role') == 'unit',
                                   align='right' if numeric else 'left'))
         rows.append(cells)
-    table_flow = LongTable(rows, colWidths=_column_widths(table, width), repeatRows=1,
+    widths = _column_widths(table, width)
+    table_flow = LongTable(rows, colWidths=widths, repeatRows=1,
                            splitByRow=1, splitInRow=1, hAlign='LEFT', spaceAfter=13)
     table_flow.setStyle(_table_style())
     result = []
     if table.get('title'):
         # Keep the caption with the beginning of a table, not its entire
         # splittable body. keepWithNext on a long table wastes a whole page.
-        result.extend([CondPageBreak(82), _Literal(table['title'], size=10.5, before=8, after=6)])
+        caption = _Literal(('T' + str(table['display_number']) + '  ' if table.get('display_number') else '') + table['title'], size=10.5, before=8, after=6)
+        opening = caption.wrap(width, 1000)[1] + caption.getSpaceBefore() + caption.getSpaceAfter()
+        for index, row in enumerate(rows[:2]):
+            heights = [cell.wrap(column_width - 2 * _PADDING, 1000)[1]
+                       for cell, column_width in zip(row, widths)]
+            # Three lines keep a short row whole; longer cells can split into
+            # at least two lines without stranding a one-line remainder.
+            if index:
+                heights = [min(height, 3 * cell.leading) for height, cell in zip(heights, row)]
+            opening += max(heights) + 12  # Actual top and bottom cell padding.
+        result.extend([CondPageBreak(opening), caption])
     result.append(table_flow)
     return result
 
@@ -339,6 +356,8 @@ def _figure(figure: dict, model: dict, width: float, prefix=None) -> list[Flowab
     diagram = _SavedCircles(ordered, extent, width, labels if beside else None)
     diameter = geometry.get('outer_diameter_m')
     caption = ('保存外径：' + raw_text(diameter) + ' m') if is_number(diameter) and math.isfinite(diameter) else '保存的几何记录未提供外径。'
+    if figure.get('diameter_cell'):
+        caption = '外径：' + cell_text(figure['diameter_cell']) + ' ' + cell_unit(figure['diameter_cell'])
     result = [KeepTogether([*opening, title, diagram, _Literal(caption, size=9, before=6, after=8)])]
     if beside:
         return result

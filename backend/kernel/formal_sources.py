@@ -11,7 +11,7 @@ import json
 import re
 
 from .formal_contracts import (SCHEMA, SIGNATURE_ROLES, TITLES, canonical_bytes,
-                               fail, is_number, jsonsha, raw_text,
+                               contains_plugin_identifier, fail, is_number, jsonsha, raw_text,
                                resolve_pointer, validate_model_refs)
 from .formal_units import domain_unit, numeric_leaves, parameter_unit, token
 from .rating_table import is_rating_table, rating_rows
@@ -66,7 +66,7 @@ _RATING_UNITS = {'value_a': ('允许电流', 'A'), 'depth_m': ('中心埋深', '
                  'duct_outer_m': ('排管外径', 'm'), 'duct_rho_k_m_w': ('管壁热阻率', 'K·m/W')}
 _STANDARD_VALUES = {'actual': '实际值', 'actual_unrounded': '未舍入实际值', 'design_actual': '设计值',
                     'limit': '要求限值', 'margin': '保存余量'}
-_PLUGIN_ID = re.compile(r'(?:x-)?cablesim\.[A-Za-z0-9_.-]+')
+_PLUGIN_ID = re.compile(r'(?:x-)?cablesim\.[A-Za-z0-9_.-]+', re.IGNORECASE)
 _KEY_INPUT_FIELDS = frozenset({'nominal_area', 'r20', 'longitudinal_r20', 'voltage', 'u0', 'u', 'um',
     'frequency', 'x', 'z', 'surface_temperature', 'air_temperature', 'thermal_resistivity',
     'dry_thermal_resistivity', 'critical_temperature_rise', 'duration', 'period', 'wind_speed',
@@ -122,16 +122,19 @@ class _Model:
             return ''
         result = str(value)
         for identifier in sorted(self.names, key=len, reverse=True):
-            result = result.replace(identifier, self.names[identifier])
+            result = re.sub(re.escape(identifier), lambda _match: self.names[identifier], result, flags=re.IGNORECASE)
         return _PLUGIN_ID.sub('保存的计算方法', result)
 
     def label(self, value):
         return _cell(self.text(value))
 
+    def has_plugin_identifier(self, value):
+        return contains_plugin_identifier(value, self.names)
+
     def body_literal(self, source, path):
         """Keep technical identifiers in trace while preserving their original."""
         value = self.at(source, path)
-        if isinstance(value, str) and _PLUGIN_ID.search(value):
+        if isinstance(value, str) and self.has_plugin_identifier(value):
             self.deferred.append({'text': value, 'source_ref': _ref(source, path), 'verbatim': True})
             return self.label(value)
         return self.literal(source, path)
@@ -419,7 +422,7 @@ def _artifact_tables(model, section, run, *, material_basis=True):
                     if isinstance(formula, str) and formula and formula not in model.formulas_seen:
                         model.formulas_seen.add(formula)
                         paragraph = {'text': formula, 'source_ref': _ref(source, path + '/formula'), 'verbatim': True}
-                        if _PLUGIN_ID.search(formula):
+                        if model.has_plugin_identifier(formula):
                             model.deferred.append(paragraph)
                         else:
                             section['paragraphs'].extend([{'text': '保存公式 · ' + model.text(item.get('title') or '计算条目'),
@@ -546,7 +549,7 @@ def _stored_text(model, section, run):
     for path, text in candidates:
         if isinstance(text, str) and text:
             item = {'text': text, 'source_ref': _ref(source, path), 'verbatim': True}
-            if _PLUGIN_ID.search(text):
+            if model.has_plugin_identifier(text):
                 model.deferred.append(item)
             else:
                 section['paragraphs'].append({'text': '保存的结论原文', 'source_ref': None, 'verbatim': False})
@@ -556,7 +559,7 @@ def _stored_text(model, section, run):
         for index, text in enumerate(run['output'].get('limitations', [])):
             if isinstance(text, str) and text:
                 paragraph = {'text': text, 'source_ref': _ref(source, '/output/limitations/' + str(index)), 'verbatim': True}
-                if _PLUGIN_ID.search(text):
+                if model.has_plugin_identifier(text):
                     model.deferred.append(paragraph)
                 else:
                     paragraphs.append(paragraph)
@@ -759,8 +762,10 @@ def build_model(research, types, request: dict) -> dict:
                 fail('FORMAL_SOURCE_CHANGED', '读取期间来源记录改变，未生成文件。', 409)
             source = model.source('run:' + run['id'], 'run', _run_projection(run),
                 f"/api/workspaces/{wid}/studies/{run['study']}/runs/{run['id']}?view=full")
-            manifest, _index, _capability = _manifest(run, run['snapshot']['definition']['method'])
-            model.names[manifest['id']] = manifest.get('name') or '保存方法'
+            _manifest(run, run['snapshot']['definition']['method'])
+            for frozen in run['snapshot'].get('method_manifests', {}).values():
+                if isinstance(frozen, dict) and isinstance(frozen.get('id'), str) and frozen['id']:
+                    model.names[frozen['id']] = frozen.get('name') or '保存方法'
             if proof is not None:
                 model.source('convergence:' + run['id'], 'convergence_proof', proof,
                              run_source_id=source)
@@ -843,6 +848,9 @@ def build_model(research, types, request: dict) -> dict:
         with research.store.read_snapshot() as final_db:
             if research.store.load(final_db, wid)[0]['revision'] != revision:
                 fail('FORMAL_REVISION_CHANGED', '生成期间工程修订已变化。', 409)
+    from .formal_presentation import prepare_engineering_body, apply_presentation
+    prepare_engineering_body(model.value)
+    apply_presentation(model.value)
     validate_model_refs(model.value)
     model.value['source_digest'] = jsonsha(model.value['sources'])
     model.value['model_digest'] = jsonsha(model.value)

@@ -9,6 +9,7 @@ from copy import deepcopy
 from collections import Counter
 import base64
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 from hashlib import sha256
 from io import BytesIO
 import json
@@ -44,7 +45,7 @@ CONTRACT_UNITS = {
         "inner_radius_m": "m", "outer_radius_m": "m", "material_volume_m3": "m³", "envelope_volume_m3": "m³",
         "density_kg_m3": "kg/m³", "material_volume_m3_per_km": "m³/km"},
     "type-rating-table": {
-        "value_a": "A", "depth_m": "m", "soil_rho_k_m_w": "K·m/W", "ambient_temperature_c": "°C",
+        "circuit_count": "1", "value_a": "A", "depth_m": "m", "soil_rho_k_m_w": "K·m/W", "ambient_temperature_c": "°C",
         "actual_spacing_m": "m", "spacing_m": "m", "frequency_hz": "Hz", "duct_inner_m": "m",
         "duct_outer_m": "m", "duct_rho_k_m_w": "K·m/W"},
 }
@@ -208,6 +209,152 @@ class SourceReader:
         return observed
 
 
+
+def rendered_text(cell):
+    return cell.get("display", {}).get("text", cell.get("display_text", cell["raw_text"]))
+
+
+def displayed_unit(cell):
+    return cell.get("display", {}).get("unit", cell.get("display_unit", cell.get("unit")))
+
+
+def check_engineering_number(cell: dict, payloads: dict) -> dict:
+    """Independent Decimal oracle: do not import the producer or its rounding helper."""
+    reference = cell["value_ref"]
+    value = pointer_value(payloads[reference["source_id"]], reference["pointer"])
+    require(canonical(value) == canonical(cell["value"]), "Display has no exact saved source")
+    path = reference["pointer"].lower()
+    field = path.rsplit("/", 1)[-1]
+    parent = pointer_value(payloads[reference["source_id"]], reference["pointer"].rsplit("/", 1)[0])
+    hints = field + " " + (" ".join(str(parent.get(k, "")) for k in
+                         ("key", "id", "title", "label", "property", "quantity")) if isinstance(parent, dict) else "")
+    hints = hints.lower()
+    role = "quantity"
+    unit = cell["unit"]
+    if unit in ("K", "\u00b0C", "\u2103") and any(word in hints for word in
+        ("difference", "margin", "temperature_rise", "headroom", "delta_", "critical_temperature_rise")):
+        role = "temperature_interval"
+    elif any(word in hints for word in ("thickness", "\u539a\u5ea6")):
+        role = "thickness"
+    elif any(word in hints for word in ("diameter", "radius", "duct_inner_m", "duct_outer_m",
+        "\u5916\u5f84", "\u5185\u5f84", "\u76f4\u5f84", "\u534a\u5f84")):
+        role = "diameter"
+    elif unit == "m" and any(word in path for word in ("/layers/", "/common_layers/", "/conductor/")):
+        role = "dimension"
+    scale, offset, quantum, target = Decimal(1), Decimal(0), None, unit
+    if unit in ("K", "\u00b0C", "\u2103"):
+        target, quantum = "\u00b0C", Decimal("0.1")
+        if unit == "K" and role != "temperature_interval":
+            offset = Decimal("-273.15")
+    elif unit in ("m2", "m^2", "m\u00b2"):
+        target, scale = "mm\u00b2", Decimal(1000000)
+    elif unit in ("mm2", "mm^2", "mm\u00b2"):
+        target = "mm\u00b2"
+    elif unit in ("ohm/m", "\u03a9/m", "ohm/km", "\u03a9/km"):
+        target = "\u03a9/km"
+        scale = Decimal(1000) if unit in ("ohm/m", "\u03a9/m") else Decimal(1)
+    elif unit in ("kg/m", "kg/km"):
+        target, quantum = "kg/km", Decimal(1)
+        scale = Decimal(1000) if unit == "kg/m" else Decimal(1)
+    elif unit == "A":
+        quantum = Decimal(1)
+    elif unit in ("m", "mm") and role in ("diameter", "thickness", "dimension"):
+        target, scale = "mm", Decimal(1000) if unit == "m" else Decimal(1)
+        quantum = Decimal("0.01") if role == "thickness" else Decimal("0.1")
+    if "K" in target and unit not in ("K", "\u00b0C", "\u2103"):
+        target = target.replace("K", "\u00b0C")
+    raw = Decimal(original_text(value))
+    with localcontext() as context:
+        context.prec = max(64, len(raw.as_tuple().digits) + abs(raw.adjusted()) + 32)
+        converted = raw * scale + offset
+        fixed = quantum is not None
+        if quantum is None:
+            quantum = Decimal(1).scaleb(converted.adjusted() - 3) if converted else Decimal(1)
+        answer = converted.quantize(quantum, rounding=ROUND_HALF_EVEN)
+        if not answer:
+            answer = answer.copy_abs()
+        text = format(answer, "f")
+        if not fixed:
+            if answer and answer.as_tuple().exponent < -6:
+                text = format(answer, "E")
+            elif "." in text and target not in ("\u03a9/km", "\u03a9", "\u03a9\u00b7m"):
+                text = text.rstrip("0").rstrip(".")
+    expected = {"policy": "cablesim.engineering-display/1", "text": text, "unit": target,
+                "scale": str(scale), "offset": str(offset), "quantum": str(quantum),
+                "rounding": "ROUND_HALF_EVEN", "precision": "fixed_interval" if fixed else "4_significant_digits",
+                "role": role}
+    require((cell.get("display") or cell.get("display_origin")) == expected,
+            "Display does not equal independently converted and once-rounded saved value")
+    return expected
+
+
+def check_engineering_body(model, payloads, body_tables):
+    if not model.get("presentation"):
+        return
+    policy = model["presentation"]
+    require(policy["id"] == "cablesim.engineering-display/1" and policy["round_once"] is True
+            and policy["source_values_unchanged"] is True and policy["rounding"] == "ROUND_HALF_EVEN",
+            "Undeclared engineering rounding policy")
+    body, expected_trace = [], Counter()
+    def numerical(cell):
+        display = check_engineering_number(cell, payloads)
+        expected_trace[canonical([cell["value_ref"], cell["raw_text"], cell["unit"], display])] += 1
+    for section in model["sections"]:
+        if section["role"] != "body":
+            continue
+        body.append(section["heading"])
+        body.extend(p["text"] for p in section.get("paragraphs", []))
+        for figure in section.get("figures", []):
+            if figure.get("diameter_cell"):
+                numerical(figure["diameter_cell"])
+    require(any("GB/T 8170-2008" in text for text in body), "Rounding declaration missing from body")
+    for table_id in body_tables:
+        table = model["tables"][table_id]
+        body.append(table.get("title", ""))
+        for column in table["columns"]:
+            body.append(column["label"])
+            for fact in column.get("header_facts", []):
+                cell = fact["cell"]
+                validate_contract_unit(cell, payloads, model["sources"])
+                numerical(cell)
+        for row in table["rows"]:
+            for cell in row["cells"].values():
+                if type(cell["value"]) in (int, float):
+                    numerical(cell)
+                body += [rendered_text(cell), str(displayed_unit(cell) or "")]
+    forbidden = re.compile(r"\d+\.\d{7,}|(?<![A-Za-z])K(?![A-Za-z])|\bcase-\d+\b|\bthree_core_[a-z_]+|(?:ohm|\u03a9)/m\b", re.I)
+    require(not any(forbidden.search(text) for text in body), "Engineering body contains raw decimals, K or internal identifiers")
+    actual_trace = Counter()
+    for row in model["tables"]["presentation:values"]["rows"]:
+        cell = row["cells"]["original"]
+        display = check_engineering_number(cell, payloads)
+        relation = f"y = x * {display['scale']} + ({display['offset']}); q = {display['quantum']}"
+        require(row["cells"]["display"]["value"] == display["text"] + " " + display["unit"]
+                and row["cells"]["relation"]["value"] == relation,
+                "Printed trace conversion disagrees with raw source")
+        actual_trace[canonical([cell["value_ref"], cell["raw_text"], cell["unit"], display])] += 1
+    require(actual_trace == expected_trace, "Printed original/display trace does not cover every body/header/diagram quantity")
+    if model["kind"] == "rating_table":
+        matrices = [model["tables"][k] for k in body_tables if model["tables"][k].get("matrix_source")]
+        require(bool(matrices), "Ampacity is not a specification-by-condition matrix")
+        refs = []
+        for table in matrices:
+            require([c["key"] for c in table["columns"][:2]] == ["specification", "area"], "Matrix row axis is not specification/area")
+            for column in table["columns"][2:]:
+                labels = [f["label"] for f in column["header_facts"]]
+                require("\u73af\u5883\u6e29\u5ea6" in labels and "\u5bfc\u4f53\u6700\u9ad8\u5141\u8bb8\u6e29\u5ea6" in labels,
+                        "Matrix is missing temperature premises")
+                for row in table["rows"]:
+                    cell = row["cells"][column["key"]]
+                    if type(cell["value"]) in (int, float):
+                        require(cell["unit"] == "A" and cell["value_ref"]["source_id"] == table["matrix_source"], "Matrix current is not bound to saved projection")
+                        refs.append(canonical(cell["value_ref"]))
+        expected_refs = [canonical({"source_id": k, "pointer": "/rows/" + str(i) + "/value_a"})
+                         for k, source in model["sources"].items() if source["kind"] == "rating_projection"
+                         for i, row in enumerate(payloads[k]["rows"]) if type(row["value_a"]) in (int, float)]
+        require(Counter(refs) == Counter(expected_refs), "Matrix dropped or duplicated saved ampacity results")
+
+
 def validate_model(model: dict, payloads: dict, *, expected_document: dict | None = None) -> dict:
     """Check every visible value and reference, including original numeric text."""
     require(model.get("schema") == SCHEMA, "正式文件模型版本不正确。")
@@ -272,9 +419,10 @@ def validate_model(model: dict, payloads: dict, *, expected_document: dict | Non
                 elif unit_reference is not None:
                     validate_contract_unit(cell, payloads, model["sources"])
                 if table_id in body_tables:
-                    require("cablesim." not in (cell["raw_text"] + str(cell.get("unit", ""))).lower(),
+                    require("cablesim." not in (rendered_text(cell) + str(displayed_unit(cell) or "")).lower(),
                             "正式文件正文出现插件标识。")
     require(numeric_cells > 0, "正式文件没有可核验的真实工程数值。")
+    check_engineering_body(model, payloads, body_tables)
     complete = {**model, "sources": {key: {**source, "payload": payloads[key]} for key, source in model["sources"].items()}}
     require(digest(complete["sources"]) == model["source_digest"], "正式文件完整来源集合摘要不一致。")
     model_digest = complete.pop("model_digest")
@@ -324,7 +472,7 @@ def validate_pdf(raw: bytes, preview: dict, payloads: dict) -> dict:
                             require(x0 >= -.5 and y0 >= -.5 and x1 <= page.rect.width + .5 and y1 <= page.rect.height + .5,
                                     f"正式 PDF 第 {number} 页存在越过页面边界的文字。")
         require(all(label in compact(pages[0]) for _role, label in ROLES), "正式 PDF 封面缺少四个签栏。")
-        trace = [number for number, text in enumerate(pages) if "追溯记录" in compact(text)]
+        trace = [number for number, text in enumerate(pages) if "追溯记录" in [compact(line) for line in text.splitlines()]]
         require(trace and trace[0] > 0, "正式 PDF 追溯页没有从正文后的新页开始。")
         body = "".join(pages[:trace[0]])
         require("cablesim." not in compact(body).lower(), "正式 PDF 正文出现插件标识。")
@@ -336,12 +484,15 @@ def validate_pdf(raw: bytes, preview: dict, payloads: dict) -> dict:
             for row in preview["tables"][table_id]["rows"]:
                 for cell in row["cells"].values():
                     if isinstance(cell["value"], (int, float)) and not isinstance(cell["value"], bool):
-                        expected_numbers[cell["raw_text"]] += 1
+                        expected_numbers[rendered_text(cell)] += 1
                     if cell.get("unit"):
-                        expected_units.add(cell["unit"])
+                        expected_units.add(displayed_unit(cell))
+        if preview.get("presentation"):
+            require(not re.search(r"\d+\.\d{7,}|(?<![A-Za-z])K(?![A-Za-z])|\bcase-\d+\b|\bthree_core_[a-z_]+|(?:ohm|Ω)/m\b", body),
+                    "Rendered PDF body contains unrounded decimals, K or internal identifiers")
         observed_numbers = Counter(re.findall(r"(?<![\w.])[-+]?(?:\d+\.\d*|\d+)(?:[eE][-+]?\d+)?(?![\w.])", body))
         require(all(observed_numbers[value] >= count for value, count in expected_numbers.items()),
-                "正式 PDF 正文缺少原始数值，或数值被舍入、截断。")
+                "PDF body is missing declared displayed numbers")
         unit_text = compact(unicodedata.normalize("NFKC", body)).replace("−", "-")
         require(all(compact(unicodedata.normalize("NFKC", unit)).replace("−", "-") in unit_text
                     for unit in expected_units), "正式 PDF 正文缺少来源单位。")
@@ -358,6 +509,8 @@ def validate_xlsx(raw: bytes, preview: dict, payloads: dict) -> dict:
 
     expected_header = ("table_id", "row_id", "column_key", "sheet", "cell", "raw_text", "numeric_value", "unit",
                        "source_id", "pointer", "unit_source_id", "unit_pointer", "numeric_kind")
+    if preview.get("presentation"):
+        expected_header += ("rendered_text", "display_text", "display_unit", "scale", "offset", "quantum", "rounding", "display_policy")
     expected = {(table_id, row["id"], key): cell
                 for table_id, table in preview["tables"].items() for row in table["rows"]
                 for key, cell in row["cells"].items()
@@ -407,7 +560,7 @@ def validate_xlsx(raw: bytes, preview: dict, payloads: dict) -> dict:
             require(location not in locations and data["sheet"] not in {"追溯原文", "追溯数值"}, "正式 Excel 数值索引指向重复或内部单元格。")
             locations.add(location)
             visible = workbook[data["sheet"]][data["cell"]]
-            require(visible.value == cell["raw_text"] and visible.data_type == "s", "正式 Excel 正文原文数值与 API 不一致。")
+            require(visible.value == rendered_text(cell) and visible.data_type == "s", "正式 Excel 正文原文数值与 API 不一致。")
             require(row[5].data_type == "s" and data["raw_text"] == cell["raw_text"], "正式 Excel 数值原文列被舍入。")
             huge_integer = isinstance(cell["value"], int) and abs(cell["value"]) > 2 ** 53 - 1
             if huge_integer:
@@ -426,12 +579,20 @@ def validate_xlsx(raw: bytes, preview: dict, payloads: dict) -> dict:
             require((data["unit"] or "") == (cell.get("unit") or "")
                     and (data["unit_source_id"] or "") == unit_reference.get("source_id", "")
                     and (data["unit_pointer"] or "") == unit_reference.get("pointer", ""), "正式 Excel 单位或单位来源不一致。")
+            if preview.get("presentation"):
+                display = cell.get("display") or cell.get("display_origin") or {}
+                expected_fields = {"rendered_text": rendered_text(cell),
+                    "display_text": display.get("text", rendered_text(cell)), "display_unit": display.get("unit", displayed_unit(cell)),
+                    **{k: display.get(k) for k in ("scale", "offset", "quantum", "rounding")},
+                    "display_policy": display.get("policy")}
+                require(all((data[k] or "") == (v or "") for k, v in expected_fields.items()),
+                        "Excel trace lost the raw-to-display relationship")
             if data["unit"]:
                 units.add(data["unit"])
         require(seen == set(expected), "正式 Excel 漏掉模型中的数值单元格。")
 
-        expected_text = Counter(cell["raw_text"] for table in preview["tables"].values() for row in table["rows"]
-                                for cell in row["cells"].values() if cell["raw_text"])
+        expected_text = Counter(rendered_text(cell) for table in preview["tables"].values() for row in table["rows"]
+                                for cell in row["cells"].values() if rendered_text(cell))
         visible_text, sheets = Counter(), []
         for sheet in workbook.worksheets:
             require(sheet.max_column <= 100 and sheet.max_row <= max(10000, len(expected) + 100), "正式 Excel 存在超出交付模型的异常区域。")
