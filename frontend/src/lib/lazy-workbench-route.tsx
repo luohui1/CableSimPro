@@ -1,4 +1,4 @@
-import { lazy, useEffect, useRef, type ComponentType } from 'react';
+import { createElement, use, useEffect, useRef, type ComponentType, type ReactPromise } from 'react';
 import type { AsyncRouteComponent } from '@tanstack/react-router';
 import { ErrorState } from '@/components/states';
 import { Button } from '@/components/ui/button';
@@ -46,8 +46,8 @@ function RouteLoadError({ error }: { error: unknown }) {
   </section>;
 }
 
-/** Keep one React.lazy identity for the lifetime of this route, including
- * after preloading. Never switch a mounted provider to another element type.
+/** Keep one wrapper and page identity for the lifetime of this route, including
+ * after preloading. An already loaded page does not need another Suspense wait.
  * Import failures render an explicit refresh action; component render errors
  * still propagate to the router's error boundary. */
 export function lazyWorkbenchRoute<
@@ -57,17 +57,32 @@ export function lazyWorkbenchRoute<
   Module[Key] extends (props: infer Props) => unknown ? AsyncRouteComponent<Props> : never {
   type Props = Module[Key] extends (props: infer Value) => unknown ? Value : never;
   type Page = ComponentType<Props>;
-  let lazyPromise: Promise<{ default: Page }> | undefined;
+  type LoadedPage = { default: Page };
+  type CachedPage = Promise<LoadedPage> & ReactPromise<LoadedPage>;
+  let pagePromise: CachedPage | undefined;
   let preloadPromise: Promise<void> | undefined;
-  const load = () => lazyPromise ??= Promise.resolve().then(importer)
-    .then(module => {
-      const component = module[exportName];
-      if (typeof component !== 'function') throw new Error(`页面导出不可用：${String(exportName)}`);
-      return { default: component as Page };
-    })
-    .catch(error => ({ default: function LoadError() { return <RouteLoadError error={error} />; } }));
-  const Lazy = lazy(load);
+  const load = () => {
+    if (pagePromise) return pagePromise;
+    const pending = Promise.resolve().then(importer)
+      .then(module => {
+        const component = module[exportName];
+        if (typeof component !== 'function') throw new Error(`页面导出不可用：${String(exportName)}`);
+        return { default: component as Page };
+      })
+      .catch(error => ({ default: function LoadError() { return <RouteLoadError error={error} />; } })) as CachedPage;
+    // React's documented promise cache lets use() read a preloaded module
+    // synchronously while continuing to track that same promise on every render.
+    pending.status = 'pending';
+    pending.then(value => { Object.assign(pending, { status: 'fulfilled', value }); },
+      reason => { Object.assign(pending, { status: 'rejected', reason }); });
+    pagePromise = pending;
+    return pending;
+  };
+  function Route(props: Props) {
+    const page = use(load());
+    return createElement(page.default as ComponentType<Props & object>, props as Props & object);
+  }
   const preload = () => preloadPromise ??= load().then(() => undefined, () => undefined);
-  return Object.assign(Lazy, { preload }) as
+  return Object.assign(Route, { preload }) as
     Module[Key] extends (props: infer Value) => unknown ? AsyncRouteComponent<Value> : never;
 }

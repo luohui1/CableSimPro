@@ -564,6 +564,18 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await expect(command().getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
     await capture('10-sweep-canvas-coordinate-edit-is-unsaved');
 
+    const mountedDrawing = await canvas.locator('[data-drawing-canvas="laying"]').elementHandle();
+    expect(mountedDrawing).toBeTruthy();
+    await inspectorTabs.getByRole('tab', { name: '方法', exact: true }).click();
+    await expect(page).toHaveURL(/inspector=method/);
+    await expect(page.getByRole('combobox', { name: '扫描变量', exact: true })).toBeVisible();
+    await inspectorTabs.getByRole('tab', { name: '输入', exact: true }).click();
+    await expect.poll(coordinates).toEqual(edited);
+    await expect(cable).toHaveAttribute('aria-pressed', 'true');
+    check('路由属性分页往返保留画布实例和未保存坐标', await mountedDrawing.evaluate(node => node.isConnected), { identity, edited });
+    await mountedDrawing.dispose();
+    await capture('10-sweep-route-change-keeps-canvas-and-draft');
+
     const point = await cable.locator('.drawing-hit-area').boundingBox();
     expect(point).toBeTruthy();
     const x = point.x + point.width / 2, y = point.y + point.height / 2;
