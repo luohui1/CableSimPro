@@ -73,3 +73,32 @@ def test_release_entrypoint_help_needs_only_standard_library(script, option):
                               text=True, capture_output=True, check=False)
     assert response.returncode == 0, response.stderr
     assert option in response.stdout
+
+
+def test_release_manifest_preserves_posix_case_distinct_payloads(tmp_path):
+    from scripts.build_release import payload_files
+    put(tmp_path, "runtime/python/share/terminfo/a/ansi", "lower")
+    put(tmp_path, "runtime/python/share/terminfo/A/apple", "upper")
+    put(tmp_path, "runtime/python/LICENSE", "license")
+    put(tmp_path, "release.toml", "user-editable")
+    files = payload_files(tmp_path, platform_name="linux")
+    assert len(files) == 3
+    assert files["runtime/python/share/terminfo/a/ansi"]["size_bytes"] == 5
+    assert files["runtime/python/share/terminfo/A/apple"]["size_bytes"] == 5
+    assert "release.toml" not in files
+
+
+def test_release_manifest_rejects_windows_parent_alias(tmp_path):
+    from scripts.build_release import payload_files
+    put(tmp_path, "runtime/python/Lib/a.py")
+    put(tmp_path, "runtime/python/lib/b.py")
+    with pytest.raises(RuntimeError, match="Windows release path aliases"):
+        payload_files(tmp_path, platform_name="win32")
+
+
+def test_release_manifest_shared_parents_are_not_duplicates(tmp_path):
+    from scripts.build_release import payload_files
+    for name in ("LICENSE", "LICENSE.APACHE", "LICENSE.BSD", "METADATA"):
+        put(tmp_path, "runtime/python/Lib/site-packages/packaging.dist-info/" + name)
+    assert len(payload_files(tmp_path, platform_name="win32")) == 4
+    assert len(payload_files(tmp_path, platform_name="linux")) == 4

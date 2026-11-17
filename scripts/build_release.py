@@ -80,6 +80,36 @@ def copy_sources(root: Path, destination: Path) -> None:
     shutil.copy2(root / "docs/architecture/database-operations.md", documentation.with_name("database-operations.md"))
 
 
+def payload_files(root: Path, *, platform_name: str) -> dict:
+    """Enumerate once; preserve POSIX case-distinct files, reject Windows aliases.
+
+    Use directory entries, not a case-normalized glob cache. A repeated parent
+    is normal; only two *different* spellings for one Windows identity collide.
+    All entries are regular files/directories, with no symlink traversal.
+    """
+    result: dict = {}
+    spellings: dict[str, str] = {}
+    for directory, directories, files in os.walk(root, followlinks=False):
+        directories.sort()
+        files.sort()
+        for name in directories + files:
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink() or not (path.is_dir() or path.is_file()):
+                raise RuntimeError("Unsupported release payload entry: " + relative)
+            if platform_name == "win32":
+                identity = relative.casefold()
+                previous = spellings.get(identity)
+                if previous is not None and previous != relative:
+                    raise RuntimeError("Windows release path aliases: " + previous + " / " + relative)
+                spellings[identity] = relative
+            if path.is_file() and relative != "release.toml":
+                if relative in result:
+                    raise RuntimeError("Repeated release payload file: " + relative)
+                result[relative] = {"size_bytes": path.stat().st_size, "sha256": digest(path)}
+    return dict(sorted(result.items()))
+
+
 def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> dict:
     if sys.version_info[:2] != (3, 12) or target()["pointer_bits"] != 64 or sys.platform not in {"linux", "win32"}:
         raise RuntimeError("发行构建使用 Windows/Linux 的 64 位 CPython 3.12。")
@@ -91,6 +121,11 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
     lock = wheel_lock(wheels)
     subprocess.run([sys.executable, str(root / "scripts/plugin_sdk.py"), "verify"], cwd=root, check=True)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    print(json.dumps({"stage": "release-builder", "git_commit": commit,
+                      "platform": sys.platform, "interpreter": sys.executable,
+                      "source_sha256": {name: digest(root / "scripts" / name) for name in
+                                        ("build_release.py", "release_support.py", "release_python_runtime.py")}},
+                     sort_keys=True), flush=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="cablesim-package-", dir=output.parent) as scratch:
         staged = Path(scratch) / "CableSimPro"
@@ -125,8 +160,7 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
             notices.write("Original runtime and dependency notices (preserved verbatim):\n"
                           + "\n".join(runtime["license_files"]) + "\n")
         release_python_runtime.prune_bytecode(staged / "runtime/python")
-        files = {path.relative_to(staged).as_posix(): {"size_bytes": path.stat().st_size, "sha256": digest(path)}
-                 for path in sorted(staged.rglob("*")) if path.is_file() and path.name != "release.toml"}
+        files = payload_files(staged, platform_name=sys.platform)
         value = {"format": FORMAT, "target": target(), "git_commit": commit,
                  "includes_prebuilt_frontend": True, "includes_geometry_dependencies": True,
                  "python_runtime": runtime,
@@ -177,5 +211,6 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        print("发行构建失败：" + str(error), file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         raise SystemExit(1)
