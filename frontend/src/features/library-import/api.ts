@@ -12,7 +12,7 @@ export interface SeriesDeclaration {
   armour_material?: string;
   conductor?: 'copper' | 'aluminium'; insulation?: 'XLPE' | 'PVC';
   metal_sheath?: 'lead' | 'corrugated_aluminium' | 'smooth_aluminium'; oversheath?: 'PVC' | 'PE';
-  resistance_basis?: 'stated' | 'standard_limit'; reference?: Record<string, unknown>;
+  resistance_basis?: 'stated' | 'standard_limit'; reference?: Record<string, unknown> & { published_guidance?: PublishedGuidance };
 }
 export type UploadedSeriesDeclaration = Omit<SeriesDeclaration, 'common' | 'common_basis' | 'modelling'>
   & Partial<Pick<SeriesDeclaration, 'common' | 'common_basis' | 'modelling'>>;
@@ -80,7 +80,33 @@ export interface LibrarySpec {
   workspace_revision?: number; has_design_changes?: boolean;
   results?: Record<string, unknown> | unknown[];
 }
-export interface SeriesDetail { series: SeriesSummary; specs: LibrarySpec[] }
+export interface SeriesDetail { series: SeriesSummary; declaration?: SeriesDeclaration; specs: LibrarySpec[] }
+
+export interface PublishedGuidanceSource {
+  reference: string; sha256: string; pdf_page: number; printed_page: number;
+  section?: string; table?: string; row?: string | number; column?: string | number;
+  row_label?: string; column_label?: string; original_text?: string;
+  bbox_pdf_points: number[]; unit_basis?: string;
+  condition_evidence?: { field: string; unit: string; bbox_pdf_points: number[]; original_text: string }[];
+}
+export interface PublishedGuidanceMethod { id: string; name: string; version: string }
+export type PublishedGuidanceConditions = Record<string, number | string | boolean | null | Partial<Record<'gt' | 'gte' | 'lt' | 'lte', number>>>;
+export interface PublishedGuidanceValue {
+  id: string; value: number; unit: string; conditions: PublishedGuidanceConditions;
+  source: PublishedGuidanceSource; method: PublishedGuidanceMethod; confidence: 'reference';
+}
+export interface PublishedGuidance {
+  schema: 'cablesim.catalogue-published-guidance/1'; id: string;
+  source: { title: string; url: string; sha256: string; nature: string; edition: string | null };
+  method: PublishedGuidanceMethod; confidence: 'reference'; reviewed: false;
+  usage: 'published_reference_only'; limitations: string[]; content_sha256: string;
+  baseline: {
+    conditions: PublishedGuidanceConditions; source: PublishedGuidanceSource; limitations: string[];
+    original_values: Record<string, { value: number; unit: string; original_text?: string; conversion?: string }>;
+  };
+  material_facts: (PublishedGuidanceValue & { label: string; quantity: string; usage: 'resistance_temperature_conversion' | 'capacitance_calculation' })[];
+  correction_tables: { id: string; title: string; original_title: string; installation: 'direct_buried'; limitations: string[]; factors: PublishedGuidanceValue[] }[];
+}
 
 export interface CatalogueMetric {
   published: number | null; value: number | null; unit: string;
@@ -104,6 +130,7 @@ export interface ReferenceAssumption {
 }
 export interface CatalogueComparisonReport {
   sample_id: string; source: unknown; scope: string; rows: CatalogueComparisonRow[];
+  published_guidance?: PublishedGuidance | null;
   summary: CatalogueComparisonSummary & { four_metric_passed: number };
   reference_scenario: {
     id: string; requires_confirmation: true; confirmed: boolean; executed: boolean;

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { catalogueComparison, confidenceText, displayLibraryText, methodText, sourceLocationText, type CatalogueComparisonReport, type ReferenceAssumption } from './api';
 import { LibraryDialog } from './dialog';
+import { PublishedGuidance } from './published-guidance';
 
 const METRICS = [{ key: 'outer_diameter', label: '外径', unit: 'mm' }, { key: 'weight', label: '重量', unit: 'kg/km' }, { key: 'r20', label: '导体直流电阻', unit: 'Ω/km' }, { key: 'ampacity', label: '载流量', unit: 'A' }];
 const STATUS = { declared_input: '输入保真，非独立验证', missing: '缺少独立数据', refused: '拒绝计算', compared: '有独立计算对照' };
@@ -68,6 +69,7 @@ export function CatalogueComparison() {
       <p className="library-import-source" aria-label="厂家样本来源">来源：{text(source.title) || '厂家公开手册'}{text(source.location) && `；${sourceLocationText(text(source.location))}`}{/^https?:\/\//.test(url) && <> · <a className="object-link" href={url} target="_blank" rel="noreferrer">查看公开原文</a></>}</p>
       <p aria-label="厂家独立核验总览">厂家独立核验：{report.summary.specifications} 个规格；载流量可对照 {report.summary.ampacity_compared} 个，拒算 {report.summary.ampacity_refused} 个；四项独立核验全部通过 {report.summary.four_metric_passed} 个。</p>
       <p className="muted">{displayLibraryText(report.scope)}</p>
+      <PublishedGuidance value={report.published_guidance} />
       <div className="library-import-series-actions">
         <Button disabled={!!busy} onClick={() => { setScenarioConfirmed(false); setScenarioOpen(true); }}>查看研究参考情景</Button>
       </div>

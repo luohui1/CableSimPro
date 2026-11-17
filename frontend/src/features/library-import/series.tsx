@@ -13,6 +13,7 @@ import { emptyRating, ratingReady, ratingRequest, RatingForm } from './rating-fo
 import { ValueTable } from './value-table';
 import { downloadSeries } from './exchange';
 import { LibraryDialog } from './dialog';
+import { PublishedGuidance } from './published-guidance';
 
 const STATES: Record<string, string> = { draft: '草稿', incomplete: '资料缺项', submitted: '待审核', reviewed: '已审核', approved: '已批准', adopted: '已采纳', confirmed: '已人工核对', published: '已发布', rejected: '已退回', unverified: '待核对', ready: '结构完整' };
 const OPERATIONS = { check: '批量标准核对', calculate: '批量计算', review: '批量人工审核' };
@@ -96,6 +97,7 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
       <div className="library-import-series-actions"><Button disabled={busy} onClick={() => void exportCurrent('json')}>导出系列 JSON</Button><Button disabled={busy} onClick={() => void exportCurrent('xlsx')}>导出系列 Excel</Button><span className="muted">当前版本及其来源原件</span></div>
       {exportNotice && <p role="status">{exportNotice}</p>}
       {error && !operation && <p role="alert" className="field-error">{error}</p>}
+      <PublishedGuidance value={details.data?.declaration?.reference?.published_guidance} />
       <div className="library-import-selection"><label className="library-import-confirm"><Checkbox aria-label="选择全部规格" checked={checked.length === specs.length && !!specs.length ? true : checked.length ? 'indeterminate' : false} onCheckedChange={value => setSelectedSpecs(value === true ? new Set(specs.map(spec => spec.id)) : new Set())} /><span>全选 {specs.length} 个规格</span></label><span className="muted">已选 {checked.length} 项{!checked.length && ' · 选择规格后可批量操作'}</span></div>
       <DataTable label="系列规格" showGroups={false} groups={[{ id: 'specs', label: '规格', rows: specs }]} rowLabel={row => row.name} columns={[
         { id: 'select', label: '选择', render: row => <Checkbox aria-label={`选择 ${row.name}`} checked={selectedSpecs.has(row.id)} onCheckedChange={value => toggle(row.id, value === true)} /> },
