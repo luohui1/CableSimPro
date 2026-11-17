@@ -19,7 +19,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { message, numeric, text, optionalRecord } from "@/api/client";
-import { studyContextQuery, studyRunsQuery, workspaceQuery, invalidateSavedStudyResults } from "@/lib/study-queries";
+import { studyContextQuery, studyRunDestination, studyRunsQuery, workspaceQuery, invalidateSavedStudyResults } from "@/lib/study-queries";
 import {
   saveStudy,
   restoreStudy,
@@ -113,10 +113,11 @@ export function StudyProvider() {
   const index = useQuery(studyContextQuery(queries, search.workspace, sid, search.run,
     location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || ''));
   const study = index.data?.find((item) => item.id === sid);
+  const destination = studyRunDestination(location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || '', study?.definition);
   const wid = study?.workspace || search.workspace;
   const workspace = useQuery({ ...workspaceQuery(wid), enabled: !!study });
   const runs = useQuery({
-    ...studyRunsQuery(queries, wid, sid, search.run, location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || ''),
+    ...studyRunsQuery(queries, wid, sid, search.run, destination.module, destination.tab),
     enabled: !!study,
     refetchInterval: (query) =>
       query.state.data?.some((run) =>

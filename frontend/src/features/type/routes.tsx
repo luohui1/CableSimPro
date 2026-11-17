@@ -7,7 +7,7 @@ import { queryClient } from '@/lib/query-client';
 import { loadWorkspace, typeEvidence, moduleMethods, runArtifact, typeRequirements } from './api';
 import { typeComparison, typeSpecification } from './version-api';
 import {preloadTypeModule} from './module-loader';
-import { typeStudies } from './rating-api';
+import { isRatingDefinition, typeStudies } from './rating-api';
 import { inputContractQuery } from '@/api/input-contracts';
 const TypeListPage = lazyWorkbenchRoute(() => import('./list-page'), 'TypeListPage');
 const TypeProvider = lazyWorkbenchRoute(() => import('./provider'), 'TypeProvider');
@@ -70,7 +70,17 @@ export function createTypeRoutes(root: AnyRootRoute) {
     if(!search.run&&search.revision===undefined&&['electrical','short-circuit','rating-table'].includes(module)) {
       void workspace.then(saved=>{
         if((saved.raw.type_lifecycle as Record<string,unknown>|undefined)?.status==='published')return;
-        void queryClient.prefetchQuery({queryKey:['type-studies',params.wid],queryFn:({signal})=>typeStudies(params.wid,signal),staleTime:15000});
+        const studies = queryClient.fetchQuery({queryKey:['type-studies',params.wid],queryFn:({signal})=>typeStudies(params.wid,signal),staleTime:15000});
+        void studies.catch(()=>{ /* The editable page reports the study read failure. */ });
+        if(tab==='parameters'&&module==='rating-table') {
+          // Match TypeRatingTable's current saved study, never an installed or
+          // historical replacement. Its pinned contract can load while the
+          // independent saved-result evidence is still being verified.
+          void studies.then(items=>{
+            const selected=items.filter(item=>isRatingDefinition(item.definition)).sort((a,b)=>b.created.localeCompare(a.created))[0];
+            if(selected)void queryClient.prefetchQuery(inputContractQuery(selected.definition.method));
+          }).catch(()=>{ /* The method form keeps its contract/error state. */ });
+        }
         if(tab==='parameters'&&module!=='rating-table') {
           // Resolve the same installed capability as the editable method page.
           // Historical pages continue to select their saved method from evidence.
