@@ -72,7 +72,7 @@ export async function libraryRequest<T>(path: string, init?: RequestInit): Promi
   return body as T;
 }
 export function libraryPost<T>(path: string, body: unknown): Promise<T> {
-  return libraryRequest<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return libraryRequest<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CableSim-Actor': 'human' }, body: JSON.stringify(body) });
 }
 export function sourceText(source: unknown): string {
   if (typeof source === 'string') return source;
@@ -84,7 +84,8 @@ export function sourceText(source: unknown): string {
     || [text(reference.standard), text(reference.edition), text(reference.locator), text(record.reference)].filter(Boolean).join(' · ');
   const original = [text(catalogue.title), text(catalogue.location)].filter(Boolean).join(' · ');
   const location = [row.file, row.sheet, row.row_number ? `第 ${row.row_number} 行` : row.row ? `第 ${row.row} 行` : '', row.column].filter(Boolean).join(' · ');
-  return [basis, original, location].filter(Boolean).join('；') || '来源未登记';
+  if (row.origin === 'standard') return ['标准上限，非厂家实测值', basis, location ? `关联规格：${location}` : ''].filter(Boolean).join('；');
+  return [row.kind === 'demo' ? '结构演示' : '', basis, original, location].filter(Boolean).join('；') || '来源未登记';
 }
 export function methodText(method: unknown): string {
   const value = optionalRecord(method);

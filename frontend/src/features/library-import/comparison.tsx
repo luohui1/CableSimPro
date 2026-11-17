@@ -64,7 +64,7 @@ export function CatalogueComparison() {
             { id: 'computed', label: '计算或回读值', unit: item.unit, numeric: true, render: row => row.metric.value === null ? '未给出结果' : number(row.metric.value, item.key === 'r20' ? 6 : 3) },
             { id: 'difference', label: '偏差', wrap: true, numeric: true, render: row => row.metric.status === 'declared_input' ? '不作独立偏差' : row.metric.difference === null ? '不可对照' : `${number(row.metric.difference, item.key === 'r20' ? 6 : 3)} ${item.unit}（${percent(row.metric.relative_difference)}）` },
             { id: 'status', label: '判定', wrap: true, render: row => STATUS[row.metric.status] },
-            { id: 'reason', label: '原因、方法与可信分档', wrap: true, render: row => <div className="library-import-issues"><span>{displayText(row.metric.reason)}</span>{!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}<span className="muted">{confidenceText(row.metric.tier || 'reference')}</span></div> },
+            { id: 'reason', label: '原因、方法与可信分档', wrap: true, render: row => <div className="library-import-issues"><span>{displayText(row.metric.reason)}</span>{!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}<span className="muted">本次样本对照：参考</span>{!!row.metric.tier && <span className="muted">方法覆盖分档：{confidenceText(row.metric.tier)}</span>}</div> },
           ]} />
         </TabsContent>)}
       </Tabs>

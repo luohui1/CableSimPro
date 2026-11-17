@@ -55,7 +55,7 @@ export function ExchangeImport({ onOpenSeries }: { onOpenSeries: (id: string) =>
     try {
       const body = new FormData(); body.append('file', file); body.append('reviewed_sha256', preview.file_sha256);
       body.append('confirmed', 'true'); body.append('request_id', request.current);
-      setReceipt(await libraryRequest<ExchangeReceipt>('/exchange/import', { method: 'POST', body }));
+      setReceipt(await libraryRequest<ExchangeReceipt>('/exchange/import', { method: 'POST', headers: { 'X-CableSim-Actor': 'human' }, body }));
       await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
     } catch (cause) { setError(message(cause)); } finally { setBusy(''); }
   }
