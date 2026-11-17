@@ -638,6 +638,156 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
   }
 
   if (after) {
+    await branch('标准参考与修改后计算参数分别显示并导出单项', async () => {
+      const catalogue = await api('/api/foundation/assets?kind=material&status=published&q=XLPE&limit=100&offset=0');
+      let source;
+      for (const candidate of catalogue.items) {
+        const asset = await api(`/api/foundation/assets/${candidate.id}`);
+        const parameter = asset.release.parameters.find(item => item.name === 'thermal_resistivity');
+        const reference = asset.release.sources.some(item => {
+          if (item.kind !== 'standard') return false;
+          try {
+            const value = JSON.parse(item.reference);
+            return value.schema === 'cablesim.reference-data/1' && value.property === 'thermal_resistivity'
+              && value.value === 3.5 && value.unit === 'K.m/W';
+          } catch { return false; }
+        });
+        if (reference && parameter?.quantity.value === 3.5 && parameter.quantity.unit === 'K.m/W') { source = asset; break; }
+      }
+      expect(source, '真实发布库须提供同时保存 3.5 热阻率及其标准出处的 XLPE 参考材料').toBeTruthy();
+      await openGroup('materials');
+      await searchResource('materials', source.name, source.version);
+      await properties.getByRole('button', { name: '派生新版本', exact: true }).click();
+      const derive = page.getByRole('dialog', { name: '派生新版本', exact: true });
+      const version = '2.0.0-' + marker;
+      await derive.getByRole('textbox', { name: '新版本号', exact: true }).fill(version);
+      await derive.getByRole('button', { name: '建立新版本草稿', exact: true }).click();
+      await expect(derive).toBeHidden();
+      const draft = await inspectSelectedResource(source.name);
+      expect(draft.id).not.toBe(source.id);
+      expect(draft.version).toBe(version);
+      await properties.getByRole('button', { name: '编辑资源草稿', exact: true }).click();
+      const editor = page.getByRole('dialog', { name: '编辑资源草稿', exact: true });
+      const index = draft.release.parameters.findIndex(item => item.name === 'thermal_resistivity');
+      await editor.getByRole('textbox', { name: `参数数值 ${index + 1}`, exact: true }).fill('3.6');
+      await editor.getByRole('button', { name: '新增来源', exact: true }).click();
+      await editor.getByRole('textbox', { name: `来源说明 ${draft.release.sources.length + 1}`, exact: true })
+        .fill('隔离浏览器验收：3.6 是明确填写的测试计算值；原标准参考 3.5 及出处保持原文，不将测试值声明为标准或厂家数据。');
+      await editor.getByRole('button', { name: '保存资源草稿', exact: true }).click();
+      await expect(editor).toBeHidden();
+      const saved = await inspectSelectedResource(source.name);
+      expect(saved.release.parameters[index].quantity).toEqual({ ...source.release.parameters[index].quantity, value: 3.6 });
+      expect(saved.release.sources.slice(0, source.release.sources.length)).toEqual(source.release.sources);
+      expect(saved.release.sources.at(-1)).toMatchObject({ kind: 'project_input', reviewed: false });
+      expect(saved.status).toBe('draft');
+      const originalReference = properties.locator('section').filter({ has: page.getByRole('heading', { name: '参考物性', exact: true }) });
+      const actualParameters = properties.locator('section').filter({ has: page.getByRole('heading', { name: '计算参数', exact: true }) });
+      const propertyRow = section => section.locator('.property-row').filter({ has: page.getByText('热阻率', { exact: true }) });
+      await expect(propertyRow(originalReference).locator('dd')).toContainText('3.5');
+      await originalReference.scrollIntoViewIfNeeded();
+      await capture('material-original-reference-preserved');
+      await expect(propertyRow(actualParameters).locator('dd')).toContainText('3.6');
+      await actualParameters.scrollIntoViewIfNeeded();
+      await capture('material-edited-calculation-value-visible');
+      check('计算参数3.6与原标准参考3.5分别显示且保留来源', true, { id: saved.id,
+        calculation: saved.release.parameters[index], references: saved.release.sources, original: source.id });
+
+      await properties.getByRole('button', { name: '导出资源定义', exact: true }).click();
+      const exportDialog = page.getByRole('dialog', { name: '导出定义', exact: true });
+      await expect(exportDialog.locator('[data-resource-state="ready"]')).toHaveCount(1);
+      const downloaded = page.waitForEvent('download');
+      await exportDialog.getByRole('button', { name: '下载 1 项定义', exact: true }).click();
+      const file = await downloaded, filename = path.join(out, `material-single-definition-${size.width}.json`);
+      await file.saveAs(filename);
+      const exported = JSON.parse(await fs.readFile(filename, 'utf8'));
+      expect(exported.schema_version).toBe('cablesim.resource-export/1');
+      expect(exported.items).toHaveLength(1);
+      for (const key of ['id', 'asset_id', 'version', 'revision', 'content_sha256', 'status']) expect(exported.items[0][key], '单项导出的 ' + key).toBe(saved[key]);
+      expect(exported.items[0].definition).toEqual({ schema_version: 'csp-asset/0.1', release: saved.release });
+      check('单项导出保留真实身份修订摘要状态及完整定义', true, { filename: path.basename(filename), id: saved.id, revision: saved.revision, digest: saved.content_sha256 });
+      await exportDialog.getByRole('button', { name: '关闭', exact: true }).click();
+      await page.locator('.topbar-actions').getByRole('button', { name: '导入资源草稿', exact: true }).click();
+      const importDialog = page.getByRole('dialog', { name: '导入资源草稿', exact: true });
+      await importDialog.locator('input[type=file]').setInputFiles(filename);
+      await expect(importDialog.getByRole('textbox', { name: '定义内容', exact: true })).toHaveValue(await fs.readFile(filename, 'utf8'));
+      await expect(importDialog.getByRole('button', { name: '校验并导入', exact: true })).toBeEnabled();
+      await capture('single-export-readable-by-import');
+      // The same immutable identity already exists in this host. Check that the
+      // real file reader accepts the wrapper, then cancel instead of duplicating it.
+      await importDialog.getByRole('button', { name: '关闭', exact: true }).click();
+      const original = await api(`/api/foundation/assets/${source.id}`);
+      check('材料草稿改值及单项导出没有覆盖原发布版本', original.revision === source.revision && original.content_sha256 === source.content_sha256
+        && JSON.stringify(original.release) === JSON.stringify(source.release));
+    });
+
+    await branch('跨类别返回隔离迟到写入并恢复原请求', async () => {
+      await openGroup('templates');
+      const templateUrl = page.url();
+      await openGroup('materials');
+      await page.locator('.topbar-actions').getByRole('button', { name: '新建资源', exact: true }).click();
+      const editor = page.getByRole('dialog', { name: '新建资源', exact: true });
+      const name = '隔离验收延迟保存-' + marker;
+      await editor.getByRole('textbox', { name: '资源名称', exact: true }).fill(name);
+      await editor.getByRole('textbox', { name: '来源说明 1', exact: true }).fill('隔离浏览器验收：验证真实保存请求迟到时的类别隔离和收据恢复，仅为资源元数据测试。');
+      let releaseRequest, finishRequest, held = false;
+      const release = new Promise(resolve => { releaseRequest = resolve; });
+      const finished = new Promise(resolve => { finishRequest = resolve; });
+      const endpoint = url => url.pathname === '/api/foundation/assets/import';
+      const holdRequest = async route => {
+        if (route.request().method() !== 'POST' || held) return route.continue();
+        held = true;
+        try { await release; await route.continue(); }
+        finally { finishRequest(); }
+      };
+      // Only delay the original UI request. The request body and the eventual
+      // host response are untouched: no route.fetch, fulfill or synthetic result.
+      await page.route(endpoint, holdRequest);
+      try {
+        await editor.getByRole('button', { name: '保存资源草稿', exact: true }).click();
+        await expect.poll(() => held).toBe(true);
+        await page.goBack();
+        await expect(page).toHaveURL(templateUrl);
+        await expect(editor).toBeHidden();
+        await expect(main.getByRole('textbox', { name: '检索', exact: true })).toHaveValue('');
+        await capture('resource-back-closes-previous-category-dialog');
+        const response = page.waitForResponse(value => new URL(value.url()).pathname === '/api/foundation/assets/import' && value.request().method() === 'POST');
+        releaseRequest();
+        const received = await response;
+        expect(received.ok(), '延迟后必须由真实宿主成功保存资源').toBeTruthy();
+        const created = await received.json();
+        await received.finished();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await expect(page).toHaveURL(templateUrl);
+        await expect(main.getByRole('textbox', { name: '检索', exact: true })).toHaveValue('');
+        const saved = await api(`/api/foundation/assets/${created.id}`);
+        expect(saved).toMatchObject({ name, kind: 'material', status: 'draft', revision: 1 });
+        await expect(main.getByRole('button', { name: '恢复未确认保存', exact: true })).toBeVisible();
+        check('原类别迟到保存没有改写当前类别筛选或选中项', true, { from: 'materials', current: page.url(), saved: saved.id });
+        await capture('resource-late-response-keeps-current-category');
+
+        await main.getByRole('button', { name: '恢复未确认保存', exact: true }).click();
+        const recovery = page.getByRole('dialog', { name: '新建资源', exact: true });
+        await expect(recovery.getByRole('combobox', { name: '资源类别', exact: true })).toContainText('材料');
+        await recovery.getByRole('button', { name: '核实保存结果', exact: true }).click();
+        await expect(recovery).toBeHidden();
+        await expect(page).toHaveURL(templateUrl);
+        await expect(main.getByRole('textbox', { name: '检索', exact: true })).toHaveValue('');
+        await expect(main.getByText(`材料“${name}” · 1.0.0 已保存，当前资源类别与选择保持不变。`, { exact: true })).toBeVisible();
+        await capture('resource-cross-category-recovery-explicit-result');
+        await main.getByRole('button', { name: '打开该资源', exact: true }).click();
+        await expect(page).toHaveURL(/\/resources\/materials\?/);
+        expect(new URL(page.url()).searchParams.get('item')).toBe(saved.id);
+        const inspected = await inspectSelectedResource(name);
+        const matches = await api(`/api/foundation/assets?kind=material&q=${encodeURIComponent(name)}&limit=50&offset=0`);
+        check('跨类别核实保留原请求且仅显式打开材料结果', inspected.id === saved.id && inspected.revision === 1
+          && matches.items.filter(item => item.name === name).length === 1, { id: saved.id, matches: matches.total });
+      } finally {
+        releaseRequest();
+        if (held) await finished;
+        await page.unroute(endpoint, holdRequest);
+      }
+    });
+
     for (const kind of ['component', 'assembly']) await branch(`${knownKindLabels[kind]}发布后工程引用边界`, async () => {
       await openGroup('materials');
       // These are explicitly labelled metadata-only test definitions. They do
