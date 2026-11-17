@@ -20,7 +20,9 @@ export function ProposalBlock({ proposal, step }: { proposal: Proposal; step: Ch
   const subject = rest.join(' · ') || step.target || '';
   const title = subject ? `${action} · ${subject}` : action;
   if (proposal.status === 'accepted' && ['failed', 'rejected', 'interrupted'].includes(step.status)) {
-    return <RefusalCard kind="error" title={title} reason={`已接受，但没有执行：${step.reason || '对话已中断，请重新核对当前输入。'}`} />;
+    const reason = step.reason?.startsWith('已接受') ? step.reason
+      : `已接受，但执行未完成：${step.reason || '对话已中断，请在工作台核对保存记录。'}`;
+    return <RefusalCard kind="error" title={title} reason={reason} />;
   }
   const executing = proposal.status === 'accepted' && step.status === 'running';
   const phase: ProposalPhase = executing || proposal.status === 'pending' ? (rejecting ? 'rejecting' : 'pending') : proposal.status;
