@@ -67,6 +67,22 @@ def original_text(value) -> str:
     return "" if value is None else value if isinstance(value, str) else canonical(value).decode("utf-8")
 
 
+def frozen_plugin_identifiers(payloads: dict) -> set[str]:
+    """Use actual frozen publisher IDs, including non-builtin namespaces."""
+    identifiers = set()
+    for payload in payloads.values():
+        for manifest in payload.get("snapshot", {}).get("method_manifests", {}).values():
+            identifier = manifest.get("id")
+            if isinstance(identifier, str) and identifier:
+                identifiers.add(identifier.casefold())
+    return identifiers
+
+
+def contains_plugin_identifier(text: str, identifiers: set[str]) -> bool:
+    folded = text.casefold()
+    return "cablesim." in folded or any(identifier in folded for identifier in identifiers)
+
+
 def pointer_value(document, pointer: str):
     """Resolve RFC 6901 without borrowing the implementation under test."""
     require(isinstance(pointer, str) and (not pointer or pointer.startswith("/")), "正式文件来源指针无效。")
@@ -126,15 +142,16 @@ def validate_contract_unit(cell: dict, payloads: dict, sources: dict) -> None:
 
 class SourceReader:
     """Fetch each declared source independently and retain its whole API reply."""
-    def __init__(self, gate):
+    def __init__(self, gate, *, artifact_prefix="formal/sources"):
         self.gate = gate
+        self.artifact_prefix = artifact_prefix
         self.responses = {}
 
     def get(self, url: str):
         if url not in self.responses:
             response = self.gate.api("GET", url)
             self.responses[url] = response
-            self.gate.artifact("formal/sources/" + sha256(url.encode()).hexdigest() + ".json",
+            self.gate.artifact(self.artifact_prefix + "/" + sha256(url.encode()).hexdigest() + ".json",
                                {"api_url": url, "response": response})
         return self.responses[url]
 
@@ -222,6 +239,7 @@ def validate_model(model: dict, payloads: dict, *, expected_document: dict | Non
     require(all(not item.get("name") and not item.get("date") and not item.get("evidence_ref")
                 for item in model["signatures"]), "发布种子没有签核记录，正式文件签栏必须全部留空。")
 
+    plugin_identifiers = frozen_plugin_identifiers(payloads)
     body_tables, used, trace_started = set(), [], False
     for section in model["sections"]:
         require(section["role"] in {"body", "trace"} and not (trace_started and section["role"] == "body"),
@@ -230,7 +248,8 @@ def validate_model(model: dict, payloads: dict, *, expected_document: dict | Non
         used.extend(section["table_ids"])
         if section["role"] == "body":
             body_tables.update(section["table_ids"])
-            require("cablesim." not in section.get("heading", section.get("title", "")).lower(), "正式文件正文标题出现插件标识。")
+            require(not contains_plugin_identifier(section.get("heading", section.get("title", "")), plugin_identifiers),
+                    "正式文件正文标题出现插件标识。")
         for paragraph in section.get("paragraphs", []):
             reference = paragraph.get("source_ref")
             if reference is not None:
@@ -238,7 +257,7 @@ def validate_model(model: dict, payloads: dict, *, expected_document: dict | Non
                 if paragraph.get("verbatim"):
                     require(paragraph["text"] == original, "正式文件保存结论原文与 API 不一致。")
             if section["role"] == "body":
-                require("cablesim." not in paragraph["text"].lower(), "正式文件正文段落出现插件标识。")
+                require(not contains_plugin_identifier(paragraph["text"], plugin_identifiers), "正式文件正文段落出现插件标识。")
     require(trace_started and body_tables and set(used) == set(model["tables"]) and len(used) == len(set(used)),
             "正式文件正文、追溯页或表格缺失、重复。")
     numeric_cells, references, row_count = 0, 0, 0
@@ -248,7 +267,8 @@ def validate_model(model: dict, payloads: dict, *, expected_document: dict | Non
         require(len({row["id"] for row in table["rows"]}) == len(table["rows"]), "正式文件同名结果行被重复覆盖。")
         if table_id in body_tables:
             visible = [table.get("title", "")] + [column.get("label", "") for column in table["columns"]]
-            require(all("cablesim." not in str(value).lower() for value in visible), "正式文件正文表头出现插件标识。")
+            require(all(not contains_plugin_identifier(str(value), plugin_identifiers) for value in visible),
+                    "正式文件正文表头出现插件标识。")
         row_count += len(table["rows"])
         for row in table["rows"]:
             require(set(row["cells"]) == set(columns), "正式文件行与表头列不一致。")
@@ -272,7 +292,7 @@ def validate_model(model: dict, payloads: dict, *, expected_document: dict | Non
                 elif unit_reference is not None:
                     validate_contract_unit(cell, payloads, model["sources"])
                 if table_id in body_tables:
-                    require("cablesim." not in (cell["raw_text"] + str(cell.get("unit", ""))).lower(),
+                    require(not contains_plugin_identifier(cell["raw_text"] + str(cell.get("unit", "")), plugin_identifiers),
                             "正式文件正文出现插件标识。")
     require(numeric_cells > 0, "正式文件没有可核验的真实工程数值。")
     complete = {**model, "sources": {key: {**source, "payload": payloads[key]} for key, source in model["sources"].items()}}
@@ -327,7 +347,8 @@ def validate_pdf(raw: bytes, preview: dict, payloads: dict) -> dict:
         trace = [number for number, text in enumerate(pages) if "追溯记录" in compact(text)]
         require(trace and trace[0] > 0, "正式 PDF 追溯页没有从正文后的新页开始。")
         body = "".join(pages[:trace[0]])
-        require("cablesim." not in compact(body).lower(), "正式 PDF 正文出现插件标识。")
+        require(not contains_plugin_identifier(compact(body), frozen_plugin_identifiers(payloads)),
+                "正式 PDF 正文出现插件标识。")
         body_tables = {table_id for section in preview["sections"] if section["role"] == "body"
                        for table_id in section["table_ids"]}
         expected_numbers = Counter()
@@ -487,7 +508,7 @@ def sample_document() -> dict:
             "logo_data_uri": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")}
 
 
-def verify_formal_exports(gate, engineering_sources: dict) -> None:
+def verify_formal_exports(gate, engineering_sources: dict) -> dict[str, dict]:
     """Export all four document types through the installed release's real API."""
     reader = SourceReader(gate)
     wid, sid, rid = (engineering_sources[key] for key in ("workspace", "study", "run"))
@@ -519,11 +540,13 @@ def verify_formal_exports(gate, engineering_sources: dict) -> None:
         "research_report": selection(workspace, rating),
     }
     metadata = sample_document()
+    requests = {}
     result = {"status": "running", "source_mode": "independent full API records", "documents": [],
               "human_visual_review": "逐页图片已生成后仍须人工逐页打开；自动检查不代替目视验收。"}
     gate.result["formal_documents"] = result
     for kind, source in selections.items():
         request = {"kind": kind, "source": source, "document": {**metadata, "number": "T4-CI-" + kind.upper() + "-001"}}
+        requests[kind] = deepcopy(request)
         prefix = "formal/" + kind
         gate.artifact(prefix + "-request.json", request)
         preview = gate.api("POST", "/api/formal-deliveries/preview", request)
@@ -572,3 +595,4 @@ def verify_formal_exports(gate, engineering_sources: dict) -> None:
             "正式文件没有完成全部四类 PDF 与 Excel 导出。")
     result["status"] = "passed"
     gate.artifact("formal/validation.json", result)
+    return requests

@@ -31,8 +31,10 @@ from uuid import uuid4
 import zipfile
 
 if __package__:
+    from .verify_formal_batch import verify_formal_batches
     from .verify_formal_delivery import verify_formal_exports
 else:
+    from verify_formal_batch import verify_formal_batches
     from verify_formal_delivery import verify_formal_exports
 
 
@@ -620,7 +622,8 @@ class InstallationGate:
                                                "specification_sha256": specification["digest"],
                                                "calculation_workspace": project["id"], "calculation_study": calculation_study["id"],
                                                "calculation_run": calculation["id"]}
-        verify_formal_exports(self, self.result["engineering_sources"])
+        requests = verify_formal_exports(self, self.result["engineering_sources"])
+        verify_formal_batches(self, requests)
 
 
 def stop_process(process: subprocess.Popen) -> None:
