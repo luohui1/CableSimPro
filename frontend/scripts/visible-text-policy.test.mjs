@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { identifyText, exceptionFor, readOnlyPost } from './visible-text-policy.mjs';
+import { inspectVisibleNames } from './visible-names.mjs';
 
 test('文字巡检按类别捕获内部标识，长摘要不吞 UUID、路径不重复报键名', () => {
   const text = '11111111-1111-4111-8111-111111111111 · aabbccddeeff00112233 · /parameters/values/conductor_form · input_schema · not_covered · verified · slurm · steady-rating · 2024.0.0';
@@ -25,4 +26,33 @@ test('白名单有明确层级理由，首层 UUID 不因原件文件名被豁�
   assert.equal(exceptionFor({ layer: 'ordinary', category: 'internal', token: 'modules/values' }), null);
   assert.equal(exceptionFor({ layer: 'ordinary', category: 'enum', token: 'current', text: 'R1=R2=1mm,d=2.5mm,sigma=55MS/m,f=40kHz. Unit RMS current normalization.' }).id, 'source-terminology');
   assert.equal(exceptionFor({ layer: 'ordinary', category: 'enum', token: 'current', text: 'current' }), null);
+});
+
+test('布局与文字巡检保留真实附录和算例引用且记录豁免理由', async () => {
+  const citations = [
+    ['GB/T 12706.2—2020 · 14.3：依据已核验；此公式尚未绑定完整附录 A/B 计算链，本项保留未覆盖。', 'standard-annex'],
+    ['未覆盖\n依据已核验；此公式尚未绑定完整附录 A/B 计算链，本项保留未覆盖。', 'standard-annex'],
+    ['成缆节距2.152m与钢带相对磁导率300分别参考TB880 Case2/10，非本型号实测。', 'tb880-examples'],
+    ['TB 880 Case2/10；TB880 Case2/10。', 'tb880-examples'],
+  ];
+  for (const [text, id] of citations) {
+    const matches = identifyText(text);
+    assert.equal(matches.length, 1, '保留匹配以写入文字巡检允许项');
+    assert.equal(exceptionFor({ ...matches[0], text, layer: 'ordinary' })?.id, id);
+  }
+  const frame = { evaluate: async () => citations.map(([text]) => text) };
+  assert.deepEqual(await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame }), []);
+});
+
+test('文献引用豁免不放行裸编号、混合露出或扩展路径', async () => {
+  const texts = ['A/B', 'Case2/10', '附录 A/B；内部 A/B', 'TB880 Case2/10；内部 Case2/10',
+    '附录 A/B/parameters', 'TB880 Case2/10/parameters', 'TB881 Case2/10',
+    '附录 A/B\\parameters', 'TB880 Case2/10\\parameters',
+    '附录 A/B；/parameters/duration_s', 'TB880 Case2/10；cablesim.type-electrical'];
+  for (const text of texts) {
+    assert.ok(identifyText(text).some(match => !exceptionFor({ ...match, text, layer: 'ordinary' })), text);
+  }
+  const frame = { evaluate: async () => texts };
+  const violations = await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame });
+  for (const text of texts) assert.ok(violations.some(item => item.text === text), text);
 });
