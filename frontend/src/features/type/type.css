@@ -143,7 +143,20 @@
 .type-result-toolbar .select-trigger>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .type-requirement{display:grid;gap:var(--space-1);white-space:normal}
 .type-requirement small{font-size:var(--text-note);color:var(--text-secondary)}
-.type-root .data-table[aria-label="标准核对"] td:first-child{min-width:calc(var(--space-12)*5)}
+.type-root .data-table[aria-label="标准核对"]{table-layout:fixed;width:100%;min-width:0}
+.type-root .data-table[aria-label="标准核对"] th,.type-root .data-table[aria-label="标准核对"] td{padding-inline:var(--space-2);white-space:normal;overflow-wrap:anywhere}
+.type-root .data-table[aria-label="标准核对"] th:nth-child(2){width:22%}
+.type-root .data-table[aria-label="标准核对"] th:nth-child(3){width:18%}
+.type-root .data-table[aria-label="标准核对"] th:last-child{width:calc(var(--space-12)*2 + var(--space-4))}
+.type-root .data-table[aria-label="要求清单"]{table-layout:fixed;width:100%;min-width:0}
+.type-root .data-table[aria-label="要求清单"] th,.type-root .data-table[aria-label="要求清单"] td{padding-inline:var(--space-2);white-space:normal;overflow-wrap:anywhere;min-width:0}
+.type-root .data-table[aria-label="要求清单"] th:first-child{width:var(--space-12)}
+.type-root .data-table[aria-label="要求清单"] th:nth-child(2){width:22%}
+.type-root .data-table[aria-label="要求清单"] th:nth-child(4){width:18%}
+.type-root .data-table[aria-label="要求清单"] th:last-child{width:calc(var(--space-12)*2 + var(--space-4))}
+.type-root .data-table[aria-label="执行标准"]{table-layout:fixed;width:100%;min-width:0}
+.type-root .data-table[aria-label="执行标准"] th,.type-root .data-table[aria-label="执行标准"] td{width:25%;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.type-root .data-table[aria-label="执行标准"] .object-link{display:inline;white-space:normal;overflow:visible;overflow-wrap:anywhere;-webkit-line-clamp:unset}
 .type-root .data-table[aria-label="外径与用料"] td:first-child{white-space:nowrap}
 .type-root .data-table[aria-label="外径与用料"]{table-layout:fixed;width:100%;min-width:0}
 .type-root .data-table[aria-label="外径与用料"] th{white-space:normal}

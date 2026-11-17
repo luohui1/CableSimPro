@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Tooltip } from '@/components/ui/tooltip';
 import { listTypes } from './api';
 import { CreateTypeDialog } from './create-dialog';
 import { typePath, useTypeNavigation } from './navigation';
@@ -48,7 +49,7 @@ export function TypeListPage() {
           { id: 'name', label: '型号与方案', wrap: true, render: row => <><button className="object-link" type="button" title={cleanLabel(row.name)} onClick={event => { event.stopPropagation(); navigate(typePath(row.id, 'structure', 'section', location.theme)); }}>{cleanLabel(row.name)}</button>{typePlanName(row) && <span className="type-list-plan">方案：{typePlanName(row)}</span>}</> },
           { id: 'voltage', label: '电压', render: row => row.card.voltage },
           { id: 'area', label: '截面', render: row => row.card.area },
-          { id: 'standard', label: '执行标准', wrap: true, render: row => <span title={row.standardsReason}>{row.standards.length ? row.standards.join('、') : '未声明'}</span> },
+          { id: 'standard', label: '执行标准', wrap: true, render: row => <><Tooltip content={row.standardsReason}><span tabIndex={0} data-type-execution-standards={row.id} data-declaration-state={row.declarationState} data-approval-state={row.approvalState} title={row.standardsReason}>{row.standardsLabel}</span></Tooltip>{row.approvalState === 'error' && <Button variant="ghost" size="compact" loading={types.isFetching} onClick={event => { event.stopPropagation(); void types.refetch(); }}>重新读取标准</Button>}</> },
           { id: 'version', label: '基准版本', render: row => versionLabel(row.version) },
           { id: 'status', label: '状态', render: row => <StatusMark kind={row.status === 'published' ? 'locked' : row.status === 'review' ? 'proposal' : 'draft'} label={publicationLabels[row.status]} /> },
         ]} selectedId={picked} onSelect={row => setPicked(row.id)} showGroups={groupBy === 'status'} groups={groupBy === 'status' ? Object.entries(publicationLabels).map(([status, label]) => ({ id: status, label, rows: rows.filter(row => row.status === status) })).filter(group => group.rows.length) : [{ id: 'all', label: '型号设计', rows }]} rowLabel={typeRowLabel} />}

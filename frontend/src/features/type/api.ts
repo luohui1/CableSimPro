@@ -2,10 +2,10 @@ import { api, ApiError, array, message, numeric, optionalRecord, record, respons
 import { typeIndex } from '@/api/research';
 import type { components } from '@/api/generated/schema';
 import type { DomainDocument } from '@/lib/domain-fields';
-import { publicationStatus, type DesignStatus } from './design-summary';
+import { executionStandardsSummary, publicationStatus, type DesignStatus, type ExecutionStandardsSummary } from './design-summary';
 
 export type Workspace = { id: string; revision: number; document: DomainDocument; raw: Record<string, unknown> };
-export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument; standards: string[]; standardsReason: string };
+export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument } & ExecutionStandardsSummary;
 export type ModelChoice = { id: string; name: string; version: string; digest: string; workspace?: string; raw: Record<string, unknown> };
 const documentAttempts = new Map<string, { input: string; request: string }>();
 
@@ -76,13 +76,16 @@ export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
 async function executionStandards(id: string, workspaceRead: Promise<Workspace>, signal?: AbortSignal) {
   try {
     const response=await fetch(`/api/types/${encodeURIComponent(id)}/standards-summary`,{signal:AbortSignal.any([AbortSignal.timeout(10000),...(signal?[signal]:[])])});
-    const data=await response.json();if(!response.ok)throw new ApiError(response.status,'执行标准目录暂不可用，请重新读取');
+    const data=await response.json();if(!response.ok)throw new ApiError(response.status,text(optionalRecord(data.detail).message)||text(data.detail)||'已批准要求标准暂不可用，请重新读取');
     const summary=record(data,'执行标准目录'), workspace=await workspaceRead;if(summary.revision!==workspace.revision)throw new ApiError(409,'型号修订已变化，请刷新目录');
-    const standards=array(summary.standards,'执行标准').map(value=>text(value));
-    return {standards,standardsReason:text(summary.reason)};
+    const standards=array(summary.standards,'已批准要求标准').map(value=>{
+      const name=text(value).trim();if(!name)throw new ApiError(502,'已批准要求标准目录缺少标准名称');return name;
+    });
+    return executionStandardsSummary(workspace.document,{standards});
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { standards: [], standardsReason: '在要求与标准里添加；要求目录未能读取：' + message(error) };
+    const workspace=await workspaceRead;
+    return executionStandardsSummary(workspace.document,{error:message(error)});
   }
 }
 export async function modelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {

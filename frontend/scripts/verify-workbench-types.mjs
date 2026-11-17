@@ -11,6 +11,7 @@ const fixedTypeRoutes = {
   'rating-table': { module: 'rating-table', tab: 'results', page: 'rating-table-results', label: '载流量表', table: '载流量表', action: '计算所选工况' },
 };
 let fixedTypeArchiveSources;
+let declaredTypeSeedIds, declaredTypeSeedId;
 function archivedTypeModule(run) {
   const definition = run?.snapshot?.definition, method = definition?.method, driver = definition?.driver;
   if (run?.integrity !== 'verified' || !['succeeded', 'partial'].includes(run.status) || !method?.release_digest) return null;
@@ -46,6 +47,132 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(buttons).toHaveText(label);
     check(context + '唯一主操作为' + label, true, { buttons: await buttons.allInnerTexts() });
     return buttons;
+  }
+  async function activate(locator, keyboard) {
+    if (keyboard) { await locator.focus(); await locator.press('Enter'); }
+    else await locator.click();
+  }
+  async function readableResultColumns(label) {
+    const table = page.getByRole('table', { name: label, exact: true });
+    await expect(table).toBeVisible();
+    const layout = await table.evaluate(node => {
+      let left = 0, right = innerWidth;
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        if (/(hidden|clip|auto|scroll)/.test(getComputedStyle(parent).overflowX)) {
+          const bounds = parent.getBoundingClientRect(); left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
+        }
+      }
+      const bounds = node.getBoundingClientRect();
+      const cells = [...node.querySelectorAll('thead th,tbody tr.data-row:first-child td')].map(cell => {
+        const range = document.createRange(); range.selectNodeContents(cell);
+        const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+        return { text: cell.textContent.trim(), complete: rects.every(rect => rect.left >= left - 1 && rect.right <= right + 1) };
+      });
+      return { left, right, tableLeft: bounds.left, tableRight: bounds.right, cells,
+        complete: bounds.left >= left - 1 && bounds.right <= right + 1 && cells.every(cell => cell.complete) };
+    });
+    check(label + '的要求数值和最右状态在原水平位置完整显示', layout.complete, layout, { fatal: false });
+  }
+  async function catalogDeclaration(input, names, label, keyboard) {
+    await page.waitForURL(url => url.pathname === '/types' && url.searchParams.get('theme') === 'light');
+    await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
+    await field('查找型号', input.domain.name);
+    const row = page.locator(`[id="row-型号-${input.id}"]`);
+    const declaration = row.locator(`[data-type-execution-standards="${input.id}"]`);
+    await expect(declaration).toHaveText(names.length ? names.join('、') : '未声明');
+    await expect(declaration).toHaveAttribute('data-declaration-state', names.length ? 'declared' : 'undeclared');
+    await expect(declaration).toHaveAttribute('data-approval-state', 'ready');
+    await declaration.scrollIntoViewIfNeeded();
+    await expect(declaration).toBeInViewport({ ratio: 1 });
+    if (keyboard !== undefined) {
+      if (keyboard) { await declaration.focus(); await expect(declaration).toBeFocused(); }
+      else await declaration.hover();
+      const explanation = page.locator('.tooltip-content:visible');
+      await expect(explanation).toContainText(names.length ? '已明确声明执行版本' : '未声明执行版本');
+      await expect(explanation).toContainText('尚无当前已批准要求');
+      await capture(label + '-读取声明与批准说明');
+      await page.keyboard.press('Escape');
+      await expect(explanation).toBeHidden();
+    }
+    await capture(label);
+    return row;
+  }
+  async function declaredSeed() {
+    const owners = await api('/api/design/type-workspaces'), checked = [];
+    // Freeze original seed identities before this walkthrough creates any designs.
+    declaredTypeSeedIds ||= owners.map(owner => owner.id);
+    for (const owner of owners.filter(item => declaredTypeSeedId ? item.id === declaredTypeSeedId : declaredTypeSeedIds.includes(item.id))) {
+      const input = await api('/api/types/' + encodeURIComponent(owner.id) + '/workspace');
+      const source = input.domain.provenance?.['/execution_standards'];
+      const evidence = { workspace: owner.id, revision: input.revision, reviewed: source?.reviewed === true };
+      checked.push(evidence);
+      if (input.type_plan_source || source?.kind !== 'standard' || source.reviewed !== true) continue;
+      let items;
+      try { const value = JSON.parse(source.reference); if (value.schema === 'cablesim.execution-standards/1') items = value.items; }
+      catch { evidence.reason = '原声明无法解析'; continue; }
+      if (!Array.isArray(items) || !items.length || !items.every(item => typeof item.standard === 'string'
+        && item.standard.trim() && /^[a-f0-9]{64}$/.test(item.source_digest))) continue;
+      const approval = await api('/api/types/' + encodeURIComponent(owner.id) + '/standards-summary');
+      evidence.approval = approval;
+      if (approval.revision !== input.revision || !Array.isArray(approval.standards) || approval.standards.length) continue;
+      const runs = await api('/api/types/' + encodeURIComponent(owner.id) + '/display-runs?after=0&limit=5&recent=true&module=requirements');
+      const run = runs.items.find(item => item.freshness === 'current' && item.snapshot?.workspace_revision === input.revision
+        && archivedTypeModule(item) === 'standard-check');
+      if (!run) { evidence.reason = '没有当前完整性通过的标准核对运行'; continue; }
+      const ledger = await api('/api/design/type-workspaces/' + encodeURIComponent(owner.id) + '/requirements?run_id=' + encodeURIComponent(run.id));
+      evidence.approvedCount = ledger.approved_count;
+      if (ledger.run_id !== run.id || ledger.source_current !== true || ledger.approved_count !== 0
+        || !Array.isArray(ledger.items) || ledger.items.some(item => item.state === 'approved')) continue;
+      declaredTypeSeedId = owner.id;
+      return { input, names: [...new Set(items.map(item => item.standard.trim()))], runId: run.id, source, checked };
+    }
+    check('执行标准目录走查有真实已声明且零批准的原始型号', false, { checked, originalSeedIds: declaredTypeSeedIds });
+    throw new Error('未找到真实已声明且零批准的原始型号，不能跳过或用本轮创建对象替代');
+  }
+  async function verifyDeclaredSeedNavigation() {
+    const source = await declaredSeed(), before = source.input, writesBefore = report.writes.length;
+    const evidence = { ...size, workspace: before.id, revision: before.revision, names: source.names,
+      domainSha256: createHash('sha256').update(JSON.stringify(before.domain)).digest('hex'),
+      declaration: source.source, run: source.runId, approvedCount: 0, candidates: source.checked, navigations: [] };
+    (report.typeDeclarationNavigation ||= []).push(evidence);
+    try {
+      await page.goto(base + '/types?theme=light');
+      for (const keyboard of [false, true]) {
+        const mode = keyboard ? '键盘' : '鼠标';
+        const row = await catalogDeclaration(before, source.names, '执行版本声明-' + mode + '-目录', keyboard);
+        await activate(row.locator('button.object-link'), keyboard);
+        await page.waitForURL(url => url.pathname === '/types/' + encodeURIComponent(before.id) + '/structure/section');
+        const navigation = page.getByRole('navigation', { name: '型号浏览器', exact: true });
+        await activate(navigation.getByRole('button', { name: /^要求与标准/ }), keyboard);
+        await activate(page.getByRole('tab', { name: '执行标准', exact: true }), keyboard);
+        await page.waitForURL(url => url.pathname === '/types/' + encodeURIComponent(before.id) + '/requirements/standards'
+          && !url.searchParams.get('run') && !url.searchParams.get('revision'));
+        const requirements = page.locator('[data-type-page="requirements-results"]');
+        await expect(requirements).toHaveAttribute('data-type-state', 'success');
+        const declaration = page.locator('[aria-label="已声明执行标准"]');
+        await expect(declaration).toContainText('执行版本已声明');
+        for (const name of source.names) await expect(declaration).toContainText(name);
+        await expect(requirements.getByText('0 项已批准', { exact: true })).toBeVisible();
+        const shot = await capture('执行版本声明-' + mode + '-详情与目录一致且零批准');
+        evidence.navigations.push({ mode, url: page.url(), screenshot: shot.screenshot });
+        await activate(page.getByRole('navigation', { name: '对象', exact: true }).getByRole('link', { name: '型号设计', exact: true }), keyboard);
+        await catalogDeclaration(before, source.names, '执行版本声明-' + mode + '-返回目录');
+        await page.reload();
+        await catalogDeclaration(before, source.names, '执行版本声明-' + mode + '-目录刷新');
+      }
+    } finally {
+      const after = await api('/api/types/' + encodeURIComponent(before.id) + '/workspace');
+      const ledger = await api('/api/design/type-workspaces/' + encodeURIComponent(before.id) + '/requirements?run_id=' + encodeURIComponent(source.runId));
+      const approval = await api('/api/types/' + encodeURIComponent(before.id) + '/standards-summary');
+      evidence.after = { revision: after.revision, declaration: after.domain.provenance?.['/execution_standards'], approvedCount: ledger.approved_count,
+        domainSha256: createHash('sha256').update(JSON.stringify(after.domain)).digest('hex'),
+        approval, writes: report.writes.slice(writesBefore) };
+      check('已声明零批准型号键鼠往返及刷新未写入且保留原修订领域与声明', report.writes.length === writesBefore
+        && after.revision === before.revision && JSON.stringify(after.domain) === JSON.stringify(before.domain)
+        && JSON.stringify(after.domain.provenance?.['/execution_standards']) === JSON.stringify(source.source)
+        && ledger.source_current === true && ledger.approved_count === 0
+        && approval.revision === before.revision && approval.standards.length === 0, evidence.after, { fatal: false });
+    }
   }
   let teachingSource;
   async function teachingDesign() {
@@ -200,6 +327,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await expect(page.getByRole('button', { name: '修改型号名称', exact: true })).toBeDisabled();
       const calculate = toolbar().getByRole('button', { name: target.action, exact: true });
       await expect(calculate).toBeDisabled();
+      if (source.module === 'structure' && await surface.getAttribute('data-type-state') === 'historical') {
+        await expect(surface.locator('.stale-banner')).toContainText('历史输入和保存结果保持只读');
+        await expect(surface).not.toContainText('保存修改后点击');
+        await expect(surface.getByRole('button', { name: '打开当前型号', exact: true })).toBeEnabled();
+      }
       if (ratingBefore) {
         expect(await surface.getByRole('table', { name: target.table, exact: true }).locator('tbody tr.data-row')
           .evaluateAll(rows => rows.map(row => row.getAttribute('aria-label')))).toEqual(ratingBefore.rows.map(row => row.name));
@@ -220,8 +352,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         await expect(page.locator('.tooltip-content:visible')).toBeVisible();
         const reasonShot = await capture('固定型号运行-' + target.label + '-计算禁用说明');
         evidence.readOnlyReason = { text: '运行快照保持只读', screenshot: reasonShot.screenshot };
-        await page.locator('.type-root .topbar h1').hover();
+        await page.keyboard.press('Escape');
         await expect(page.locator('.tooltip-content:visible')).toBeHidden();
+        await capture('固定型号运行-' + target.label + '-键盘关闭禁用说明');
       }
       check(target.label + ' · ' + label + '保留确切运行与只读状态且未写入', report.writes.length === writesBefore,
         { run: source.rid, url: page.url(), writes: report.writes.slice(writesBefore) });
@@ -244,6 +377,20 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await openFixed(source.module === 'rating-table' ? '旧批量空间链接打开' : '旧载流量结果链接打开',
         () => page.goto(legacy.href));
       await openFixed('旧入口转到型号后刷新', () => page.reload());
+      const openCurrent = page.getByRole('button', { name: '打开当前型号', exact: true });
+      if (source.module === 'structure' && await openCurrent.isVisible()) {
+        if (size.width === 1366) { await openCurrent.focus(); await openCurrent.press('Enter'); }
+        else await openCurrent.click();
+        await page.waitForURL(url => url.pathname === '/types/' + encodeURIComponent(source.wid) + '/structure/table'
+          && url.searchParams.get('theme') === 'light' && !url.searchParams.get('run') && !url.searchParams.get('revision'));
+        await expect(layers()).toBeVisible();
+        await expect(page.locator('.type-root .topbar')).not.toContainText('保存运行');
+        const currentShot = await capture('固定型号运行-结构推导-打开同一当前型号');
+        evidence.currentInputEntry = { workspace: source.wid, revision: current.revision, url: page.url(), screenshot: currentShot.screenshot };
+        record = await openRunRecord();
+        await openFixed('当前型号返回保存运行', () => record.link.click());
+        check('历史结构推导可键鼠返回同一当前型号并重新打开原保存运行', true, evidence.currentInputEntry);
+      }
     } finally {
       const [afterWorkspace, afterStudy, afterArchive] = await Promise.all([workspace(source.wid), api(prefix), api(source.fullPath)]);
       check(target.label + '固定入口检查没有改动当前输入或原运行', report.writes.length === writesBefore
@@ -399,7 +546,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       name: new RegExp('^' + label),
     }).click();
     const result = {
-      '结构 ·': 'structure', '标准核对': 'standard-check-results',
+      '结构 ·': 'structure', '标准核对': 'standard-check-results', '要求与标准': 'requirements-results',
       '电气参数': 'electrical-results', '短路容量': 'short-circuit-results',
       '载流量表': 'rating-table-results', '方案对比': 'comparison-results',
       '规格书': 'specification-results',
@@ -1034,6 +1181,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const table = page.getByRole('table', { name: '型号', exact: true });
     check('型号列表可选择多个型号批量操作', await table.getByRole('checkbox').count() > 1, await visibleText());
   });
+  await attempt('01a-已有执行版本声明且零批准的型号键鼠往返目录与详情', verifyDeclaredSeedNavigation);
 
   const library = await attempt('02-从真实型号库引用建立草稿', async () => {
     const dialog = await openNew('从型号库复制', name('库引用'));
@@ -1245,6 +1393,24 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const dialog = await openNew('空白', name('从零'));
     await choose('结构类型', '单芯', dialog);
     const blank = await create(dialog, 'blank');
+    const before = await api('/api/types/' + encodeURIComponent(blank.id) + '/workspace'), writesBefore = report.writes.length;
+    expect(before.domain.provenance?.['/execution_standards'], '真实空白型号尚未保存执行版本声明').toBeUndefined();
+    try {
+      await activate(page.getByRole('navigation', { name: '对象', exact: true }).getByRole('link', { name: '型号设计', exact: true }), true);
+      const row = await catalogDeclaration(before, [], '空白型号-目录真实未声明', true);
+      await activate(row.locator('button.object-link'), true);
+      await page.waitForURL(url => url.pathname === '/types/' + encodeURIComponent(blank.id) + '/structure/section');
+    } finally {
+      const after = await api('/api/types/' + encodeURIComponent(blank.id) + '/workspace');
+      const evidence = { ...size, workspace: blank.id, origin: 'blank', revision: before.revision,
+        domainSha256: createHash('sha256').update(JSON.stringify(before.domain)).digest('hex'),
+        afterDomainSha256: createHash('sha256').update(JSON.stringify(after.domain)).digest('hex'),
+        afterRevision: after.revision, declaration: after.domain.provenance?.['/execution_standards'] ?? null, writes: report.writes.slice(writesBefore) };
+      (report.typeDeclarationNavigation ||= []).push(evidence);
+      check('空白型号目录未声明核对未写入且保留原修订领域输入', report.writes.length === writesBefore
+        && after.revision === before.revision && JSON.stringify(after.domain) === JSON.stringify(before.domain)
+        && after.domain.provenance?.['/execution_standards'] === undefined, evidence, { fatal: false });
+    }
     await expect(page.getByRole('region', { name: '型号缺项', exact: true })).toBeVisible();
     await capture('从零-缺项与可开始的操作');
     await page.getByRole('button', { name: '芯 1 · 导体截面', exact: true }).click();
@@ -1553,6 +1719,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(table).toBeVisible();
     const issues = table.getByRole('row').filter({ hasText: /不满足|待补|缺项|不适用|未覆盖/ });
     check('标准核对结果逐项可读', await table.getByRole('row').count() > 1, await table.innerText());
+    await readableResultColumns('标准核对');
     await capture('标准核对-真实结果');
     if (await issues.count()) {
       await issues.first().click();
@@ -1873,6 +2040,21 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     if (!await run('执行标准核对', 'standard-check-results')) return;
     await expect(page.getByRole('table', { name: '标准核对', exact: true })).toBeVisible();
     await captureNotationEvidence(delivery.id, '教学标准核对-附录原文');
+    await readableResultColumns('标准核对');
+    const before = await workspace(delivery.id), writesBefore = report.writes.length;
+    await module('要求与标准');
+    await activate(page.getByRole('tab', { name: '待批准导入', exact: true }), size.width === 1366);
+    await expect(page.locator('[data-type-page="requirements-results"]')).toHaveAttribute('data-type-state', 'success');
+    await readableResultColumns('要求清单');
+    await capture('教学待批准要求-原水平位置完整状态');
+    await activate(page.getByRole('tab', { name: '执行标准', exact: true }), size.width === 1920);
+    await readableResultColumns('执行标准');
+    await capture('教学执行标准-完整固定资源链接');
+    await module('标准核对');
+    const after = await workspace(delivery.id);
+    check('核对要求与执行版本的原屏阅读没有写入或改动批准', report.writes.length === writesBefore
+      && after.revision === before.revision && JSON.stringify(after.domain) === JSON.stringify(before.domain),
+    { beforeRevision: before.revision, afterRevision: after.revision, writes: report.writes.slice(writesBefore) });
   });
   const celsius = value => Number((value - 273.15).toPrecision(12));
   for (const analysis of [

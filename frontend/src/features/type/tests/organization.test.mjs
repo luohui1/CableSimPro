@@ -10,7 +10,7 @@ import {createElement} from 'react';
 const frontend = fileURLToPath(new URL('../../../../', import.meta.url));
 const server = await createServer({ configFile: false, root: frontend, server: { middlewareMode: true }, optimizeDeps: { noDiscovery: true, include: [] }, resolve: { alias: { '@': path.join(frontend, 'src') } } });
 after(() => server.close());
-const { designSummary, versionLabel, publicationStatus, approvedStandardNames } = await server.ssrLoadModule('/src/features/type/design-summary.ts');
+const { designSummary, versionLabel, publicationStatus, approvedStandardNames, executionStandardsSummary } = await server.ssrLoadModule('/src/features/type/design-summary.ts');
 const { commandResultLabel, latestModuleRun, moduleResultStatus, moduleEvidenceState, methodLabel, chooseEvidence, currentEvidence } = await server.ssrLoadModule('/src/features/type/evidence.ts');
 const { quantityLayer, quantityMissingInputs } = await server.ssrLoadModule('/src/features/type/quantity-inputs.ts');
 const { pointer } = await server.ssrLoadModule('/src/lib/domain-fields.ts');
@@ -154,6 +154,36 @@ test('Only current host-approved standards with matching receipt enter the catal
   const ledger={run_id:'run',source_current:true,items:[item,item,{...item,state:'proposed'},{...item,state:'conflict',definition:{standard:'IEC 60502-1'}}]};
   assert.deepEqual(approvedStandardNames(ledger,'run'),[standard]);
   for(const invalid of [{...ledger,source_current:false},{...ledger,run_id:'other'},{...ledger,items:[{...item,approval:null}]},{...ledger,items:[{...item,approval:{...item.approval,definition:{standard:'other'}}}]}]) assert.deepEqual(approvedStandardNames(invalid,'run'),[]);
+});
+test('Explicit edition declarations stay visible before any requirement approval; approval does not invent a declaration', () => {
+  const next=structuredClone(document), names=['GB/T 11017.2—2024','GB/T 3956—2008'];
+  next.provenance['/execution_standards']={kind:'standard',reviewed:true,reference:JSON.stringify({schema:'cablesim.execution-standards/1',items:names.map(standard=>({standard,source_digest:'a'.repeat(64)}))})};
+  const before=structuredClone(next), declared=executionStandardsSummary(next,{standards:[]});
+  assert.deepEqual(declared.standards,names);assert.deepEqual(declared.approvedStandards,[]);assert.equal(declared.declarationState,'declared');assert.equal(declared.standardsLabel,names.join('、'));
+  assert.match(declared.standardsReason,/声明不等于批准要求/);assert.deepEqual(next,before);
+  const approvedOnly=executionStandardsSummary(document,{standards:[names[0]]});
+  assert.deepEqual(approvedOnly.standards,[]);assert.deepEqual(approvedOnly.approvedStandards,[names[0]]);assert.equal(approvedOnly.declarationState,'undeclared');assert.match(approvedOnly.standardsLabel,/未声明.*已有批准要求/);
+});
+test('Reference prose, unconfirmed editions and damaged declaration records cannot become execution standards', () => {
+  const next=structuredClone(document);next.provenance['/name']={kind:'standard',reviewed:true,reference:'GB/T 11017.2—2024'};
+  assert.equal(executionStandardsSummary(next,{standards:[]}).standardsLabel,'未声明');
+  const items=[{standard:'GB/T 11017.2—2024',source_digest:'a'.repeat(64)}];
+  for(const [source,state] of [
+    [{kind:'standard',reviewed:false,reference:JSON.stringify({schema:'cablesim.execution-standards/1',items})},'unconfirmed'],
+    [{kind:'standard',reviewed:true,reference:'GB/T 11017.2—2024'},'invalid'],
+    [{kind:'standard',reviewed:true,reference:JSON.stringify({schema:'cablesim.execution-standards/1',items:[...items,{standard:'GB/T 3956—2008'}]})},'invalid'],
+  ]) {
+    next.provenance['/execution_standards']=source;const result=executionStandardsSummary(next,{standards:[]});
+    assert.deepEqual(result.standards,[]);assert.equal(result.declarationState,state);assert.notEqual(result.standardsLabel,'未声明');
+  }
+});
+test('Unavailable approval summaries retain known declarations and never masquerade as an empty successful read', () => {
+  const missing=executionStandardsSummary(document,{error:'型号修订已变化，请刷新目录'});
+  assert.equal(missing.approvalState,'error');assert.equal(missing.standardsLabel,'标准读取失败');assert.match(missing.standardsReason,/型号修订已变化/);
+  const next=structuredClone(document),standard='GB/T 11017.2—2024';
+  next.provenance['/execution_standards']={kind:'standard',reviewed:true,reference:JSON.stringify({schema:'cablesim.execution-standards/1',items:[{standard,source_digest:'a'.repeat(64)}]})};
+  const result=executionStandardsSummary(next,{error:'要求目录离线'});
+  assert.deepEqual(result.standards,[standard]);assert.deepEqual(result.approvedStandards,[]);assert.equal(result.approvalState,'error');assert.equal(result.standardsLabel,standard+'；批准状态读取失败');assert.match(result.standardsReason,/要求目录离线/);
 });
 test('Reference standards are not execution declarations; missing geometry remains missing', () => {
   const next = structuredClone(document); next.provenance['/name']={kind:'standard',reference:'GB/T 12706.2-2020 表 1'}; next.cable_types[0].cores[0].conductor.diameter=0;
