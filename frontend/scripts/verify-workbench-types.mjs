@@ -1178,6 +1178,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const before = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
     const chapters = page.getByRole('navigation', { name: '规格书章节', exact: true });
     await chapters.getByRole('button', { name: '结构尺寸表', exact: true }).click();
+    await expect(chapters.getByRole('button', { name: '结构尺寸表', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="structure"]')).toBeVisible();
     await capture('规格书-内部审核稿结构章节与缺项');
     const [download] = await Promise.all([
@@ -1193,6 +1194,21 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       && JSON.stringify(after.payload.checks) === JSON.stringify(before.payload.checks), {
       file: path.basename(filename), bytes: bytes.length, ready: after.ready,
       blockers: after.payload.checks.filter(item => item.blocking).map(item => item.id),
+    });
+    const currentChapter = chapters.locator('button[aria-current="page"]');
+    await expect(currentChapter).toHaveCount(1);
+    await expect(currentChapter).toHaveAttribute('aria-label', '封面');
+    const coverHeading = page.frameLocator('iframe[title="正式规格书预览"]')
+      .locator('[data-specification-section="cover"]').getByRole('heading', { name: '产品规格书', exact: true });
+    await expect(coverHeading).toBeInViewport({ ratio: 1 });
+    const bounds = await coverHeading.boundingBox(), dockBounds = await page.locator('.workbench-dock-body').boundingBox();
+    const navigationBounds = await page.locator('.type-specification-navigation').boundingBox();
+    check('内部审核稿导出后封面正文与当前章节一致', Boolean(bounds && dockBounds && navigationBounds
+      && bounds.y >= Math.max(dockBounds.y, navigationBounds.y + navigationBounds.height)
+      && bounds.y + bounds.height <= dockBounds.y + dockBounds.height
+      && bounds.x >= dockBounds.x && bounds.x + bounds.width <= dockBounds.x + dockBounds.width), {
+      chapter: await currentChapter.getAttribute('aria-label'),
+      heading: await coverHeading.innerText(), bounds, dockBounds, navigationBounds,
     });
   });
 
