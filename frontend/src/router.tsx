@@ -157,13 +157,13 @@ export const studyRootRoute = createRoute({
     // 右侧属性区显示“输入”还是“方法”（方法参数、问询条件、扫描设置）
     inspector: search.inspector === "method" || search.inspector === "input" || search.inspector === "agent" ? search.inspector : undefined,
   }),
-  loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run }),
+  loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run, inspector: search.inspector }),
   // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。
   loader: ({ context, params, deps, location }) => {
     const module = location.pathname.split('/')[3] || '';
     const tab = location.pathname.split('/')[4] || '';
     // Prefetch and provider resolve the same existing input/method aliases.
-    prefetchStudy(context.queryClient, deps.workspace, params.sid, deps.run, module, tab);
+    prefetchStudy(context.queryClient, deps.workspace, params.sid, deps.run, module, tab, deps.inspector);
   },
   component: StudyProvider,
 });
