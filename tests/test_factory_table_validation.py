@@ -5,6 +5,7 @@ computed engineering result. Unchanged rows retain their original values.
 """
 from copy import deepcopy
 import csv
+import struct
 from hashlib import sha256
 from io import StringIO
 from uuid import uuid4
@@ -14,7 +15,68 @@ from openpyxl.utils import get_column_letter
 import pytest
 
 from backend.kernel.public_catalogues import sample_bytes, sample_manifest
+from backend.kernel.factory_tables import mapped_rows, read
 from backend.main import create_app
+
+
+def biff_table(*, formula):
+    """A real BIFF8 stream tests the legacy reader, not an xlrd mock.
+
+    The formula intentionally has a plausible stale cached diameter of 82 mm.
+    This parser fixture is not a manufacturer document or engineering evidence.
+    """
+    def record(code, payload):
+        return struct.pack('<HH', code, len(payload)) + payload
+
+    def bof(kind):
+        return record(0x0809, struct.pack('<HHHHII', 0x0600, kind, 0x0DBB, 1997, 0, 6))
+
+    def label(column, value):
+        return record(0x0204, struct.pack('<HHHHB', 0, column, 0, len(value), 0) + value.encode('ascii'))
+
+    def number(column, value):
+        return record(0x0203, struct.pack('<HHHd', 1, column, 0, value))
+
+    def boundsheet(offset):
+        return record(0x0085, struct.pack('<IBBBB', offset, 0, 0, 5, 0) + b'Cable')
+
+    end = record(0x000A, b'')
+    globals_length = len(bof(5) + boundsheet(0) + end)
+    diameter = (record(0x0006, struct.pack('<HHHdHIH', 1, 1, 0, 82., 0, 0, 7)
+                       + b'\x1e\x01\x00\x1e\x01\x00\x03') if formula else number(1, 82))
+    return (bof(5) + boundsheet(globals_length) + end + bof(0x10)
+            + label(0, 'Area') + label(1, 'Diameter') + number(0, 240) + diameter + end)
+
+
+@pytest.mark.parametrize('formula', [False, True])
+def test_legacy_xls_does_not_turn_a_formula_cache_into_source_data(tmp_path, formula):
+    import xlrd
+
+    content = biff_table(formula=formula)
+    # Both cases look identical through xlrd's normal cell API, which is why
+    # checking the value returned by that API cannot protect the import.
+    book = xlrd.open_workbook(file_contents=content)
+    assert book.sheet_by_index(0).cell_value(1, 1) == 82
+    with TestClient(create_app(tmp_path / 'xls.sqlite')) as client:
+        response = client.post('/api/type-library/imports/upload', files={'file': ('source.xls', content)})
+        if formula:
+            assert response.status_code == 422, response.text
+            assert response.json()['detail']['code'] == 'TABLE_XLS_FORMULA'
+            assert 'B2' in response.json()['detail']['message'] and '缓存值' in response.text
+            assert client.get('/api/type-library/series').json() == {'items': []}
+        else:
+            assert response.status_code == 201, response.text
+            assert response.json()['sheets'][0]['rows'] == 2
+
+
+def test_text_comma_is_not_guessed_as_decimal_or_thousands_separator():
+    source = read('ambiguous.csv', b'Area,Diameter\n"1,000",82\n240,82\n')
+    rows, skipped = mapped_rows(source, 'ambiguous', 2, {'area': 0, 'outer_diameter': 1})
+    assert skipped == []
+    assert rows[0]['raw']['area'] == '1,000'
+    assert 'area' not in rows[0]['values']
+    assert rows[0]['issues'][0]['column'] == 'A2'
+    assert rows[1]['values']['area'] == 240 and rows[1]['issues'] == []
 
 
 def public_table_request(client, *, corrupt=False):

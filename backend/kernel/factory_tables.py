@@ -10,6 +10,7 @@ from io import BytesIO, StringIO
 import math
 from pathlib import Path
 import re
+import struct
 from zipfile import ZipFile, BadZipFile
 
 from fastapi import HTTPException
@@ -31,7 +32,9 @@ FIELDS = {**structure.FIELDS,
     'ampacity': ('样本载流量', 'A', 1, ['样本载流量', '载流量', 'Ampacity']),
 }
 SI_UNITS = {'mm': 'm', 'mm²': 'm2', 'Ω/km': 'ohm/m', 'kg/km': 'kg/m', '根': '1', '%': '1', 'A': 'A'}
-NUMBER = re.compile(r'^[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?$')
+# A text comma could be either a decimal separator or a thousands separator.
+# Without a declared locale, accepting it would silently change source values.
+NUMBER = re.compile(r'^[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$')
 
 
 def fail(code, message, status=422):
@@ -44,7 +47,7 @@ def number(value):
     if isinstance(value, (float, int)):
         return float(value) if math.isfinite(value) else None
     if isinstance(value, str) and NUMBER.fullmatch(value.strip()):
-        parsed = float(value.strip().replace(',', '.'))
+        parsed = float(value.strip())
         return parsed if math.isfinite(parsed) else None
     return None
 
@@ -65,6 +68,33 @@ def bounded(name, grid):
     if len(grid) > MAX_ROWS or max(map(len, grid), default=0) > MAX_COLUMNS:
         fail('TABLE_TOO_LARGE', f'工作表“{name}”超过 {MAX_ROWS} 行或 {MAX_COLUMNS} 列；请拆分后导入，未截掉任何行列。')
     return grid
+
+
+def reject_xls_formulas(book):
+    """xlrd exposes cached formula results as numbers; they are not source facts.
+
+    Inspect the worksheet records in the original BIFF stream before asking the
+    pinned xlrd 2.0.1 reader for cells. Older BIFF releases discard that stream
+    while opening, so refuse them instead of accepting unverifiable caches.
+    """
+    from xlrd.biffh import XL_FORMULA_OPCODES
+
+    if book.biff_version < 50 or book.mem is None:
+        fail('TABLE_XLS_VERSION', '此旧版 XLS 无法核验公式来源，请另存为 XLSX 后导入；未采用缓存数值。')
+    for name, position in zip(book.sheet_names(), book._sh_abs_posn):
+        while position + 4 <= len(book.mem):
+            code, length = struct.unpack_from('<HH', book.mem, position)
+            position += 4
+            if position + length > len(book.mem):
+                fail('TABLE_UNREADABLE', 'XLS 工作表记录不完整，请提供未损坏的原件。')
+            if code in XL_FORMULA_OPCODES:
+                row, column = struct.unpack_from('<HH', book.mem, position)
+                address = f'{get_column_letter(column + 1)}{row + 1}'
+                fail('TABLE_XLS_FORMULA', f'工作表“{name}”的 {address} 含公式，不能把旧版 XLS 的缓存值当作原始数值。'
+                     '请另存为保留公式的 XLSX，或提供有来源的数值结构表。')
+            position += length
+            if code == 0x000A:  # end of the worksheet substream
+                break
 
 
 def read(filename, content):
@@ -101,6 +131,7 @@ def read(filename, content):
             import xlrd
             book = xlrd.open_workbook(file_contents=content, on_demand=True)
             try:
+                reject_xls_formulas(book)
                 sheets = []
                 for sheet in book.sheets():
                     if sheet.nrows > MAX_ROWS or sheet.ncols > MAX_COLUMNS:
