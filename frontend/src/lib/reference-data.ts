@@ -12,7 +12,7 @@ export type ReferenceGap = { properties: string[]; reason: string };
 export type ReferenceEdition = {
   standard: string; edition: string; file: string; scope: string; pdfPage: number | null; sourceDigest: string; rights: string;
 };
-export type ReferenceData = { values: ReferenceValue[]; gaps: ReferenceGap[]; editions: ReferenceEdition[]; other: { kind: string; reference: string }[] };
+export type ReferenceData = { values: ReferenceValue[]; gaps: ReferenceGap[]; editions: ReferenceEdition[]; other: { kind: string; reference: string; reviewed: boolean }[] };
 
 export const REFERENCE_SCHEMA = "cablesim.reference-data/1";
 
@@ -27,6 +27,15 @@ const PROPERTY_LABELS: Record<string, string> = {
   relative_permittivity: "相对介电常数",
   loss_tangent: "介质损耗角正切",
   density: "密度",
+  thermal_conductivity: "热导率",
+  burial_depth: "埋深",
+  conductor_area: "导体截面",
+  conductor_limit: "导体温度上限",
+  ambient_temperature: "环境温度",
+  temperature_rise: "温升",
+  linear_resistance: "单位长度电阻",
+  current: "电流",
+  frequency: "频率",
 };
 export const propertyLabel = (property: string) => PROPERTY_LABELS[property] || property;
 
@@ -40,7 +49,7 @@ export function referenceData(sources: unknown): ReferenceData {
     const row = optionalRecord(source), reference = text(row.reference);
     let parsed: Record<string, unknown> | null = null;
     try { parsed = optionalRecord(JSON.parse(reference)); } catch { /* 非 JSON 出处按原文显示 */ }
-    if (!parsed || parsed.schema !== REFERENCE_SCHEMA) { data.other.push({ kind: text(row.kind), reference }); continue; }
+    if (!parsed || parsed.schema !== REFERENCE_SCHEMA) { data.other.push({ kind: text(row.kind), reference, reviewed: row.reviewed === true }); continue; }
     const value = numeric(parsed.value);
     if (typeof parsed.property === "string" && value !== null) data.values.push({
       property: parsed.property, value, unit: text(parsed.unit), standard: text(parsed.standard), table: text(parsed.table),
@@ -51,7 +60,7 @@ export function referenceData(sources: unknown): ReferenceData {
       standard: text(parsed.standard), edition: parsed.edition, file: text(parsed.file), scope: text(parsed.scope),
       pdfPage: numeric(parsed.pdf_page), sourceDigest: text(parsed.source_digest), rights: text(parsed.rights),
     });
-    else data.other.push({ kind: text(row.kind), reference });
+    else data.other.push({ kind: text(row.kind), reference, reviewed: row.reviewed === true });
   }
   return data;
 }
