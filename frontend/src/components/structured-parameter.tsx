@@ -2,10 +2,9 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { numeric, optionalRecord, text } from "@/api/client";
 import { displayName } from "@/lib/display-names";
 import { declaredUnit, expand, rowUnit, scalarColumns, toDisplay, toSi, type DisplayUnit } from "@/lib/contract-schema";
-import { formatNumber } from "@/lib/format";
 import { Button, IconButton } from "./ui/button";
 import { appendFieldPath } from '@/lib/missing-input';
-import { declaredParameterDefaults } from '@/lib/study-parameter-form';
+import { declaredParameterDefaults, nullableParameter } from '@/lib/study-parameter-form';
 import { Textarea } from './ui/textarea';
 import './study-method-form.css';
 
@@ -26,16 +25,26 @@ export function ParameterSource({ value, label, readOnly, onChange, error }: { v
 
 /** 一个数值单元：显示单位下编辑，失焦或回车时按 SI 写回；空值写回 undefined。 */
 function NumberCell({ value, unit, label, readOnly, onCommit }: { value: unknown; unit: DisplayUnit | null; label: string; readOnly: boolean; onCommit: (value: number | undefined) => void }) {
-  const shown = numeric(value) === null ? "" : formatNumber(toDisplay(Number(value), unit), 6);
+  // Editable text must retain every digit and use a parseable sign. Display-only
+  // grouping, Unicode minus and fixed precision cannot be written back safely.
+  const shown = numeric(value) === null ? "" : String(toDisplay(Number(value), unit));
   const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => { setDraft(null); }, [value, unit?.scale, unit?.offset]);
   const commit = () => {
     if (draft === null) return;
     const parsed = draft.trim() === "" ? undefined : Number(draft);
-    if (parsed === undefined || Number.isFinite(parsed)) {setDraft(null);onCommit(parsed === undefined ? undefined : toSi(parsed, unit));}
+    if (parsed === undefined || Number.isFinite(parsed)) {
+      setDraft(null);
+      // Re-entering the displayed value must not introduce a conversion tail in
+      // the original SI number (especially units with a temperature offset).
+      const next = parsed === undefined ? undefined : numeric(value) !== null && parsed === toDisplay(Number(value), unit) ? Number(value) : toSi(parsed, unit);
+      if (!Object.is(next, value)) onCommit(next);
+    }
   };
   return <span className="cell-number">
     <input aria-label={label} inputMode="decimal" value={draft ?? shown} readOnly={readOnly} aria-invalid={draft !== null && draft.trim() !== "" && !Number.isFinite(Number(draft))}
-      onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") {event.preventDefault();commit();} }} />
+      title={shown ? shown + (unit?.unit ? ' ' + unit.unit : '') : undefined}
+      onFocus={event => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") {event.preventDefault();commit();} }} />
     {unit?.unit && <span className="unit">{unit.unit}</span>}
   </span>;
 }
@@ -45,13 +54,17 @@ function ScalarCell({ field, value, unit, label, readOnly, onCommit }: { field: 
   if (field.type === "number" || field.type === "integer") return <NumberCell value={value} unit={unit} label={label} readOnly={readOnly} onCommit={onCommit} />;
   if (Array.isArray(field.enum)) {
     const labels = optionalRecord(field["x-enum-labels"]);
-    return <select className="cell-select" aria-label={label} value={value === undefined ? "" : String(value)} disabled={readOnly} onChange={(event) => onCommit(event.target.value === "" ? undefined : event.target.value)}>
+    const nullable = nullableParameter(field);
+    return <select className="cell-select" aria-label={label} value={value === null && nullable ? '__none__' : value === undefined ? "" : String(value)} disabled={readOnly} onChange={(event) => onCommit(event.target.value === '__none__' && nullable ? null : event.target.value === "" ? undefined : event.target.value)}>
       <option value="">请选择</option>
+      {nullable && <option value="__none__">明确不指定</option>}
       {field.enum.map((item) => <option key={String(item)} value={String(item)}>{text(labels[String(item)]) || displayName(String(item))}</option>)}
     </select>;
   }
   if (field.type === "boolean") return <input type="checkbox" aria-label={label} checked={value === true} disabled={readOnly} onChange={(event) => onCommit(event.target.checked)} />;
-  return <input className="cell-text" aria-label={label} defaultValue={value === undefined ? "" : String(value)} readOnly={readOnly} onBlur={(event) => onCommit(event.target.value === "" ? undefined : event.target.value)} />;
+  // Rows have positional paths. A controlled input follows the new row after a
+  // deletion instead of keeping the removed row's DOM value until blur.
+  return <input className="cell-text" aria-label={label} value={value === undefined ? "" : String(value)} readOnly={readOnly} onChange={(event) => onCommit(event.target.value === "" ? undefined : event.target.value)} />;
 }
 
 const titleOf = (key: string, field: Field) => text(field.title) || displayName(key);
@@ -77,8 +90,8 @@ export function NumberListEditor({ field, value, readOnly, label, onChange, path
     setDraft("");
   };
   return <div className="number-list" role="group" aria-label={label} data-field-path={path}>
-    {items.map((item, index) => <span key={index} className="number-chip" data-field-path={path ? appendFieldPath(path, index) : undefined}>{formatNumber(toDisplay(item, unit), 6)}{unit?.unit && <span className="unit">{unit.unit}</span>}
-      {!readOnly && <button type="button" aria-label={`删除 ${formatNumber(toDisplay(item, unit), 6)}`} onClick={() => onChange(items.filter((_, position) => position !== index))}>×</button>}</span>)}
+    {items.map((item, index) => <span key={index} className="number-chip" data-field-path={path ? appendFieldPath(path, index) : undefined}>{String(toDisplay(item, unit))}{unit?.unit && <span className="unit">{unit.unit}</span>}
+      {!readOnly && <button type="button" aria-label={`删除 ${String(toDisplay(item, unit))}`} onClick={() => onChange(items.filter((_, position) => position !== index))}>×</button>}</span>)}
     {!readOnly && <input aria-label={`添加${label}`} inputMode="decimal" placeholder={"添加" + (unit?.unit ? `（${unit.unit}）` : "")} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); add(); } }} onBlur={add} />}
     {!items.length && readOnly && <span className="muted">—</span>}
   </div>;

@@ -12,7 +12,7 @@ import { expand } from '@/lib/contract-schema';
 import { KeyedMapEditor, NumberListEditor, ParameterSource, RowsEditor, TupleListEditor } from './structured-parameter';
 import { RangeField, isRangeField } from './ui/range-field';
 import { Select } from './ui/select';
-import { declaredParameterDefaults, nullableParameter } from '@/lib/study-parameter-form';
+import { clearParameterDrafts, declaredParameterDefaults, nullableParameter, reindexParameterDrafts } from '@/lib/study-parameter-form';
 import { appendFieldPath, pointerParts } from '@/lib/missing-input';
 
 type Props = ComponentProps<typeof ContractFields>;
@@ -65,7 +65,7 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
       // 引用工程模型里的对象：从真实的截面、负荷、电缆结构中选，不手填编号
       field = { ...base, type: 'select', options: [...(nullableParameter(source) ? [{value:'__none__',label:'明确不指定'}] : []),...bound], description: bound.length ? description : '当前工程没有可引用的对象，请先完善工程模型。' };
     } else if (Array.isArray(source.enum) && source.enum.every(value => typeof value === 'string')) {
-      field = { ...base, type: 'select', options: source.enum.map(value => ({ value: String(value), label: text(enumLabels[String(value)]) || displayName(String(value)) })) };
+      field = { ...base, type: 'select', options: [...(nullableParameter(source) ? [{value:'__none__',label:'明确不指定'}] : []), ...source.enum.map(value => ({ value: String(value), label: text(enumLabels[String(value)]) || displayName(String(value)) }))] };
     } else if (source.type === 'number' || source.type === 'integer') {
       integer = source.type === 'integer';
       // 清单声明了显示单位就按它换算（显示值 = SI × scale + offset），否则按字段名推断
@@ -141,15 +141,36 @@ export function BuzzformContractFields(props: Props) {
   const structured = (entry: Entry) => {
     const props = { field: entry.source, root, value: valueAt(entry), readOnly: readOnly || optionalRecord(entry.source['x-bind']).read_only === true, label: entry.ownLabel };
     const renderObject = (schema:unknown, values:Record<string,unknown>, prefix:string) => <BuzzformContractFields module={module} schema={schema} root={root} values={values} prefix={prefix} readOnly={readOnly} onChange={onChange} onDraftChange={onDraftChange} draftFields={draftFields} references={references} fieldErrors={fieldErrors} />;
+    const replaceDrafts = (next: typeof draftFields) => {
+      // Delete all changed keys before inserting shifted rows: a new /0 must not
+      // be removed while clearing the previous /0 or /1 from the same batch.
+      for (const [key, field] of Object.entries(draftFields)) if (next[key] !== field) onDraftChange(undefined, key);
+      for (const [key, field] of Object.entries(next)) if (draftFields[key] !== field) onDraftChange(field, key);
+    };
+    const replaceObject = (value: unknown) => {
+      replaceDrafts(clearParameterDrafts(draftFields, module, entry.path));
+      onChange(entry.path, value);
+    };
+    const changeRows = (value: Record<string, unknown>[]) => {
+      const previous = Array.isArray(props.value) ? props.value : [];
+      if (value.length !== previous.length) replaceDrafts(reindexParameterDrafts(draftFields, module, entry.path, value.map(row => previous.indexOf(row))));
+      onChange(entry.path, value);
+    };
+    const changeMap = (value: Record<string, unknown>) => {
+      let next = draftFields;
+      for (const key of Object.keys(optionalRecord(props.value))) if (!Object.hasOwn(value, key)) next = clearParameterDrafts(next, module, appendFieldPath(entry.path, key));
+      replaceDrafts(next);
+      onChange(entry.path, value);
+    };
     return <div key={entry.name} className="parameter-structured" data-field-path={entry.path}>
       <span className="parameter-structured-label" title={text(entry.source.description) || undefined}>{entry.ownLabel}</span>
-      {entry.structure === 'object' ? <><Select label={`${entry.ownLabel} · 配置`} value={props.value===null ? 'none' : props.value===undefined ? 'unset' : 'set'} disabled={readOnly} error={fieldErrors[entry.path]} options={[{value:'unset',label:entry.required ? '请选择' : '未单独设置'},...(nullableParameter(entry.source) ? [{value:'none',label:'明确不指定'}] : []),{value:'set',label:'逐项配置'}]} onChange={value=>onChange(entry.path,value==='set' ? declaredParameterDefaults(entry.source,root) : value==='none' ? null : undefined)} />{props.value && typeof props.value==='object' ? renderObject(entry.source,optionalRecord(props.value),entry.path) : null}</>
+      {entry.structure === 'object' ? <><Select label={`${entry.ownLabel} · 配置`} value={props.value===null ? 'none' : props.value===undefined ? 'unset' : 'set'} disabled={readOnly} error={fieldErrors[entry.path]} options={[{value:'unset',label:entry.required ? '请选择' : '未单独设置'},...(nullableParameter(entry.source) ? [{value:'none',label:'明确不指定'}] : []),{value:'set',label:'逐项配置'}]} onChange={value=>replaceObject(value==='set' ? declaredParameterDefaults(entry.source,root) : value==='none' ? null : undefined)} />{props.value && typeof props.value==='object' ? renderObject(entry.source,optionalRecord(props.value),entry.path) : null}</>
         : entry.structure==='source' ? <ParameterSource {...props} error={fieldErrors[entry.path]} onChange={value=>onChange(entry.path,value)} />
         : entry.structure === 'range' ? <RangeField {...props} module={module} path={entry.path} draftFields={draftFields} onDraftChange={onDraftChange} onChange={value => onChange(entry.path, value)} />
         : entry.structure === 'list' ? <NumberListEditor {...props} path={entry.path} onChange={value => onChange(entry.path, value)} />
-          : entry.structure === 'rows' ? <RowsEditor {...props} path={entry.path} renderObject={renderObject} onChange={value => onChange(entry.path, value)} />
+          : entry.structure === 'rows' ? <RowsEditor {...props} path={entry.path} renderObject={renderObject} onChange={changeRows} />
             : entry.structure==='tuples' ? <TupleListEditor {...props} path={entry.path} onChange={value=>onChange(entry.path,value)} />
-            : <KeyedMapEditor {...props} path={entry.path} keys={entry.keys || []} renderObject={renderObject} onChange={value => onChange(entry.path, value)} />}
+            : <KeyedMapEditor {...props} path={entry.path} keys={entry.keys || []} renderObject={renderObject} onChange={changeMap} />}
       {fieldErrors[entry.path] && entry.structure!=='source' && entry.structure!=='object' && <p className="field-error" role="alert">{fieldErrors[entry.path]}</p>}
     </div>;
   };

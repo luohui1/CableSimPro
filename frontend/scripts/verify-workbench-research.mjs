@@ -1,6 +1,27 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { walkthrough } from './verify-workbench-support.mjs';
+
+// Read the real download, including escaped quotes and multiline source cells.
+function csvRows(text) {
+  const rows = [], input = text.replace(/^\uFEFF/, '');
+  let row = [], cell = '', quoted = false;
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '"') {
+      if (quoted && input[i + 1] === '"') { cell += '"'; i++; }
+      else quoted = !quoted;
+    } else if (!quoted && char === ',') { row.push(cell); cell = ''; }
+    else if (!quoted && (char === '\r' || char === '\n')) {
+      if (char === '\r' && input[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += char;
+  }
+  if (quoted) throw Error('CSV 下载含未闭合的引号');
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
 
 // Engineering changes go through the real interface. GETs verify saved identities.
 await walkthrough('research', async ({ page, expect, base, api, choose, step, check, capture, out, tag, report }) => {
@@ -39,6 +60,10 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await page.getByRole('button', { name: '建立研究', exact: true }).first().click();
     await page.waitForURL(/\/studies\/[^/?]+\/ampacity\/results/);
     await expect(page.getByRole('button', { name: '预检并运行', exact: true })).toBeVisible();
+    const treeName = page.locator('.project-explorer .explorer-study-name b').filter({ hasText: tag });
+    await expect(treeName).toBeVisible();
+    check('工程树显示完整研究名称', await treeName.evaluate(node => node.scrollWidth <= node.clientWidth + 1
+      && node.scrollHeight <= node.clientHeight + 1), { title: await treeName.innerText() });
   });
   const url = new URL(page.url());
   const sid = url.pathname.split('/')[2], wid = url.searchParams.get('workspace');
@@ -223,11 +248,70 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await results.locator('tbody tr').last().evaluate(row => row.scrollIntoView({ block: 'end', inline: 'nearest' }));
     await capture('07-result-differences-end');
     await checkResultWidth('尾部');
-    const pending = page.waitForEvent('download');
-    await page.getByRole('button', { name: '导出对比 CSV', exact: true }).click();
+    const csvButton = page.getByRole('button', { name: '导出对比 CSV', exact: true });
+    const pending = page.waitForEvent('download', { timeout: 90000 });
+    await csvButton.click();
     const file = await pending;
-    await file.saveAs(path.join(out, 'comparison-' + tag + '.csv'));
-    expect(await fs.readFile(path.join(out, 'comparison-' + tag + '.csv'), 'utf8')).toMatch(/单位/);
+    const csvPath = path.join(out, 'comparison-' + tag + '.csv');
+    await file.saveAs(csvPath);
+    const csv = await fs.readFile(csvPath, 'utf8'), [headers, ...exported] = csvRows(csv);
+    expect(headers).toEqual(['物理量', '对象', '输出条件', '基准 / SI', '对照 / SI', '差值 / SI', '单位', '来源']);
+    expect(exported.length).toBeGreaterThan(0);
+    expect(exported.every(row => row.length === headers.length)).toBe(true);
+
+    const evidencePending = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下载未配对量与固定记录', exact: true }).click();
+    const evidenceFile = await evidencePending, evidencePath = path.join(out, 'comparison-evidence-' + tag + '.json');
+    await evidenceFile.saveAs(evidencePath);
+    const evidence = JSON.parse(await fs.readFile(evidencePath, 'utf8'));
+    await capture('07-fixed-comparison-evidence-download');
+    const fullRuns = await Promise.all([first, second].map(saved => api(prefix + '/runs/' + saved.id + '?view=full')));
+    const byRun = new Map(fullRuns.map(saved => [saved.id, saved]));
+    expect(evidence.sources.map(source => source.run_id).sort()).toEqual([...byRun.keys()].sort());
+    check('独立 JSON 下载保留两次运行的完整固定输入与方法清单', evidence.sources.every(source => {
+      const saved = byRun.get(source.run_id);
+      return saved.integrity === 'verified' && source.sequence === saved.sequence
+        && isDeepStrictEqual(source.snapshot, saved.snapshot);
+    }), { runs: [...byRun.keys()], bytes: (await fs.stat(evidencePath)).size });
+
+    // Excel documents a 32,767-character cell limit. The compact source should
+    // remain substantially below it, without truncating any saved identity.
+    // https://support.microsoft.com/en-us/excel/excel-specifications-and-limits
+    const maxCellChars = Math.max(...exported.flatMap(row => row.map(cell => cell.length)));
+    const maxSourceChars = Math.max(...exported.map(row => row[7].length));
+    check('CSV 单元格可由表格软件完整保存且来源不重复整份快照', maxCellChars <= 32767 && maxSourceChars <= 4096,
+      { rows: exported.length, bytes: Buffer.byteLength(csv, 'utf8'), maxCellChars, maxSourceChars });
+    const expected = evidence.differences.flatMap(difference => difference.quantities.map(quantity => ({ difference, quantity })));
+    expect(exported).toHaveLength(expected.length);
+    const matched = new Set();
+    for (const row of exported) {
+      const source = JSON.parse(row[7]);
+      expect(Object.keys(source).sort()).toEqual(['baseline', 'comparison', 'quantity']);
+      expect(Object.keys(source.quantity).sort()).toEqual(['case_id', 'condition', 'entity', 'key', 'unit']);
+      const index = expected.findIndex(({ difference, quantity }) => difference.baseline_run_id === source.baseline.run_id
+        && difference.run_id === source.comparison.run_id && ['case_id', 'condition', 'entity', 'key', 'unit'].every(key => quantity[key] === source.quantity[key]));
+      expect(index, 'CSV 每行必须对应真实比较中的唯一物理量与运行对').toBeGreaterThanOrEqual(0);
+      expect(matched.has(index), 'CSV 不能以重复行替代遗漏结果').toBe(false); matched.add(index);
+      const { quantity } = expected[index];
+      expect(row[3]).not.toBe(''); expect(row[4]).not.toBe(''); expect(row[5]).not.toBe('');
+      expect([Number(row[3]), Number(row[4]), Number(row[5]), row[6]])
+        .toEqual([quantity.baseline, quantity.value, quantity.difference, quantity.unit ?? '']);
+      for (const role of ['baseline', 'comparison']) {
+        const trace = source[role], saved = byRun.get(trace.run_id);
+        expect(saved, '来源必须指向本次勾选的真实保存运行').toBeTruthy();
+        const outputCase = saved.output.cases.find(item => item.case_id === source.quantity.case_id);
+        expect(outputCase, 'CSV 的物理量工况必须存在于对应保存运行').toBeTruthy();
+        const method = outputCase.method || saved.snapshot.definition.method;
+        expect(trace).toEqual({
+          workspace_id: saved.workspace, study_id: saved.study, run_id: saved.id, sequence: saved.sequence,
+          input_digest: saved.input_digest, output_digest: saved.output_digest,
+          method: { plugin_id: method.plugin_id, capability: method.capability, version: method.version, release_digest: method.release_digest },
+        });
+      }
+    }
+    check('CSV 每行基准与对照的运行、摘要、方法版本及 SI 数值均与固定记录一致', matched.size === expected.length,
+      { rows: matched.size, runs: fullRuns.map(saved => ({ id: saved.id, sequence: saved.sequence, input_digest: saved.input_digest, output_digest: saved.output_digest })) });
+    await csvButton.scrollIntoViewIfNeeded();
   });
   await independent('08-calculation-book-download', async () => {
     await page.goto(resultUrl);
