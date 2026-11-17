@@ -105,6 +105,12 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       const studyLink = projectTable.getByRole('link', { name: '直埋载流量 · ' + tag, exact: true });
       await expect(studyLink).toBeVisible();
       await expect(projectTable.locator('tbody tr')).toHaveCount(projectStudies.length);
+      const projectStudyStatus = projectTable.locator('tbody tr').filter({
+        has: page.getByRole('link', { name: '直埋载流量 · ' + tag, exact: true }),
+      }).locator('.status-mark');
+      await expect(projectStudyStatus).toHaveText('未运行');
+      check('新建未运行研究在工程目录中保持未运行', true,
+        { workspace: createdWid, study: createdSid, status: await projectStudyStatus.innerText() });
       await capture('01-project-directory-keyboard-navigation');
       await studyLink.click();
       await page.waitForURL(next => next.pathname === `/studies/${createdSid}/ampacity/results` && next.searchParams.get('workspace') === createdWid);
