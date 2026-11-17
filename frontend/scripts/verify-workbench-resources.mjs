@@ -43,9 +43,16 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     // Category pages share the same component. Reset any retained filters using
     // the visible controls before beginning the next category's walkthrough.
     const search = main.getByRole('textbox', { name: '检索', exact: true });
-    if (await search.isVisible()) await search.clear();
-    if (await main.getByRole('combobox', { name: '状态', exact: true }).isVisible()) await choose('状态', '全部');
-    if (await main.getByRole('combobox', { name: '类别', exact: true }).isVisible()) await choose('类别', '全部');
+    const currentSearch = await search.evaluateAll(inputs => inputs[0]?.value || '');
+    if (currentSearch) await search.clear();
+    for (const label of ['状态', '类别']) {
+      // An unfiltered empty catalogue removes its toolbar. Read the current
+      // value without waiting for a disappearing element, and avoid clicking
+      // an already-default control after the preceding reset emptied the list.
+      const current = await main.getByRole('combobox', { name: label, exact: true })
+        .evaluateAll(controls => controls[0]?.textContent?.trim() || '');
+      if (current && current !== '全部') await choose(label, '全部');
+    }
     await expect(page.getByText('正在读取资源', { exact: true })).toHaveCount(0);
   }
 

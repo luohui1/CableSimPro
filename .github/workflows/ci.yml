@@ -13,7 +13,7 @@ jobs:
   hygiene:
     name: Hygiene and plugin catalog checks (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -138,24 +138,30 @@ jobs:
           retention-days: 14
           include-hidden-files: true
           path: .data/workbench-walk/
-      - name: Audit visible text
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
-        working-directory: frontend
-        env:
-          VISIBLE_TEXT_PASS: before
-        run: npm run test:visible-text 2>&1 | tee ../.data/workbench-walk/logs/visible-text.log
-      - name: Audit interface regularity
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
-        working-directory: frontend
-        env:
-          REGULARITY_PASS: before
-        run: npm run test:regularity 2>&1 | tee ../.data/workbench-walk/logs/regularity.log
-      - name: Audit rendering performance
+      - name: Audit rendering performance in an independent browser session
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
         env:
           PERFORMANCE_PASS: before
         run: npm run test:performance 2>&1 | tee ../.data/workbench-walk/logs/performance.log
+      - name: Upload the completed performance audit before the full text traversal
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-performance-${{ env.WORKBENCH_PHASE }}
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .data/fix-round/shared-shell/performance/
+            .data/workbench-walk/logs/performance.log
+      - name: Audit visible text and interface regularity on the same full walkthrough
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        working-directory: frontend
+        env:
+          REGULARITY_WITH_VISIBLE: '1'
+          VISIBLE_TEXT_PASS: before
+          REGULARITY_PASS: before
+        run: npm run test:regularity 2>&1 | tee ../.data/workbench-walk/logs/visible-text-and-regularity.log
       - name: Upload workbench screenshots, real request records and audits
         if: ${{ always() && matrix.os == 'ubuntu-latest' }}
         uses: actions/upload-artifact@v4
@@ -169,7 +175,7 @@ jobs:
             .data/fix-round/shared-shell/regularity/
             .data/fix-round/shared-shell/performance/
       - name: Cable Studio types, build and real-flow tests
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
         working-directory: studio
         run: |
           npm ci --ignore-scripts

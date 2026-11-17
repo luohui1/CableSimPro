@@ -5,7 +5,7 @@ import { walkthrough } from './verify-workbench-support.mjs';
 // Run with isolated-e2e.mjs and the engineering demo database. All writes below
 // are mouse/keyboard actions; GETs only verify the state returned by this host.
 // Deliberately incomplete engineering inputs remain visible in the evidence.
-await walkthrough('types', async ({ page, expect, base, api, choose, capture, step, check, out, size, tag }) => {
+await walkthrough('types', async ({ page, expect, base, api, choose, capture, step, check, out, size, tag, report }) => {
   const name = origin => `T1 型号走查 · ${origin} · ${tag}`;
   const versionLabel = value => String(value || '').replace(/\+engineering$/, '（工程版）').replace(/\+[^\s]+$/, '（定制版）') || '未提供';
   const workspace = id => api(`/api/workspaces/${encodeURIComponent(id)}`);
@@ -17,9 +17,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
 
   async function dismissDialog() {
     for (let count = 0; count < 3 && await page.getByRole('dialog').count(); count++) {
+      const current = page.getByRole('dialog').first();
       const leave = page.getByRole('dialog', { name: '型号有未保存修改', exact: true });
       if (await leave.isVisible()) await leave.getByRole('button', { name: '放弃修改并离开', exact: true }).click();
       else await page.keyboard.press('Escape');
+      await expect(current).toBeHidden();
     }
   }
   async function attempt(label, action) {
@@ -71,6 +73,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(input).toBeVisible();
     await input.fill(String(value));
     await input.press('Tab');
+  }
+  async function advanced(scope = page) {
+    for (const section of await scope.locator('details.parameter-advanced').all()) {
+      if (await section.getAttribute('open') === null) await section.locator(':scope > summary').click();
+    }
   }
   async function openNew(origin, title) {
     await dismissDialog();
@@ -135,13 +142,26 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator(`[data-type-page="${resultPage}"]`)).not.toHaveAttribute('data-type-state', 'loading');
     const button = await command(label, true);
     if (!check(label + '可从当前页面启动', button && await button.isEnabled(), await visibleText())) return false;
-    await button.click();
+    const [response] = await Promise.all([
+      page.waitForResponse(value => value.request().method() === 'GET'
+        && /^\/api\/workspaces\/[^/]+\/studies\/[^/]+\/preflight$/.test(new URL(value.url()).pathname), { timeout: 90000 }),
+      button.click(),
+    ]);
+    expect(response.ok()).toBeTruthy();
+    const preflight = await response.json();
+    (report.preflights ||= []).push({ label, ...size, path: new URL(response.url()).pathname, payload: preflight });
     const dialog = page.getByRole('dialog', { name: label + ' · 预检', exact: true });
     await expect(dialog).toBeVisible({ timeout: 90000 });
+    if (!preflight.ready) {
+      for (const trace of await dialog.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^追溯$/ }) }).all()) {
+        if (await trace.getAttribute('open') === null) await trace.locator(':scope > summary').click();
+      }
+    }
     await capture(label + '-真实预检');
     const ack = dialog.getByRole('checkbox', { name: '已核对输入来源与方法适用范围', exact: true });
-    if (!check(label + '通过真实预检', await ack.isVisible(), await dialog.innerText())) {
+    if (!check(label + '通过真实预检', preflight.ready && await ack.isVisible(), { visible: await dialog.innerText(), preflight })) {
       await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
       return false;
     }
     await ack.check();
@@ -150,6 +170,101 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator(`[data-type-page="${resultPage}"]`)).toHaveAttribute('data-type-state', 'success', { timeout: 180000 });
     check(label + '取得当前保存结果', true);
     return true;
+  }
+  async function generateSpecification(id, label, suffix, expectedIncomplete = false) {
+    await module('规格书');
+    await choose('文档版本', '客户版');
+    await page.getByRole('tab', { name: '内容', exact: true }).click();
+    await expect(page.getByTitle('正式规格书预览')).toBeVisible();
+    await capture(label + '-生成前缺项与章节');
+    const generate = await command('生成规格书', true);
+    if (!check(label + '有可启动的生成操作', generate && await generate.isEnabled(), await visibleText())) return;
+    let download;
+    const listener = item => { download = item; };
+    page.on('download', listener);
+    try {
+      const response = await responseFor('POST', `/api/types/${id}/specification/generate`, () => generate.click(), 360000);
+      await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading', { timeout: 180000 });
+      if (expectedIncomplete) {
+        const spec = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+        const mass = spec.payload.checks.find(item => item.id === 'geometry/mass' && item.blocking);
+        check(label + '因真实材料密度或构造缺项拒绝客户交付', response.status === 'blocked' && response.channel === 'geometry'
+          && response.details === '结构外径或用料缺少完整输入。' && !download
+          && mass?.quantities?.some(row => row.quantity_missing?.includes('材料密度')), { response, blocker: mass });
+        await capture(label + '-保留真实用料缺项');
+        const repair = page.getByRole('button', { name: '查看结构推导条件', exact: true });
+        await expect(repair).toBeVisible();
+        await repair.click();
+        await expect(page).toHaveURL(/\/structure\/quantities/);
+        await expect(page.getByRole('table', { name: '外径与用料', exact: true })).toBeVisible();
+        check(label + '拒绝后可定位结构用料缺项', true);
+        return;
+      }
+      if (!check(label + '生成通过全部真实方法', response.status === 'generated', response)) {
+        await capture(label + '-生成受阻的真实原因');
+        const repair = page.getByRole('button', { name: /^查看.+条件$/ }).first();
+        check(label + '生成受阻时给出可跳转的条件入口', await repair.isVisible(), await visibleText());
+        return;
+      }
+      await expect.poll(() => Boolean(download), { timeout: 60000 }).toBe(true);
+      const filename = path.join(out, `types-${size.width}-${tag}-${suffix}-customer.pdf`);
+      await download.saveAs(filename);
+      const bytes = await fs.readFile(filename);
+      const spec = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+      check(label + '客户下载是有效PDF且引用五项当前结果', bytes.subarray(0, 5).toString() === '%PDF-'
+        && spec.payload.sources.length === 5 && spec.payload.sources.every(source => source.freshness === 'current'), {
+        file: path.basename(filename), bytes: bytes.length, sources: spec.payload.sources,
+      });
+    } finally { page.off('download', listener); }
+  }
+  async function reviewSpecification(id, label, expectedIncomplete = false) {
+    await module('规格书');
+    await choose('文档版本', '客户版');
+    await page.getByRole('tab', { name: '审核与发布', exact: true }).click();
+    let spec = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+    const blockers = spec.payload.checks.filter(item => item.blocking === true);
+    await capture(label + '-审核与发布清单');
+    if (expectedIncomplete) {
+      const mass = blockers.find(item => item.id === 'geometry/mass');
+      const submit = page.getByRole('button', { name: '提交评审', exact: true });
+      check(label + '保留真实用料缺项且禁止提交评审', !spec.ready && await submit.isDisabled()
+        && mass?.message === '单位长度用料缺少完整材料密度或构造输入。'
+        && mass?.quantities?.some(row => row.quantity_missing?.includes('材料密度')),
+      { ready: spec.ready, blockers });
+      for (const group of await page.locator('.type-review-groups > section > details').all()) {
+        if (await group.getAttribute('open') === null) await group.locator(':scope > summary').click();
+      }
+      const item = page.locator('[data-check-id="geometry/mass"]');
+      await item.getByRole('button', { name: /^填写/ }).click();
+      await expect(page).toHaveURL(/\/structure\/table.*field=/);
+      const target = new URL(page.url()).searchParams.get('field');
+      check(label + '审核缺项可定位真实密度或构造字段', /\/(?:density|lay_factor|tape_width|tape_count|tape_application)$/.test(target || ''), { target });
+      await capture(label + '-审核缺项定位到结构字段');
+      return;
+    }
+    if (!check(label + '具备提交审核的完整输入与结果', spec.ready && blockers.length === 0, { ready: spec.ready, blockers })) {
+      const submit = page.getByRole('button', { name: '提交评审', exact: true });
+      check(label + '校核未闭合时禁止发布并显示实际原因', await submit.isDisabled() && blockers.length > 0, await visibleText());
+      return;
+    }
+    for (const action of ['采纳为版本草稿', '提交评审', '人工批准', '发布型号版本']) {
+      const button = page.locator('.type-result-summary').getByRole('button', { name: action, exact: true });
+      await expect(button).toBeEnabled();
+      await button.click();
+      const dialog = page.getByRole('dialog', { name: action, exact: true });
+      if (action === '提交评审') {
+        await field('变更摘要', 'T1 隔离走查：核对固定来源、真实保存输入及计算结果；仅作为测试版本。', dialog);
+        await field('编制人', 'T1 隔离走查', dialog);
+      }
+      await capture(label + '-' + action + '-确认前');
+      await dialog.getByRole('checkbox', { name: '已核对当前版本与提交前校核清单', exact: true }).check();
+      await dialog.getByRole('button', { name: action, exact: true }).click();
+      await expect(dialog).toBeHidden({ timeout: 90000 });
+    }
+    spec = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+    check(label + '人工审核发布闭环', spec.lifecycle.status === 'published', spec.lifecycle);
+    await page.getByRole('tab', { name: '修订记录', exact: true }).click();
+    await expect(page.getByRole('table', { name: '文档修订记录', exact: true })).toBeVisible();
   }
 
   const options = await api('/api/types/creation-options');
@@ -345,6 +460,18 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       // Units come from the installed method contract: degrees C, Hz and seconds.
       // These are explicit isolated teaching conditions, not manufacturer evidence.
       for (const [label, value] of analysis.inputs) await field(label, value);
+      if (analysis.module === '电气参数') {
+        const cable = (await workspace(main.id)).domain.cable_types[0];
+        if (cable.rating?.u0) await field('运行相电压', cable.rating.u0);
+        await advanced(page.locator('.type-method-fields'));
+        for (const label of ['集肤效应系数', '邻近效应系数', '成缆绞入系数']) await field(label, '1');
+        await choose('R₂₀ 长度基准', '成品电缆长度');
+        if (cable.cores.length === 3) await choose('相间排列', '品字排列');
+        // The steel-armour reference cannot be declared non-magnetic. Leave
+        // that branch and unsupported impedance explicitly unresolved.
+      } else {
+        await choose('金属容量校核口径', '绝热容量');
+      }
       await capture(analysis.module + '-明示教学方法条件');
       await page.getByRole('button', { name: '保存方法条件', exact: true }).click();
       await expect(toolbar().locator('.command-state')).not.toContainText('未保存');
@@ -376,68 +503,61 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await choose('接地', '两端接地');
     await save(main.id);
     await capture('载流量表-工况与来源已保存');
+    await page.getByRole('tab', { name: '方法参数', exact: true }).click();
+    await expect(page.locator('.parameter-form .buzzform-contract')).toBeVisible();
+    await advanced(page.locator('.parameter-form'));
+    for (const [label, value] of [['集肤效应系数', '1'], ['邻近效应系数', '1'], ['初始护套温度', '70']]) await field(label, value);
+    await choose('外部热阻形式', '精确形式');
+    await choose('涡流损耗处理', '忽略');
+    await field('来源', 'T1 隔离走查明示教学条件：ks=kp=1，精确外部热阻，忽略涡流，初始护套温度70°C；不是厂家默认值、现场测量或批准数据。');
+    await save(main.id);
+    const ratingStudy = (await api(`/api/workspaces/${main.id}/studies`))
+      .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];
+    check('载流量方法条件与明确教学来源已保存', ratingStudy?.definition.parameters.ks === 1
+      && ratingStudy?.definition.parameters.kp === 1
+      && /T1 隔离走查/.test(ratingStudy?.definition.input_sources?.['/parameters/ks']?.reference || ''), ratingStudy?.definition);
+    await capture('载流量表-方法参数与来源已保存');
+    await page.getByRole('tab', { name: '结果表', exact: true }).click();
     if (!await run('计算所选工况', 'rating-table-results')) return;
     const table = page.getByRole('table', { name: '载流量表', exact: true });
-    check('载流量表显示当前工况的真实结果', (await table.innerText()).includes(caseName), await table.innerText());
+    const currentStudy = (await api(`/api/workspaces/${main.id}/studies`))
+      .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];
+    const current = (await api(`/api/workspaces/${main.id}/studies/${currentStudy.id}/runs`)).items
+      .filter(item => item.freshness === 'current' && item.integrity === 'verified').sort((a, b) => b.created.localeCompare(a.created))[0];
+    const results = current && await api(`/api/design/workspaces/${main.id}/rating-table-runs/${current.id}`);
+    const value = results?.rows.find(row => row.name === caseName);
+    check('载流量表显示当前工况的真实正电流', Boolean(value && value.value_a > 0)
+      && (await table.innerText()).includes(caseName), { row: value, visible: await table.innerText() });
   });
 
-  await attempt('10-生成规格书并核验真实下载', async () => {
+  await attempt('10-缺项草稿拒绝客户交付并定位真实缺项', () => generateSpecification(main.id, '缺项草稿规格书', 'incomplete', true));
+
+  await attempt('10b-预览章节并下载保留缺项的内部审核稿', async () => {
     await module('规格书');
-    await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading');
+    await choose('文档版本', '内部审核版');
     await expect(page.getByTitle('正式规格书预览')).toBeVisible();
-    await capture('规格书-生成前缺项与章节');
-    const generate = await command('生成规格书', true);
-    if (!check('规格书有可启动的生成操作', generate && await generate.isEnabled(), await visibleText())) return;
-    let download;
-    const listener = item => { download = item; };
-    page.on('download', listener);
-    try {
-      const response = await responseFor('POST', `/api/types/${main.id}/specification/generate`, () => generate.click(), 360000);
-      await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading', { timeout: 180000 });
-      if (!check('完整规格书生成通过全部真实方法', response.status === 'generated', response)) {
-        await capture('规格书-生成受阻的真实原因');
-        const repair = page.getByRole('button', { name: /^查看.+条件$/ }).first();
-        check('规格书生成受阻时给出可跳转的条件入口', await repair.isVisible(), await visibleText());
-        return;
-      }
-      await expect.poll(() => Boolean(download), { timeout: 60000 }).toBe(true);
-      const filename = path.join(out, `types-${size.width}-${tag}-customer.pdf`);
-      await download.saveAs(filename);
-      const bytes = await fs.readFile(filename);
-      check('客户规格书下载是有效 PDF', bytes.subarray(0, 5).toString() === '%PDF-', { file: path.basename(filename), bytes: bytes.length });
-    } finally { page.off('download', listener); }
+    const before = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
+    const chapters = page.getByRole('navigation', { name: '规格书章节', exact: true });
+    await chapters.getByRole('button', { name: '结构尺寸表', exact: true }).click();
+    await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="structure"]')).toBeVisible();
+    await capture('规格书-内部审核稿结构章节与缺项');
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 180000 }),
+      page.getByRole('button', { name: '导出内部审核稿', exact: true }).click(),
+    ]);
+    const filename = path.join(out, `types-${size.width}-${tag}-internal.pdf`);
+    await download.saveAs(filename);
+    const bytes = await fs.readFile(filename);
+    const after = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
+    check('内部审核稿下载是有效PDF且保留原校核与生命周期', bytes.subarray(0, 5).toString() === '%PDF-'
+      && after.ready === before.ready && after.lifecycle.status === before.lifecycle.status
+      && JSON.stringify(after.payload.checks) === JSON.stringify(before.payload.checks), {
+      file: path.basename(filename), bytes: bytes.length, ready: after.ready,
+      blockers: after.payload.checks.filter(item => item.blocking).map(item => item.id),
+    });
   });
 
-  await attempt('11-规格书审核发布或真实校核阻塞', async () => {
-    await module('规格书');
-    await page.getByRole('tab', { name: '审核与发布', exact: true }).click();
-    let spec = await api(`/api/types/${main.id}/specification?audience=customer&view=detail`);
-    const blockers = spec.payload.checks.filter(item => item.blocking === true);
-    await capture('规格书-审核与发布清单');
-    if (!check('本次设计具备提交审核的完整输入与结果', spec.ready && blockers.length === 0, { ready: spec.ready, blockers })) {
-      const submit = page.getByRole('button', { name: '提交评审', exact: true });
-      check('校核未闭合时禁止发布并显示实际原因', await submit.isDisabled() && blockers.length > 0, await visibleText());
-      return;
-    }
-    for (const action of ['采纳为版本草稿', '提交评审', '人工批准', '发布型号版本']) {
-      const button = page.locator('.type-result-summary').getByRole('button', { name: action, exact: true });
-      await expect(button).toBeEnabled();
-      await button.click();
-      const dialog = page.getByRole('dialog', { name: action, exact: true });
-      if (action === '提交评审') {
-        await field('变更摘要', 'T1 隔离走查：从固定库引用核对结构与保存的真实计算结果；仅作为测试版本。', dialog);
-        await field('编制人', 'T1 隔离走查', dialog);
-      }
-      await capture('规格书-' + action + '-确认前');
-      await dialog.getByRole('checkbox', { name: '已核对当前版本与提交前校核清单', exact: true }).check();
-      await dialog.getByRole('button', { name: action, exact: true }).click();
-      await expect(dialog).toBeHidden({ timeout: 90000 });
-    }
-    spec = await api(`/api/types/${main.id}/specification?audience=customer&view=detail`);
-    check('型号人工审核发布闭环', spec.lifecycle.status === 'published', spec.lifecycle);
-    await page.getByRole('tab', { name: '修订记录', exact: true }).click();
-    await expect(page.getByRole('table', { name: '文档修订记录', exact: true })).toBeVisible();
-  });
+  await attempt('11-缺项草稿保留审核门禁并定位字段', () => reviewSpecification(main.id, '缺项草稿规格书', true));
 
   await attempt('12-建立独立改版方案并保留原型号', async () => {
     await module('方案对比');
@@ -455,8 +575,182 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       source: main.id, originalRevision: original.revision, savedRevision: source.revision,
       branch: branch.workspace_id, lifecycle: branched.type_lifecycle,
     });
+    check('独立改版的型号名可与原型号区分', branched.domain.name === name('改版'), {
+      requested: name('改版'), saved: branched.domain.name, original: original.domain.name,
+    });
+    const input = layers().getByRole('textbox', { name: '绝缘厚度', exact: true }).first();
+    const originalValue = Number(await input.inputValue());
+    const revisedValue = Math.max(originalValue - 0.1, originalValue * 0.9).toFixed(3);
+    await input.fill(revisedValue);
+    await input.press('Tab');
+    await save(branch.workspace_id);
+    await expect.poll(async () => (await workspace(branch.workspace_id)).revision).toBeGreaterThan(branched.revision);
+    const originalAfterEdit = await workspace(main.id);
+    check('独立方案修改保存不回写原型号', originalAfterEdit.revision === original.revision
+      && JSON.stringify(originalAfterEdit.domain) === JSON.stringify(original.domain));
+    await capture('改版-独立修改已保存且原型号保留');
     await module('方案对比');
     await page.getByRole('tab', { name: '参数差异', exact: true }).click();
+    const differences = page.getByRole('table', { name: '方案参数差异', exact: true });
+    await expect(differences.getByRole('row').filter({ hasText: /芯 1.*绝缘.*厚度/ })).toBeVisible();
+    check('改版比较显示真实保存的厚度差异', (await differences.innerText()).includes(revisedValue)
+      && (await differences.innerText()).includes(originalValue.toFixed(3)), await differences.innerText());
     await capture('改版-原型号与独立方案参数对比');
   });
+
+  // This is a separate design object. The manufacturer's library copy above
+  // intentionally retains its missing densities and manufacturing facts.
+  // Read the release demo's saved teaching conditions, then enter them through
+  // real forms in an independent plan. No evidence or approval is fabricated.
+  const delivery = await attempt('13-打开来源完整的教学型号并建立独立交付方案', async () => {
+    const candidates = await api('/api/design/type-workspaces');
+    const seed = candidates.find(item => item.name === 'YJV22-8.7/15 3×300');
+    if (!check('发布种子提供独立的三芯教学型号', Boolean(seed), candidates.map(item => item.name))) return null;
+    const original = await workspace(seed.id);
+    const studies = await api(`/api/workspaces/${seed.id}/studies`);
+    const conditions = parameters => parameters && Object.fromEntries(Object.entries(parameters)
+      .filter(([key]) => !['basis_references', 'cable_type_id', 'circuit_id'].includes(key)));
+    const electrical = conditions(studies.find(item => item.definition.parameters?.temperature_k
+      && item.definition.parameters?.core_lay_factor && item.definition.parameters?.sources)?.definition.parameters);
+    const short = conditions(studies.find(item => item.definition.parameters?.duration_s
+      && item.definition.parameters?.metal_initial_temperature_k && item.definition.parameters?.sources)?.definition.parameters);
+    const rating = studies.find(item => item.definition.driver.kind === 'batch'
+      && /教学/.test(item.definition.parameters?.source || ''))?.definition;
+    const cable = original.domain.cable_types[0];
+    const used = new Set([...cable.cores.flatMap(core => [core.conductor.material, ...core.layers.map(layer => layer.material)]),
+      ...cable.common_layers.map(layer => layer.material)]);
+    const densities = original.domain.materials.filter(material => used.has(material.id)).map(material => ({ label: material.label, density: material.density }));
+    if (!check('教学型号保存完整密度及可追溯的计算条件', densities.length > 0 && densities.every(material => material.density > 0)
+      && electrical && short && rating && Object.values(electrical.sources).every(value => /教学/.test(value))
+      && Object.values(short.sources).every(value => /教学/.test(value)), { source: seed, densities, electrical, short, rating: rating?.parameters })) return null;
+    await page.goto(base + '/types?theme=light');
+    await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
+    await field('查找型号', seed.name);
+    await page.getByRole('table', { name: '型号', exact: true }).getByRole('button', { name: seed.name, exact: true }).click();
+    await expect(layers()).toBeVisible();
+    await capture('教学交付-已保存的来源完整型号');
+    await module('方案对比');
+    await page.getByRole('button', { name: '建立方案', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '建立独立型号方案', exact: true });
+    const title = name('教学交付副本');
+    await field('方案名称', title, dialog);
+    const branch = await responseFor('POST', `/api/types/${seed.id}/plans`, () => dialog.getByRole('button', { name: '建立方案', exact: true }).click());
+    await expect(page).toHaveURL(new RegExp('/types/' + branch.workspace_id + '/structure/section'));
+    await expect(layers()).toBeVisible();
+    // Rename through the existing editor, independently of the plan-name defect
+    // recorded in step 12; retain the source's proven geometry for calculation.
+    await page.getByRole('button', { name: '修改型号名称', exact: true }).click();
+    const rename = page.getByRole('dialog', { name: '修改型号名称', exact: true });
+    await field('新的型号名称', title, rename);
+    await rename.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(rename).toBeHidden();
+    await save(branch.workspace_id);
+    const copied = await workspace(branch.workspace_id), source = await workspace(seed.id);
+    check('教学交付副本独立保存且保留源型号和来源', branch.workspace_id !== seed.id && copied.domain.name === title
+      && JSON.stringify(copied.domain.cable_types) === JSON.stringify(original.domain.cable_types)
+      && JSON.stringify(copied.domain.materials) === JSON.stringify(original.domain.materials)
+      && source.revision === original.revision && JSON.stringify(source.domain) === JSON.stringify(original.domain), {
+      source: seed.id, sourceRevision: original.revision, copy: branch.workspace_id, copyRevision: copied.revision,
+    });
+    (report.deliverySources ||= []).push({ ...size, source: seed.id, sourceRevision: original.revision,
+      copy: branch.workspace_id, origin: original.type_origin_reference, densities, electrical, short, rating: rating.parameters });
+    return { id: branch.workspace_id, source: seed.id, original, electrical, short, rating };
+  });
+  if (!delivery) return;
+
+  await attempt('14-教学交付副本运行真实结构推导', async () => {
+    await module('结构 ·');
+    await page.getByRole('tab', { name: '外径与用料', exact: true }).click();
+    if (!await run('更新结构推导', 'quantities')) return;
+    await expect(page.getByRole('table', { name: '外径与用料', exact: true })).toBeVisible();
+  });
+  await attempt('15-教学交付副本运行真实标准核对', async () => {
+    await module('标准核对');
+    if (!await run('执行标准核对', 'standard-check-results')) return;
+    await expect(page.getByRole('table', { name: '标准核对', exact: true })).toBeVisible();
+  });
+  const celsius = value => Number((value - 273.15).toPrecision(12));
+  for (const analysis of [
+    { label: '电气参数', result: 'electrical-results', parameters: delivery.electrical, fields: [
+      ['temperature_k', '工作温度', celsius], ['frequency_hz', '频率'], ['phase_voltage_v', '运行相电压'],
+      ['ks', '集肤效应系数'], ['kp', '邻近效应系数'], ['spacing_m', '导体中心距', value => value * 1000], ['core_lay_factor', '成缆绞入系数'],
+    ], selections: [['r20_length_basis', 'R₂₀ 长度基准', { finished_cable: '成品电缆长度', straight_core: '直线线芯长度' }],
+      ['arrangement', '相间排列', { trefoil: '品字排列', flat: '水平排列' }]] },
+    { label: '短路容量', result: 'short-circuit-results', parameters: delivery.short, fields: [
+      ['duration_s', '持续时间'], ['initial_temperature_k', '初始绝对温度', celsius], ['final_temperature_k', '导体最终温度', celsius],
+      ['metal_initial_temperature_k', '金属组件初始温度', celsius], ['metal_final_temperature_k', '金属组件最终温度', celsius],
+      ['contact_factor', '金属接触因数'], ['inner_thermal_resistivity', '内侧介质热阻率'], ['outer_thermal_resistivity', '外侧介质热阻率'],
+      ['inner_volumetric_heat_capacity', '内侧介质体积热容'], ['outer_volumetric_heat_capacity', '外侧介质体积热容'],
+    ], selections: [] },
+  ]) {
+    await attempt('16-教学交付副本录入已有来源并运行' + analysis.label, async () => {
+      await module(analysis.label);
+      await page.getByRole('tab', { name: '方法参数', exact: true }).click();
+      await expect(page.locator('.type-method-fields .buzzform-contract')).toBeVisible();
+      await advanced(page.locator('.type-method-fields'));
+      for (const [key, label, convert = value => value] of analysis.fields) {
+        expect(Number.isFinite(analysis.parameters[key]), key + '必须来自已保存的教学条件').toBeTruthy();
+        await field(label, convert(analysis.parameters[key]));
+      }
+      for (const [key, label, labels] of analysis.selections) {
+        expect(labels[analysis.parameters[key]], key + '必须来自已保存的教学条件').toBeTruthy();
+        await choose(label, labels[analysis.parameters[key]]);
+      }
+      await page.getByRole('button', { name: '保存方法条件', exact: true }).click();
+      await expect.poll(dirty).toBe(false);
+      await capture('教学交付-' + analysis.label + '-已有来源条件已保存');
+      await page.getByRole('tab', { name: '结果', exact: true }).click();
+      if (!await run('计算' + analysis.label, analysis.result)) return;
+      await expect(page.getByRole('table', { name: analysis.label, exact: true })).toBeVisible();
+    });
+  }
+  await attempt('17-教学交付副本录入已有工况并运行载流量表', async () => {
+    const condition = delivery.rating.driver.cases.map(item => item.metadata?.condition)
+      .find(item => item?.layout === 'three_core_buried_single');
+    expect(condition, '教学种子必须提供真实保存的三芯直埋单回条件').toBeTruthy();
+    const parameters = delivery.rating.parameters, caseName = '已有来源的教学直埋工况 ' + tag;
+    await module('载流量表');
+    await page.getByRole('button', { name: '添加工况', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '添加工况', exact: true });
+    await field('工况名称', caseName, dialog);
+    await choose('工况排列', '三芯直埋 · 单回', dialog);
+    await field('交流频率 / Hz', condition.frequency_hz, dialog);
+    await dialog.getByRole('button', { name: '添加到工况表', exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: 90000 });
+    await page.getByText('所选工况条件 · ' + caseName, { exact: true }).click();
+    for (const [key, label] of [['ambient_temperature_c', '环境温度'], ['depth_m', '中心埋深'], ['soil_rho_k_m_w', '土壤热阻率']]) {
+      await field(caseName + ' ' + label, condition[key]);
+    }
+    await field(caseName + ' 中心距', condition.spacing_m ?? '');
+    expect(condition.bonding).toBe('both_ends');
+    expect(condition.rating_basis).toBe('simultaneous');
+    await choose('接地', '两端接地');
+    await choose('载流量口径', '全回路等负荷');
+    await field('条件来源', condition.source);
+    await save(delivery.id);
+    await page.getByRole('tab', { name: '方法参数', exact: true }).click();
+    await expect(page.locator('.parameter-form .buzzform-contract')).toBeVisible();
+    await advanced(page.locator('.parameter-form'));
+    for (const [label, value] of [['集肤效应系数', parameters.ks], ['邻近效应系数', parameters.kp],
+      ['初始护套温度', celsius(parameters.solver.initial_sheath_temperature_k)], ['最大迭代次数', parameters.solver.max_iterations],
+      ['电流容差', parameters.solver.current_tolerance_a]]) await field(label, value);
+    expect(parameters.t4_form).toBe('exact'); expect(parameters.eddy).toBe('ignored'); expect(parameters.reference_basis).toBe('iec2023');
+    await choose('外部热阻形式', '精确形式'); await choose('涡流损耗处理', '忽略'); await choose('参考依据', 'IEC 2023 依据');
+    await field('来源', parameters.source);
+    await save(delivery.id);
+    await capture('教学交付-载流量工况与已有来源已保存');
+    await page.getByRole('tab', { name: '结果表', exact: true }).click();
+    if (!await run('计算所选工况', 'rating-table-results')) return;
+    const study = (await api(`/api/workspaces/${delivery.id}/studies`)).filter(item => item.definition.driver.kind === 'batch')
+      .sort((a, b) => b.created.localeCompare(a.created))[0];
+    const current = (await api(`/api/workspaces/${delivery.id}/studies/${study.id}/runs`)).items
+      .filter(item => item.freshness === 'current' && item.integrity === 'verified').sort((a, b) => b.created.localeCompare(a.created))[0];
+    const result = current && await api(`/api/design/workspaces/${delivery.id}/rating-table-runs/${current.id}`);
+    check('教学交付载流量由当前真实运行取得正电流', result?.rows.some(row => row.name === caseName && row.value_a > 0), result);
+  });
+  await attempt('18-教学交付副本生成客户规格书并下载真实PDF', () => generateSpecification(delivery.id, '教学交付规格书', 'teaching'));
+  await attempt('19-教学交付副本逐项审核并执行版本流程', () => reviewSpecification(delivery.id, '教学交付规格书'));
+  const sourceAfterDelivery = await workspace(delivery.source);
+  check('交付计算和文档流程没有改动原教学型号', sourceAfterDelivery.revision === delivery.original.revision
+    && JSON.stringify(sourceAfterDelivery.domain) === JSON.stringify(delivery.original.domain));
 });

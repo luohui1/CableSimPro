@@ -217,7 +217,7 @@ await walkthrough('simulation', async ({
       const dialog = page.getByRole('dialog', { name: '新建研究', exact: true });
       await dialog.getByRole('textbox', { name: '研究名称', exact: true })
         .fill(`暂态温升参数填写 · ${tag}`);
-      await choose('引用型号版本', /YJL02.*1×400/, dialog);
+      await choose('引用型号版本', /^YJL02-12\/20 kV 1×400（结构演示） · /, dialog);
       await dialog.getByRole('combobox', { name: '计算方法', exact: true }).click();
       await page.getByRole('option').first().click();
       const json = dialog.getByRole('textbox', { name: '方法参数 / SI', exact: true });

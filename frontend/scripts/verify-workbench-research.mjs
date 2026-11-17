@@ -116,9 +116,10 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
   let first, second;
   await step('04-run-and-read-conclusion', async () => {
     first = await run();
-    await expect(page.locator('.conclusion')).toBeVisible();
-    await expect(page.locator('.conclusion')).toContainText(/允许|载流量/);
-    await expect(page.locator('.conclusion')).toContainText(/最热|温限/);
+    const conclusion = page.getByRole('region', { name: '载流量结论', exact: true });
+    await expect(conclusion).toBeVisible();
+    await expect(conclusion).toContainText(/允许|载流量/);
+    await expect(conclusion).toContainText(/最热|温限/);
   });
   await independent('05-temperature-and-loss-details', async () => {
     for (const [label, shot] of [['温度与电流', '05-layer-temperatures'], ['损耗', '05-losses']]) {
@@ -149,7 +150,12 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     const table = page.getByRole('table', { name: '可比较运行', exact: true });
     await expect(table).toBeVisible();
     const choices = table.getByRole('checkbox');
-    await expect(choices).toHaveCount(2);
+    const saved = await api(prefix + '/runs?view=summary&limit=100');
+    expect(saved.items.filter(item => item.integrity === 'verified' && item.status === 'succeeded')).toHaveLength(2);
+    await expect(choices.first()).toBeVisible();
+    await capture('07-saved-runs-available-for-selection');
+    if (!check('两次真实保存运行均可在界面勾选比较', await choices.count() === 2,
+      { saved: saved.items.map(item => item.id), visibleChoices: await choices.count(), screen: await table.innerText() })) return;
     await choices.nth(0).check(); await choices.nth(1).check();
     await page.getByRole('button', { name: '比较所选运行', exact: true }).click();
     await page.getByRole('tab', { name: '输入差异', exact: true }).click();
@@ -167,6 +173,8 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
   });
   await independent('08-calculation-book-download', async () => {
     await page.goto(resultUrl);
+    await expect(page.getByRole('region', { name: '载流量结论', exact: true })).toBeVisible();
+    await expect(command()).toBeVisible();
     await clickCommand('生成计算书');
     await expect(page.getByRole('button', { name: '下载 PDF', exact: true })).toBeEnabled({ timeout: 90000 });
     const pending = page.waitForEvent('download');
@@ -174,9 +182,13 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     const file = await pending, target = path.join(out, 'calculation-book-' + tag + '.pdf');
     await file.saveAs(target);
     expect((await fs.readFile(target)).subarray(0, 5).toString()).toBe('%PDF-');
+    await page.waitForURL(next => !!next.searchParams.get('delivery'));
     const deliveryId = new URL(page.url()).searchParams.get('delivery');
     expect(deliveryId).toBeTruthy();
-    const delivery = await api(`/api/workspaces/${wid}/deliveries/${deliveryId}`);
-    check('计算书引用本次保存运行', JSON.stringify(delivery).includes(second.id), { run: second.id, delivery: deliveryId });
+    const delivery = await api(`/api/workspaces/${wid}/deliveries/${deliveryId}?view=summary`);
+    const source = delivery.sources?.find(item => item.run_id === second.id);
+    check('计算书引用本次保存运行及准确输入输出摘要', !!source
+      && source.input_digest === second.input_digest && source.output_digest === second.output_digest,
+      { run: second.id, delivery: deliveryId, source });
   });
 });
