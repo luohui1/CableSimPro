@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const materialCases = [
   { table: 'huang-TableA1', record: 'huang-TableA1/r1/density', parameter: 'density', label: '密度', value: 8889, unit: 'kg/m3', dimension: 'mass_density',
@@ -28,10 +28,33 @@ const sha = value => assert.match(value, /^[a-f0-9]{64}$/);
 /** New resource actions use their real visible forms. Only explicit research
  * condition preparation and isolated history restoration use existing Types
  * APIs; neither replaces resource creation, publication, binding or adoption. */
-export async function walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report, previousCalculation }) {
+export async function walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, report, previousCalculation }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
-  const audit = { selections: [], assets: [], material: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [] };
+  const audit = { selections: [], assets: [], material: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [], api_responses: [] };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-resources-${name}.json`), JSON.stringify(value, null, 2));
+  async function supportingResponse(response, endpoint, method) {
+    const body = await response.body();
+    const file = `${viewport.width}-resources-http-${String(audit.api_responses.length + 1).padStart(3, '0')}.json`;
+    // Preserve the actual JSON bytes as well as parsed values: reserializing in
+    // JavaScript loses Python's 1.0/1 distinction in fixed source digests.
+    await fs.writeFile(path.join(out, file), body);
+    audit.api_responses.push({ endpoint, method, status: response.status(), file, sha256: createHash('sha256').update(body).digest('hex') });
+    await write('api-response-index', audit.api_responses);
+    return JSON.parse(body.toString('utf8'));
+  }
+  // Use Playwright's existing request context for full saved-run responses as
+  // well as small lookups. Node 24's bundled Undici can abort the process when
+  // a paused HTTP/1 parser receives FIN; a catch cannot preserve this audit.
+  async function readApi(endpoint) {
+    const response = await page.request.get(base + endpoint, { timeout: 300000 });
+    try {
+      const value = await supportingResponse(response, endpoint, 'GET');
+      assert.equal(response.ok(), true, JSON.stringify(value));
+      return value;
+    } finally {
+      await response.dispose();
+    }
+  }
   async function postUI(endpoint, button, name, status = 200) {
     const response = await afterAction(page.waitForResponse(value => new URL(value.url()).pathname === endpoint && value.request().method() === 'POST', { timeout: 300000 }), () => button.click());
     assert.equal(response.status(), status, await response.text());
@@ -41,11 +64,16 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     return { request: response.request().postDataJSON(), value };
   }
   async function explicitTypesWrite(endpoint, method, body, name) {
-    const response = await fetch(base + endpoint, { method, headers: { 'Content-Type': 'application/json', 'X-CableSim-Actor': 'human' }, body: JSON.stringify(body) });
-    const value = await response.json();
-    await write(name, { endpoint, method, actor: 'human', request: body, status: response.status, response: value });
-    assert.equal(response.ok, true, JSON.stringify(value));
-    return value;
+    const headers = { 'content-type': 'application/json', 'x-cablesim-actor': 'human' };
+    const response = await page.request.fetch(base + endpoint, { method, headers, data: body, timeout: 300000 });
+    try {
+      const value = await supportingResponse(response, endpoint, method);
+      await write(name, { endpoint, method, actor: 'human', headers, request: body, status: response.status(), response: value });
+      assert.equal(response.ok(), true, JSON.stringify(value));
+      return value;
+    } finally {
+      await response.dispose();
+    }
   }
   async function openTable(category, id) {
     const back = page.getByRole('button', { name: '返回资料目录', exact: true });
