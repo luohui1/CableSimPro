@@ -18,6 +18,33 @@ export function projectWorkspace(value: unknown): Workspace {
   for (const key of ['cable_types', 'materials', 'circuits', 'sections', 'load_cases']) array(domain[key], key);
   return { id, revision, document: domain as unknown as DomainDocument, raw };
 }
+export function typeRunReceipt(wid: string, runId: string, value: unknown) {
+  const run = record(value, '固定运行身份');
+  if (run.id !== runId || run.workspace !== wid || !text(run.study) || run.integrity !== 'verified'
+    || !/^[0-9a-f]{64}$/.test(text(run.input_digest))
+    || run.output_digest !== null && !/^[0-9a-f]{64}$/.test(text(run.output_digest)))
+    throw new ApiError(409, '固定运行身份、完整性或保存摘要不一致，停止显示');
+  return run;
+}
+export function matchingTypeRun(wid: string, runId: string, reference: unknown, value: unknown) {
+  const expected = typeRunReceipt(wid, runId, reference), run = typeRunReceipt(wid, runId, value);
+  if (run.study !== expected.study || run.input_digest !== expected.input_digest || run.output_digest !== expected.output_digest)
+    throw new ApiError(409, '固定运行与保存身份或摘要不一致，停止显示');
+  return run;
+}
+export async function fullTypeRun(wid: string, runId: string, reference: unknown, signal?: AbortSignal) {
+  const expected = typeRunReceipt(wid, runId, reference), sid = text(expected.study);
+  const run = matchingTypeRun(wid, runId, expected, await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {
+    params: { path: { wid, sid, rid: runId }, query: { view: 'full' } }, signal,
+  })));
+  const snapshot = record(run.snapshot, '固定运行完整输入'), revision = numeric(snapshot.study_revision), workspaceRevision = numeric(snapshot.workspace_revision);
+  if (snapshot.workspace_id !== wid || snapshot.study_id !== sid || revision === null || revision < 1
+    || workspaceRevision === null || workspaceRevision < 1
+    || snapshot.workspace !== undefined && snapshot.workspace !== wid
+    || snapshot.study !== undefined && snapshot.study !== sid)
+    throw new ApiError(409, '固定运行完整输入与工程、研究身份不一致，停止显示');
+  return { study: { id: sid, revision, definition: record(snapshot.definition, '固定运行方法') }, run };
+}
 export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?: number, runId?: string, savedEvidence?: ReturnType<typeof typeEvidence>) {
   if (runId) {
     const evidence = await (savedEvidence ?? typeEvidence(wid, signal));

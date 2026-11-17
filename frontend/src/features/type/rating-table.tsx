@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CommandAction } from './command-slot';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { message, numeric, optionalRecord, record, text } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { DataTable } from '@/components/data-table';
@@ -17,7 +17,9 @@ import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
 import { currentEvidence, methodLabel, useTypeEvidence } from './evidence';
 import { useTypeInspector } from './inspector';
-import { compileRating, isRatingDefinition, ratingBody, ratingResults, typeStudies, type RatingDraft, type RatingCondition } from './rating-api';
+import { compileRating, isRatingDefinition, ratingBody, typeStudies, type RatingDraft, type RatingCondition } from './rating-api';
+import { fixedRatingEvidenceOptions, typeRatingResultsOptions } from './evidence-query';
+import { matchingTypeRun } from './api';
 import { TypeRunControl } from './run-control';
 import { MethodParameterFields } from '@/components/method-parameter-fields';
 import { EvidenceDigest } from './evidence-digest';
@@ -33,7 +35,13 @@ export function ratingConditionNumber(key:string,value:number,unit?:string){retu
 type Row = RatingCondition & { id: string };
 const ratingReadOnlyFields = { '/rating_mode': '全局额定模式只读，保留已保存值；计算采用每行的载流量口径，请在“结果表 → 所选工况条件”修改。' };
 export function TypeRatingTable({ tab }: { tab: string }) {
-  const state = useTypeWorkspace(), { location, navigate } = useTypeNavigation(), evidence = useTypeEvidence(), inspector = useTypeInspector();
+  const state = useTypeWorkspace(), { location, navigate } = useTypeNavigation(), history = useTypeEvidence(), inspector = useTypeInspector();
+  const queries = useQueryClient();
+  const fixed = useQuery({ ...fixedRatingEvidenceOptions(queries, location.wid || '', location.run || ''),
+    enabled: !!location.wid && !!location.run, refetchOnMount: false });
+  // The selected immutable result does not wait for the independent history
+  // directory. No single-run value is written to the history query cache.
+  const evidence = location.run ? fixed : history;
   const threeCore = state.document?.cable_types[0]?.construction === 'three_core';
   const unsupported = state.document?.cable_types[0]?.construction === 'multi_core';
   const [studyOpen, setStudyOpen] = useState(false);
@@ -43,7 +51,12 @@ export function TypeRatingTable({ tab }: { tab: string }) {
   let saved = null as NonNullable<typeof evidence.data>[number] | null, savedStudy: components['schemas']['StudyResponse'] | undefined, projectionError = '', studyProjectionError = '';
   try { saved = evidence.data?.find(item => isRatingDefinition(optionalRecord(item.run.snapshot).definition) && (!location.run || item.run.id === location.run) && (!location.revision || optionalRecord(item.run.snapshot).workspace_revision === location.revision)) || null; } catch (failure) { projectionError = message(failure); }
   try { savedStudy = studies.data?.filter(item => isRatingDefinition(item.definition)).sort((a, b) => b.created.localeCompare(a.created))[0]; } catch (failure) { studyProjectionError = message(failure); }
-  const results = useQuery({ queryKey: ['type-rating-results', state.workspace?.id, saved?.run.id], queryFn: ({ signal }) => ratingResults(state.workspace!.id, text(saved!.run.id), signal), enabled: !!saved && tab !== 'parameters' });
+  const results = useQuery({ ...typeRatingResultsOptions(state.workspace?.id || '', text(saved?.run.id)),
+    enabled: !!saved && tab !== 'parameters', refetchOnMount: !location.run });
+  if (location.run && saved && results.data) {
+    try { matchingTypeRun(state.workspace!.id, location.run, saved.run, results.data.run); }
+    catch (failure) { projectionError = message(failure); }
+  }
   const snapshotStudy = saved && state.readOnly ? { ...savedStudy, id: text(saved.study.id), definition: record(optionalRecord(saved.run.snapshot).definition, '固定工况配置') } as components['schemas']['StudyResponse'] : savedStudy;
   let body = state.ratingDraft && !state.readOnly ? state.ratingDraft.body : snapshotStudy ? ratingBody(snapshotStudy) : { rows: [], parameters: {}, selected_case_ids: null };
   const rows: Row[] = body.rows.map(row => ({ ...row, id: row.case_id }));
@@ -119,6 +132,7 @@ export function TypeRatingTable({ tab }: { tab: string }) {
       </>}
     </>}
     {independentParameters&&resultError&&<ErrorState title="保存结果不可用" description={resultError} action={<Button onClick={()=>void evidence.refetch()}>重新读取结果</Button>} />}
+    {location.run && history.error && <ErrorState title="保存运行目录不可用" description={message(history.error)} action={<Button onClick={() => void history.refetch()}>重新读取运行目录</Button>} />}
     <Dialog open={open} onOpenChange={value => { if (!adding) setOpen(value); }} title="添加工况" description="选择排列后核对工况模板的尺寸、温度和来源。" actions={<Button variant="primary" loading={adding} disabled={!name.trim()} onClick={() => void add()}>添加到工况表</Button>}><div className="type-create-fields"><label className="type-form-label">工况名称<Input aria-label="工况名称" value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter'&&name.trim()) { event.preventDefault(); void add(); } }} /></label><Select label="工况排列" value={layout} options={layoutOptions} onChange={value => setLayout(value as typeof layout)} /><label className="type-form-label">交流频率 / Hz<Input aria-label="交流频率 / Hz" inputMode="decimal" value={frequency} onChange={event=>setFrequency(event.target.value)} /></label>{error && <p role="alert" className="field-error">{error}</p>}</div></Dialog>
   </div>;
 }

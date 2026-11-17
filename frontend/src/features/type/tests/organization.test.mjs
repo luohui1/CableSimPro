@@ -32,6 +32,208 @@ const {dimensionBasis}=await server.ssrLoadModule('/src/features/type/dimension-
 const {methodErrorText,MethodErrorDetail}=await server.ssrLoadModule('/src/features/type/method-error.tsx');
 const {structureIssue}=await server.ssrLoadModule('/src/features/type/structure-issue.tsx');
 const {readTypeEvidenceForWorkspace}=await server.ssrLoadModule('/src/features/type/routes.tsx');
+const {fixedRatingEvidenceOptions,typeEvidenceOptions,typeRatingResultsOptions}=await server.ssrLoadModule('/src/features/type/evidence-query.ts');
+const {loadWorkspace}=await server.ssrLoadModule('/src/features/type/api.ts');
+const {ratingBody}=await server.ssrLoadModule('/src/features/type/rating-api.ts');
+const {api:typeApi}=await server.ssrLoadModule('/src/api/client.ts');
+
+function ratingArchive() {
+  const condition={case_id:'buried',name:'Saved condition',layout:'trefoil',ambient_temperature_c:25,depth_m:0.8,source:'Saved source'};
+  return {id:'rating-run',workspace:'type-workspace',study:'rating-study',status:'succeeded',integrity:'verified',
+    input_digest:'a'.repeat(64),output_digest:'b'.repeat(64),freshness:'historical',created:'2026-01-01T00:00:00Z',
+    snapshot:{workspace_id:'type-workspace',study_id:'rating-study',workspace_revision:3,study_revision:2,
+      definition:{method:{plugin_id:'cablesim.iec60287',version:'1.2.0',release_digest:'c'.repeat(64),capability:'steady-rating'},
+        parameters:{rating_mode:'simultaneous',source:'Saved method source'},
+        driver:{kind:'batch',selected_case_ids:['buried'],cases:[{case_id:'buried',label:'Saved condition',metadata:{kind:'type-rating-table',condition}}]}},
+      workspace_state:{type_creation:{source:'unit fixture'},can_undo:true,can_redo:true,
+        domain:{schema_version:'cablesim.domain/1',name:'Saved type input',cable_types:[{id:'cable',construction:'single_core'}],materials:[],circuits:[],sections:[],load_cases:[]}}},
+    output:{cases:[{case_id:'buried',status:'succeeded',artifacts:{'x-cablesim.iec60287-trace':{schema:'cablesim.iec60287-trace/1'}}}]}};
+}
+function runReceipt(run) { return Object.fromEntries(['id','workspace','study','status','integrity','input_digest','output_digest','freshness','created'].map(key=>[key,run[key]])); }
+function runProjection(run) {
+  const value=structuredClone(run);delete value.snapshot.workspace_state;
+  value.snapshot.workspace_state_ref={url:`/api/workspaces/${run.workspace}/studies/${run.study}/runs/${run.id}?view=full`,sha256:'d'.repeat(64)};
+  return value;
+}
+function evidenceClient() { return new QueryClient({defaultOptions:{queries:{retry:false,gcTime:Infinity,staleTime:15000}}}); }
+async function withSavedRunReads(archive, task, responses={}) {
+  const originalGet=typeApi.GET,originalFetch=globalThis.fetch,requests=[];
+  typeApi.GET=async(path,options)=>{
+    assert.equal(path,'/api/workspaces/{wid}/studies/{sid}/runs/{rid}');assert.equal(options.params.query.view,'full');
+    requests.push({kind:'full',path:options.params.path});
+    return {data:responses.full?await responses.full(options):structuredClone(archive),response:new Response(null,{status:200})};
+  };
+  globalThis.fetch=async(url,options)=>{
+    const address=new URL(String(url),'http://fixture.invalid');
+    if(address.pathname.endsWith('/rating-table-runs/'+archive.id)) {
+      assert.equal(address.searchParams.get('view'),'rows');requests.push({kind:'rows',path:address.pathname});
+      if(responses.rows)return responses.rows(options);
+      return Response.json({run:runReceipt(archive),rows:[{case_id:'buried',name:'Saved condition',status:'已计算',value_a:321.25,
+        condition:archive.snapshot.definition.driver.cases[0].metadata.condition}]});
+    }
+    if(address.pathname.endsWith('/display-runs')) {
+      requests.push({kind:'history',after:address.searchParams.get('after')});
+      if(responses.history)return responses.history(address,options);
+    }
+    throw new Error('Unexpected fixture request: '+address.pathname);
+  };
+  try { return await task(requests); }
+  finally { typeApi.GET=originalGet;globalThis.fetch=originalFetch; }
+}
+
+test('A fixed rating archive and rows complete while genuine full history remains pending',async()=>{
+  const archive=ratingArchive(),client=evidenceClient();let finishHistory;
+  const historyReply=new Promise(resolve=>{finishHistory=resolve;});
+  try { await withSavedRunReads(archive,async requests=>{
+    const historyOptions=typeEvidenceOptions(archive.workspace,true,'rating-table');
+    const history=client.fetchQuery(historyOptions);
+    client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+    const selected=await client.fetchQuery(fixedRatingEvidenceOptions(client,archive.workspace,archive.id));
+    assert.deepEqual(requests.map(item=>item.kind),['history','rows','full']);
+    assert.equal(client.getQueryData(historyOptions.queryKey),undefined);
+    assert.equal(client.getQueryState(historyOptions.queryKey).fetchStatus,'fetching');
+    assert.equal(client.getQueryData(['type-evidence-history',archive.workspace]),undefined);
+    assert.equal(selected[0].run.input_digest,archive.input_digest);
+    const older={...runProjection(archive),id:'older-rating',created:'2025-01-01T00:00:00Z'};
+    finishHistory(Response.json({items:[runProjection(archive),older],next_cursor:null,history_complete:true}));
+    assert.equal((await history).length,2);
+    assert.equal(client.getQueryData(historyOptions.queryKey).length,2);
+    assert.equal(requests.filter(item=>item.kind==='full').length,1);
+  },{history:()=>historyReply}); } finally {client.clear();}
+});
+test('A cold fixed rating link discovers its study from rows and preserves immutable read-only inputs',async()=>{
+  const archive=ratingArchive(),original=structuredClone(archive),client=evidenceClient();
+  try { await withSavedRunReads(archive,async requests=>{
+    const selected=await client.fetchQuery(fixedRatingEvidenceOptions(client,archive.workspace,archive.id));
+    assert.deepEqual(requests.map(item=>item.kind),['rows','full']);
+    assert.deepEqual(requests[1].path,{wid:archive.workspace,sid:archive.study,rid:archive.id});
+    const workspace=await loadWorkspace(archive.workspace,new AbortController().signal,undefined,archive.id,Promise.resolve(selected));
+    assert.equal(workspace.revision,3);assert.equal(workspace.document.name,'Saved type input');
+    assert.equal(workspace.raw.fixed_run,true);assert.equal(workspace.raw.historical,true);
+    assert.equal(workspace.raw.can_undo,false);assert.equal(workspace.raw.can_redo,false);
+    const body=ratingBody({id:selected[0].study.id,definition:selected[0].study.definition});
+    assert.deepEqual(body.rows,[{...archive.snapshot.definition.driver.cases[0].metadata.condition,rating_basis:'individual'}]);
+    assert.deepEqual(body.parameters,archive.snapshot.definition.parameters);assert.deepEqual(body.selected_case_ids,['buried']);
+    const rows=await client.fetchQuery(typeRatingResultsOptions(archive.workspace,archive.id));
+    assert.equal(rows.rows[0].value_a,321.25);assert.equal(rows.rows[0].condition.source,'Saved source');
+    assert.equal(requests.length,2);assert.deepEqual(archive,original);
+    assert.equal(client.getQueryCache().findAll({queryKey:['type-evidence']}).length,0);
+  }); } finally {client.clear();}
+});
+test('Fixed rating consumers reuse the verified route reads even after a slow bundle mount',async()=>{
+  const archive=ratingArchive(),client=evidenceClient();
+  try { await withSavedRunReads(archive,async requests=>{
+    const fixedOptions=fixedRatingEvidenceOptions(client,archive.workspace,archive.id);
+    const saved=await client.fetchQuery(fixedOptions),rowsOptions=typeRatingResultsOptions(archive.workspace,archive.id);
+    const rows=client.getQueryData(rowsOptions.queryKey);
+    client.setQueryData(rowsOptions.queryKey,rows,{updatedAt:Date.now()-60000});
+    const observers=[new QueryObserver(client,{...fixedOptions,refetchOnMount:false}),
+      new QueryObserver(client,{...fixedOptions,refetchOnMount:false}),
+      new QueryObserver(client,{...rowsOptions,refetchOnMount:false})];
+    const leave=observers.map(observer=>observer.subscribe(()=>{}));
+    try {
+      await Promise.resolve();
+      assert.equal(observers[0].getCurrentResult().data,saved);
+      assert.equal(observers[1].getCurrentResult().data,saved);
+      assert.equal(observers[2].getCurrentResult().data,rows);
+      assert.deepEqual(observers.map(observer=>observer.getCurrentResult().fetchStatus),['idle','idle','idle']);
+      assert.deepEqual(requests.map(item=>item.kind),['rows','full']);
+    } finally {leave.forEach(unsubscribe=>unsubscribe());}
+  }); } finally {client.clear();}
+});
+test('Fixed rating reads reject mismatched archive identities, digests, snapshots and row receipts',async()=>{
+  const mutations=[
+    run=>{run.id='another-run';},run=>{run.workspace='another-workspace';},run=>{run.study='another-study';},
+    run=>{run.integrity='corrupt';},run=>{run.input_digest='e'.repeat(64);},run=>{run.output_digest='f'.repeat(64);},
+    run=>{run.snapshot.workspace_id='another-workspace';},run=>{run.snapshot.study_id='another-study';},
+    run=>{run.snapshot.workspace_revision=0;},run=>{delete run.snapshot.workspace_state;},
+    run=>{run.snapshot.workspace_state.study_cable_reference={};},
+    run=>{run.snapshot.definition.method.plugin_id='cablesim.type-electrical';run.snapshot.definition.method.capability='electrical';},
+  ];
+  for(const mutate of mutations) {
+    const archive=ratingArchive(),client=evidenceClient();
+    try { await withSavedRunReads(archive,async()=>{
+      client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+      await assert.rejects(client.fetchQuery(fixedRatingEvidenceOptions(client,archive.workspace,archive.id)));
+      assert.equal(client.getQueryData(['type-fixed-rating-run',archive.workspace,archive.id]),undefined);
+    },{full:()=>{const value=structuredClone(archive);mutate(value);return value;}}); } finally {client.clear();}
+  }
+  for(const key of ['id','workspace','study','integrity','input_digest','output_digest']) {
+    const archive=ratingArchive(),client=evidenceClient();
+    try { await withSavedRunReads(archive,async()=>{
+      client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+      await assert.rejects(client.fetchQuery(fixedRatingEvidenceOptions(client,archive.workspace,archive.id)));
+    },{rows:()=>Response.json({run:{...runReceipt(archive),[key]:key.endsWith('digest')?'e'.repeat(64):'wrong'},rows:[]})}); } finally {client.clear();}
+  }
+});
+test('History errors remain observable without replacing an independently verified selected rating result',async()=>{
+  const archive=ratingArchive(),client=evidenceClient(),failure=new Error('History transport failed');
+  try { await withSavedRunReads(archive,async()=>{
+    const selectedOptions=fixedRatingEvidenceOptions(client,archive.workspace,archive.id);
+    const selected=await client.fetchQuery(selectedOptions);
+    const historyOptions=typeEvidenceOptions(archive.workspace,true,'rating-table');
+    await assert.rejects(client.fetchQuery(historyOptions),error=>error===failure);
+    assert.equal(client.getQueryState(historyOptions.queryKey).error,failure);
+    assert.equal(client.getQueryData(historyOptions.queryKey),undefined);
+    assert.equal(client.getQueryData(selectedOptions.queryKey),selected);
+  },{history:()=>{throw failure;}}); } finally {client.clear();}
+  for(const channel of ['rows','full']) {
+    const client=evidenceClient(),failure=new Error(channel+' transport failed');
+    try { await withSavedRunReads(archive,async()=>{
+      await assert.rejects(client.fetchQuery(fixedRatingEvidenceOptions(client,archive.workspace,archive.id)),error=>error===failure);
+      assert.equal(client.getQueryCache().find({queryKey:typeRatingResultsOptions(archive.workspace,archive.id).queryKey}).getObserversCount(),0);
+    },{[channel]:()=>{throw failure;}}); } finally {client.clear();}
+  }
+});
+test('A failed warm archive releases its pending rows dependency without cancelling another row consumer',async()=>{
+  for(const otherConsumer of [false,true]) {
+    const archive=ratingArchive(),client=evidenceClient(),failure=new Error('Full archive failed');
+    let rowSignal,finishRows;
+    try { await withSavedRunReads(archive,async()=>{
+      const rowsOptions=typeRatingResultsOptions(archive.workspace,archive.id);
+      const observer=otherConsumer?new QueryObserver(client,rowsOptions):undefined;
+      const leave=observer?.subscribe(()=>{});
+      client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+      try {
+        await assert.rejects(client.fetchQuery(fixedRatingEvidenceOptions(client,archive.workspace,archive.id)),error=>error===failure);
+        assert.equal(client.getQueryCache().find({queryKey:rowsOptions.queryKey}).getObserversCount(),otherConsumer?1:0);
+        assert.equal(rowSignal.aborted,!otherConsumer);
+        if(otherConsumer) {
+          finishRows(Response.json({run:runReceipt(archive),rows:[]}));
+          assert.equal((await client.fetchQuery(rowsOptions)).run.id,archive.id);
+        }
+      } finally {leave?.();}
+    },{rows:options=>new Promise((resolve,reject)=>{
+      finishRows=resolve;rowSignal=options.signal;
+      rowSignal.addEventListener('abort',()=>reject(rowSignal.reason),{once:true});
+    }),full:()=>{throw failure;}}); } finally {client.clear();}
+  }
+});
+test('The ordinary saved-workspace fallback still finishes full history and rejects missing or corrupt selection',async()=>{
+  const archive=ratingArchive();archive.snapshot.definition.method={plugin_id:'cablesim.type-electrical',capability:'electrical',version:'1.1.1',release_digest:'c'.repeat(64)};
+  archive.snapshot.definition.driver={kind:'single'};
+  await withSavedRunReads(archive,async requests=>{
+    const workspace=await loadWorkspace(archive.workspace,undefined,undefined,archive.id);
+    assert.equal(workspace.raw.fixed_run,true);assert.equal(workspace.document.name,'Saved type input');
+    assert.deepEqual(requests.map(item=>item.kind),['history','history','full']);
+    assert.deepEqual(requests.filter(item=>item.kind==='history').map(item=>item.after),['0','1']);
+    await assert.rejects(loadWorkspace(archive.workspace,undefined,undefined,'missing',Promise.resolve([])),/固定运行不存在/);
+    await assert.rejects(loadWorkspace(archive.workspace,undefined,undefined,archive.id,Promise.resolve([
+      {study:{id:archive.study},run:{...runProjection(archive),integrity:'corrupt'}}])),/完整性未通过/);
+  },{history:address=>Response.json({items:address.searchParams.get('after')==='0'?[runProjection(archive)]:[],
+    next_cursor:address.searchParams.get('after')==='0'?1:null,history_complete:true})});
+});
+test('Other saved modules retain their existing workspace-alias archive compatibility',async()=>{
+  const archive=ratingArchive();archive.snapshot.definition.method={plugin_id:'cablesim.type-electrical',capability:'electrical',version:'1.1.1',release_digest:'c'.repeat(64)};
+  archive.snapshot.definition.driver={kind:'single'};
+  archive.snapshot.workspace=archive.workspace;delete archive.snapshot.workspace_id;
+  await withSavedRunReads(archive,async requests=>{
+    const workspace=await loadWorkspace(archive.workspace,undefined,undefined,archive.id);
+    assert.equal(workspace.raw.fixed_run,true);assert.equal(workspace.revision,3);
+    assert.equal(workspace.document.name,'Saved type input');
+    assert.deepEqual(requests.map(item=>item.kind),['history','full']);
+  },{history:()=>Response.json({items:[runProjection(archive)],next_cursor:null,history_complete:true})});
+});
 
 function pendingHistory() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });

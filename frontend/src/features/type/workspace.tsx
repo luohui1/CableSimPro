@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TypeCommandSlot } from './command-slot';
 import { CommandBar, type CommandAction } from '@/components/command-bar';
 import { commandResultLabel, latestModuleRun, moduleResultStatus, useTypeEvidence } from './evidence';
 import { nominalNumber } from './design-summary';
 import { message, optionalRecord, text } from '@/api/client';
 import { moduleMethods } from './api';
+import { fixedRatingEvidenceOptions } from './evidence-query';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icon';
 import { PropertyPanel, type PropertyGroup } from '@/components/property-panel';
@@ -48,6 +49,10 @@ export { typeModules } from "./module-definitions";
 export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
   const evidence = useTypeEvidence();
+  const queries = useQueryClient(), fixedRating = location.module === 'rating-table' && !!location.run;
+  const fixed = useQuery({ ...fixedRatingEvidenceOptions(queries, location.wid || '', location.run || ''),
+    enabled: !!location.wid && fixedRating, refetchOnMount: false });
+  const activeEvidence = fixedRating ? fixed : evidence;
   const methods = useQuery({ queryKey: ['type-method-catalog'], queryFn: ({ signal }) => moduleMethods(signal) });
   const specificationState = useQuery({ queryKey: ['type-specification', state.workspace?.id, 'customer'], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, 'customer'), enabled: !!state.workspace && location.module==='specification', staleTime:30000 });
   const comparisonState = useQuery({ queryKey: ['type-comparison', state.workspace?.id], queryFn: ({ signal }) => typeComparison(state.workspace!.id, signal), enabled: !!state.workspace && location.module==='comparison', staleTime:30000 });
@@ -99,9 +104,10 @@ export function TypeWorkspace() {
       const stale = state.dirty || spec.lifecycle.stale || spec.payload.revision !== state.workspace?.revision || sources.some(source => optionalRecord(source).freshness !== 'current');
       return { kind: stale ? 'historical' as const : 'current' as const, label: stale ? '过期' : '当前', reason: stale ? '规格书引用的输入或结果已变化，需重新生成。' : '规格书对应当前输入及保存结果。' };
     }
-    if (evidence.error || methods.error) return { kind: 'error' as const, label: '读取失败', reason: message(evidence.error || methods.error) };
+    const selectedEvidence = id === 'rating-table' && fixedRating ? fixed : evidence;
+    if (selectedEvidence.error || methods.error) return { kind: 'error' as const, label: '读取失败', reason: message(selectedEvidence.error || methods.error) };
     if (id === 'structure' && !state.inputDirty && !evidence.data?.some(item=>optionalRecord(optionalRecord(item.study.definition).method).plugin_id==='cablesim.cable-geometry' && ['succeeded','partial'].includes(text(item.run.status))) && rows.some(row => row.outerM !== null)) return {kind:'current' as const,label:'当前',reason:'参数截面对应当前输入；外径与用料尚未运行。'};
-    return moduleResultStatus(evidence.data, id, state.workspace?.revision, state.inputDirty || !!state.methodDrafts[id] || id === 'rating-table' && !!state.ratingDraft, methods.data);
+    return moduleResultStatus(selectedEvidence.data, id, state.workspace?.revision, state.inputDirty || !!state.methodDrafts[id] || id === 'rating-table' && !!state.ratingDraft, methods.data);
   }
   function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason} aria-label={value.label}>{value.kind === 'unknown' ? <span className="type-module-idle" aria-hidden="true" /> : <StatusMark kind={value.kind} label={value.label} />}</span></Tooltip>; }
   const choose = useCallback((target: LayerTarget | null) => { setSelected(target); if (target) setCollapsed(false); }, []);
@@ -193,7 +199,7 @@ export function TypeWorkspace() {
     : location.module === 'structure' && !state.dirty && !state.readOnly && !state.loading && !state.busy && state.workspace && document && cable
       ? { id: 'next-standard-check', label: '标准核对', icon: 'module/standard-check', role: 'primary', onSelect: () => go('standard-check', 'results') }
       : null;
-  const commandBar = <CommandBar label="型号命令" status={state.dirty ? `${state.changeCount} 处未保存` : location.module === 'specification' ? undefined : commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), false)} actions={[
+  const commandBar = <CommandBar label="型号命令" status={state.dirty ? `${state.changeCount} 处未保存` : location.module === 'specification' ? undefined : commandResultLabel(resultStatus(location.module), latestModuleRun(activeEvidence.data, location.module, methods.data), false)} actions={[
     { id:'save', label:'保存', icon:'action/save', role:'save', variant:savePrimary?'primary':'outline', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
     ...(moduleAction ? [moduleAction] : []),
     { id:'undo', label:'撤销', icon:'action/undo', priority:40, disabledReason:state.readOnly?'此版本只读':state.busy?'正在保存或恢复修改':state.undoReason||(!state.canUndo?'当前模块没有可撤销的修改':undefined), onSelect:()=>void state.undo() },

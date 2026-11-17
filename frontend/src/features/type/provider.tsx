@@ -6,6 +6,7 @@ import { at, change, commitFields, isLocked, parseInput, type DomainDocument, ty
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { historyType, loadWorkspace, saveType, type Workspace } from './api';
+import { fixedRatingEvidenceOptions, readTypeEvidenceForWorkspace } from './evidence-query';
 import { useTypeNavigation } from './navigation';
 import { isRatingDefinition, ratingBody, saveRating, typeStudies, type RatingDraft } from './rating-api';
 import { saveMethod, type MethodDraft } from './method-draft';
@@ -35,7 +36,11 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
   const queries = useQueryClient(), { location } = useTypeNavigation();
   // The route starts this read on entry. Mounting must not repeat a just-finished
   // prefetch; explicit reload/save/undo keep their existing refresh behavior.
-  const query = useQuery({ queryKey: ['type-workspace', wid, location.revision, location.run], queryFn: ({ signal }) => loadWorkspace(wid, signal, location.revision, location.run), staleTime: 0, refetchOnMount: false });
+  const query = useQuery({ queryKey: ['type-workspace', wid, location.revision, location.run], queryFn: ({ signal }) => {
+    const fixed = location.module === 'rating-table' && location.run ? fixedRatingEvidenceOptions(queries, wid, location.run) : undefined;
+    return loadWorkspace(wid, signal, location.revision, location.run, fixed
+      ? readTypeEvidenceForWorkspace(fixed, () => queries.fetchQuery(fixed), signal, queries) : undefined);
+  }, staleTime: 0, refetchOnMount: false });
   const [history, setHistory] = useState<DomainDraftHistory>(emptyDomainHistory), draft = history.present;
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const setDraft = (update: SetStateAction<DomainDraft | null>) => setHistory(current => domainDraftReducer(current, { type: 'set', update }));
