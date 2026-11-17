@@ -304,7 +304,8 @@ export function TypeBatchActions({ selected, hiddenCount, inactive = false, onCl
     ['暂不可操作', items.filter(item => item.state === 'blocked').length], ['待执行', items.filter(item => item.state === 'ready').length],
     ['核对中', items.filter(item => item.state === 'checking').length], ['执行中', items.filter(item => item.state === 'running' && !item.uncertain).length],
   ].filter(([, count]) => Number(count) > 0).map(([label, count]) => label + ' ' + count + ' 项').join('，');
-  const disabledReason = recoveryError || (loading ? '正在读取所选型号的当前状态。' : busy ? '正在逐项执行，可停止尚未开始的条目；当前请求超过等候时间后会结束等候并保留原请求。' : !eligible.length ? '没有可执行项，请查看每项原因或补齐表单。' : eligible.length !== selectedCount ? '请补齐所有勾选项的必填内容，或取消该项。' : !ack ? '请先核对清单并勾选确认。' : '');
+  const allComplete = items.length > 0 && items.every(item => item.state === 'success');
+  const disabledReason = recoveryError || (loading ? '正在读取所选型号的当前状态。' : busy ? '正在逐项执行，可停止尚未开始的条目；当前请求超过等候时间后会结束等候并保留原请求。' : allComplete ? '本批次已全部完成，可打开结果或关闭窗口。' : !eligible.length ? '没有可执行项，请查看每项原因或补齐表单。' : eligible.length !== selectedCount ? '请补齐所有勾选项的必填内容，或取消该项。' : !ack ? '请先核对清单并勾选确认。' : '');
   const scopeText = batchAction === 'generate'
     ? '将依次核对结构与用料、电气参数、载流量表、短路容量、标准核对。缺少或过期的结果只有通过实际预检后才补算；已有完整结果由服务核对后复用。计算只采用已保存的型号与方法条件，缺项会停止该型号并保留已完成结果。'
     : batchAction === 'branch' ? '每项建立一个基于所示已保存版本的独立方案，保留原型号名称、原方案与历史结果。请核对各项新方案名称。'
