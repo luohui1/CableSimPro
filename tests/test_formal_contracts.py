@@ -93,3 +93,17 @@ def test_reference_validation_keeps_unsigned_roles_blank_and_ids_out_of_body():
     with pytest.raises(HTTPException) as error:
         validate_model_refs(model)
     assert '正文' in error.value.detail['message']
+
+
+def test_verbatim_formula_text_cannot_change_a_saved_number():
+    model = reference_model()
+    payload = model['sources']['record']['payload']
+    payload['formula'] = '保存的原始表达式：a = 0.12345678901234567'
+    model['sources']['record']['payload_digest'] = jsonsha(payload)
+    paragraph = {'text': payload['formula'], 'source_ref': {'source_id': 'record', 'pointer': '/formula'}, 'verbatim': True}
+    model['sections'][0]['paragraphs'] = [paragraph]
+    validate_model_refs(model)
+    paragraph['text'] = '保存的原始表达式：a = 0.1235'
+    with pytest.raises(HTTPException) as error:
+        validate_model_refs(model)
+    assert '原文与完整来源不一致' in error.value.detail['message']

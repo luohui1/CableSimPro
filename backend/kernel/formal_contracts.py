@@ -215,6 +215,13 @@ def validate_model_refs(model: dict) -> None:
                 raise ValueError('追溯章节必须完整地附在正文之后。')
             saw_trace |= section['role'] == 'trace'
             used.extend(section['table_ids'])
+            for paragraph in section.get('paragraphs', []):
+                reference = paragraph.get('source_ref')
+                if paragraph.get('verbatim'):
+                    if not reference or referenced_value(model, reference) != paragraph['text']:
+                        raise ValueError('保存的公式、结论或依据原文与完整来源不一致。')
+                elif reference is not None:
+                    referenced_value(model, reference)
             for figure in section.get('figures', []):
                 if figure.get('kind') != 'cable_section':
                     raise ValueError('未支持的交付图形类型。')

@@ -58,6 +58,13 @@ def _reset_digest(model):
     model['model_digest'] = jsonsha(model)
 
 
+def _saved_paragraph(model, text):
+    paragraphs = model['sources']['fixture']['payload'].setdefault('paragraphs', [])
+    paragraphs.append(text)
+    return {'text': text, 'source_ref': {'source_id': 'fixture', 'pointer': '/paragraphs/' + str(len(paragraphs) - 1)},
+            'verbatim': True}
+
+
 def _text(pdf):
     return '\n'.join(page.get_text() for page in pdf)
 
@@ -104,7 +111,7 @@ def test_exact_values_signatures_running_information_and_canonical_attachment():
 def test_embedded_cjk_latin_and_controlled_scripts_retain_original_unicode():
     model = _model()
     text = '中文 Ω μ − ≤ ≥ ² ³ ⁰ ⁻ ⁺ ₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉ ₘ ₛ ₚ m² K·m/W'
-    model['sections'][0]['paragraphs'].append({'text': text, 'source_ref': None, 'verbatim': True})
+    model['sections'][0]['paragraphs'].append(_saved_paragraph(model, text))
     _reset_digest(model)
     with fitz.open(stream=render_pdf(model), filetype='pdf') as pdf:
         actual = ''.join(_text(pdf).split())
@@ -151,7 +158,7 @@ def test_long_trace_cell_splits_across_pages_without_truncation():
 @pytest.mark.parametrize('text', ['NUL\x00字符', '不支持的字符𠮷', '图标🧪'])
 def test_unsupported_glyphs_fail_explicitly(text):
     model = _model()
-    model['sections'][0]['paragraphs'].append({'text': text, 'source_ref': None, 'verbatim': True})
+    model['sections'][0]['paragraphs'].append(_saved_paragraph(model, text))
     _reset_digest(model)
     with pytest.raises(HTTPException) as failure:
         render_pdf(model)
@@ -232,7 +239,7 @@ def test_presentation_labels_stay_with_the_first_lines_of_literal_formulas():
     paragraphs = []
     for label, formula in pairs:
         paragraphs.extend([{'text': label, 'source_ref': None, 'verbatim': False},
-                           {'text': formula, 'source_ref': None, 'verbatim': True}])
+                           _saved_paragraph(model, formula)])
     model['sections'][0]['paragraphs'] = paragraphs
     _reset_digest(model)
     with fitz.open(stream=render_pdf(model), filetype='pdf') as pdf:
