@@ -13,6 +13,7 @@ from math import isfinite
 from typing import Literal
 from uuid import UUID, uuid4
 from threading import Lock
+from contextlib import nullcontext
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -205,6 +206,9 @@ def imported_provenance(payload, cable):
     from backend.domain.guards import pointer
     result = {}
     for path, source in payload['sources'].items():
+        if path == '/cable_type':
+            result[pointer('cable_types', cable['id'])] = deepcopy(source)
+            continue
         if not path.startswith('/cable_type/'):
             result[path] = deepcopy(source)
             continue
@@ -262,9 +266,9 @@ def candidate_design_document(payload, name):
         document['materials'] = deepcopy(payload['materials'])
     else:
         spec = payload['specification']
-        if spec['cores'] not in (1, 3):
-            raise HTTPException(422, '当前新建入口只覆盖单芯 / 三芯；资料中的其他结构未覆盖。')
-        document = skeleton('single_core' if spec['cores'] == 1 else 'three_core', name)
+        if spec['cores'] not in (1, 3, 4):
+            raise HTTPException(422, '当前资料草稿入口覆盖单芯、三芯和四芯；其他结构尚未覆盖。')
+        document = skeleton({1: 'single_core', 3: 'three_core', 4: 'four_core'}[spec['cores']], name)
         cable = document['cable_types'][0]
         cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'])
         document['materials'][0].update(label='铜' if spec['conductor'].startswith('copper') else '铝', standard_kind=spec['conductor'])
@@ -666,9 +670,9 @@ class Types:
                 db.execute('INSERT INTO type_creation_proposals VALUES (?,?,?,?,?,?)', (pid, str(body.request_id), digest, json.dumps(result, ensure_ascii=False), result['content_sha256'], stamp()))
             return result
 
-    def create_type(self, body, actor):
+    def create_type(self, body, actor, *, connection=None):
         digest = fingerprint(body.model_dump(mode='json'))
-        with self.store.db(True) as db:
+        with (self.store.db(True) if connection is None else nullcontext(connection)) as db:
             prior = db.execute('SELECT * FROM type_create_requests WHERE request_id=?', (str(body.request_id),)).fetchone()
             if prior:
                 if prior['request_digest'] != digest:
@@ -1329,8 +1333,8 @@ class Types:
         db.execute('INSERT INTO type_requests VALUES (?,?,?,?)',
                    (wid, str(body.request_id), fingerprint(body.model_dump(mode='json')), json.dumps(result, ensure_ascii=False)))
 
-    def branch(self, wid, body):
-        with self.store.db(True) as db:
+    def branch(self, wid, body, *, connection=None):
+        with (self.store.db(True) if connection is None else nullcontext(connection)) as db:
             previous = self._replay(db, wid, body)
             if previous:
                 return previous
@@ -1369,8 +1373,8 @@ class Types:
             self._remember(db, wid, body, result)
             return result
 
-    def adopt(self, wid, body):
-        with self.store.db(True) as db:
+    def adopt(self, wid, body, *, connection=None):
+        with (self.store.db(True) if connection is None else nullcontext(connection)) as db:
             previous = self._replay(db, wid, body)
             if previous:
                 return previous
@@ -1656,8 +1660,8 @@ class Types:
             result.append({'id':row['id'], 'revision':row['revision'], 'digest':row['digest'], 'receipt':receipt})
         return result
 
-    def submit(self, wid, body):
-        with self.store.db() as db:
+    def submit(self, wid, body, *, connection=None):
+        with (self.store.db() if connection is None else nullcontext(connection)) as db:
             previous = self._replay(db, wid, body)
             if previous:
                 return previous
@@ -1667,7 +1671,7 @@ class Types:
         if spec['payload']['checks'] and not body.acknowledge_checks:
             raise HTTPException(422, {'message': '请核对提交前清单。', 'checks': spec['payload']['checks']})
         proposed = self.revision_draft(wid, spec['payload'])
-        with self.store.db(True) as db:
+        with (self.store.db(True) if connection is None else nullcontext(connection)) as db:
             previous = self._replay(db, wid, body)
             if previous:
                 return previous
@@ -1721,9 +1725,9 @@ class Types:
         except (ValueError, KeyError, TypeError):
             raise HTTPException(409, '人工批准记录完整性异常。') from None
 
-    def approve(self, wid, body, actor):
+    def approve(self, wid, body, actor, *, connection=None):
         reviewer = self._human(actor)
-        with self.store.db(True) as db:
+        with (self.store.db(True) if connection is None else nullcontext(connection)) as db:
             previous = self._replay(db, wid, body)
             if previous:
                 return previous
@@ -1785,9 +1789,9 @@ class Types:
             self._remember(db, wid, body, result)
             return result
 
-    def publish(self, wid, body, actor):
+    def publish(self, wid, body, actor, *, connection=None):
         self._human(actor)
-        with self.store.db(True) as db:
+        with (self.store.db(True) if connection is None else nullcontext(connection)) as db:
             previous = self._replay(db, wid, body)
             if previous:
                 return previous
