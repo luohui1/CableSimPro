@@ -2,8 +2,24 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, array, optionalRecord, record, responseData } from "@/api/client";
 import { projectStudy, type StudyDefinition } from "@/api/research";
 import type { CatalogRow } from '@/api/catalogs';
-import { rootModule } from '@/lib/study-config';
+import { rootModule, studyEntryTab } from '@/lib/study-config';
+import { moduleBehavior, moduleDefinitions } from '@/pages/study-modules';
 import { femConclusionQuery } from '@/components/study-fem-conclusion';
+
+/** Match the workbench's existing redirects before choosing a saved-run view. */
+export function studyRunDestination(module: string, tab: string, definition?: StudyDefinition) {
+  const inputAlias = moduleBehavior.input.has(module)
+    && (!tab || moduleDefinitions[module]?.tabs.some(item => item.id === tab));
+  if (definition && (!module || inputAlias)) {
+    module = rootModule(definition);
+    tab = studyEntryTab(module);
+  }
+  const tabs = moduleDefinitions[module]?.tabs;
+  tab ||= tabs?.[0]?.id || '';
+  const methodTab = tabs?.find(item => item.id === 'parameters' || item.id === 'settings');
+  if (methodTab?.id === tab) tab = tabs?.find(item => item.id !== methodTab.id)?.id || tab;
+  return { module, tab };
+}
 
 /** Selection cards share one cache; the selected capability owns its full schema. */
 export function methodCardsQuery() {
@@ -61,8 +77,8 @@ export function studyContextQuery(client: QueryClient, workspace: string | undef
         if ((run || study.latest_run) && ['ampacity','thermal-field','selection'].includes(analysis))
           void import('@/features/field/field-view').catch(()=>{});
         // 归属已核验即可读选中运行，不等工程模型的大响应完成。
-        void client.prefetchQuery(studyRunsQuery(client, wid, sid, run,
-          module || rootModule(optionalRecord(study.definition) as StudyDefinition), tab));
+        const destination = studyRunDestination(module, tab, optionalRecord(study.definition) as StudyDefinition);
+        void client.prefetchQuery(studyRunsQuery(client, wid, sid, run, destination.module, destination.tab));
         const state = await client.fetchQuery(workspaceQuery(wid));
         const projected=[projectStudy(study,state,optionalRecord(study.model_reference))];
         client.setQueryData(['study-context',wid,sid],projected);
@@ -169,6 +185,7 @@ export function prefetchCatalogs(client: QueryClient) {
 
 /** 进入研究前并行预取研究、工程与运行；失败留给页面自己的错误状态处理，不在 loader 抛出。 */
 export function prefetchStudy(client: QueryClient, workspace: string, sid: string, run: string, module = '', tab = '') {
+  ({module, tab} = studyRunDestination(module, tab));
   // The ordinary entry first discovers ownership and then redirects to a tab.
   // Download its existing workbench in parallel, rather than start that second
   // chunk chain only after the provider has committed the verified context.
@@ -195,8 +212,12 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
   // duration after these same verified query results have already arrived.
   void Promise.all([
     client.prefetchQuery(studyContextQuery(client, workspace, sid, run, module, tab)),
-    client.prefetchQuery(studyRunsQuery(client, workspace, sid, run, module, tab)),
     client.fetchQuery(savedStudyQuery(workspace, sid)).then(study => {
+      // Input aliases need the actual study kind before their result destination
+      // is known. The run query already waited for this same metadata; resolve
+      // it here so the alias and mounted destination share one projection/key.
+      const destination = studyRunDestination(module, tab, optionalRecord(study.definition) as StudyDefinition);
+      void client.prefetchQuery(studyRunsQuery(client, workspace, sid, run, destination.module, destination.tab));
       // Start the saved FEM conclusion once study ownership/type is known,
       // so it does not become a second request chain after the display finishes.
       // The mounted conclusion uses this exact key; the host still verifies it.
