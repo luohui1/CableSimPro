@@ -1,26 +1,30 @@
-import { createElement, lazy, type ComponentProps, type ComponentType } from 'react';
+import { createElement, use, type ComponentProps, type ComponentType, type ReactPromise } from 'react';
 
-type Tracked<T> = Promise<T> & { status?: 'pending' | 'fulfilled' | 'rejected'; value?: T; reason?: unknown };
+type Tracked<T> = Promise<T> & ReactPromise<T>;
 
 /**
- * 可预加载的懒组件。代码块已下载时直接渲染真实组件，完全不经过 Suspense——
- * 否则 React 一旦显示等待提示会至少保留约 300 ms（fallback 节流）。preload() 可在空闲或悬停时调用，只下载一次。
+ * 预载与渲染共用代码块，始终保留包装组件与正文组件的身份。
+ * 未被渲染采用的预载失败可以重试；已采用的拒绝保留给错误边界。
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 与 React.lazy 自身的约束一致
 export function preloadable<C extends ComponentType<any>>(load: () => Promise<{ default: C }>) {
   let promise: Tracked<{ default: C }> | null = null;
+  let renderPromise: Tracked<{ default: C }> | null = null;
   const preload = () => {
     if (promise) return promise;
-    const pending: Tracked<{ default: C }> = load();
+    const pending = Promise.resolve().then(load) as Tracked<{ default: C }>;
     pending.status = 'pending';
-    pending.then(value => { pending.status = 'fulfilled'; pending.value = value; }, reason => { pending.status = 'rejected'; pending.reason = reason; promise = null; });
+    pending.then(value => { Object.assign(pending, { status: 'fulfilled', value }); }, reason => {
+      Object.assign(pending, { status: 'rejected', reason });
+      if (renderPromise !== pending && promise === pending) promise = null;
+    });
     promise = pending;
     return pending;
   };
-  const Lazy = lazy(preload);
   function Component(props: ComponentProps<C>) {
-    const ready = promise?.status === 'fulfilled' ? promise.value!.default : null;
-    return createElement((ready || Lazy) as ComponentType<ComponentProps<C>>, props);
+    renderPromise ??= preload();
+    const loaded = use(renderPromise);
+    return createElement(loaded.default as ComponentType<ComponentProps<C>>, props);
   }
   return { Component, preload };
 }

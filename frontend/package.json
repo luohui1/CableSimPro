@@ -43,7 +43,7 @@
     "build:release": "npm run check:styles && vite build",
     "preview": "vite preview",
     "check:styles": "node scripts/check-styles.mjs",
-    "test": "node --test scripts/lazy-workbench-route.test.mjs scripts/check-styles.test.mjs scripts/format.test.mjs scripts/solver-location.test.mjs scripts/shared-experience.test.mjs scripts/visible-text-policy.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs scripts/field-geometry.test.mjs src/features/type/tests/organization.test.mjs src/features/cad/tests/what-if.test.mjs src/features/cad/tests/thermal-difference.test.mjs src/features/agent/transcript.test.mjs",
+    "test": "node --test scripts/lazy-workbench-route.test.mjs scripts/preloadable.test.mjs scripts/check-styles.test.mjs scripts/format.test.mjs scripts/solver-location.test.mjs scripts/shared-experience.test.mjs scripts/visible-text-policy.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs scripts/field-geometry.test.mjs src/features/type/tests/organization.test.mjs src/features/cad/tests/what-if.test.mjs src/features/cad/tests/thermal-difference.test.mjs src/features/agent/transcript.test.mjs",
     "test:browser": "node scripts/isolated-e2e.mjs verify-components.mjs",
     "test:migration": "node scripts/isolated-e2e.mjs verify-migration.mjs",
     "test:migration-states": "node scripts/isolated-e2e.mjs verify-migration-states.mjs",

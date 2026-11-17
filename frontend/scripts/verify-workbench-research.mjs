@@ -519,6 +519,9 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     const workbench = page.locator('.study-workbench[data-analysis="sweep"]');
     const canvas = workbench.locator('.workbench-canvas');
     await expect(page.locator('.study-sweep-results .series-chart')).toBeVisible();
+    const mountedChart = await page.locator('.study-sweep-results .series-chart').elementHandle();
+    expect(mountedChart).toBeTruthy();
+    const chartLabel = await page.locator('.study-sweep-results .series-chart').getByRole('img').getAttribute('aria-label');
     await expect(workbench).toHaveAttribute('data-dock', 'max');
     await expect(canvas).toHaveCount(0);
     check('保存扫描先显示真实曲线，未打开的隐藏画布尚未挂载', true, source);
@@ -541,6 +544,10 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     check('已保存扫描变量在方法栏完整显示名称与单位', variableLayout.complete && variableLayout.inView && variableLayout.font >= 13, variableLayout);
     await capture('10-saved-sweep-variable-name-and-unit');
     await inspectorTabs.getByRole('tab', { name: '输入', exact: true }).click();
+    check('属性分页往返保留已加载曲线实例与结果量', await mountedChart.evaluate(node => node.isConnected)
+      && await page.locator('.study-sweep-results .series-chart').getByRole('img').getAttribute('aria-label') === chartLabel,
+    { chartLabel });
+    await mountedChart.dispose();
 
     await page.getByRole('button', { name: '还原结果面板', exact: true }).click();
     await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
