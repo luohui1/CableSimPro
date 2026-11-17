@@ -130,8 +130,19 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       check('结果可展开' + label, await detail.count() > 0);
       if (await detail.count()) {
         if (await detail.getAttribute('open') === null) await detail.locator('summary').click();
-        await expect(detail.getByRole('table')).toBeVisible();
+        const table = detail.getByRole('table');
+        await expect(table).toBeVisible();
+        // Reading the table means bringing its data into the clipped result
+        // panel, not merely finding an offscreen DOM node after expansion.
+        const rows = table.getByRole('row');
+        await rows.nth(1).scrollIntoViewIfNeeded();
+        await expect(rows.nth(1)).toBeInViewport();
+        if (report.phase === 'after') for (const phase of ['A','B','C'])
+          await expect(table).toContainText(new RegExp(phase + '\\s*相'));
         await capture(shot);
+        await rows.last().scrollIntoViewIfNeeded();
+        await expect(rows.last()).toBeInViewport();
+        await capture(shot + '-last-rows');
         await detail.locator('summary').click();
       }
     }
@@ -173,7 +184,9 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await page.getByRole('tab', { name: '输入差异', exact: true }).click();
     const difference = page.getByRole('table', { name: '对比输入差异', exact: true });
     await expect(difference).toBeVisible();
-    check('对比指出改动的具体条件及前后值', /热阻率/.test(await difference.innerText()), await difference.innerText());
+    const soil = difference.getByRole('row').filter({hasText:'热阻率'});
+    check('对比指出改动的具体条件及前后值', await soil.count() > 0
+      && /0[.]8/.test(await soil.first().innerText()) && /1[.]1/.test(await soil.first().innerText()), await difference.innerText());
     await capture('07-input-differences');
     await page.getByRole('tab', { name: '结果', exact: true }).click();
     await expect(page.getByRole('table', { name: '方法结果差异', exact: true })).toBeVisible();

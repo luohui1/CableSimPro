@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
-import { formatDateTime } from '@/lib/format';
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearch } from '@tanstack/react-router';
 import { statusLabel } from '@/lib/status-vocabulary';
 import { displayName } from "@/lib/display-names";
-import { entityLabel, savedDomain } from "@/lib/domain-fields";
+import { savedEntityLabel, savedRunLabel } from './study-run-label';
+import { frozenInputDifferences, comparisonCellText } from './run-records-comparison';
 import { useQuery } from "@tanstack/react-query";
 import { compareRuns } from "@/api/comparison";
 import { inputContractQuery, capabilityInputContracts, exactContract } from "@/api/input-contracts";
@@ -20,6 +21,7 @@ import {
   withConfiguration,
   parameterChange,
   configurationOnly,
+  rootModule,
 } from "@/lib/study-config";
 import { useStudy } from "./study-provider";
 import { DataTable } from "./data-table";
@@ -36,7 +38,7 @@ import { Button } from "./ui/button";
 import { StatusMark } from "./status-mark";
 import { downloadCsv, downloadJson } from "@/lib/download";
 import type { CatalogRow } from "@/api/catalogs";
-import { type StudyDefinition } from "@/api/research";
+import { studyRuns, type StudyDefinition } from "@/api/research";
 import { methodCardsQuery } from '@/lib/study-queries';
 export function StudyCompare({
   run,
@@ -71,13 +73,34 @@ export function StudyCompare({
     [method, setMethod] = useState(""),
     [error, setError] = useState("");
   const [physics, setPhysics] = useState("thermal");
-  const ids = selectedRuns.split(",").filter(Boolean);
+  const search = useSearch({strict:false});
+  const ids = [...new Set(selectedRuns.split(",").filter(Boolean))];
+  useEffect(() => setChosen([...new Set(selectedRuns.split(',').filter(Boolean))]), [selectedRuns]);
+  // Load lightweight summaries only when this comparison module is open. The
+  // normal workbench continues to fetch just its selected/latest saved result.
+  const runList = useQuery({
+    queryKey: ['study-compare-runs', context.study.workspace, context.study.id, text(optionalRecord(context.study.raw.latest_run).id)],
+    queryFn: ({signal}) => studyRuns(context.study.workspace, context.study.id, signal, 'summary'),
+    staleTime: 0,
+    retry: false,
+  });
+  const availableRuns = (runList.data || []).filter(row => ['succeeded','partial'].includes(text(row.status)) && row.integrity === 'verified');
+  const chosenMissing = chosen.some(id => !availableRuns.some(row => row.id === id));
   const comparison = useQuery({
     queryKey: ["run-comparison", context.study.workspace, selectedRuns],
-    queryFn: () => compareRuns(context.study.workspace, ids),
+    queryFn: ({signal}) => compareRuns(context.study.workspace, ids, signal),
     enabled: ids.length >= 2 && ids.length <= 5,
     retry: false,
   });
+  const compareReason = comparison.isFetching ? '正在读取并核对保存运行'
+    : runList.isPending ? '正在读取可比较运行'
+    : runList.error ? '请先重新读取可比较运行'
+    : chosenMissing ? '所选运行不再可用，请重新选择'
+    : chosen.length < 2 ? '先选择一个基准运行，再选择至少一个对照运行'
+    : chosen.length > 5 ? '每次最多比较五个运行' : undefined;
+  const startResearch = <Button asChild size="compact"><Link to="/studies/$sid/$module/$tab"
+    params={{sid:context.study.id,module:'ampacity',tab:'results'}}
+    search={{workspace:context.study.workspace,theme:search.theme === 'dark' ? 'dark' : 'light',run:'',delivery:''}}>返回载流量研究</Link></Button>;
   const view = useMemo(() => {
     try {
       if (ids.length) return { data: comparison.data, error: undefined };
@@ -259,10 +282,17 @@ export function StudyCompare({
   const diffs = (
     Array.isArray(view.data?.differences) ? view.data.differences : []
   ).map(optionalRecord);
+  const sourceFor = (id: unknown) => sources.find(source => source.run_id === id);
+  const inputDifferences = diffs.flatMap((difference, index) => {
+    const baseline = sourceFor(difference.baseline_run_id), other = sourceFor(difference.run_id);
+    if (!baseline || !other) return [];
+    return frozenInputDifferences(optionalRecord(baseline.snapshot), optionalRecord(other.snapshot))
+      .map(row => ({...row, id:index + row.id, comparison:savedRunLabel(other)}));
+  });
   const rows: CatalogRow[] = diffs.flatMap((difference, index) =>
     (Array.isArray(difference.quantities) ? difference.quantities : [])
       .map(optionalRecord)
-      .map((row, at) => ({ ...row, id: index + "/" + at })),
+      .map((row, at) => ({ ...row, comparisonRun: difference.run_id, id: index + "/" + at })),
   );
   if (view.error)
     return (
@@ -300,6 +330,7 @@ export function StudyCompare({
             disabled={
               catalog.isPending || !!catalog.error || context.saving
             }
+            title={catalog.isPending ? '正在读取计算方法' : catalog.error ? '请先重新读取计算方法' : context.saving ? '正在保存修改' : undefined}
             onClick={configurePhysics}
           >
             采用物理对比
@@ -312,15 +343,17 @@ export function StudyCompare({
           <div className="spacer" />
           <Button
             size="compact"
-            disabled={
-              chosen.length < 2 || chosen.length > 5 || comparison.isFetching
-            }
-            onClick={() => onComparison(chosen.join(","))}
+            variant={config || rootModule(definition) === 'method-compare' ? 'outline' : 'primary'}
+            disabled={!!compareReason}
+            title={compareReason}
+            onClick={() => chosen.join(',') === selectedRuns ? void comparison.refetch() : onComparison(chosen.join(','))}
           >
             比较所选运行
           </Button>
         </Toolbar>
-        <DataTable
+        <p className="muted" role="status">已选 {chosen.length} 个运行。先选基准，再选一至四个对照；历史运行保留原输入和结果。</p>
+        <QueryState query={runList} empty={false} loading="正在读取可比较运行">
+        {availableRuns.length ? <DataTable
           label="可比较运行"
           density="standard"
           rowLabel={(row) => text(row.created)}
@@ -329,13 +362,7 @@ export function StudyCompare({
             {
               id: "runs",
               label: "运行",
-              rows: context.runs
-                .filter(
-                  (row) =>
-                    ["succeeded", "partial"].includes(text(row.status)) &&
-                    row.integrity === "verified",
-                )
-                .map((row) => ({ ...row, id: text(row.id) }) as CatalogRow),
+              rows: availableRuns.map((row) => ({ ...row, id: text(row.id) }) as CatalogRow),
             },
           ]}
           columns={[
@@ -345,8 +372,10 @@ export function StudyCompare({
               render: (row) => (
                 <input
                   type="checkbox"
-                  aria-label={"比较 " + text(row.created)}
+                  aria-label={"比较 " + savedRunLabel(row)}
                   checked={chosen.includes(row.id)}
+                  disabled={!chosen.includes(row.id) && chosen.length >= 5}
+                  title={!chosen.includes(row.id) && chosen.length >= 5 ? '每次最多五个运行，请先取消一个选择' : undefined}
                   onChange={(event) =>
                     setChosen((previous) =>
                       event.target.checked
@@ -359,12 +388,14 @@ export function StudyCompare({
             },
             {
               id: "created",
-              label: "计算时间",
-              render: (row) => formatDateTime(text(row.created)),
+              label: "保存运行",
+              wrap: true,
+              render: (row) => <>{savedRunLabel(row)}{chosen.includes(row.id) && <span className="muted"> · {chosen[0] === row.id ? '基准' : '对照'}</span>}</>,
             },
             {
               id: "method",
               label: "方法",
+              wrap: true,
               render: (row) =>
                 methodLabel(
                   optionalRecord(
@@ -377,13 +408,14 @@ export function StudyCompare({
               label: "状态",
               render: (row) => (
                 <StatusMark
-                  kind={row.freshness === "historical" ? "historical" : "saved"}
-                  label={statusLabel(row.freshness === "historical" ? "historical" : "current", '状态未记录')}
+                  kind={row.freshness === "historical" ? "historical" : row.freshness === "current" ? "saved" : "partial"}
+                  label={row.freshness === 'historical' || row.freshness === 'current' ? statusLabel(row.freshness, '当前性未核验') : '当前性未核验'}
                 />
               ),
             },
           ]}
-        />
+        /> : <EmptyState title="尚无通过完整性核验的成功运行" description="先在载流量研究中保存输入并计算，再修改条件取得第二次运行。" action={startResearch} />}
+        </QueryState>
       </section>
       {ids.length > 0 && (
         <QueryState query={comparison} empty={false}>
@@ -396,7 +428,21 @@ export function StudyCompare({
         <>
           <section className="input-section">
             <h2>输入与方法差异</h2>
-            {diffs.length ? (
+            {ids.length >= 2 && comparison.data ? <>
+              {diffs.map((diff, index) => <p key={index} className="muted">
+                {savedRunLabel(sourceFor(diff.run_id) || {}, '对照运行')}：
+                {([['same_input','输入'],['same_parameters','方法参数'],['same_method','方法版本']] as const)
+                  .map(([key,label]) => label + (diff[key] === true ? '相同' : diff[key] === false ? '不同' : '未提供')).join('；')}
+              </p>)}
+              {inputDifferences.length ? <DataTable label="对比输入差异" rowLabel={row => row.name} showGroups={false}
+                groups={[{id:'saved-inputs',label:'固定输入（SI）',rows:inputDifferences}]}
+                columns={[
+                  {id:'name',label:'改动条件 / 对象',wrap:true,render:row => row.name},
+                  {id:'before',label:'基准值 / SI',wrap:true,render:row => comparisonCellText(row.a)},
+                  {id:'after',label:'对照值 / SI',wrap:true,render:row => comparisonCellText(row.b)},
+                  ...(diffs.length > 1 ? [{id:'comparison',label:'对照运行',wrap:true,render:(row:typeof inputDifferences[number]) => row.comparison}] : []),
+                ]} /> : <p role="status">数值、边界与方法参数没有变化。若上方标为不同，请在“证据”中核对保存的来源和发行记录。</p>}
+            </> : diffs.length ? (
               <DataTable
                 label="对比输入差异"
                 rowLabel={(row) => row.label}
@@ -434,8 +480,9 @@ export function StudyCompare({
               />
             ) : (
               <EmptyState
-                title="先配置同输入方法或选择已有运行"
-                description=""
+                title="选择运行后查看具体改动"
+                description="在上表先勾选基准，再勾选对照，点击“比较所选运行”。"
+                action={!availableRuns.length ? startResearch : <Button size="compact" onClick={() => document.querySelector<HTMLInputElement>('table[aria-label="可比较运行"] input[type="checkbox"]')?.focus()}>选择基准运行</Button>}
               />
             )}
           </section>
@@ -453,12 +500,13 @@ export function StudyCompare({
                     label:
                       methodLabel(value.method) +
                       " · " +
-                      value.method.version,
+                      value.method.version + (key(value.method) === key(config?.method || definition.method) ? '（当前基准版本）' : ''),
                   }))}
                 />
                 <Button
                   size="compact"
                   disabled={!method || contracts.isPending || !!contracts.error}
+                  title={!method ? '请选择与基准不同的方法版本' : contracts.isPending ? '正在读取方法输入契约' : contracts.error ? '方法输入契约读取失败，请重新选择或重试' : undefined}
                   onClick={configure}
                 >
                   采用对照方法
@@ -626,8 +674,8 @@ export function StudyCompare({
                     ],
                     ...rows.map((row) => [
                       text(row.title) || displayName(text(row.key)),
-                      row.entity,
-                      row.condition,
+                      savedEntityLabel(sourceFor(row.comparisonRun) || run || {}, text(row.case_id), text(row.entity)),
+                      displayName(text(row.condition)),
                       row.baseline,
                       row.value,
                       row.difference,
@@ -657,10 +705,7 @@ export function StudyCompare({
                 id: "entity",
                 label: "对象 / 条件",
                 render: (row) =>
-                  entityLabel(
-                    run ? savedDomain(run) : undefined,
-                    text(row.entity),
-                  ) +
+                  savedEntityLabel(sourceFor(row.comparisonRun) || run || {}, text(row.case_id), text(row.entity)) +
                   " · " +
                   displayName(text(row.condition)),
               },

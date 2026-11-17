@@ -15,7 +15,7 @@ import './run-records-comparison.css';
 type Cell = { value: unknown; unit: string; name?: string; display?: string };
 type Difference = { id: string; name: string; a?: Cell; b?: Cell };
 const records = (v: unknown) => (Array.isArray(v) ? v : []).map(optionalRecord);
-const show = (cell?: Cell) => !cell ? '—' : `${typeof cell.value === 'number' ? significantNumber(cell.value, 6) : cell.display ?? String(cell.value ?? '—')}${cell.unit ? ` ${cell.unit}` : ''}`;
+export const comparisonCellText = (cell?: Cell) => !cell ? '—' : `${typeof cell.value === 'number' ? significantNumber(cell.value, 6) : cell.display ?? String(cell.value ?? '—')}${cell.unit ? ` ${cell.unit}` : ''}`;
 const escape = (s: string) => s.replaceAll('~', '~0').replaceAll('/', '~1');
 // These are receipts and redundant specification projections, not solver inputs.
 const receipts = new Set(['provenance', 'sources', 'input_sources', 'schema_version', 'release_digest', 'digest', 'reference', 'candidate_specification', 'created', 'updated', 'id', 'case_id']);
@@ -74,7 +74,14 @@ function frozenInputs(snapshot: Record<string, unknown>) {
   schemaUnits(definition.parameters, schema, '/parameters');
   for (const c of records(snapshot.cases)) schemaUnits(c.parameters, schema, `/cases/${escape(text(c.case_id))}/parameters`);
   return flatten({ method: definition.method, task: definition.task, parameters: definition.parameters,
-    driver: definition.driver, cases: snapshot.cases }, '', { ...units }, new Map(), names, '', labels);
+    crosschecks: definition.crosschecks, driver: definition.driver, cases: snapshot.cases }, '', { ...units }, new Map(), names, '', labels);
+}
+/** Both comparison surfaces use the same frozen inputs and field vocabulary. */
+export function frozenInputDifferences(before: Record<string, unknown>, after: Record<string, unknown>): Difference[] {
+  const a = frozenInputs(before), b = frozenInputs(after);
+  return [...new Set([...a.keys(), ...b.keys()])]
+    .filter(path => JSON.stringify([a.get(path)?.value, a.get(path)?.unit]) !== JSON.stringify([b.get(path)?.value, b.get(path)?.unit]))
+    .map(id => ({ id, name: a.get(id)?.name || b.get(id)?.name || fieldLabel(id.split('/').at(-1) || ''), a: a.get(id), b: b.get(id) }));
 }
 export function RunRecordsComparison({ workspace, ids }: { workspace: string; ids: string[] }) {
   const query = useQuery({ queryKey: ['run-record-comparison', workspace, ...ids], queryFn: () => compareRuns(workspace, ids), retry: false });
@@ -93,9 +100,7 @@ export function RunRecordsComparison({ workspace, ids }: { workspace: string; id
       a: x ? { value: x.display_value ?? x.value, unit: text(x.display_unit ?? x.unit) } : undefined,
       b: y ? { value: y.display_value ?? y.value, unit: text(y.display_unit ?? y.unit) } : undefined };
   });
-  const fa = frozenInputs(optionalRecord(a.snapshot)), fb = frozenInputs(optionalRecord(b.snapshot));
-  const inputs: Difference[] = [...new Set([...fa.keys(), ...fb.keys()])].filter(path => JSON.stringify([fa.get(path)?.value, fa.get(path)?.unit]) !== JSON.stringify([fb.get(path)?.value, fb.get(path)?.unit]))
-    .map(id => ({ id, name: fa.get(id)?.name || fb.get(id)?.name || fieldLabel(id.split('/').at(-1) || ''), a: fa.get(id), b: fb.get(id) }));
+  const inputs = frozenInputDifferences(optionalRecord(a.snapshot), optionalRecord(b.snapshot));
   const limits = (source: Record<string, unknown>) => records(source.limiting_objects).map((row, i) => ({
     id: `${text(row.case_id)}/${text(row.entity)}/${i}`, name: [displayName(text(row.case_id)), entityLabel(optionalRecord(records(optionalRecord(source.snapshot).cases).find(c => c.case_id === row.case_id)).input, text(row.entity))].filter(Boolean).join(' · '),
     value: [displayName(text(row.limiting_cable)), text(row.reason || row.limiting_reason)].filter(v => v && v !== '—').join(' · ') || '—',
@@ -105,10 +110,10 @@ export function RunRecordsComparison({ workspace, ids }: { workspace: string; id
     a: la.has(id) ? { value: la.get(id)!.value, unit: '' } : undefined, b: lb.has(id) ? { value: lb.get(id)!.value, unit: '' } : undefined }));
   const columns: Column<Difference>[] = [
     { id: 'name', label: '字段 / 对象', wrap: true, render: row => <span title={row.id}>{row.name}</span> },
-    { id: 'a', label: '运行 A', numeric: true, wrap: true, render: row => show(row.a) },
-    { id: 'b', label: '运行 B', numeric: true, wrap: true, render: row => show(row.b) },
+    { id: 'a', label: '运行 A', numeric: true, wrap: true, render: row => comparisonCellText(row.a) },
+    { id: 'b', label: '运行 B', numeric: true, wrap: true, render: row => comparisonCellText(row.b) },
     { id: 'difference', label: '差值 B − A', numeric: true, wrap: true, render: row => row.a?.unit === row.b?.unit && typeof row.a?.value === 'number' && typeof row.b?.value === 'number'
-      ? show({ value: row.b.value - row.a.value, unit: row.a.unit }) : '—' },
+      ? comparisonCellText({ value: row.b.value - row.a.value, unit: row.a.unit }) : '—' },
   ];
   return <section className="run-comparison" aria-label="两次运行对比">
     <h3>保存运行对比</h3>

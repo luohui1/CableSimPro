@@ -16,9 +16,21 @@ export function savedCaseLabel(run: Record<string,unknown>, id: string) {
 }
 export function savedEntityLabel(run: Record<string,unknown>, caseId: string, id: string) {
   const fixed = text(optionalRecord(optionalRecord(optionalRecord(run.saved_case_labels)[caseId]).entities)[id]);
-  if (fixed) return fixed;
-  const cases = optionalRecord(run.snapshot).cases;
+  const snapshot = optionalRecord(run.snapshot), definition = optionalRecord(snapshot.definition);
+  const cases = snapshot.cases;
   const input = optionalRecord((Array.isArray(cases) ? cases : []).map(optionalRecord).find(row=>row.case_id===caseId)?.input);
+  // Older display receipts recognised L1/L2/L3 but collapsed saved A/B/C
+  // phases to “电缆”. Recover only from the same frozen case, or its unchanged
+  // single-driver input. Sweep/selection cases must not use another case's model.
+  const phaseInput = Object.keys(input).length ? input
+    : optionalRecord(definition.driver).kind === 'single' ? savedDomain(run) : undefined;
+  const circuits = optionalRecord(phaseInput).circuits;
+  const cable = (Array.isArray(circuits) ? circuits : []).map(optionalRecord)
+    .flatMap(circuit => Array.isArray(circuit.cables) ? circuit.cables : [])
+    .map(optionalRecord).find(cable => cable.id === id);
+  const phases: Record<string,string> = {A:'A 相',B:'B 相',C:'C 相',L1:'A 相',L2:'B 相',L3:'C 相',L1L2L3:'三相'};
+  const phase = phases[text(cable?.phase)];
+  if (fixed) return fixed.endsWith(' · 电缆') && phase ? fixed.slice(0,-2) + phase : fixed;
   const label = entityLabel(Object.keys(input).length ? input : savedDomain(run), id);
   return label && label!==id ? label : id ? '保存对象（名称未记录）' : '';
 }
