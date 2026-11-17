@@ -334,7 +334,43 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       { run: second.id, delivery: deliveryId, source });
   });
   await independent('09-create-type-from-research', async () => {
-    await page.goto(base + '/?theme=light');
+    const sidebar = page.locator('.workbench-sidebar');
+    const visibleObjects = () => sidebar.locator('a.tree-object').evaluateAll(links => links.map(link => {
+      const url = new URL(link.href);
+      return { name: link.textContent.trim(), path: url.pathname, workspace: url.searchParams.get('workspace'), current: link.getAttribute('aria-current') };
+    }));
+    if (report.phase === 'after') {
+      let releaseRequest, finishRequest, held = false;
+      const release = new Promise(resolve => { releaseRequest = resolve; });
+      const finished = new Promise(resolve => { finishRequest = resolve; });
+      const endpoint = url => url.pathname === '/api/design/type-workspaces';
+      const holdIndex = async route => {
+        if (route.request().method() !== 'GET' || held) return route.continue();
+        held = true;
+        try { await release; await route.continue(); }
+        finally { finishRequest(); }
+      };
+      // Exercise the observed index race with a genuine delayed GET. No input,
+      // status, response or index membership is replaced by the walkthrough.
+      await page.route(endpoint, holdIndex);
+      try {
+        const spacesRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspaces' && response.request().method() === 'GET');
+        const typesRequested = page.waitForRequest(request => new URL(request.url()).pathname === '/api/design/type-workspaces' && request.method() === 'GET');
+        await page.goto(base + '/?theme=light');
+        const response = await spacesRead;
+        expect(response.ok(), '分类必须先取得真实工作区索引').toBe(true);
+        await response.finished(); await typesRequested;
+        await expect(sidebar.getByText('正在读取工程与型号', { exact: true })).toBeVisible();
+        const waiting = await visibleObjects();
+        check('型号索引未返回时不把工作区猜成工程', held && waiting.length === 0, { held, visibleObjects: waiting });
+        await capture('09-sidebar-waits-for-real-type-index');
+      } finally {
+        releaseRequest();
+        if (held) await finished;
+        await page.unroute(endpoint, holdIndex);
+      }
+      await expect(sidebar.getByText('正在读取工程与型号', { exact: true })).toHaveCount(0);
+    } else await page.goto(base + '/?theme=light');
     await page.getByRole('button', { name: '新建研究', exact: true }).first().click();
     const create = page.getByRole('dialog', {name:'新建研究',exact:true});
     await expect(create.getByRole('combobox', {name:'研究任务',exact:true})).toBeVisible();
@@ -379,6 +415,21 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         && saved.type_creation?.kind === 'library' && saved.type_lifecycle?.status === 'draft'
         && pin?.id === selected.id && pin?.version === selected.version && pin?.content_sha256 === selected.content_sha256,
       {workspace:saved.id, source:pin, lifecycle:saved.type_lifecycle});
+      const [typeIndex, workspaceIndex] = await Promise.all([api('/api/design/type-workspaces'), api('/api/workspaces')]);
+      expect(typeIndex.some(item => item.id === saved.id), '新型号必须真实出现在宿主型号索引').toBe(true);
+      const currentType = sidebar.locator('a.tree-object[aria-current="page"]').filter({ hasText: saved.domain.name });
+      await expect(currentType).toHaveCount(1);
+      await expect(currentType).toHaveAttribute('href', new RegExp(`/types/${saved.id}/structure/table(?:\\?|$)`));
+      await expect(currentType).toBeInViewport({ ratio: 1 });
+      if (typeIndex.length > 3) await expect(sidebar.getByRole('link', { name: `全部 ${typeIndex.length} 个型号设计`, exact: true })).toBeVisible();
+      const typeIds = new Set(typeIndex.map(item => item.id));
+      const projectIds = new Set(workspaceIndex.filter(item => !typeIds.has(item.id)).map(item => item.id));
+      const objects = await visibleObjects();
+      const typeLinks = objects.filter(item => item.path.startsWith('/types/'));
+      check('创建后侧栏当前型号与总数刷新且工程分组不混入型号', objects.filter(item => item.path === '/studies').every(item => projectIds.has(item.workspace))
+        && typeLinks.every(item => typeIds.has(item.path.split('/')[2]))
+        && (typeIndex.length > 3 || typeLinks.length === typeIndex.length),
+      { created: saved.id, typeCount: typeIndex.length, projectCount: projectIds.size, visibleObjects: objects });
     }
   });
 });
