@@ -97,6 +97,8 @@ Excel 自身限制每个页眉/页脚的总字符数，格式控制符也占用�
 正文使用方法的保存名称，原始插件标识仅出现在追溯部分。追溯记录区分算法版本与
 发行版本，并保留发行摘要、完整输入/输出摘要、数据来源原文、适用范围和保存的
 验证等级。已有验证等级不等同工程批准，不提升缺失或较低等级的证据。
+标识识别包含冻结清单中的其他发布者及大小写显示变体；含标识的保存原文完整移入
+追溯，不改写原文后再将其冒称逐字引用。
 
 ## 文件导出
 
@@ -157,6 +159,124 @@ FastAPI `422` 校验结构。来源或修订改变一般为 `409`；缺少正式
 “追溯数值”列顺序固定为 `table_id,row_id,column_key,sheet,cell,raw_text,numeric_value,unit,source_id,pointer,unit_source_id,unit_pointer,numeric_kind`。
 分析数值列不取代原文列；用户在 Excel 中编辑或另存后应重新核对来源与文件摘要。
 
+## 按工程或显式系列成员批量导出
+
+`POST /api/formal-deliveries/batch/preview` 接收 `scope` 与 `items`。每个条目
+复用前述单文件预览请求，另加机器可读 `key` 和 `formats`，不嵌套另一层请求：
+
+```json
+{
+  "scope": {
+    "kind": "project",
+    "workspace_id": "工程 ID"
+  },
+  "items": [{
+    "key": "calculation",
+    "kind": "calculation",
+    "source": {
+      "workspace_id": "工程 ID",
+      "expected_revision": 4,
+      "runs": [{
+        "run_id": "保存运行 ID",
+        "input_digest": "完整运行返回的 64 位小写 SHA256",
+        "output_digest": "完整运行返回的 64 位小写 SHA256"
+      }]
+    },
+    "document": {
+      "organization": "交付单位名称",
+      "number": "CALC-001",
+      "revision": "A"
+    },
+    "formats": ["pdf", "xlsx"]
+  }]
+}
+```
+
+`items` 可追加任意已支持文件类型，各条目仍遵守单文件的来源、单位、签栏与
+正式交付门禁。批量操作不补算、不审批，也不自动选择最新运行。
+
+### 选择范围
+
+| scope | 选择与校验 |
+| --- | --- |
+| `project` | `workspace_id` 指当前已有工程，全部条目必须属于这一工程。 |
+| `series` | 调用方提供 `series_name` 和 `workspace_ids`，明确选定本次归为一组的工程成员；成员列表不得重复，必须与条目的实际工程集合完全相等。 |
+
+系列范围示例，用于替换上述请求的 `scope`：
+
+```json
+{
+  "kind": "series",
+  "series_name": "本次选定的系列交付",
+  "workspace_ids": ["第一个工程 ID", "第二个工程 ID"]
+}
+```
+
+当前型号方案的 `type_families` 是同型号方案/发布谱系，不等同跨规格商业系列。
+现有系列导入记录没有稳定的系列到工程关联；本接口因此明确接受用户选定成员，
+不根据型号前缀、制造商或来源原文猜归属，也不写入 T3 的系列数据模型。响应与
+ZIP 清单在系列范围中强制记录 `membership_source: explicit_workspace_ids`，
+不将命名分组冒称已有登记系列。该字段由服务器生成，请求不得自行提供。
+
+同一工程的所有条目必须使用相同 `expected_revision`；历史运行是否适合交付，
+继续由单文件来源校验判定。系列声明了未使用成员，或条目带入未声明工程时均拒绝。
+
+### 条目、摘要与文件路径
+
+`key` 为 1–40 个 ASCII 字母、数字、下划线或连字符，首字符须为字母或数字，
+忽略大小写后必须唯一。`formats` 为 1–2 个不重复的 `pdf` / `xlsx`，顺序保留。
+最多 16 个条目、32 个交付文件；同一份文件编号可用于不同条目，不会覆盖。
+
+预览返回 `schema: cablesim.formal-batch/1`，主要字段如下：
+
+| 字段 | 含义 |
+| --- | --- |
+| `scope` | 实际校验的工程或显式系列成员范围 |
+| `items` | 按请求顺序排列，含 `index/key/kind/title`、规范化 `source/document`、完整 `source_identity`、模型与来源摘要、无大 payload 的来源描述符、格式与计划文件路径 |
+| `file_count` | PDF/XLSX 文件数量，不包含 `manifest.json` |
+| `source_bytes` | 各条目完整 `sources` 规范 JSON 字节数之和；同条目两种格式只计一次，不同条目仍各计一次 |
+| `batch_digest` | 除本字段外完整批量预览的规范 JSON SHA256，固定范围、成员、顺序、元数据、来源、格式、路径和每项模型摘要 |
+
+文件路径固定为 `001-<key>/<kind>.<format>`，序号从 1 开始。例如
+`001-calculation/calculation.pdf`。路径不采用文件编号或任意用户路径，避免同号文件
+覆盖、跨目录写入和大小写冲突。原文件编号仍完整保存在 PDF/XLSX 元数据和清单中。
+
+规格书的请求固定其规格书摘要，实际来源运行由规格书确定；因此清单同时保留
+请求 `source` 和模型的 `source_identity`，后者包含实际五通道运行及输入/输出摘要，
+不能只凭一个规格书摘要省略其真实来源。
+
+### 整包导出与清单
+
+`POST /api/formal-deliveries/batch/export` 使用完全相同的批量预览请求，另加
+`expected_batch_digest`，值为本次预览返回的 `batch_digest`。成功返回
+`application/zip`、UTF-8 下载文件名以及：
+
+| 响应头 | 校验对象 |
+| --- | --- |
+| `X-Artifact-SHA256` | 实际 ZIP 响应字节 |
+| `X-Delivery-Batch-SHA256` | 固定的批量预览摘要 |
+| `Cache-Control: no-store` | 批量文件不进入共享缓存；单份和批量预览也明确使用此头 |
+
+ZIP 根目录的 `manifest.json` 包含完整批量预览和额外的顶层 `files` 清单。每个
+文件记录条目序号、键、类型、格式、路径、实际 `bytes/sha256`、模型/来源摘要、
+请求来源、实际 `source_identity` 和含读取 API 的来源描述符。每份 PDF/XLSX
+仍各自携带完整原始来源，批量打包不删改其内容。清单本身不列入交付文件清单，
+ZIP 的实际摘要放在响应头，避免清单摘要引用自身。
+
+预览后元数据、成员、顺序、格式、来源或签核改变时返回
+`FORMAL_BATCH_CHANGED`（409）。所有条目生成完毕后，会重新构建并核对**全部**
+来源模型；即使第一项在最后一项渲染期间才发生变化，也拒绝整个 ZIP。单条目
+不能生成时返回 `FORMAL_BATCH_ITEM_FAILED`，保留其原 HTTP 状态和 `cause`，
+并附条目序号、键、类型、工程和失败阶段。请求结构错误仍为 FastAPI 的 422。
+生成后的重新核验如发现来源失效，响应统一为 409，原失败状态保留在 `cause_status`。
+整包累计超限、清单或 ZIP 归档失败为 `FORMAL_BATCH_ARCHIVE_FAILED`，带
+`stage: archive`、`cause_status` 和原 `cause`，不将全局失败归给某个条目。
+任何失败都不返回部分文件，不跳过条目，不改成使用另一条运行。
+
+完整来源累计最多 128 MiB；全部 ZIP 未压缩内容（含 `manifest.json`）最多
+128 MiB。既有单份 32 MiB 来源、6000 行可见表、64 MiB 文件门禁继续适用。
+超限明确拒绝并要求缩小选择，不通过截断文件、来源或清单规避限制。
+
 ## 发行验证入口
 
 现有 `.github/workflows/ci.yml` 的 Ubuntu/Windows 发行任务仍从真实发行压缩包安装、
@@ -165,3 +285,6 @@ FastAPI `422` 校验结构。来源或修订改变一般为 `409`；缺少正式
 Excel。独立核对所有可见数值、单位、空签栏、完整附件、模型摘要及 Excel OOXML，
 并将 PDF 每页转成 PNG；发行包、文件、图片和日志仅作为 CI artifacts 上传。
 自动检查后还须逐页目视 PDF，打开 Excel 核对表头、单位、数值和长说明布局。
+批量验证复用安装后的真实 API，分别选择工程和显式系列成员，下载 ZIP 并独立
+核对成员、路径、清单、文件摘要及每份原件的完整来源；包内 PDF 逐页转成 PNG，
+与 ZIP、展开的原件及日志一并进入同一安装验收 artifact。
