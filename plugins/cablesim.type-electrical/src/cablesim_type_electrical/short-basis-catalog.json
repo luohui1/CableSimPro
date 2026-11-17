@@ -12,7 +12,14 @@
       }
     },
     "digest": "d1b54789c98e691005e9b8214ef011aa6aac57fd86551da4bcfd91b3a493ac95",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "d1b54789c98e691005e9b8214ef011aa6aac57fd86551da4bcfd91b3a493ac95",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "47fa6f30ca9594b94796c271be957291dfa9e97c5e3784547fa40b40c68095f3",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "56918db955727fe080c6c8609eca4502cf6de110925eef59f4cf47f60ba27e19"
   },
   "sc-material-constants/r1/beta": {
     "query": {
@@ -27,7 +34,14 @@
       }
     },
     "digest": "9afc78594f92d0dcc28adce0a4162c7d55066d9e84b92539a79a6ba1411f3d1b",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "9afc78594f92d0dcc28adce0a4162c7d55066d9e84b92539a79a6ba1411f3d1b",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "50ec75d96395341baa2bcc8cb9d0506bf826c98ef71601343814fe0d1a4275a9",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "bb6198fec87a7e9cc2f3b95d806e500566a0f05d1e3b307e71b557447f210b27"
   },
   "sc-material-constants/r1/sigma_c": {
     "query": {
@@ -42,7 +56,14 @@
       }
     },
     "digest": "400fc617be0c2e1c329c5c493110e1f7679cb38f6fa0a3822809f92a8b0d57af",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "4deefabd4f5d0c7639c0971122c838b229872a9358baf1c0027b160151c6d54f",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "42267cc783d1d4679e1875d6747e4cb5051dece52f32666c53c700dc5e085e13",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "3d2cb6dc69abf91a99cd2b8738f9ce4341034b605fc2bf6b5304cb9c46127709"
   },
   "sc-material-constants/r2/K": {
     "query": {
@@ -57,7 +78,14 @@
       }
     },
     "digest": "22e5b56d880ed7c7126eae05c994824940beb272c72e135de607439abc979157",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "22e5b56d880ed7c7126eae05c994824940beb272c72e135de607439abc979157",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "03003b56ffb17483472eebff4131230142de747980775d77aad78a0bf45abcdc",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "4dc85f397f16108546f5438f08ab1c9ae6be4e0cb3e43263bd8af63b65bc7c55"
   },
   "sc-material-constants/r2/beta": {
     "query": {
@@ -72,7 +100,14 @@
       }
     },
     "digest": "6a126b7545371b4a975358579c9d4c9cd54b6cb13c92336fca9004cfe70fe325",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "6a126b7545371b4a975358579c9d4c9cd54b6cb13c92336fca9004cfe70fe325",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "c55b06f2633e23f218698ff7c51c7319a3e3a35a205420537ecf39c799bca8fd",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "3dbf0d8b8d58150c0489191b307106947a5882f08d7ed55a8f266fc7074ff5c4"
   },
   "sc-material-constants/r2/sigma_c": {
     "query": {
@@ -87,7 +122,14 @@
       }
     },
     "digest": "f088ed30c7351d6197510e33e216bb35708459a0c1a01217bda720c3b0fd24b5",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "d966e8982d3eefb404a4672eba5a355e49e62cf7131f4aafde97b5a9b42ab446",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "279721b2a18986792cb15bd6e80597e6fab54f3810e58ad9af424c368ec2fcb5",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "2a0bd92dc39b48b5fafcde72f81462b31278b1420d1c8ce0179d68a0be3806a1"
   },
   "sc-material-constants/r3/K": {
     "query": {
@@ -102,7 +144,14 @@
       }
     },
     "digest": "131995a7b1468aaa89b99505cce46c55339435002ee31b33e38bf3e62a0ae4b9",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "131995a7b1468aaa89b99505cce46c55339435002ee31b33e38bf3e62a0ae4b9",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "c7479d6e9ce30441f0a6d823cbb5fc0aa0cb705fdfd0f432e5b4ca9539df4856",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "b5fd944a4bbb416e88bc33b3ecae1166371bdcfff579a0b71c9e1ff5fe45de02"
   },
   "sc-material-constants/r3/beta": {
     "query": {
@@ -117,7 +166,14 @@
       }
     },
     "digest": "a7ef97792cbe7044049049dd36dbee0f1e662657cdad3d8fdd1c32a64cbdff27",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "a7ef97792cbe7044049049dd36dbee0f1e662657cdad3d8fdd1c32a64cbdff27",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "2fe61263aacb4662c0dee3a176057fe6bda6cb243aa4e855e4de72c6129c1b46",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "685d786a7155b2cec24fa5d31b813378d80539c29242457d642ef76312f27dea"
   },
   "sc-material-constants/r3/sigma_c": {
     "query": {
@@ -132,7 +188,14 @@
       }
     },
     "digest": "46b890943cd19bea007cb966b1a6d47d2f816cd8084a068241872907051c5114",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "0ec89ad692be36fe10655abbfb3aa7f770312d2bc366577c7b29a25da7144122",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "4cba35a84ba2f66578937c8dd95d7cbe777b3d0629e7911878377adcfa0a2728",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "e7b5a18a5320c35a54243bca21d66a7ef9698073c9b110463c50f9565cf399fa"
   },
   "sc-material-constants/r4/K": {
     "query": {
@@ -147,7 +210,14 @@
       }
     },
     "digest": "45eaf06ee36bd735864a7f7a5299a927fc1d1fa10f1add7ae26c15d56f55b539",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "45eaf06ee36bd735864a7f7a5299a927fc1d1fa10f1add7ae26c15d56f55b539",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "9108cd354012fe290bbf265cb2d1dbec8f4c2d34c9c4cfcf60334362fd24e32c",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "b7c02608abfe1b71bc8c99d7760b46136291bc4a52ec6cf0455f2379a8b5df57"
   },
   "sc-material-constants/r4/beta": {
     "query": {
@@ -162,7 +232,14 @@
       }
     },
     "digest": "73799ce4f4e7f76e9ada1bd1c3efd3d0179bf94cfd80455f96a04936e9ca41b8",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "73799ce4f4e7f76e9ada1bd1c3efd3d0179bf94cfd80455f96a04936e9ca41b8",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "e8e86ff75e7be817fe3a0cf33da397352d50302ed0cfd904aff63bc0b7b34225",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "f6521f3dff6917a8767371a5c3909b8b2bae484e061def940b9e70720dfe1881"
   },
   "sc-material-constants/r4/sigma_c": {
     "query": {
@@ -177,7 +254,14 @@
       }
     },
     "digest": "81ecf16a0fb93cf35170d4954f8e88227a39be875c433b65d8c44abffa56727f",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "a918bda974443baccc5c75d58eca540f2bf731e111eb155739ae51c242c0baf7",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "9d6365e297fb7c5d56505f0c5ea74bafb00f718e18ec7387dd18c2c023464bcf",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "789007efc37b5abe4d04fa4e85b92831c11b608138a77105afd0c23033c1c230"
   },
   "sc-material-constants/r5/K": {
     "query": {
@@ -192,7 +276,14 @@
       }
     },
     "digest": "26abeda6ca67601bb4f9c7ec5b0dd89b15bddfa6bed31a0d702eb5beface845e",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "26abeda6ca67601bb4f9c7ec5b0dd89b15bddfa6bed31a0d702eb5beface845e",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "0d56ea1aae4123f2e6eef2f51b8f7f2311650e78952bbdb2ecbbc7dd2f3803e6",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "f485cc76fa83ff1cf845d80f73b835078240d62cdda6b858409c46b078faed7c"
   },
   "sc-material-constants/r5/beta": {
     "query": {
@@ -207,7 +298,14 @@
       }
     },
     "digest": "7ba29763c0843414469cef222c52f746735ceba8145824a939d52cfc435f35e9",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "7ba29763c0843414469cef222c52f746735ceba8145824a939d52cfc435f35e9",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "a56a74fc6964b80655e227d33b49aa3afaff4d1dcca5809db34d75ec8f311400",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "e2ac65a85e0a7fb09115ed796efa28d5e6df176ee4f042dd41bd526b40a694ca"
   },
   "sc-material-constants/r5/sigma_c": {
     "query": {
@@ -222,7 +320,14 @@
       }
     },
     "digest": "d945425e6943a3edb27d1e531acee1702441a648e9f2027267d6f00ca07796af",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "e828df4fe0b496579e6232c1d752f4dadb1cc65dc24e2f522f74f400913e5b0a",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "c997eba5a1d3658ce08720b5f5a657583189f5e9683bd1914a0b5dc6831ff4ec",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "618ba9fccfb76ed4c7145d1cee980b257360e4b032ca2f26986e1f1a249919b8"
   },
   "sc-material-constants/r6/K": {
     "query": {
@@ -237,7 +342,14 @@
       }
     },
     "digest": "cb2f90c014fc0a2f3d9e169b05edd3fccbc7b248c8a63007ab43320e07bc9113",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "cb2f90c014fc0a2f3d9e169b05edd3fccbc7b248c8a63007ab43320e07bc9113",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "09b7876057d8849fe2c7e4d77598a67f7ffbc320e00c42f383af5359c13ea4f0",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "715f22be39b5008cfeb8a024ad22045cb2e355364c2ade73bc5e4b75f36d83f2"
   },
   "sc-material-constants/r6/beta": {
     "query": {
@@ -252,7 +364,14 @@
       }
     },
     "digest": "1a8eb96d89a766772b80e4305551f8f646af0f32149a28966ff139cb36ffffb2",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "1a8eb96d89a766772b80e4305551f8f646af0f32149a28966ff139cb36ffffb2",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "72476067d3fc635ed03a8c8adba35b6ec841adc4d0fd70d3c30029c8e359ee29",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "d427eee2dae2758d28e9cb7b0cc01a0247d551c015796d003463847e569116cc"
   },
   "sc-material-constants/r6/sigma_c": {
     "query": {
@@ -267,7 +386,14 @@
       }
     },
     "digest": "fd1cbf34127cdd4098fa989cb340c3ac068857977d5bbee7d855a46e6a1f7a35",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "2e69232e7bf2f009da30d947af009262e35ddc4bb3616bebbfcd2baa88ffaabd",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "d94f4087f7369fb837a45df3879da440452b66f6a63c9e7c7f766bc006faae91",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table I，第 17 页（PDF 第 7 页）",
+    "artifact_digest": "6f5a3429c5332dfc5fe927ef0cdea8fd053eaa37844e6fb70e709797fd4f477f"
   },
   "sc-simplified-constants/r3/cu_X": {
     "query": {
@@ -283,7 +409,14 @@
       }
     },
     "digest": "b153a4b8b37f88e0110f68a1de323c6fe59881c9150d223b1c4ecf16b0b9fa47",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "b153a4b8b37f88e0110f68a1de323c6fe59881c9150d223b1c4ecf16b0b9fa47",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "63137b3ea4f98a69f1e15eda13e65d4e5fbb2311244c2f6ea4e66beaa0a41a7b",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table III，第 19 页（PDF 第 8 页）",
+    "artifact_digest": "4360abe5e0ebace3a458b5ea9fedd93788a99e4d7818852621438a4210f0e35c"
   },
   "sc-simplified-constants/r3/cu_Y": {
     "query": {
@@ -299,7 +432,14 @@
       }
     },
     "digest": "633184866f5b0e8b0e9715cc4b0f79968594f2f8456106df43064932a0cbc90f",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "633184866f5b0e8b0e9715cc4b0f79968594f2f8456106df43064932a0cbc90f",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "b8c43aec96f92a388e374bcaf24e3e5686e126d23e30a34c30dd0184a8ae4033",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table III，第 19 页（PDF 第 8 页）",
+    "artifact_digest": "5b223d929354d993f91b4c2e937ccbeecd513ca1ad6ac6ac747f0082f8d8deee"
   },
   "sc-simplified-constants/r3/al_X": {
     "query": {
@@ -315,7 +455,14 @@
       }
     },
     "digest": "df484d73c3072f645611c79bf3fbfb718314299f946cc0e190888e947beda82f",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "df484d73c3072f645611c79bf3fbfb718314299f946cc0e190888e947beda82f",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "c8a8a4bb52628d510acd26e10d8c48bae41fbdd18b857796d88f757757f5851f",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table III，第 19 页（PDF 第 8 页）",
+    "artifact_digest": "198242da95ba008ea713d8b8f9d5e5575d8c0147bc11528f8ca5034ef18fc7da"
   },
   "sc-simplified-constants/r3/al_Y": {
     "query": {
@@ -331,7 +478,14 @@
       }
     },
     "digest": "7775890806c57fed822a6dbd0bf683c812e28af86142c60fa3934d14a764ae3b",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "7775890806c57fed822a6dbd0bf683c812e28af86142c60fa3934d14a764ae3b",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "d684ffac93b1e974595e24aedc3f5611afb216ed7037254b803354813ea67b60",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 Table III，第 19 页（PDF 第 8 页）",
+    "artifact_digest": "6140a60c28a0b098b8f8bb21d4beb9011e80dd5e3d9ace0a95e1d7fa63ba2d3a"
   },
   "sc-conductor-simplified/r1/non_adiabatic_conductor_simplified_formula": {
     "query": {
@@ -345,7 +499,14 @@
       }
     },
     "digest": "02511a115a1adc021232b8cd424fb11af582066dfbee7875319ea28d62955f71",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "02511a115a1adc021232b8cd424fb11af582066dfbee7875319ea28d62955f71",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "14d13ad1b0607fa9e220ad46b59993457695bf818cf7fa12263dfb277641ac55",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 5.2，第 13 页（PDF 第 5 页）",
+    "artifact_digest": "3c38cb45269a3531bca821392b1f14868d7060b183fba224aa24fdb04a0e2bb4"
   },
   "sc-adiabatic-current/r1/adiabatic_short_circuit_formula": {
     "query": {
@@ -357,7 +518,14 @@
       "conditions": {}
     },
     "digest": "ba51bf08680c92b055719d7103cb9a7632827046157e2fc6a6add5defa4afa1a",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "ba51bf08680c92b055719d7103cb9a7632827046157e2fc6a6add5defa4afa1a",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "7c44cced9bbb0cada3f21bfbef8da92e2e771168205c720a494ea07974c819a4",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 3，第 9 页（PDF 第 3 页）",
+    "artifact_digest": "561d4f41159912aa6309bf7a3173ce0a6cb13870312142558caae203ed841a17"
   },
   "sc-conductor-general/r1/non_adiabatic_conductor_formula": {
     "query": {
@@ -371,7 +539,14 @@
       }
     },
     "digest": "95828ccdcc2aecd1726b16ad8032a41b3affbaa6e9efffc1ada0f2eb1aa8a9fb",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "95828ccdcc2aecd1726b16ad8032a41b3affbaa6e9efffc1ada0f2eb1aa8a9fb",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "f6a8a52bc65b3669483dd759ee46b75fb221e7d670a5ee1b19e3dc1384765139",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 5.1，第 11 页（PDF 第 4 页）",
+    "artifact_digest": "5f243ae52a047083ace93d9d85e7b03f854b0514e14775eb119de9f84acd41ab"
   },
   "sc-screen-general/r1/non_adiabatic_screen_formula": {
     "query": {
@@ -385,7 +560,14 @@
       }
     },
     "digest": "20d39fbeda672c445779cd2be819571ae2f60c7c0bf2eff505b9a9aba146f3ef",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "20d39fbeda672c445779cd2be819571ae2f60c7c0bf2eff505b9a9aba146f3ef",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "ae64f8aec8fb5e5d773e5992f56f025f4aebe3faba3d004071f5f393e3d58fff",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 6.1，第 13 页（PDF 第 5 页）",
+    "artifact_digest": "513add2079ba221374b4463faf0eeb174a430bd6dcfcbf3f2e545b399dabcac8"
   },
   "sc-tubular-area/r1/short_circuit_geometrical_area_formula": {
     "query": {
@@ -399,7 +581,14 @@
       }
     },
     "digest": "7c85db7eca33244e42e32fd554ff594d7351a94934914bcfd81241f083077ecc",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "7c85db7eca33244e42e32fd554ff594d7351a94934914bcfd81241f083077ecc",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "ff10ecf72accff98c0f3407a0b69c52c73c3abb3dd30c7f78b368f38e2e44669",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 6.2，第 15 页（PDF 第 6 页）",
+    "artifact_digest": "6135015694abd7e39b4a839f9d2b76ea281fe844b529b890714cb6072c4f44ea"
   },
   "sc-longitudinal-tape-area/r1/short_circuit_geometrical_area_formula": {
     "query": {
@@ -413,7 +602,14 @@
       }
     },
     "digest": "f7d908d1194ec5b7ea2e6f9baaa2c085bbe391b1ee01b8ac6a54e143709dc6f5",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "f7d908d1194ec5b7ea2e6f9baaa2c085bbe391b1ee01b8ac6a54e143709dc6f5",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "5a70d39c53f4c3039b43e5602c319a3adda1056a33aa7c667e91becbe3b77f9b",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 6.3.1，第 15 页（PDF 第 6 页）",
+    "artifact_digest": "2b67fbe51db84907795648450ec23526f5addc887f7560c62d6c3f05d61af60d"
   },
   "sc-helical-tape-area/r1/short_circuit_geometrical_area_formula": {
     "query": {
@@ -427,7 +623,14 @@
       }
     },
     "digest": "d4aaf78db986ed91ca765524c0d8d55a0c3a405698ae65479efe42633fbc2ee1",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "d4aaf78db986ed91ca765524c0d8d55a0c3a405698ae65479efe42633fbc2ee1",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "4e50c6a424b24ca5df2fcfa7406b2482b13391cc65fd9b49f44edc2aa9918559",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988 6.3.2，第 15 页（PDF 第 6 页）",
+    "artifact_digest": "99eb6552c138897592b3bb19c20141933c025d7529028972400ae7aa5700aa33"
   },
   "sc-parallel-metal-current/r1/parallel_metal_short_circuit_rule": {
     "query": {
@@ -439,6 +642,13 @@
       "conditions": {}
     },
     "digest": "a0863e1eeff7018ac0bf140863425803085978cc78c8e0af5ffaeeb55174663c",
-    "plugin_version": "0.9.0"
+    "content_digest_schema": "cablesim.basis-json-content/1",
+    "content_sha256": "a0863e1eeff7018ac0bf140863425803085978cc78c8e0af5ffaeeb55174663c",
+    "plugin_version": "0.9.0",
+    "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+    "query_sha256": "07481c6fb436d4276ff312c2035e975269d907be7eab1fa410ba1635bcc9dbad",
+    "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a",
+    "citation": "IEC 60949—1988/AMD1:2008 4 amendment，第 2 页（PDF 第 4 页）",
+    "artifact_digest": "c8dd4d678c1aac05326ac514700ad1f602cc27d5b79f2bfabec859de559c518d"
   }
 }
