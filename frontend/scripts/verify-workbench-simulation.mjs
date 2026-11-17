@@ -177,6 +177,7 @@ await walkthrough('simulation', async ({
     await expect(control.locator(':scope > span').first()).toHaveText(selectedText);
   }
 
+  let primaryFailure;
   try {
     const projects = await api('/api/workspaces');
     const studies = (await Promise.all(projects.map(project =>
@@ -531,10 +532,123 @@ await walkthrough('simulation', async ({
         evidence.newTask.preflight=result;
       }
     });
+  } catch (error) {
+    primaryFailure = error;
+  }
+  try {
+    // This read-only empty-state check is independent of the native form flow.
+    // Its result never replaces a failure in the main simulation journey.
+    if (report.phase === 'after') await step('09-hybrid-model-empty-state', async () => {
+      let identity = evidence.source.iec;
+      if (!identity) {
+        const projects = await api('/api/workspaces');
+        const saved = (await Promise.all(projects.map(project => api(`/api/workspaces/${project.id}/studies`)))).flat();
+        const study = saved.find(row => row.definition.method.plugin_id === 'cablesim.iec60287') || saved[0];
+        expect(study, '空态走查仍须使用真实已保存研究').toBeTruthy();
+        identity = { workspace: study.workspace, study: study.id, title: study.definition.title };
+      }
+      const endpoint = studyPath({ workspace: identity.workspace, id: identity.study });
+      const workspaceEndpoint = `/api/workspaces/${identity.workspace}`;
+      const [savedStudy, savedWorkspace] = await Promise.all([api(endpoint), api(workspaceEndpoint)]);
+      const writesBefore = report.writes.length, runsBefore = evidence.nativeRuns.length;
+      const directoryResponse = page.waitForResponse(response => response.request().method() === 'GET'
+        && new URL(response.url()).pathname === '/api/model-artifacts');
+      // Leave any blocked main-flow dialog without saving or resuming its work.
+      const leave = dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss();
+      page.on('dialog', leave);
+      let response;
+      try {
+        [, response] = await Promise.all([
+          page.goto(`${base}/studies/${identity.study}/hybrid/sources?workspace=${identity.workspace}&theme=light`),
+          directoryResponse,
+        ]);
+      } finally { page.off('dialog', leave); }
+      expect(response.ok(), '模型目录必须是真实成功响应').toBe(true);
+      const directory = await response.json();
+      expect(Array.isArray(directory)).toBe(true);
+      const hybrid = page.locator('.hybrid-study');
+      await expect(hybrid.locator('.hybrid-sources')).toBeVisible();
+      const families = { direct_single: '直埋单回', direct_double: '直埋双回', duct: '排管', backfill: '矩形回填', layered_soil: '分层土壤' };
+      const familyLabel = (await hybrid.locator('.hybrid-sources dt').filter({ hasText: /^场景族$/ })
+        .locator('xpath=following-sibling::dd[1]').innerText()).trim();
+      const family = Object.keys(families).find(key => families[key] === familyLabel);
+      expect(family, '适用场景须来自当前保存研究的可见来源').toBeTruthy();
+      const compatible = directory.filter(row => row.availability === 'available' && row.family === family);
+      evidence.hybridEmpty = { identity, family, directory: directory.map(row => ({
+        model_sha256: row.model_sha256, family: row.family, availability: row.availability,
+      })), compatible: compatible.length, status: 'checking' };
+      if (compatible.length) {
+        evidence.hybridEmpty.status = '当前目录存在适用模型，空目录分支未覆盖；不删除模型或改写目录。';
+        await check('混合模型目录保持真实已登记适用版本', true, evidence.hybridEmpty);
+        await capture('09-hybrid-model-directory-nonempty');
+        return;
+      }
+      const select = hybrid.getByRole('combobox', { name: '模型版本', exact: true });
+      const predict = hybrid.getByRole('button', { name: /^(保存并)?预测$/ });
+      const reason = hybrid.getByRole('status');
+      await expect(select).toBeDisabled();
+      await expect(predict).toBeDisabled();
+      await expect(reason).toBeVisible();
+      await expect(reason).toContainText(directory.length ? '已登记模型中没有适用于' : '尚无已登记的训练模型');
+      await expect(reason).toContainText(familyLabel);
+      await expect(predict).toHaveAccessibleDescription(await reason.innerText());
+      await check('没有适用模型时可见禁用原因且正文至少 13px',
+        await reason.evaluate(node => parseFloat(getComputedStyle(node).fontSize)) >= 13,
+        { reason: await reason.innerText(), ...evidence.hybridEmpty });
+      await capture('09-hybrid-model-empty');
+      const refreshed = page.waitForResponse(reply => reply.request().method() === 'GET'
+        && new URL(reply.url()).pathname === '/api/model-artifacts');
+      await hybrid.getByRole('button', { name: '重新读取模型目录', exact: true }).click();
+      const freshResponse = await refreshed;
+      expect(freshResponse.ok()).toBe(true);
+      const freshDirectory = await freshResponse.json();
+      expect(Array.isArray(freshDirectory)).toBe(true);
+      await expect(hybrid.getByRole('button', { name: '重新读取模型目录', exact: true })).toBeEnabled();
+      await expect(select).toBeDisabled();
+      await check('重新读取模型目录发送真实 GET 且未提交预测', evidence.nativeRuns.length === runsBefore,
+        { status: freshResponse.status(), models: freshDirectory.length, runs: evidence.nativeRuns.slice(runsBefore) });
+      await capture('09-hybrid-model-directory-refreshed');
+      const methods = await api('/api/methods');
+      const method = methods.find(row => row.method.plugin_id === 'cablesim.hybrid-rating');
+      const training = method?.capabilities.find(row => row.id === 'train-model');
+      expect(training, '训练要求入口须对应真实插件能力声明').toBeTruthy();
+      const returnUrl = page.url();
+      const guidance = hybrid.getByRole('link', { name: '查看混合方法与训练要求', exact: true });
+      await guidance.focus();
+      await expect(guidance).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page).toHaveURL(/\/plugins\/cablesim\.hybrid-rating(?:\?|$)/);
+      const detail = page.getByRole('article', { name: method.name, exact: true });
+      await expect(detail).toBeVisible();
+      await detail.getByRole('tablist', { name: '插件详情', exact: true }).getByRole('tab', { name: /^能力 \d+$/ }).click();
+      await detail.getByRole('heading', { name: training.title, exact: true }).scrollIntoViewIfNeeded();
+      await expect(detail.getByRole('heading', { name: training.title, exact: true })).toBeVisible();
+      await capture('09-hybrid-training-requirements');
+      await page.goBack();
+      await expect(page).toHaveURL(returnUrl);
+      await expect(select).toBeDisabled();
+      await expect(predict).toBeDisabled();
+      await expect(reason).toBeVisible();
+      await capture('09-hybrid-returned-to-sources');
+      const [studyAfter, workspaceAfter] = await Promise.all([api(endpoint), api(workspaceEndpoint)]);
+      expect(studyAfter.definition).toEqual(savedStudy.definition);
+      expect(studyAfter.revision).toBe(savedStudy.revision);
+      expect(workspaceAfter.domain).toEqual(savedWorkspace.domain);
+      expect(workspaceAfter.revision).toBe(savedWorkspace.revision);
+      await check('键盘查看训练要求并返回保留研究与工程且不提交运行',
+        report.writes.length === writesBefore && evidence.nativeRuns.length === runsBefore,
+        { url: returnUrl, studyRevision: studyAfter.revision, workspaceRevision: workspaceAfter.revision,
+          writes: report.writes.slice(writesBefore), runs: evidence.nativeRuns.slice(runsBefore) });
+      evidence.hybridEmpty.status = 'empty-state-actions-verified';
+    });
+  } catch (error) {
+    if (primaryFailure) check('混合模型空态独立步骤未通过', false, error.message, { fatal: false });
+    else primaryFailure = error;
   } finally {
     page.off('request', onRequest);
     await fs.writeFile(path.join(out, `simulation-detail-${size.width}x${size.height}.json`),
       JSON.stringify(evidence, null, 2));
     expect(evidence.nativeRuns, '缺环境走查禁止任何原生 POST /runs').toEqual([]);
   }
+  if (primaryFailure) throw primaryFailure;
 });

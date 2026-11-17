@@ -26,7 +26,7 @@ jobs:
       PYTHONUTF8: '1'
       E2E_DEV: '0'
       E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
-      WORKBENCH_PHASE: before
+      WORKBENCH_PHASE: after
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,19 +46,18 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             studio/package-lock.json
-      - name: Install system libraries for the existing CAD gallery inputs
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Generate the existing CAD gallery inputs required by TypeScript
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1 libxrender1 fonts-arphic-uming
-      - name: Generate the existing CAD gallery inputs required by TypeScript
+          python scripts/prepare_plugin_environment.py cablesim.cable-geometry
+          .venv/bin/python frontend/src/features/cad/prepare-fixtures.py
+      - name: Generate the existing CAD gallery inputs required by TypeScript on Windows
+        if: runner.os == 'Windows'
         run: |
           python scripts/prepare_plugin_environment.py cablesim.cable-geometry
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            .venv/Scripts/python.exe frontend/src/features/cad/prepare-fixtures.py
-          else
-            .venv/bin/python frontend/src/features/cad/prepare-fixtures.py
-          fi
+          .venv/Scripts/python.exe -X utf8 frontend/src/features/cad/prepare-fixtures.py
       - name: Frontend style rules, types and unit tests
         working-directory: frontend
         run: |
@@ -277,7 +276,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.11', '3.12']
+        python: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
