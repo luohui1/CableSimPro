@@ -250,6 +250,7 @@ p.type-meta{font-size:var(--text-note)}
 .type-root .type-property-wrapper .number-input{width:100%;min-width:0;height:var(--control-compact)}
 .type-root .type-property-wrapper input,.type-root .type-property-wrapper .select-trigger{min-width:0;width:100%;height:var(--control-compact);font-variant-numeric:tabular-nums;text-align:right}
 .type-root .type-property-wrapper .field-error{grid-column:1/-1}
+.type-root .type-property-wrapper .type-material-reference .select-field{grid-template-columns:minmax(0,1fr);gap:var(--space-1);margin-block:var(--space-2)}
 .type-field-source{font-size:var(--text-note);color:var(--text-secondary);text-align:right;line-height:var(--control-compact)}
 .work-panel:has([data-type-page=list])>.topbar h1{font-size:var(--text-heading);font-weight:600}
 .type-root .status-mark,[data-type-page=list] .status-mark,.type-design-card .status-mark{color:var(--text)}

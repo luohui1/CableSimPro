@@ -163,7 +163,7 @@ export function TypeWorkspace() {
       { label: '绘图外径', value: formatNumber(row.outerM === null ? null : row.outerM * 2000, 2), unit: 'mm', source: row.outerM === null ? undefined : 'derived', sourceDetail: '参数截面尺寸，原始实体结果见外径与用料页签' },
     ] }]} />
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
-      <div title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
+      <div className="type-material-reference" title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
       <ResourceBindings materialId={row.material.id} />
       {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
   </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} extra={state.workspace.raw.type_creation ? <TypeRatingInputs /> : undefined} /> : null
