@@ -88,6 +88,10 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     from .kernel.batch_service import Batches, make_router as batch_router
     batches = Batches(research, root=os.environ.get('CABLESIM_DATASETS_DIR'))
     types = Types(research, assets)
+    from .kernel.type_library import TypeLibrary, make_router as type_library_router
+    type_library = TypeLibrary(types)
+    from .kernel.resource_exchange import ResourceExchange, make_router as resource_exchange_router
+    exchange = ResourceExchange(workspace_store, assets)
     from .kernel.datasheets import Documents, make_router as documents_router
     documents = Documents(workspace_store)
     owner = OwnerLock(workspace_store.path)
@@ -103,9 +107,11 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         try:
             workspace_store.initialize()
             assets.initialize()
+            exchange.initialize()
             research.initialize()
             batches.initialize()
             types.initialize()
+            type_library.initialize()
             documents.initialize()
             from .kernel.candidates import initialize
             with workspace_store.db(True) as db:
@@ -145,6 +151,12 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(documents_router(documents))
     app.include_router(domain_router(workspace_store))
     app.include_router(type_versions_router(types))
+    app.include_router(type_library_router(type_library))
+    from .kernel.type_library_exchange import make_router as type_library_exchange_router
+    app.include_router(type_library_exchange_router(type_library))
+    app.include_router(resource_exchange_router(exchange))
+    from .kernel.resource_data import make_router as resource_data_router
+    app.include_router(resource_data_router(research.executor))
     app.include_router(scenario_router(workspace_store,research))
     app.include_router(requirements_router(research))
     app.include_router(rating_table_router(research))
@@ -154,6 +166,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     from .index import make_router as index_router
     app.include_router(index_router(research))
     app.state.types, app.state.assets = types, assets
+    app.state.type_library, app.state.resource_exchange = type_library, exchange
     app.state.research, app.state.batches = research, batches
     app.state.previews = previews
     app.state.workspace_store = workspace_store

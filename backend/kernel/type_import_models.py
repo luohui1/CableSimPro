@@ -1,0 +1,286 @@
+"""A manufacturer's cells become immutable candidate facts, not approvals.
+
+Complete medium-voltage tables use the existing constructor and sealed model
+completion. Other families retain incomplete specifications until their stated
+dimensions and materials suffice; nothing is inferred from a neighbouring size.
+"""
+from copy import deepcopy
+import json
+import math
+from typing import Literal
+
+from pydantic import Field, model_validator
+
+from backend.schemas import StrictModel
+from .candidates import CableModelVersion
+from . import factory_tables as tables
+from studio.core.studio_core import CoreError, designation, structure
+
+
+class DeclaredParameter(StrictModel):
+    value: float | str
+    reference: str = Field(min_length=1, max_length=2000)
+    unit: str | None = None
+
+    @model_validator(mode='after')
+    def valid(self):
+        if not self.reference.strip() or isinstance(self.value, float) and not math.isfinite(self.value):
+            raise ValueError('参数必须有有限值及非空出处。')
+        return self
+
+
+class SeriesDeclaration(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    manufacturer: str = Field(min_length=1, max_length=120)
+    designation: str = Field(min_length=1, max_length=40)
+    cores: int = Field(ge=1, le=16)
+    u0_v: float = Field(gt=0, le=500000, allow_inf_nan=False)
+    u_v: float = Field(gt=0, le=1000000, allow_inf_nan=False)
+    um_v: float | None = Field(default=None, gt=0, le=1000000, allow_inf_nan=False)
+    origin: Literal['factory', 'public', 'demo'] = 'factory'
+    standards: list[str] = Field(default_factory=list, max_length=32)
+    common: dict[str, float] = Field(default_factory=dict, max_length=64)
+    common_basis: dict[str, str] = Field(default_factory=dict, max_length=64)
+    modelling: dict[str, DeclaredParameter] = Field(default_factory=dict, max_length=64)
+    source: dict = Field(default_factory=dict)
+    reference: dict = Field(default_factory=dict)
+    resistance_basis: Literal['stated', 'standard_limit'] = 'stated'
+    conductor: Literal['copper', 'aluminium'] | None = None
+    insulation: Literal['XLPE', 'PVC'] | None = None
+    metal_sheath: Literal['lead', 'corrugated_aluminium', 'smooth_aluminium'] | None = None
+    oversheath: Literal['PVC', 'PE'] | None = None
+    armour_material: str | None = None
+    outer_diameter_precision_mm: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    material_properties: dict[str, dict[str, DeclaredParameter]] = Field(default_factory=dict)
+
+    @model_validator(mode='after')
+    def stated(self):
+        for key in ('name', 'manufacturer', 'designation'):
+            value = getattr(self, key).strip()
+            if not value:
+                raise ValueError('系列名称、厂家和型号不能为空。')
+            setattr(self, key, value)
+        if self.u0_v > self.u_v or self.um_v is not None and self.um_v < self.u_v:
+            raise ValueError('额定电压须满足 U0 ≤ U ≤ Um。')
+        if self.u_v > 35000 and self.cores != 1:
+            raise ValueError('高压结构表仅覆盖单芯型号。')
+        for key, value in self.common.items():
+            if key not in tables.FIELDS or not math.isfinite(value) or value <= 0:
+                raise ValueError('系列通用尺寸存在未知字段或无效数值：' + key)
+            if not self.common_basis.get(key, '').strip():
+                raise ValueError('系列通用尺寸必须逐项填写出处：' + tables.FIELDS[key][0])
+        allowed = set(structure.MODELLING) | {'normal_temperature_k', 'short_circuit_temperature_k', 'conductor_class'}
+        if set(self.modelling) - allowed:
+            raise ValueError('未知计算参数：' + sorted(set(self.modelling) - allowed)[0])
+        return self
+
+
+def parts_of(series):
+    try:
+        parts = designation.parse(series['designation'])
+    except CoreError:
+        if not all(series.get(key) for key in ('conductor', 'insulation', 'oversheath')):
+            tables.fail('SERIES_MATERIALS_MISSING', '此型号写法不能唯一识别材料，请明确声明导体、绝缘及外护套材料。')
+        parts = {'conductor': series['conductor'], 'insulation': series['insulation'],
+                 'sheath': series['oversheath'], 'metal_sheath': series.get('metal_sheath'),
+                 'screen': None, 'armour': None, 'model': series['designation']}
+    for key, target in [('conductor', 'conductor'), ('insulation', 'insulation'), ('oversheath', 'sheath'), ('metal_sheath', 'metal_sheath')]:
+        if series.get(key) is not None:
+            if parts.get(target) and parts[target] != series[key]:
+                tables.fail('SERIES_DECLARATION_CONFLICT', f'材料声明与型号写法不一致：{key}。')
+            parts[target] = series[key]
+    if parts.get('u0_v') and (parts['u0_v'], parts['u_v']) != (series['u0_v'], series['u_v']):
+        tables.fail('SERIES_VOLTAGE_CONFLICT', '型号中电压与系列声明不同。')
+    if parts.get('cores') and parts['cores'] != series['cores']:
+        tables.fail('SERIES_CORES_CONFLICT', '型号中芯数与系列声明不同。')
+    return parts
+
+
+def source_record(upload, sheet, row, key, series, mapping, origin='table'):
+    from openpyxl.utils import get_column_letter
+    source = {'kind': 'manufacturer' if origin == 'table' else 'user', 'file': upload['file'],
+              'file_sha256': upload['sha256'], 'sheet': sheet, 'row': row,
+              'column': get_column_letter(mapping[key] + 1) if origin == 'table' and key in mapping else None,
+              'field': key, 'origin': origin, 'catalogue': deepcopy(series.get('source') or {}),
+              'reference': series.get('common_basis', {}).get(key) if origin == 'series' else None,
+              'method': tables.IMPORT_METHOD, 'confidence': 'reference', 'reviewed': False}
+    if series.get('origin') == 'demo':
+        source['kind'] = 'demo'
+    return source
+
+
+def candidate_source(record):
+    return {'kind': record['kind'], 'reviewed': False, 'reference': json.dumps(record, ensure_ascii=False, sort_keys=True)}
+
+
+def numeric_facts(upload, sheet, row, series, mapping):
+    merged = {**series.get('common', {}), **row['values']}
+    facts = []
+    for key, value in merged.items():
+        label, unit, scale, _ = tables.FIELDS[key]
+        scale = .001 if unit == 'kg/km' else scale
+        origin = 'table' if key in row['values'] else 'series'
+        facts.append({'key': key, 'label': label, 'value': value * scale, 'unit': tables.SI_UNITS[unit],
+                      'display_value': value, 'display_unit': unit, 'source': source_record(upload, sheet, row['row_number'], key, series, mapping, origin),
+                      'method': tables.IMPORT_METHOD, 'confidence': 'reference'})
+        if key in row.get('_standard_values', {}):
+            reference = row['_standard_values'][key]
+            facts[-1]['source'].update(kind='standard', origin='standard', column=None, reference=reference)
+            facts[-1]['method'] = {'name': '标准依据库', 'version': reference['plugin_version'],
+                                  'release_digest': reference.get('release_digest')}
+    return facts, merged
+
+
+def _incomplete_payload(series, parts, name, facts, missing):
+    aliases = {'screen_tape_thickness': 'metallic_screen_tape_thickness',
+               'screen_tape_width': 'metallic_screen_tape_width', 'binder_thickness': 'binder_tape_thickness'}
+    values, sources = {}, {}
+    for item in facts:
+        sources[item['key']] = candidate_source(item['source'])
+        if item['key'] in ('area', 'ampacity'):
+            continue
+        key = aliases.get(item['key'], item['key'])
+        values[key] = {'value': item['value'], 'unit': item['unit'], 'source': item['key'],
+                       'basis': 'manufacturer' if item['source']['origin'] == 'table' else 'standard_limit' if item['source']['origin'] == 'standard' else 'engineer_given'}
+    if not values:
+        return None
+    return {'name': name, 'version': '1', 'confirmed': False, 'materials': [],
+            'specification': {'manufacturer': series['manufacturer'], 'designation': series['designation'],
+                'u0_v': series['u0_v'], 'voltage_v': series['u_v'], 'cores': series['cores'],
+                'area_m2': next(item['value'] for item in facts if item['key'] == 'area'),
+                'conductor': 'copper_bare' if parts['conductor'] == 'copper' else 'aluminium',
+                'values': values, 'missing': missing or ['尚未形成完整工程结构，请补齐层结构与材料物性。']}, 'sources': sources}
+
+
+def _full_sources(payload, facts, series, derivation):
+    """Attach cell identities to exact model paths; derived values keep the constructor receipt."""
+    sources = {item['key']: candidate_source(item['source']) for item in facts}
+    source_by_key = dict(sources)
+    base = {'kind': 'derived', 'reviewed': False, 'reference': json.dumps({
+        'method': derivation, 'series': series, 'message': '按已声明结构和方法形成；来源核对不等于产品批准。'}, ensure_ascii=False)}
+    sources['/cable_type'] = base
+    sources['/materials'] = {'kind': 'standard', 'reviewed': False,
+        'reference': json.dumps({'thermal': structure.THERMAL, 'dielectric': structure.DIELECTRIC,
+                                'modelling': series['modelling'], 'method': derivation}, ensure_ascii=False)}
+    roles = {'conductor_screen': 'conductor_screen_thickness', 'insulation': 'insulation_thickness',
+             'insulation_screen': 'insulation_screen_thickness', 'oversheath': 'oversheath_thickness',
+             'bedding': 'bedding_thickness', 'metallic_sheath': 'metallic_sheath_thickness', 'buffer': 'buffer_thickness'}
+    for index, core in enumerate(payload['cable_type']['cores']):
+        for key, field in [('area', 'nominal_area'), ('conductor_diameter', 'diameter'), ('r20', 'r20')]:
+            if key in source_by_key:
+                sources[f'/cable_type/cores/{index}/conductor/{field}'] = source_by_key[key]
+        for layer_index, layer in enumerate(core['layers']):
+            if roles.get(layer['role']) in source_by_key:
+                sources[f'/cable_type/cores/{index}/layers/{layer_index}/thickness'] = source_by_key[roles[layer['role']]]
+    for index, layer in enumerate(payload['cable_type']['common_layers']):
+        if roles.get(layer['role']) in source_by_key:
+            sources[f'/cable_type/common_layers/{index}/thickness'] = source_by_key[roles[layer['role']]]
+    return sources
+
+
+def build_rows(upload, sheet, rows, series, mapping):
+    parts = parts_of(series)
+    rows = deepcopy(rows)
+    if series.get('resistance_basis') == 'standard_limit':
+        from studio.core.studio_core import basis
+        queries = {str(index): {'schema_version': 'cablesim.standards-query/1', 'standard': 'GB/T 3956', 'edition': '2008',
+            'locator': '表 2', 'quantity': 'resistance_20_max', 'conditions': {
+                'area_m2': row['values']['area'] * 1e-6, 'conductor_class': 2,
+                'conductor_material': parts['conductor'], **({'coating': 'plain'} if parts['conductor'] == 'copper' else {})}}
+            for index, row in enumerate(rows) if not row['issues'] and 'area' in row['values']
+            and 'r20' not in row['values'] and 'r20' not in series.get('common', {})}
+        references, _missing = basis.resolve(queries) if queries else ({}, [])
+        for index, reference in references.items():
+            rows[int(index)]['values']['r20'] = reference['record']['value']
+            rows[int(index)]['_standard_values'] = {'r20': reference}
+    result, buildable, indices, seen = [], [], [], {}
+    # Using a nominal-resistance standard limit must be a separate explicit
+    # choice. The importer never calls Studio's missing-R20 fallback.
+    required = ['area', 'conductor_diameter', 'insulation_thickness', 'oversheath_thickness', 'outer_diameter', 'r20']
+    if series['u_v'] > 3000:
+        required += ['conductor_screen_thickness', 'insulation_screen_thickness']
+    if parts.get('metal_sheath'):
+        required += ['metallic_sheath_thickness']
+        if parts['metal_sheath'] == 'corrugated_aluminium':
+            required += ['corrugation_depth', 'corrugation_pitch']
+    elif series['u_v'] > 3000:
+        required += ['screen_tape_thickness']
+    if parts.get('armour'):
+        required += ['bedding_thickness', 'armour_tape_thickness' if parts['armour']['kind'] == 'steel_tape' else 'armour_wire_diameter']
+    for row in rows:
+        facts, values = numeric_facts(upload, sheet, row, series, mapping)
+        area = values.get('area')
+        key = f'{series["cores"]}×{area:g}' if area else ''
+        name = f'{series["designation"]}-{series["u0_v"]/1000:g}/{series["u_v"]/1000:g} kV {key}'
+        issues = deepcopy(row['issues'])
+        if area in seen:
+            issues.append({'column': 'area', 'field': 'area', 'message': f'截面与第 {seen[area]} 行重复；请拆分为另一系列或删除重复规格。'})
+        elif area is not None:
+            seen[area] = row['row_number']
+        missing = [tables.FIELDS[field][0] for field in required if field not in values]
+        item = {'row_number': row['row_number'], 'name': name, 'key': key, 'area_m2': area * 1e-6 if area else None,
+                'values': facts, 'issues': issues, 'missing': missing, 'status': 'error' if issues else 'incomplete',
+                'payload': None, 'derivation': {'kind': 'stated', 'method': tables.IMPORT_METHOD}, 'closure': None}
+        result.append(item)
+        if issues:
+            continue
+        payload = _incomplete_payload(series, parts, name, facts, missing)
+        if payload is None:
+            item['issues'].append({'column': '', 'field': 'structure', 'message': '只有截面，缺少可保存的结构值。'})
+            item['status'] = 'error'
+            continue
+        item['payload'] = payload
+        if series['cores'] == 1 and (parts.get('metal_sheath') or series['u_v'] <= 3000):
+            from .stated_single_core import build
+            stated = build(series, parts, name, facts)
+            item['missing'] = list(dict.fromkeys(missing + stated['missing']))
+            item['issues'].extend(stated['issues'])
+            item['closure'], item['derivation'], item['warnings'] = stated['closure'], stated['derivation'], stated['warnings']
+            if item['issues']:
+                item['status'] = 'error'
+            elif stated['payload'] is not None and not item['missing']:
+                item.update(payload=stated['payload'], status='ready')
+            else:
+                payload['specification']['missing'] = item['missing'] or ['完整结构尚未形成，请核对声明。']
+            continue
+        if missing:
+            continue
+        if parts.get('metal_sheath') or series['u_v'] <= 3000 or series['cores'] not in (1, 3):
+            # Preserve HV/LV actual cells even when the installed constructor
+            # does not cover the family. A structured draft remains editable.
+            item['missing'].append('当前结构构造器未覆盖此系列；须补齐并核对完整分层结构和材料后计算。')
+            payload['specification']['missing'] = list(item['missing'])
+            continue
+        needed = {'conductor_form', 'filler_rho', 'diameter_rounding', 'screen_radial_factor'}
+        if structure.covered_by_completion(series, parts):
+            needed |= set(structure.MODELLING)
+        absent = needed - set(series.get('modelling', {}))
+        if absent:
+            item['missing'].extend('计算用参数：' + structure.MODELLING[field][0] for field in sorted(absent))
+            payload['specification']['missing'] = list(item['missing'])
+            continue
+        buildable.append({key: value for key, value in values.items() if key in structure.FIELDS})
+        indices.append(len(result) - 1)
+    if buildable:
+        build_series = {**series, 'modelling': {k: v for k, v in series['modelling'].items() if k in structure.MODELLING}}
+        built = structure.build(build_series, buildable)
+        for source_index, row in zip(indices, built['rows']):
+            item = result[source_index]
+            if not row['ok']:
+                error = row['error']
+                field = (error.get('path') or '').rsplit('/', 1)[-1]
+                item['issues'].append({'column': field, 'field': field, 'message': error['message']})
+                item['status'] = 'error'
+                continue
+            payload = deepcopy(row['entry']['payload'])
+            if any(f['key'] == 'r20' and f['source']['origin'] == 'standard' for f in item['values']):
+                for core in payload['cable_type']['cores']:
+                    core['conductor']['r20_basis'] = 'design'
+            item.update(status='ready', missing=[], closure=row['closure'], derivation=row['derivation'])
+            item['warnings'] = row['warnings']
+            item['payload'] = {'name': item['name'], 'version': '1', 'confirmed': False, **payload,
+                               'sources': _full_sources(payload, item['values'], series, row['derivation'])}
+    for item in result:
+        if item['payload']:
+            item['payload'] = CableModelVersion.model_validate(item['payload']).model_dump(mode='json')
+    return result
