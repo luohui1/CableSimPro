@@ -4,7 +4,7 @@ import path from "node:path";
 import net from "node:net";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -51,6 +51,52 @@ async function run(command, args, options = {}) {
   const [code] = await once(child, "exit");
   if (code !== 0) throw Error(command + " 退出 " + code);
 }
+async function isolateReproductionLibrary() {
+  // Some fixture scripts deliberately create this directory themselves.
+  // Preserve that explicit contract; never silently select the host's global library.
+  if (process.env.CABLESIM_REPRODUCTION_LIBRARY) {
+    console.log('使用显式验证证据目录（保留脚本自建夹具约定）：' + process.env.CABLESIM_REPRODUCTION_LIBRARY);
+    return process.env.CABLESIM_REPRODUCTION_LIBRARY;
+  }
+  const sourceDatabase = await fs.realpath(source);
+  const releaseDatabase = await fs.realpath(path.join(root, '.data/release/engineering.sqlite'))
+    .catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  const required = sourceDatabase === releaseDatabase;
+  const sourceLibrary = path.join(path.dirname(sourceDatabase), 'library');
+  const library = path.join(scratch, 'library');
+  const state = await fs.lstat(sourceLibrary)
+    .catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  if (!state) {
+    if (required) throw Error('发布验证证据库缺失：' + sourceLibrary + '；请先完成发布种子生成。');
+    await fs.mkdir(library);
+    console.log('来源未配置验证证据库；使用隔离空目录，不读取全局证据：' + library);
+    return library;
+  }
+  if (!state.isDirectory()) throw Error('验证证据库必须是实际目录：' + sourceLibrary);
+  async function manifest(folder, relative = '') {
+    const files = [];
+    const entries = await fs.readdir(path.join(folder, relative), { withFileTypes: true });
+    entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    for (const entry of entries) {
+      const name = path.join(relative, entry.name);
+      if (entry.isDirectory()) files.push(...await manifest(folder, name));
+      else if (entry.isFile()) {
+        const bytes = await fs.readFile(path.join(folder, name));
+        files.push({ path: name.split(path.sep).join('/'), bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
+      } else throw Error('验证证据库包含非普通文件：' + path.join(folder, name));
+    }
+    return files;
+  }
+  const files = await manifest(sourceLibrary);
+  if (required && !files.some(file => file.path === 'index.json'))
+    throw Error('发布验证证据索引缺失：' + path.join(sourceLibrary, 'index.json'));
+  await fs.cp(sourceLibrary, library, { recursive: true, force: false, errorOnExist: true });
+  const expected = JSON.stringify(files);
+  if (JSON.stringify(await manifest(sourceLibrary)) !== expected || JSON.stringify(await manifest(library)) !== expected)
+    throw Error('验证证据库在复制期间发生变化或副本字节不一致；未启动验收服务。');
+  console.log('验证证据库只读复制与逐文件摘要核对：' + JSON.stringify({ source: sourceLibrary, isolated: library, files }));
+  return library;
+}
 async function ready(url, child, output = () => backendOutput) {
   // 后端启动时会预热研究与运行读取；大的演示库冷启动约 30 s，等待上限 60 s
   for (let attempt = 0; attempt < 240; attempt++) {
@@ -79,6 +125,7 @@ try {
   const sourceReceipt = path.join(path.dirname(source), path.parse(source).name + '.seed.json');
   const seedReceipt = path.join(scratch, 'seed.json');
   if (script === 'verify-display-names.mjs') await fs.copyFile(sourceReceipt, seedReceipt);
+  const reproductionLibrary = await isolateReproductionLibrary();
   const backendPort = await port(),
     frontendPort = await port();
   servicePorts.push(backendPort, frontendPort);
@@ -89,6 +136,7 @@ try {
     // 普通验收禁用系统凭据；真实使用仅让平台按来源库账户正常鉴权，不改模型或密钥。
     CABLESIM_AGENT_KEY_STORE: realUseScript ? 'system' : 'memory',
     CABLESIM_DATASETS_DIR: path.join(scratch, "datasets"),
+    CABLESIM_REPRODUCTION_LIBRARY: reproductionLibrary,
     TEMP: scratch,
     TMP: scratch,
     BACKEND_URL: "http://127.0.0.1:" + backendPort,
