@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type Frame, type Locator, type Page } from 'playwright';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
+import type { Proposal } from '../shared/types.ts';
 import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
   installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState } from './fusion-scripts.ts';
 import { probe } from './layout-probe.ts';
@@ -37,6 +38,7 @@ const leakLocations = new Set<string>();
 const checks: { id: string; status: '通过' | '未通过' | '云端无法验证'; evidence: unknown }[] = [];
 const screenshots: Record<string, unknown>[] = [];
 const completedImports = new Set<number>();
+const clickedProposalIds = new Set<string>();
 let stage = 'startup';
 let browser: Browser | undefined;
 let sidecar: Sidecar | undefined;
@@ -192,27 +194,39 @@ async function waitFlow(state: FlowState, label: string): Promise<void> {
   assert.equal(state.failure, undefined, label + ': ' + state.failure);
   assert.ok(state.done, label);
 }
+async function waitingReviews(frame: Frame): Promise<Proposal[]> {
+  return frame.evaluate(async () => {
+    const session = /^#\/chat\/([^/]+)/.exec(location.hash)?.[1];
+    if (!session) return [];
+    const response = await fetch('/agent-sidecar/api/chat/sessions/' + encodeURIComponent(decodeURIComponent(session)), { cache: 'no-store' });
+    if (!response.ok) throw new Error('读取实际待审状态失败：' + response.status);
+    return (await response.json()).waiting ?? [];
+  });
+}
+function proposalCard(frame: Frame, id: string): Locator {
+  assert.match(id, /^[a-zA-Z0-9_-]+$/, '提案标识必须来自实际保存记录');
+  return frame.locator(`[data-card="proposal"][data-proposal-id="${id}"]`);
+}
+async function canAccept(frame: Frame, id: string): Promise<boolean> {
+  const button = proposalCard(frame, id).getByRole('button', { name: '接受', exact: true });
+  return await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false);
+}
+async function pendingReview(frame: Frame, match: (proposal: Proposal) => boolean = () => true): Promise<Proposal> {
+  let review: Proposal | undefined;
+  await until(async () => {
+    review = (await waitingReviews(frame)).filter(match).at(-1);
+    return Boolean(review && await canAccept(frame, review.id));
+  }, '实际待审提案及其接受按钮', 90_000);
+  assert.ok(review);
+  return review;
+}
 async function pending(frame: Frame, title?: string): Promise<Locator> {
-  const proposals = frame.locator('[data-card="proposal"][data-phase="pending"]');
-  const card = (title ? proposals.filter({ has: frame.getByRole('heading', { name: title, exact: true }) }) : proposals).last();
-  const button = card.getByRole('button', { name: '接受', exact: true });
-  await until(async () => await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false), '可审阅的提案', 90_000);
-  return card;
+  const review = await pendingReview(frame, proposal => !title || proposal.title === title);
+  return proposalCard(frame, review.id);
 }
 async function pendingOperation(frame: Frame, operation: string): Promise<Locator> {
-  let title = '';
-  await until(async () => {
-    const review = await frame.evaluate(async () => {
-      const session = location.hash.split('/')[2];
-      if (!session) return undefined;
-      const response = await fetch('/agent-sidecar/api/chat/sessions/' + session);
-      return (await response.json()).waiting?.at(-1);
-    });
-    if (review?.operation !== operation) return false;
-    title = review.title;
-    return true;
-  }, operation + ' 的实际待审状态', 90_000);
-  return pending(frame, title);
+  const review = await pendingReview(frame, proposal => proposal.operation === operation);
+  return proposalCard(frame, review.id);
 }
 async function expandProposal(card: Locator): Promise<void> {
   const trigger = card.getByRole('button', { name: /^完整改动/ });
@@ -234,23 +248,39 @@ async function expandProposal(card: Locator): Promise<void> {
     });
   }), '展开后的首项字段和值在画面内可见');
 }
-async function accept(frame: Frame): Promise<void> {
-  const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
+async function accept(frame: Frame, proposalId?: string): Promise<void> {
+  const id = proposalId ?? (await pendingReview(frame)).id;
+  assert.ok(!clickedProposalIds.has(id), '同一提案只能点击接受一次：' + id);
+  const button = proposalCard(frame, id).getByRole('button', { name: '接受', exact: true });
   await button.scrollIntoViewIfNeeded();
-  await button.click();
+  const [response] = await Promise.all([
+    frame.page().waitForResponse(reply => reply.request().method() === 'POST'
+      && new URL(reply.url()).pathname.endsWith('/api/proposals/' + encodeURIComponent(id) + '/decision'), { timeout: 90_000 }),
+    button.click(),
+  ]);
+  clickedProposalIds.add(id);
+  assert.equal(response.status(), 200, '人工接受必须收到实际决定回执');
+  const decision = await response.json();
+  assert.equal(decision.id, id);
+  assert.equal(decision.status, 'accepted');
+  await until(async () => !(await waitingReviews(frame)).some(proposal => proposal.id === id), '同一已接受提案退出实际待审队列', 90_000);
 }
 async function approveAll(frame: Frame, state: FlowState): Promise<number> {
   let count = 0;
   while (!state.done && !state.failure) {
-    const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
-    await until(async () => state.done || Boolean(state.failure) || await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false), '下一项待审提案', 90_000);
+    let review: Proposal | undefined;
+    await until(async () => {
+      if (state.done || state.failure) return true;
+      review = (await waitingReviews(frame)).at(-1);
+      if (!review) return false;
+      assert.ok(!clickedProposalIds.has(review.id), '已经接受的提案不得再次进入待审队列：' + review.id);
+      return canAccept(frame, review.id);
+    }, '下一项实际待审提案或任务完成', 90_000);
     if (state.done || state.failure) break;
-    const card = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
-    const description = await card.innerText();
-    await accept(frame);
+    assert.ok(review);
+    await accept(frame, review.id);
     count += 1;
     assert.ok(count <= 10, '单项任务不应无限产生提案');
-    await until(async () => state.done || Boolean(state.failure) || await card.count() === 0 || await card.innerText({ timeout: 500 }).catch(() => '') !== description, '已接受提案后的继续', 90_000);
   }
   await waitFlow(state, '多步任务完成');
   return count;
@@ -593,7 +623,9 @@ try {
       const tableRunProposal = await pending(frame, '运行研究');
       record(`${viewport.width}/unapproved-rating-table-run-does-not-write`, (await json(backendUrl, `/api/workspaces/${type.workspace}/studies/${tableFlow.study}/runs`)).items.length === 0,
         { study: tableFlow.study, runs: 0 });
-      await tableRunProposal.getByRole('button', { name: '接受', exact: true }).click();
+      const tableRunProposalId = await tableRunProposal.getAttribute('data-proposal-id');
+      assert.ok(tableRunProposalId);
+      await accept(frame, tableRunProposalId);
       await waitFlow(tableFlow, '真实载流量表');
       const savedTable = await json(backendUrl, `/api/design/workspaces/${type.workspace}/rating-table-runs/${tableFlow.run}?view=rows`);
       assert.deepEqual(tableFlow.table, savedTable.rows);
@@ -728,7 +760,9 @@ try {
             { previewDigest: imported.preview!.preview_digest, allRowsPreserved: true });
           await shot(page, frame, 'import-draft-proposal', { rows: 11, previewDigest: imported.preview!.preview_digest });
         }
-        await proposal.getByRole('button', { name: '接受', exact: true }).click();
+        const importProposalId = await proposal.getAttribute('data-proposal-id');
+        assert.ok(importProposalId);
+        await accept(frame, importProposalId);
       }
       await waitFlow(imported, '原件导入并逐项真实核对');
       const checked = frame.locator('[data-card="structure-check"]').last();

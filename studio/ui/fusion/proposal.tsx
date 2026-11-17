@@ -39,9 +39,9 @@ export function ProposalBlock({ proposal, step }: { proposal: Proposal; step: Ch
     return <RefusalCard kind="error" title={title} reason={reason} />;
   }
   const executing = proposal.status === 'accepted' && step.status === 'running';
-  const phase: ProposalPhase = executing || proposal.status === 'pending' ? (rejecting ? 'rejecting' : 'pending') : proposal.status;
+  const phase: ProposalPhase = proposal.status === 'pending' ? (rejecting ? 'rejecting' : 'pending') : proposal.status;
   return <>
-    <ProposalCard action={action} subject={subject} phase={phase} busy={decide.isPending || executing || !sessionId} collapseChangesAfter={8}
+    <ProposalCard proposalId={proposal.id} action={action} subject={subject} phase={phase} busy={decide.isPending || executing || !sessionId} collapseChangesAfter={8}
       changes={proposal.changes.map((change, index) => ({ id: `${index}/${change.part}/${change.field}`, label: change.label, before: change.before, after: change.after }))}
       consequence={proposal.checks?.length || proposal.assumptions?.length ? <>
         {proposal.checks?.length ? <ul className="m-0 list-disc space-y-1 pl-4">{proposal.checks.map((check, index) => <li key={index}>{check}</li>)}</ul> : null}

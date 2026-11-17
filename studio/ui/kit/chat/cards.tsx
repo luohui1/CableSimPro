@@ -159,7 +159,9 @@ export interface Change {
 
 export type ProposalPhase = 'pending' | 'rejecting' | 'accepted' | 'rejected';
 
-export function ProposalCard({ action, subject, changes, phase, consequence, note, onNoteChange, onAccept, onReject, onConfirmReject, onCancelReject, busy, collapseChangesAfter }: {
+export function ProposalCard({ proposalId, action, subject, changes, phase, consequence, note, onNoteChange, onAccept, onReject, onConfirmReject, onCancelReject, busy, collapseChangesAfter }: {
+  /** The saved proposal identity remains stable while its human decision and execution state change. */
+  proposalId?: string;
   /** The operation: 修改结构, 新建工程. */
   action: string;
   /** What it acts on: YJV22-8.7/15 kV 3×240 · 第 1 版. */
@@ -188,14 +190,14 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
   const effects = consequence && <div className="flex items-start gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name="status/warning" className="mt-1 text-attention" /><div className="min-w-0 flex-1">{consequence}</div></div>;
   if (phase === 'accepted' || phase === 'rejected') {
     const accepted = phase === 'accepted';
-    return <Collapsible className="rounded-card border border-line bg-surface" data-card="proposal" data-phase={phase}>
+    return <Collapsible className="rounded-card border border-line bg-surface" data-card="proposal" data-phase={phase} data-proposal-id={proposalId} aria-busy={busy || undefined}>
       <CollapsibleTrigger className="group flex min-h-12 w-full items-center gap-2 rounded-card px-4 text-left outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring">
         <Icon name={accepted ? 'agent/approve' : 'agent/reject'} className={accepted ? 'text-success' : 'text-error'} />
         <span className="min-w-0 flex-1 truncate text-sm">
           <span className="font-medium text-ink">{accepted ? '已接受' : '已拒绝'} · {action}</span>
           <span className="ml-2 text-ink-2">{subject}</span>
         </span>
-        <span className="text-sm whitespace-nowrap text-ink-2">{accepted ? `${changes.length} 项已生效` : note ? `原因：${note}` : '没有改动'}</span>
+        <span className="text-sm whitespace-nowrap text-ink-2">{accepted ? busy ? '正在执行，等待结果' : `${changes.length} 项已生效` : note ? `原因：${note}` : '没有改动'}</span>
         <Icon name="action/chevron-right" className="text-ink-2 transition-transform duration-std group-data-panel-open:rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
@@ -203,7 +205,7 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
       </CollapsibleContent>
     </Collapsible>;
   }
-  return <section className="flex min-w-0 flex-col overflow-hidden rounded-card border border-agent bg-surface" data-card="proposal" data-phase={phase}>
+  return <section className="flex min-w-0 flex-col overflow-hidden rounded-card border border-agent bg-surface" data-card="proposal" data-phase={phase} data-proposal-id={proposalId}>
     <header className="flex min-h-12 items-center gap-2 px-4 pt-3">
       <Badge variant="agent"><Icon name="agent/proposal" data-icon="inline-start" />待你审阅</Badge>
       <h3 className="m-0 min-w-0 flex-1 truncate text-h3 text-ink">{action}<span className="ml-2 font-normal text-ink-2">{subject}</span></h3>
