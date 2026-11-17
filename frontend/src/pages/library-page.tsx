@@ -85,7 +85,7 @@ function assetGroups(asset: Record<string, unknown>): PropertyGroup[] {
   if (data.values.length) groups.push({
     label: "参考物性",
     items: data.values.map((row) => ({
-      label: propertyLabel(row.property), value: referenceNumber(row.value), unit: unitOf(row.unit), source: "standard" as const,
+      label: propertyLabel(row.property), value: referenceNumber(row.value), unit: unitOf(row.unit), source: "standard" as const, stacked: true,
       sourceDetail: [referenceCitation(row), row.condition && `条件：${row.condition}`, row.sourceDigest && `文件摘要 ${row.sourceDigest}`].filter(Boolean).join("\n"),
     })),
   });
@@ -104,7 +104,7 @@ function assetGroups(asset: Record<string, unknown>): PropertyGroup[] {
     label: "计算参数",
     items: parameters.map((row) => {
       const quantity = optionalRecord(row.quantity), value = numeric(quantity.value);
-      return { label: propertyLabel(text(row.name)), value: value === null ? "未提供" : referenceNumber(value), unit: unitOf(text(quantity.unit)) };
+      return { label: propertyLabel(text(row.name)), value: value === null ? "未提供" : referenceNumber(value), unit: unitOf(text(quantity.unit)), stacked: true };
     }),
   });
   if (data.gaps.length) groups.push({
