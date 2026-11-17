@@ -37,6 +37,7 @@ def test_preview_pins_metadata_and_export_headers_match_actual_bytes(saved_api, 
     monkeypatch.setattr(client.app.state.research.executor, 'run', no_solver)
     preview = client.post('/api/formal-deliveries/preview', json=request)
     assert preview.status_code == 200, preview.text
+    assert preview.headers['cache-control'] == 'no-store'
     model = preview.json()
     assert all('payload' not in source for source in model['sources'].values())
     assert all(signature['name'] is None and signature['date'] is None for signature in model['signatures'])
