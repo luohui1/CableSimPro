@@ -18,6 +18,7 @@ from pydantic import Field, field_validator, model_validator
 from backend.schemas import StrictModel
 from .workspace import fingerprint, stamp
 from . import candidates, factory_tables as tables
+from .published_guidance import validate_published_guidance
 from .type_import_models import SeriesDeclaration, build_rows
 from .type_versions import NewType, Branch
 
@@ -261,6 +262,7 @@ class TypeLibrary:
             if not good:
                 tables.fail('TABLE_NO_VALID_ROWS', '没有可入库规格。')
             declaration = payload['series']
+            validate_published_guidance(declaration.get('reference', {}))
             if db.execute('SELECT 1 FROM type_series WHERE name=?', (declaration['name'],)).fetchone():
                 tables.fail('TYPE_SERIES_EXISTS', '同名系列已存在，请修改系列名称后重新预览。', 409)
             series_id = str(uuid4())
@@ -279,7 +281,9 @@ class TypeLibrary:
         row = db.execute('SELECT * FROM type_series WHERE id=?', (str(identifier),)).fetchone()
         if not row:
             tables.fail('TYPE_SERIES_UNKNOWN', '系列不存在。', 404)
-        return dict(row), json.loads(row['declaration'])
+        declaration = json.loads(row['declaration'])
+        validate_published_guidance(declaration.get('reference', {}))
+        return dict(row), declaration
 
     def _spec(self, db, identifier, version=None):
         row = db.execute('SELECT * FROM type_series_specs WHERE id=?', (str(identifier),)).fetchone()
@@ -314,6 +318,7 @@ class TypeLibrary:
             items = []
             for row in db.execute('SELECT * FROM type_series ORDER BY created DESC'):
                 declaration = json.loads(row['declaration'])
+                validate_published_guidance(declaration.get('reference', {}))
                 specs = [self._spec(db, item['id']) for item in db.execute('SELECT id FROM type_series_specs WHERE series=?', (row['id'],))]
                 states = {name: sum(s['state'] == name for s in specs) for name in {s['state'] for s in specs}}
                 items.append({'id': row['id'], **declaration, 'spec_count': len(specs), 'states': states})

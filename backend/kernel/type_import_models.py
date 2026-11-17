@@ -62,6 +62,8 @@ class SeriesDeclaration(StrictModel):
 
     @model_validator(mode='after')
     def stated(self):
+        from .published_guidance import validate_published_guidance
+        validate_published_guidance(self.reference)
         for key in ('name', 'manufacturer', 'designation'):
             value = getattr(self, key).strip()
             if not value:
