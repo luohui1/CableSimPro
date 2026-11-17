@@ -319,6 +319,7 @@ try {
         }
         if (size.width === 1366) await page.screenshot({ path: path.join(out, 'runs-light.png') });
       }
+      const surfaceUrl = page.url().replace(base, '');
       if (!performanceMode) await scan(surface, size);
       if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === 1366) {
         const links = await page.locator(`a[href^="/studies/${surface.study}/"]`).evaluateAll(links => links.map(l => l.getAttribute('href')));
@@ -355,10 +356,10 @@ try {
           } else {
             await click(); await settled(); await scan(tab, size, /技术|追溯/.test(label) ? 'technical' : 'ordinary');
           }
-          report.pages.push({ ...tab, ...size });
+          report.pages.push({ ...tab, actualUrl: page.url().replace(base, ''), ...size });
         }
       }
-      report.pages.push({ ...surface, actualUrl: page.url().replace(base, ''), readiness, ...size });
+      report.pages.push({ ...surface, actualUrl: surfaceUrl, readiness, ...size });
     } catch (error) {
       const screenshot = 'uncovered-' + createHash('sha256').update(surface.route + size.width).digest('hex').slice(0, 12) + '.png';
       await page.screenshot({ path: path.join(out, screenshot) }).catch(() => {});

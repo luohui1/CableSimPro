@@ -214,6 +214,9 @@ export function TypeWorkspace() {
     {property}{location.module === 'structure' && cable && <StructureSourceInput cableId={cable.id} />}</>}
     {agentOpened && state.workspace && <div className="type-agent-panel" hidden={inspectorView !== 'agent'}><AgentPanel key={state.workspace.id} workspaceId={state.workspace.id} context={cleanLabel(document?.name || '型号设计')} suggestions={['检查这个型号的问题', '绝缘厚度改到 15.8 mm 会怎样？', '检查规格书还缺哪些来源与结果']} /></div>}
   </div>;
+  const workspaceState = state.loading ? <LoadingState title="正在读取型号输入" />
+    : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} />
+      : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" action={<Button variant="primary" onClick={() => navigate('/types?theme=' + location.theme)}>选择型号</Button>} /> : null;
   return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={title} status={<StatusMark kind={status} label={statusLabel + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
     actions={<><IconButton icon="action/edit" label="修改型号名称" disabled={state.busy || state.readOnly || !document} onClick={() => { setNewName(document?.name || ''); setRenaming(true); }} /></>}
@@ -225,7 +228,7 @@ export function TypeWorkspace() {
         <div className="workbench-views" role="group" aria-label="模型视图">
           {([['section', 'object/cable', '电缆截面'], ['three', 'result/field', '三维剥切']] as const).map(([value, icon, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}><Icon name={icon} />{label}</button>)}
         </div>
-        {!dockMax && (state.loading ? <LoadingState title="正在读取型号输入" /> : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} /> : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" /> : <TypeCanvas view={view} cable={cable} selected={selected} onSelect={choose} />)}
+        {!dockMax && (workspaceState || <TypeCanvas view={view} cable={cable} selected={selected} onSelect={choose} />)}
         {structureError && <p className="type-notice is-error" role="alert">{structureError}</p>}
       </section>
       <WorkbenchSplitter kind="type" />
@@ -234,7 +237,8 @@ export function TypeWorkspace() {
           {dockTabs.length > 1 ? <TabsList aria-label={(module?.label || '') + '页签'}>{dockTabs.map(([id, label]) => <TabsTrigger key={id} value={id}>{label}</TabsTrigger>)}</TabsList> : <span className="workbench-dock-title">{module?.label}</span>}
           <Button variant="ghost" size="compact" onClick={() => setDockMax(!dockMax)}><Icon name={dockMax ? 'action/chevron-down' : 'action/chevron-up'} />{dockMax ? '显示模型' : '展开结果'}</Button>
         </div>
-        <TabsContent asChild value={dockTab}><div className="type-page workbench-dock-body" aria-label={module?.label || '型号模块'} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
+        <TabsContent asChild value={dockTab}><div className="type-page workbench-dock-body" aria-label={module?.label || '型号模块'} aria-busy={state.loading || undefined} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
+          {dockMax && workspaceState}
           {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
           {state.dirty && <p className="type-notice">{state.changeCount} 处未保存 · {state.inputDirty ? evidence.data?.length ? '保存后重算受影响的结果。' : '保存后用于计算和交付。' : '保存方法条件后可运行。'}</p>}
           {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
