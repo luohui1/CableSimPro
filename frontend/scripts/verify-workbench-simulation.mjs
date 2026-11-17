@@ -82,8 +82,11 @@ await walkthrough('simulation', async ({
       evidence.focus.push({pointer,...state});
     }
   }
-  async function inspectMethodVersion(method) {
-    const control=form.getByRole('combobox',{name:'方法版本',exact:true});
+  async function inspectMethodVersion(method,scope=form,expectedHeight=36,prefix='03') {
+    const control=scope.getByRole('combobox',{name:'方法版本',exact:true});
+    const fullName=scope.locator('.study-method-current-name');
+    await expect(fullName).toBeVisible();
+    await fullName.scrollIntoViewIfNeeded();
     await control.scrollIntoViewIfNeeded();
     const cards=await api('/api/methods?view=summary');
     const card=cards.find(row=>row.method.plugin_id===method.plugin_id
@@ -92,36 +95,61 @@ await walkthrough('simulation', async ({
     expect(card,'方法名称须来自保存 pin 对应的真实方法清单').toBeTruthy();
     const capability=card.capabilities.find(row=>row.id===method.capability);
     const selectedText=(await control.locator(':scope > span').first().innerText()).trim();
-    expect(selectedText).toBe(displayText(`${card.name} · ${capability.title} · ${method.version}`));
+    const completeName=displayText(`${card.name} · ${capability.title} · ${method.version}`);
+    expect(selectedText).toBe(method.version);
+    await expect(fullName).toHaveText(completeName);
+    await expect(fullName).toBeInViewport({ratio:1});
+    await expect(control).toHaveAccessibleDescription(completeName);
     const layout=await control.evaluate(button=>{
       const rect=element=>{
         const box=element.getBoundingClientRect();
         return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:box.width,height:box.height};
       };
       const value=button.querySelector(':scope > span:first-child'),arrow=button.querySelector('[data-select-arrow]');
-      const range=document.createRange();range.selectNodeContents(value);
+      const textRects=element=>{
+        const text=[],nodes=document.createTreeWalker(element,NodeFilter.SHOW_TEXT);
+        for(let node=nodes.nextNode();node;node=nodes.nextNode()){
+          if(!node.textContent.trim())continue;
+          const range=document.createRange();range.selectNodeContents(node);
+          text.push(...[...range.getClientRects()].map(box=>({left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:box.width,height:box.height})));
+        }
+        return text;
+      };
+      const name=document.getElementById(button.getAttribute('aria-describedby'));
+      const style=getComputedStyle(button),box=rect(button);
       const label=button.labels[0],field=button.closest('.select-field');
       const ancestors=[];
       for(let node=field;node;node=node.parentElement){
         if(node.clientWidth && /auto|scroll/.test(getComputedStyle(node).overflowX))
           ancestors.push({selector:node.className || node.tagName,width:node.clientWidth,scrollWidth:node.scrollWidth});
       }
-      return {button:rect(button),field:rect(field),label:rect(label),arrow:rect(arrow),
-        text:[...range.getClientRects()].map(box=>({left:box.left,right:box.right,top:box.top,bottom:box.bottom})),
+      return {button:box,field:rect(field),label:rect(label),arrow:rect(arrow),
+        minimumHeight:parseFloat(style.minHeight),fontSize:parseFloat(getComputedStyle(value).fontSize),text:textRects(value),
+        name:{...rect(name),fontSize:parseFloat(getComputedStyle(name).fontSize),text:textRects(name)},
+        inner:{left:box.left+parseFloat(style.borderLeftWidth),right:box.right-parseFloat(style.borderRightWidth),
+          top:box.top+parseFloat(style.borderTopWidth),bottom:box.bottom-parseFloat(style.borderBottomWidth)},
         ancestors,viewport:innerWidth};
     });
-    evidence.parameters.methodVersion={method,selectedText,layout};
-    await check('方法版本独占整行且完整文字、箭头不越界，无横向滚动',
-      Math.abs(layout.button.height-36)<1 && layout.label.bottom<=layout.button.top
+    const measuredVersion={method,selectedText,completeName,expectedHeight,layout};
+    evidence.parameters[expectedHeight===32?'inspectorMethodVersion':'methodVersion']=measuredVersion;
+    await check(`方法版本控件保持 ${expectedHeight}px，关联完整名称可读且无越界横滚`,
+      Math.abs(layout.minimumHeight-expectedHeight)<1 && Math.abs(layout.button.height-expectedHeight)<1
+      && layout.fontSize>=13 && layout.label.bottom<=layout.button.top
       && Math.abs(layout.button.width-layout.field.width)<1
       && layout.button.left>=0 && layout.button.right<=layout.viewport
       && layout.arrow.left>=layout.button.left && layout.arrow.right<=layout.button.right
       && layout.arrow.top>=layout.button.top && layout.arrow.bottom<=layout.button.bottom
-      && layout.text.every(box=>box.left>=layout.button.left && box.right<=layout.arrow.left
-        && box.top>=layout.button.top && box.bottom<=layout.button.bottom)
+      && layout.text.length>0 && layout.text.every(box=>box.width>0 && box.height>0
+        && box.left>=layout.inner.left && box.right<=Math.min(layout.arrow.left,layout.inner.right)
+        && box.top>=layout.inner.top && box.bottom<=layout.inner.bottom)
+      && layout.name.fontSize>=13 && layout.name.top>=layout.button.bottom
+      && layout.name.left>=layout.field.left && layout.name.right<=Math.min(layout.field.right,layout.viewport)
+      && layout.name.text.length>0 && layout.name.text.every(box=>box.width>0 && box.height>0
+        && box.left>=layout.name.left && box.right<=layout.name.right
+        && box.top>=layout.name.top && box.bottom<=layout.name.bottom)
       && layout.ancestors.every(node=>node.scrollWidth<=node.width+1),
-      evidence.parameters.methodVersion);
-    await capture('03-method-version-complete');
+      measuredVersion);
+    await capture(`${prefix}-method-version-complete`);
     await control.focus();await page.keyboard.press('Enter');
     const listbox=page.getByRole('listbox');await expect(listbox).toBeVisible();
     const options=listbox.getByRole('option');
@@ -142,9 +170,9 @@ await walkthrough('simulation', async ({
         && measured.scrollWidth<=measured.width+1 && measured.textRects.every(rect=>rect.left>=measured.left
           && rect.right<=measured.right && rect.top>=measured.top && rect.bottom<=measured.bottom),measured);
     }
-    expect(labels).toContain(selectedText);
-    evidence.parameters.methodVersion.options=labels;
-    await capture('03-method-version-options');
+    expect(labels).toContain(completeName);
+    measuredVersion.options=labels;
+    await capture(`${prefix}-method-version-options`);
     await page.keyboard.press('Escape');await expect(control).toBeFocused();
     await expect(control.locator(':scope > span').first()).toHaveText(selectedText);
   }
@@ -182,6 +210,12 @@ await walkthrough('simulation', async ({
       await expect(page.locator('[data-drawing-canvas="laying"]')).toBeVisible();
       await expect(page.getByText('正在读取保存工况的模型输入',{exact:true})).toHaveCount(0);
       await check('能从已保存的 IEC 研究开始有限元对照', true, evidence.source.iec);
+      if(report.phase==='after'){
+        const tabs=page.getByRole('tablist',{name:'属性分页',exact:true});
+        await tabs.getByRole('tab',{name:'方法',exact:true}).click();
+        await inspectMethodVersion(iec.definition.method,page.getByRole('complementary',{name:'属性',exact:true}),32,'01-iec');
+        await tabs.getByRole('tab',{name:'输入',exact:true}).click();
+      }
     });
 
     await step('02-new-fem-comparison', async () => {

@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { displayName } from '@/lib/display-names';
+import { displayName, displayText } from '@/lib/display-names';
 import { exactContract, inputContractQuery } from "@/api/input-contracts";
 import { type StudyDefinition } from "@/api/research";
 import { methodCardsQuery } from '@/lib/study-queries';
 import { optionalRecord, text, message } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import { useStudy } from "./study-provider";
-import { Select } from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { LoadingState, EmptyState, StaleBanner } from '@/components/states';
@@ -20,7 +20,7 @@ import { expand } from '@/lib/contract-schema';
 import { savedDomain } from '@/lib/domain-fields';
 import { array } from '@/api/client';
 import './study-method-form.css';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { focusParameterField, nullableParameter } from '@/lib/study-parameter-form';
 import { contractFields } from '@/lib/heavy-components';
 const ContractFields = contractFields.Component;
@@ -57,6 +57,7 @@ export function StudyMethodForm({
 }) {
   const context = useStudy();
   const form=useRef<HTMLDivElement>(null);
+  const methodId=useId();
   useEffect(()=>{
     if(!context.saveError || historical || context.saving)return;
     const invalid=Object.values(context.draft?.parameterFields || {}).find(field=>{
@@ -201,16 +202,19 @@ export function StudyMethodForm({
   return (
     <div ref={form} className="parameter-form study-method-config">
       {historical && <StaleBanner description="固定运行方法配置 · 只读" />}
-      <Select
-        label="方法版本"
-        value={savedKey}
-        disabled={historical || context.saving}
-        options={available}
-        onChange={(value) => {
-          const chosen = available.find((item) => item.value === value);
-          if (chosen) update({ ...configuration, method: chosen.method });
-        }}
-      />
+      <div className="select-field">
+        <label htmlFor={methodId}>方法版本</label>
+        <Select value={savedKey} disabled={historical || context.saving} onValueChange={value=>{
+          const chosen=available.find(item=>item.value===value);
+          if(chosen && !historical && !context.saving)update({...configuration,method:chosen.method});
+        }}>
+          <SelectTrigger id={methodId} aria-describedby={`${methodId}-name`}>
+            <SelectValue>{configuration.method.version}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>{available.map(item=><SelectItem key={item.value} value={item.value}>{displayText(item.label)}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+      <p id={`${methodId}-name`} className="study-method-current-name">{displayText(available.find(item=>item.value===savedKey)!.label)}</p>
       {!!error && (
         <ErrorState
           title="方法契约不可用"
