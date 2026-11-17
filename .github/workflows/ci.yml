@@ -251,6 +251,25 @@ jobs:
             .data/fix-round/shared-shell/visible-text/
             .data/fix-round/shared-shell/regularity/
             .data/fix-round/shared-shell/performance/
+      - name: Diagnose representative saved pages after the complete audits
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        working-directory: frontend
+        env:
+          LOADING_TRACE_AUDIT: ${{ github.workspace }}/.data/fix-round/shared-shell/performance/after/audit.json
+          LOADING_TRACE_OUTPUT: ${{ github.workspace }}/.data/fix-round/shared-shell/loading-path/trace
+          LOADING_SERVER_TRACE: ${{ runner.temp }}/workbench-loading-trace-server.jsonl
+        run: npm run test:loading-trace 2>&1 | tee ../.data/workbench-walk/logs/loading-trace.log
+      - name: Upload diagnostic traces separately from performance budgets
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-loading-trace
+          retention-days: 14
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            .data/fix-round/shared-shell/loading-path/trace/
+            .data/workbench-walk/logs/loading-trace.log
       - name: Cable Studio types, build and real-flow tests
         if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
         working-directory: studio
