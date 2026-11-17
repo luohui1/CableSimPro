@@ -46,7 +46,13 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 ## 公开样本对照
 
-`GET /api/type-library/samples` 提供人民电缆和 Bahra 的原始来源及随附表声明；`/samples/{name}.xlsx` 或 `.csv?table=...` 下载可直接导入的结构表。`POST /api/type-library/catalogue-comparison/{name}` 重新调用真实方法，逐规格返回外径、重量、R20、载流量及偏差原因。表列读回标记为 `declared_input`，不能当作独立计算验证；未公开或方法不能算的值不会填零。载流量对照使用报告列明的样本条件和明确建模假设，不能自动作为工程发布依据。
+`GET /api/type-library/samples` 提供人民电缆和 Bahra 的原始来源及随附表声明；`/samples/{name}.xlsx` 或 `.csv?table=...` 下载可直接导入的结构表。
+
+`POST /api/type-library/catalogue-comparison/{name}` 返回 `schema: cablesim.catalogue-comparison/2`，不传请求体或传 `{}` 时只读取真实厂家数据，不构造假定结构、不调用载流量求解器。根层 `rows` 逐规格保留原表外径、重量、R20、载流量和来源；厂家结构或工况缺失时，计算值及偏差为 `null`，`missing_fields` 列明缺项。外径或电阻的输入读回标记为 `declared_input`，偏差仍为 `null`，不能用零偏差冒充独立验证。当前两份手册共 59 个规格均缺少独立载流量复现所需的厂家输入，根层 `summary.ampacity_compared` 与 `four_metric_passed` 都为 0。
+
+旧版 Studio 回归保留为独立研究参考情景。响应的 `reference_scenario` 在执行前列明全部假设、单位、依据、方法版本、来源摘要及可信分档；`manufacturer_data` 为 `false`，`reference_calculation` 为 `null`。界面或 Agent 必须先展示完整声明，经操作者明确选择后，才可发送 `{"reference_scenario_confirmed":true}`。该字段只接受布尔值，不接受字符串或数字。执行后的结果只进入独立 `reference_calculation`，保存每个规格实际使用的结构和方法输入；根层厂家 `rows`、缺项、拒绝及通过计数不变。参考计算的差异不计入四项真实厂家数据验收，也不能自动作为型号发布依据。
+
+全新发布种子的电缆厂示例复用原有电气及短路通道。即使规格书生成被其他真实缺项阻断，也保存能够得到的电气结果与短路缺项诊断，并保留普通运行的输入、输出、工件摘要和方法版本。没有故障持续时间或初末温度时，不生成短路容量；有保存的诊断运行不代表规格书齐全或产品已批准。
 
 ## 两台机器之间的数据搬运
 
