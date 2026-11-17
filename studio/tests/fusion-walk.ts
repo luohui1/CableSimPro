@@ -466,7 +466,18 @@ try {
       const conditionApprovals = await approveAll(frame, condition);
       record(`${viewport.width}/conditions-recalculate-compare`, conditionApprovals === 2 && Boolean(condition.comparison && condition.run),
         { approvals: conditionApprovals, newRun: condition.run, originalRun: source.run, comparison: condition.comparison });
-      await frame.locator('[data-role="assistant"]').last().scrollIntoViewIfNeeded();
+      const comparisonSummary = frame.locator('[data-role="assistant"]').last().locator('p').filter({ hasText: '保存的比较差值为' });
+      await until(async () => (await comparisonSummary.innerText()).includes('旧记录保持不变'), '完整保存运行比较文字到达');
+      const latest = frame.getByRole('button', { name: '回到最新', exact: true, includeHidden: true });
+      if (await latest.isVisible() && await latest.isEnabled()) await latest.click();
+      await until(async () => await latest.isDisabled() && !await latest.isVisible(), '真实滚到消息结尾且浮动按钮消失');
+      await until(() => comparisonSummary.evaluate(element => {
+        const box = element.getBoundingClientRect();
+        const viewport = element.closest('.overflow-y-auto')?.getBoundingClientRect();
+        const composer = document.querySelector('[aria-label="给 Agent 的消息"]')?.closest('form')?.getBoundingClientRect();
+        return Boolean(viewport && composer && box.height > 0 && box.top >= viewport.top
+          && box.bottom <= Math.min(viewport.bottom, composer.top));
+      }), '比较差值完整可见且没有被输入框遮挡');
       await shot(page, frame, 'conditions-compared', { run: condition.run, originalRun: source.run });
       const changedAmpacity = condition.result!.headlines.find((row: any) => row.key === 'ampacity').display_value.toFixed(1);
       await frame.locator('[data-card="rating"]').last().getByRole('button', { name: '在工作台打开', exact: true }).click();
