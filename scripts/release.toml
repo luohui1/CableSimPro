@@ -1,0 +1,38 @@
+# CableSimPro 发行运行配置；UTF-8。相对路径以本文件所在目录为基准。
+# Windows 路径请用正斜杠（如 D:/CableSimPro-data）或 TOML 单引号。
+[server]
+host = "127.0.0.1"
+port = 8100
+open_browser = true
+# 首次导入随附教学输入可能需要几分钟；超过此时间启动失败并恢复升级前快照。
+startup_timeout_seconds = 300
+# 访问内网主机名时在这里明确列出；不提供账号权限服务。
+trusted_hosts = []
+
+[storage]
+# 工程库、数据集、复现资料、备份及保留的程序版本均放在这个目录。
+# 默认放在用户主目录，避免 Windows Downloads 的解压目录层级导致路径过长。
+# 升级时继续使用同一份配置；已有显式路径保持不变，不要把数据设在解压目录内。
+data_dir = "~/CableSimPro-data"
+
+[initialization]
+# 只在工程库不存在时经现有发布流程创建教学示例；升级永不重置已有库。
+seed_examples = true
+
+[model]
+# 默认不调用模型。内网服务可填写完整 API 基址和模型名。
+# 已有后端设置优先于本文件的初始连接值，密钥只从环境变量/系统凭据读取。
+base_url = ""
+model = ""
+api_key_env = "CABLESIM_LLM_API_KEY"
+
+# 可追加随应用启动的进程。command 为参数数组，直接执行，不经过 shell。
+# {python} 指发行环境解释器；{app_dir}、{data_dir} 为绝对目录。
+# 相对 cwd 以此配置文件所在目录为基准；env 只放非敏感设置。
+# 必需进程退出会停止应用；所有进程在退出时一并终止。
+# [[processes]]
+# name = "agent-sidecar"
+# command = ["{python}", "{app_dir}/path/to/sidecar.py"]
+# cwd = "."
+# required = true
+# env = { HOST = "127.0.0.1" }
