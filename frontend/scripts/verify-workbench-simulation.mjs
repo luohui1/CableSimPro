@@ -325,7 +325,7 @@ await walkthrough('simulation', async ({
       await expect(dialog.getByRole('button',{name:'确认并运行',exact:true})).toBeDisabled();
       await expect(dialog.getByRole('link',{name:'去设置',exact:true})).toBeVisible();
       evidence.comparison.preflight=result;
-      await capture('02b-new-comparison-no-hpc');await page.keyboard.press('Escape');
+      await capture('02b-new-comparison-no-hpc');await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
     });
 
     await step('03-saved-fem-parameters', async () => {
@@ -349,8 +349,22 @@ await walkthrough('simulation', async ({
         if(sources.length){
           const sourceDetail=form.locator('.parameter-source').first();
           await sourceDetail.locator(':scope > summary').click();
-          await expect(sourceDetail.locator('textarea')).toHaveValue(sources[0]);
+          const sourceInput=sourceDetail.locator('textarea');
+          await expect(sourceInput).toHaveValue(sources[0]);
+          await sourceInput.scrollIntoViewIfNeeded();
+          await sourceInput.focus();await sourceInput.press('Control+Home');
+          const sourceLayout=await sourceInput.evaluate(node=>{const box=node.getBoundingClientRect();return {
+            inView:box.top>=0&&box.bottom<=innerHeight&&box.left>=0&&box.right<=innerWidth,
+            font:parseFloat(getComputedStyle(node).fontSize),scrollHeight:node.scrollHeight,clientHeight:node.clientHeight,
+            wraps:node.scrollWidth<=node.clientWidth+1};});
+          check('已保存来源可以在工作区完整展开阅读',sourceLayout.inView&&sourceLayout.font>=13&&sourceLayout.wraps,sourceLayout);
           await capture('03-full-source-readable');
+          if(sourceLayout.scrollHeight>sourceLayout.clientHeight+1){
+            await sourceInput.press('Control+End');
+            await expect.poll(()=>sourceInput.evaluate(node=>node.scrollTop+node.clientHeight>=node.scrollHeight-1)).toBe(true);
+            await capture('03-full-source-readable-end');
+          }
+          await expect(sourceInput).toHaveValue(sources[0]);
           await sourceDetail.locator(':scope > summary').click();
         }
       }

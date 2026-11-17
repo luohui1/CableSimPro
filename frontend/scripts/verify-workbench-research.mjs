@@ -524,6 +524,24 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     check('保存扫描先显示真实曲线，未打开的隐藏画布尚未挂载', true, source);
     await capture('10-saved-sweep-before-opening-canvas');
 
+    const inspectorTabs = page.getByRole('tablist', { name: '属性分页', exact: true });
+    await inspectorTabs.getByRole('tab', { name: '方法', exact: true }).click();
+    const scanVariable = page.getByRole('combobox', { name: '扫描变量', exact: true });
+    await expect(scanVariable).toBeVisible();
+    await scanVariable.scrollIntoViewIfNeeded();
+    const variableLayout = await scanVariable.locator(':scope > span').first().evaluate(node => {
+      const box = node.getBoundingClientRect(), range = document.createRange();
+      range.selectNodeContents(node);
+      const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+      return { text: node.textContent, font: parseFloat(getComputedStyle(node).fontSize),
+        complete: rects.length > 0 && rects.every(rect => rect.left >= box.left - 1 && rect.right <= box.right + 1
+          && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1),
+        inView: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth };
+    });
+    check('已保存扫描变量在方法栏完整显示名称与单位', variableLayout.complete && variableLayout.inView && variableLayout.font >= 13, variableLayout);
+    await capture('10-saved-sweep-variable-name-and-unit');
+    await inspectorTabs.getByRole('tab', { name: '输入', exact: true }).click();
+
     await page.getByRole('button', { name: '还原结果面板', exact: true }).click();
     await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
     const cable = canvas.locator('[data-section-object^="cable/"]').first();

@@ -306,7 +306,7 @@ p.type-meta{font-size:var(--text-note)}
 .type-result-trace dt{color:var(--text-secondary);margin-bottom:var(--space-1)}
 .type-root .property-panel .type-saved-formula{display:block;margin:0;text-align:left;line-height:1.8;font-variant-numeric:tabular-nums;overflow-wrap:normal;word-break:normal;white-space:normal}
 .type-saved-formula sub{vertical-align:sub;line-height:0}
-.type-rating-condition summary{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.type-rating-condition summary{white-space:normal;overflow-wrap:anywhere}
 .type-rating-condition{min-width:0}
 .type-root .property-panel .property-row.is-stacked{grid-template-columns:minmax(0,1fr);align-items:start;padding-block:var(--space-1);gap:var(--space-1)}
 .type-root .property-panel .property-row.is-stacked dd{margin:0;justify-content:flex-start;text-align:left;display:block}

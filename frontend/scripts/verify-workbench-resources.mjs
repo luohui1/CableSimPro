@@ -673,6 +673,23 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
           saved.study_cable_reference?.id === studyVersion.id && saved.study_cable_reference?.content_sha256 === studyVersion.content_sha256 &&
           saved.study_cable_reference?.version === studyVersion.version, { workspace: wid, reference: saved.study_cable_reference?.id, version: saved.study_cable_reference?.version });
         check('从资源建立的研究有明确名称与真实方法', (study.title || study.definition?.title) === title && !!(study.definition?.method || study.method));
+        const projectLabel = page.locator('.workbench-sidebar a.tree-object[aria-current="page"] .tree-label').filter({ hasText: project });
+        await expect(projectLabel).toHaveText(project);
+        await projectLabel.scrollIntoViewIfNeeded();
+        const projectLayout = await projectLabel.evaluate(node => {
+          const box = node.getBoundingClientRect(), range = document.createRange();
+          range.selectNodeContents(node);
+          const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+          const count = node.parentElement.querySelector('.tree-count')?.getBoundingClientRect();
+          return { text: node.textContent, font: parseFloat(getComputedStyle(node).fontSize),
+            complete: rects.length > 0 && rects.every(rect => rect.left >= box.left - 1 && rect.right <= box.right + 1
+              && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1),
+            inView: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth,
+            separateCount: !count || count.left >= box.right - 1,
+            height: box.height, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight };
+        });
+        check('新建工程的完整长名称可在导航中阅读且不盖住研究数', projectLayout.complete && projectLayout.inView
+          && projectLayout.separateCount && projectLayout.font >= 13 && projectLayout.scrollHeight <= projectLayout.clientHeight + 1, projectLayout);
         await capture('cable-fixed-version-study-created');
       });
     }

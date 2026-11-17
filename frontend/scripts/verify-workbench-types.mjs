@@ -1303,6 +1303,20 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await field('条件来源', 'T1 隔离走查明示教学条件：25°C、埋深 1 m、土壤热阻率 1 K·m/W、中心距 0.2 m；不是工程现场实测或批准数据。');
     await choose('接地', '两端接地');
     await save(main.id);
+    const conditionSummary = page.getByRole('table', { name: '载流量表', exact: true })
+      .getByRole('row', { name: caseName, exact: true }).locator('.type-rating-condition > summary');
+    await expect(conditionSummary).toHaveText('25.0 °C · 1.00 m');
+    await conditionSummary.scrollIntoViewIfNeeded();
+    const conditionLayout = await conditionSummary.evaluate(node => {
+      const box = node.getBoundingClientRect(), range = document.createRange();
+      range.selectNodeContents(node);
+      const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+      return { text: node.textContent, font: parseFloat(getComputedStyle(node).fontSize),
+        complete: rects.length > 0 && rects.every(rect => rect.left >= box.left - 1 && rect.right <= box.right + 1
+          && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1),
+        inView: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth };
+    });
+    check('工况摘要完整显示温度和埋深', conditionLayout.complete && conditionLayout.inView && conditionLayout.font >= 13, conditionLayout);
     await capture('载流量表-工况与来源已保存');
     await page.getByRole('tab', { name: '方法参数', exact: true }).click();
     const teaching = await teachingDesign();
@@ -1399,6 +1413,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         blockers: after.payload.checks.filter(item => item.blocking).map(item => item.id),
       });
     } finally { await finishPdfEvidence(downloaded); }
+    await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading');
+    await expect(chapters.getByRole('button').first()).toHaveAttribute('aria-current', 'page');
+    await expect(chapters.getByRole('button', { name: '结构尺寸表', exact: true })).not.toHaveAttribute('aria-current', 'page');
+    const cover = page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="cover"]');
+    await expect(cover).toBeInViewport();
+    check('审核稿导出后重新打开的封面与章节导航一致', true, { chapter: await chapters.locator('[aria-current="page"]').innerText() });
+    await capture('规格书-内部审核稿导出后封面与章节一致');
   });
 
   await attempt('11-缺项草稿保留审核门禁并定位字段', () => reviewSpecification(main.id, '缺项草稿规格书', true));
