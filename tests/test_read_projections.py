@@ -605,6 +605,23 @@ def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
     with TestClient(app) as client:
         assert warmed.wait(20), 'Managed catalogue warm-up did not complete'
         research = client.app.state.research
+        if research.catalog_read_responses.generation(False) is None:
+            # Without native notifications (including Linux), safe fallback
+            # revalidates source on every request instead of retaining receipts.
+            assert research.catalog_read_responses.get(('methods',), False) is None
+            methods = research.methods
+            calls = []
+            def verified_again(*args, **kwargs):
+                calls.append(True)
+                return methods(*args, **kwargs)
+            monkeypatch.setattr(research, 'methods', verified_again)
+            first = client.get('/api/methods')
+            second = client.get('/api/methods')
+            assert first.status_code == second.status_code == 200
+            assert first.content == second.content
+            assert len(calls) == 2, 'Unwatched source must be revalidated on every read'
+            assert client.get('/api/input-contracts').status_code == 200
+            return
         assert research.catalog_read_responses.get(('methods',), False)
         assert research.catalog_read_responses.get(('input-contracts',), False)
         before = research.catalog_read_responses.generation(False)

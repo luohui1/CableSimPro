@@ -51,6 +51,9 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     registry=research.registry
     def forbid_request_rediscovery(*args,**kwargs):
         if current_thread().name=='study-read-warmup':return registry(*args,**kwargs)
+        # Linux deliberately rehashes source on every read. A notification
+        # receipt only permits reuse where SourceWatch can prove no change.
+        if not research.read_responses.watch.healthy:return registry(*args,**kwargs)
         pytest.fail('warm directory rediscovered plugins')
     monkeypatch.setattr(research,'registry',forbid_request_rediscovery)
     started=perf_counter();assert client.get('/api/agent/tools').json()==tools.json();warm_ms=(perf_counter()-started)*1000

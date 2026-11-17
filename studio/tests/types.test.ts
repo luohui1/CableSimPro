@@ -283,7 +283,9 @@ test('an ampacity table is kept on a specification version, each number is a run
   // The specification sheet carries the table, with the record of each number.
   const report = await op<SpecificationReport>('library.export', { spec: target.id, version: 1 });
   const text = pdfText(report.id).replace(/\s+/g, ' ');
-  assert.match(text, /载流量表 · 规格书载流量表/);
+  // PDF extractors/font versions may omit the decorative middle dot. The
+  // section/title, every computed value and its run identity must still exist.
+  assert.match(text, /载流量表\s*(?:·\s*)?规格书载流量表/);
   for (const row of table.rows) {
     assert.ok(text.includes(row.ampacity_a!.toFixed(1)), row.label);
     assert.ok(text.includes(row.run.run), row.run.run);
