@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -25,12 +25,20 @@ import { modelArtifacts } from "@/api/model-artifacts";
 import { capabilityInputContracts, inputContractQuery, exactContract } from "@/api/input-contracts";
 import { CreateInquiryDialog } from "./create-inquiry-dialog";
 import { AddStudyDialog } from './add-study-dialog';
+import { MethodParameterFields } from './method-parameter-fields';
+import { SolverLocation } from './solver-location';
+import type { SolverCapability } from '@/lib/solver-location';
+import { committedParameter, type ParameterDraft } from '@/lib/study-config';
+import { declaredParameterDefaults, focusParameterField, parameterErrors, parameterReferences, setParameterValue } from '@/lib/study-parameter-form';
+import { entityLabel, type DomainDocument } from '@/lib/domain-fields';
 
 export function CreateStudyDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   theme: "light" | "dark";
   initialTask?: string;
+  /** A real creation-options resource ID; this entry always creates a new project. */
+  initialModelId?: string;
 }) {
   const [task, setTask] = useState(props.initialTask || "operating");
   useEffect(() => { if (props.open) setTask(props.initialTask || 'operating'); }, [props.open, props.initialTask]);
@@ -39,7 +47,7 @@ export function CreateStudyDialog(props: {
   const projects=(Array.isArray(workspaces.data)?workspaces.data:[]).map(optionalRecord);
   const selected=projects.find(item=>text(item.id)===workspaceId);
   const picker=<Select label="所属工程" value={workspaceId || 'new-project'} onChange={value=>setWorkspaceId(value==='new-project'?'':value)} options={[{value:'new-project',label:'新建工程'},...projects.map(item=>({value:text(item.id),label:text(item.name)||text(item.title)||text(optionalRecord(item.design).title)||'工程'}))]} />;
-  if(selected)return <AddStudyDialog {...props} key={workspaceId} workspaceId={workspaceId} projectName={text(selected.name)||text(selected.title)||text(optionalRecord(selected.design).title)||'工程'} workspacePicker={picker} />;
+  if(selected && !props.initialModelId)return <AddStudyDialog {...props} key={workspaceId} workspaceId={workspaceId} projectName={text(selected.name)||text(selected.title)||text(optionalRecord(selected.design).title)||'工程'} workspacePicker={picker} />;
   return task === "selection" ? (
     <CreateInquiryDialog
       {...props}
@@ -54,7 +62,7 @@ export function CreateStudyDialog(props: {
       {...props}
       key={task}
       initialTask={task}
-      workspacePicker={picker}
+      workspacePicker={props.initialModelId ? undefined : picker}
       onInquiry={() => setTask("selection")}
       onOpenChange={(value) => {
         props.onOpenChange(value);
@@ -70,6 +78,7 @@ function GenericCreateStudyDialog({
   initialTask,
   onInquiry,
   workspacePicker,
+  initialModelId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,11 +86,13 @@ function GenericCreateStudyDialog({
   initialTask: string;
   onInquiry: () => void;
   workspacePicker?:ReactNode;
+  initialModelId?:string;
 }) {
   const navigate = useNavigate();
   const queries = useQueryClient();
   const [task, setTask] = useState(initialTask);
-  const [modelId, setModelId] = useState("");
+  const [modelId, setModelId] = useState(initialModelId || '');
+  useEffect(()=>{if(open && initialModelId)setModelId(initialModelId);},[open,initialModelId]);
   const [methodId, setMethodId] = useState("");
   const [trainedModelId, setTrainedModelId] = useState("");
   const trainedModels = useQuery({
@@ -99,6 +110,10 @@ function GenericCreateStudyDialog({
   const allocated = useRef<Record<string, unknown> | null>(null);
   const installedTemplate = useRef("");
   const pending = useRef(false);
+  const form=useRef<HTMLFormElement>(null), firstError=useRef<string | undefined>(undefined);
+  const [nativeWorkspace,setNativeWorkspace]=useState<Record<string,unknown> | null>(null);
+  const [nativeDraftFields,setNativeDraftFields]=useState<Record<string,ParameterDraft>>({});
+  const [nativeErrors,setNativeErrors]=useState<Record<string,string>>({});
   const models = useQuery({
     queryKey: ["model-versions"],
     queryFn: ({ signal }) => modelVersions(signal),
@@ -123,7 +138,7 @@ function GenericCreateStudyDialog({
     "sheath-losses",
     "electrothermal-steady",
   ].includes(task);
-  const [nativeParameters, setNativeParameters] = useState("");
+  const [nativeParameters, setNativeParameters] = useState<Record<string,unknown>>({});
   const model = models.data?.find((item) => text(item.id) === modelId);
   const choices = (methods.data || []).flatMap((item) => {
     const pin = optionalRecord(item.method);
@@ -159,6 +174,7 @@ function GenericCreateStudyDialog({
                   ...pin,
                   capability: text(capability.id),
                 } as components["schemas"]["Method"],
+                capability:capability as SolverCapability,
               },
             ]
           : [];
@@ -170,13 +186,24 @@ function GenericCreateStudyDialog({
     ...inputContractQuery(chosen?.method || optionalRecord(nativeTask?.method) as components['schemas']['Method']),
     enabled: open && nativeRequested && !!chosen,
   });
-  let nativeContract;
-  try {
-    if (nativeRequested && chosen)
-      nativeContract = contracts.data;
-  } catch {
-    /* Display the exact contract error below. */
-  }
+  const nativeContract=nativeRequested && chosen ? contracts.data : undefined;
+  useEffect(()=>{
+    if(nativeRequested && nativeContract){setNativeParameters(declaredParameterDefaults(nativeContract.parameter_schema));setNativeDraftFields({});setNativeErrors({});}
+  },[nativeRequested,nativeContract]);
+  const nativeDomain=nativeWorkspace?.domain as DomainDocument | undefined;
+  const references=useMemo(()=>nativeDomain ? parameterReferences(nativeDomain,id=>entityLabel(nativeDomain,id)) : {},[nativeDomain]);
+  const allocateNative=useMutation({retry:false,mutationFn:async()=>{
+    if(!title.trim())throw new ApiError(422,'请填写研究名称');
+    if(!projectName.trim())throw new ApiError(422,'请填写工程名称');
+    if(!model || !chosen)throw new ApiError(422,'请选择准确型号版本和计算方法');
+    if(!optionalRecord(model.payload).cable_type)throw new ApiError(422,'该型号缺少工程参数，请先完成型号工程输入。');
+    if(!nativeContract?.input_sources.includes('domain'))throw new ApiError(422,'所选方法的领域输入契约尚不可用，请重新读取。');
+    if(!allocated.current)allocated.current=record(await responseData(api.POST('/api/design/study-workspaces',{body:{model_id:text(model.id),content_sha256:text(model.content_sha256),project_name:projectName.trim()}})),'新工程');
+    const workspace=allocated.current;
+    if(!text(workspace.id) || numeric(workspace.revision)===null || !optionalRecord(workspace.domain).schema_version)throw new ApiError(502,'新工程未返回有效的模型与修订，请从工程列表重新打开。');
+    setNativeWorkspace(workspace);
+    await queries.invalidateQueries({queryKey:['workspaces']});
+  }});
   const mutation = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -278,22 +305,11 @@ function GenericCreateStudyDialog({
         throw new ApiError(422, "所选方法不接受领域工程输入");
       let parameters = optionalRecord(defaults[chosen.method.plugin_id]);
       if (nativeRequested) {
-        try {
-          parameters = record(JSON.parse(nativeParameters), "方法参数");
-        } catch {
-          throw new ApiError(
-            422,
-            "请填写有效的方法参数 JSON，单位采用所选契约的 SI 单位",
-          );
-        }
-        const required = Array.isArray(contract.parameter_schema.required)
-          ? contract.parameter_schema.required
-          : [];
-        const missing = required.filter(
-          (key) => typeof key === "string" && !(key in parameters),
-        );
-        if (missing.length)
-          throw new ApiError(422, "方法参数缺项：" + missing.join("、"));
+        if(!nativeWorkspace)throw new ApiError(422,'请先建立工程，再选择其真实对象并填写仿真参数。');
+        parameters=nativeParameters;
+        for(const field of Object.values(nativeDraftFields))try{parameters=setParameterValue(parameters,field.path,committedParameter(field));}catch(problem){firstError.current=field.path;setNativeErrors({[field.path]:message(problem)});throw problem;}
+        const problems=parameterErrors(contract.parameter_schema,parameters);setNativeErrors(problems);
+        if(Object.keys(problems).length){firstError.current=Object.keys(problems)[0];throw new ApiError(422,'请补齐方法输入：'+Object.values(problems).slice(0,3).join('；'));}
       }
       if (!allocated.current)
         allocated.current = record(
@@ -384,7 +400,15 @@ function GenericCreateStudyDialog({
       };
     },
     onSuccess: async ({ wid, sid, module }) => {
-      await queries.invalidateQueries({ queryKey: ["study-index"] });
+      // This path creates a project as well as its first study. Refresh the
+      // real project index before navigating so the current project and its
+      // study count appear together in the persistent sidebar.
+      await Promise.all([
+        queries.invalidateQueries({ queryKey: ["workspace-index"], exact: true }),
+        queries.invalidateQueries({ queryKey: ["study-index"] }),
+        // The picker closes below; let its next opening read the new project.
+        queries.invalidateQueries({ queryKey: ["workspaces"], exact: true, refetchType: "none" }),
+      ]);
       allocated.current = null;
       installedTemplate.current = "";
       onOpenChange(false);
@@ -395,21 +419,21 @@ function GenericCreateStudyDialog({
       });
     },
   });
+  useEffect(() => {
+    if (!open || !error || mutation.isPending || allocateNative.isPending) return;
+    const frame = requestAnimationFrame(() => focusParameterField(form.current, firstError.current));
+    return () => cancelAnimationFrame(frame);
+  }, [open, error, mutation.isPending, allocateNative.isPending]);
   async function submit() {
     if (pending.current) return;
     pending.current = true;
     setError("");
+    firstError.current=undefined;
     try {
-      await mutation.mutateAsync();
+      if(nativeRequested && !nativeWorkspace)await allocateNative.mutateAsync();
+      else await mutation.mutateAsync();
     } catch (problem) {
       setError(message(problem));
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLInputElement>(
-            '.create-study-form input[aria-invalid="true"]',
-          )
-          ?.focus(),
-      );
     } finally {
       pending.current = false;
     }
@@ -426,6 +450,7 @@ function GenericCreateStudyDialog({
           if (!value) {
             setError("");
             allocated.current = null;
+            setNativeWorkspace(null);
             installedTemplate.current = "";
           }
         }
@@ -436,18 +461,18 @@ function GenericCreateStudyDialog({
       actions={
         <Button
           variant="primary"
-          loading={mutation.isPending}
+          loading={mutation.isPending || allocateNative.isPending}
           disabled={
             task === "hybrid"
               ? trainedModels.isPending || !trainedModel
               : loading ||
                 !!catalogError ||
                 !models.data?.length ||
-                !choices.length
+                !choices.length || nativeRequested && (contracts.isPending || !!contracts.error)
           }
           onClick={submit}
         >
-          建立研究
+          {nativeRequested && !nativeWorkspace ? '建立工程并配置仿真' : '建立研究'}
         </Button>
       }
     >
@@ -474,6 +499,7 @@ function GenericCreateStudyDialog({
         />
       ) : (
         <form
+          ref={form}
           className="create-study-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -481,7 +507,7 @@ function GenericCreateStudyDialog({
           }}
         >
           {workspacePicker}
-          {!!allocated.current && <p className="muted">工程已建立，工程名称与型号已固定；重试会在同一工程继续创建研究。</p>}
+          {!!allocated.current && <p className="muted">工程已建立，工程名称、型号与任务已固定{nativeWorkspace ? '，计算方法也已固定' : ''}；重试会在同一工程继续创建研究。</p>}
           {task !== 'hybrid' && <label className="text-field">
             工程名称
             <input value={projectName} maxLength={120} required disabled={!!allocated.current}
@@ -498,7 +524,7 @@ function GenericCreateStudyDialog({
               }
               setTask(value);
               setMethodId("");
-              setNativeParameters("");
+              setNativeParameters({});setNativeDraftFields({});setNativeErrors({});
               setError("");
             }}
             disabled={!!allocated.current}
@@ -587,14 +613,14 @@ function GenericCreateStudyDialog({
                   setModelId(value);
                   setError("");
                 }}
-                disabled={!!allocated.current}
+                disabled={!!allocated.current || !!initialModelId}
                 options={(models.data || []).map((item) => ({
                   value: text(item.id),
                   label: `${text(item.name)} · ${text(item.version)}${item.state === "incomplete" ? " · 工程参数缺项" : ""}`,
                 }))}
               />
               <div className="source-line">
-                <Button type="button" size="compact" disabled={!!allocated.current} title={allocated.current ? '工程已建立，正在使用已选型号继续创建研究' : undefined} onClick={() => {
+                <Button type="button" size="compact" disabled={!!allocated.current || !!initialModelId} title={initialModelId ? '本入口已明确引用固定型号版本；关闭后可从型号库新建型号' : allocated.current ? '工程已建立，正在使用已选型号继续创建研究' : undefined} onClick={() => {
                   onOpenChange(false);
                   void navigate({to:'/types',search:{theme,create:true}});
                 }}>新建型号</Button>
@@ -627,6 +653,7 @@ function GenericCreateStudyDialog({
                 label="计算方法"
                 value={methodId || undefined}
                 onChange={setMethodId}
+                disabled={!!nativeWorkspace}
                 options={choices.map((item) => ({
                   value: item.id,
                   label: item.label,
@@ -654,23 +681,11 @@ function GenericCreateStudyDialog({
               ) : !nativeContract ? (
                 <ErrorState description="所选方法版本没有匹配的参数契约。" />
               ) : (
-                <>
-                  <label className="text-field">
-                    方法参数 / SI
-                    <textarea
-                      value={nativeParameters}
-                      onChange={(event) =>
-                        setNativeParameters(event.target.value)
-                      }
-                      aria-invalid={!!error && !nativeParameters.trim()}
-                    />
-                  </label>
-                  <details>
-                    <summary>参数契约</summary>
-                    <pre className="contract-schema">
-                      {JSON.stringify(nativeContract.parameter_schema, null, 2)}
-                    </pre>
-                  </details>
+                <>{chosen && <SolverLocation pluginId={chosen.method.plugin_id} capability={chosen.capability} />}
+                  {!nativeWorkspace ? <p className="muted">先建立工程，再从真实敷设截面、负荷和电缆中选择对象。仅采用插件明确声明的默认值，其余物理输入由工程师填写。</p>
+                    : <><p className="muted">工程已建立。请逐项填写方法输入；缺项会指出位置。关闭后，工程仍可从工程列表继续使用。</p><MethodParameterFields method={chosen!.method} namespace="new-simulation" values={nativeParameters} references={references} fieldErrors={nativeErrors} draftFields={nativeDraftFields} readOnly={mutation.isPending}
+                      onDraftChange={(field,key)=>setNativeDraftFields(current=>{const next={...current};if(field)next[key]=field;else delete next[key];return next;})}
+                      onChange={(path,value)=>{setNativeParameters(current=>setParameterValue(current,path,value));setNativeErrors(current=>Object.fromEntries(Object.entries(current).filter(([key])=>key!==path && !key.startsWith(path+'/'))));setError('');}} /></>}
                 </>
               )}
             </div>
