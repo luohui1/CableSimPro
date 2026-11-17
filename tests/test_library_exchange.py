@@ -537,6 +537,54 @@ def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_c
         assert target.get('/api/domain-cable-models').json() == []
 
 
+def test_candidate_export_validates_source_shape_before_deriving_order(clients):
+    source, _ = clients
+    candidate, project = candidate_study(source)
+    store = source.app.state.workspace_store
+    with store.db() as db:
+        original = json.loads(db.execute('SELECT state FROM workspaces WHERE id=?', (project['id'],)).fetchone()['state'])
+    # A completed model carries the full schema and the same actual materials
+    # as its study. No additional physical inputs or replacement values are used.
+    complete = deepcopy(candidate['payload'])
+    complete['materials'] = deepcopy(original['study_cable_reference']['payload']['materials'])
+    cases = [('valid_projection', None), ('valid_complete', None),
+             ('missing_source', 'EXCHANGE_CABLE_REFERENCE'), ('null_source', 'EXCHANGE_CABLE_REFERENCE'),
+             ('null_sources', 'EXCHANGE_CABLE_SOURCE'), ('list_sources', 'EXCHANGE_CABLE_SOURCE'),
+             ('missing_reference', 'EXCHANGE_CABLE_SOURCE')]
+    for change, code in cases:
+        state = deepcopy(original)
+        binding = state['study_cable_reference']
+        if change == 'missing_source':
+            binding.pop('source')
+        elif change == 'null_source':
+            binding['source'] = None
+        elif change != 'valid_projection':
+            binding['payload'] = deepcopy(complete)
+            if change == 'null_sources':
+                binding['payload']['sources'] = None
+            elif change == 'list_sources':
+                binding['payload']['sources'] = []
+            elif change == 'missing_reference':
+                next(iter(binding['payload']['sources'].values())).pop('reference')
+            binding['content_sha256'] = fingerprint(binding['payload'])
+        stored = json.dumps(state, ensure_ascii=False)
+        with store.db() as db:
+            db.execute('UPDATE workspaces SET state=? WHERE id=?', (stored, project['id']))
+        before = source.get('/api/workspaces/' + project['id']).json()
+        response = source.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
+        assert response.status_code == (422 if code else 200), (change, response.text)
+        if code:
+            assert response.json()['detail']['code'] == code, (change, response.text)
+        else:
+            proof = response.json()['projects'][0]['inputs']['study_cable_reference']['source_snapshot']
+            assert proof['schema'] == SOURCE_SCHEMA
+            assert proof['payload'] == (candidate['payload'] if change == 'valid_projection' else complete)
+        assert source.get('/api/workspaces/' + project['id']).json() == before
+        assert source.get('/api/domain-cable-models').json() == [candidate]
+        with store.db() as db:
+            assert db.execute('SELECT state FROM workspaces WHERE id=?', (project['id'],)).fetchone()['state'] == stored
+
+
 def test_candidate_source_must_match_pinned_version_and_project_limit_stays_in_force(clients):
     source, target = clients
     candidate, project = candidate_study(source)
@@ -574,35 +622,3 @@ def test_candidate_source_must_match_pinned_version_and_project_limit_stays_in_f
     assert response.status_code == 422
     assert response.json()['detail']['code'] == 'EXCHANGE_CABLE_SOURCE'
     assert target.get('/api/workspaces').json() == []
-
-
-def test_candidate_export_validates_damaged_binding_before_building_source_order(tmp_path):
-    with TestClient(create_app(tmp_path / 'damaged-binding.sqlite')) as client:
-        candidate, project = candidate_study(client)
-        export(client, project=project)
-        store = client.app.state.workspace_store
-        with store.db() as db:
-            _, original = store.load(db, project['id'])
-        for corruption in ('missing_source', 'null_source', 'invalid_embedded_sources'):
-            damaged = deepcopy(original)
-            binding = damaged['study_cable_reference']
-            if corruption == 'missing_source':
-                binding.pop('source')
-            elif corruption == 'null_source':
-                binding['source'] = None
-            else:
-                # Preserve a self-consistent full snapshot digest so export
-                # validates this damaged embedded source, not the local model.
-                binding['payload'] = deepcopy(candidate['payload'])
-                binding['payload']['sources'] = None
-                binding['content_sha256'] = fingerprint(binding['payload'])
-            with store.db(True) as db:
-                db.execute('UPDATE workspaces SET state=? WHERE id=?',
-                           (json.dumps(damaged), project['id']))
-            before = client.get('/api/workspaces/' + project['id']).json()
-            response = client.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
-            assert response.status_code == 422, (corruption, response.text)
-            expected = 'EXCHANGE_CABLE_SOURCE' if corruption == 'invalid_embedded_sources' else 'EXCHANGE_CABLE_REFERENCE'
-            assert response.json()['detail']['code'] == expected, (corruption, response.text)
-            assert client.get('/api/workspaces/' + project['id']).json() == before
-            assert client.get('/api/domain-cable-models').json() == [candidate]
