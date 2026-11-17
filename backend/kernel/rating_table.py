@@ -63,9 +63,14 @@ def rating_rows(run):
             condition['layout'] = 'three_core_buried_single' if len(places) == 1 else 'three_core_buried_horizontal'
         elif len(distances) == 3:
             condition['layout'] = 'trefoil' if max(distances)-min(distances)<1e-8 else 'flat'
-        records.append({'case_id': saved['case_id'], 'name': saved['label'], 'condition': condition,
-                        'value_a': None if result is None else result['value'], 'status': status, 'reason': reason,
-                        'artifact_digests': out.get('artifact_digests', {})})
+        row = {'case_id': saved['case_id'], 'name': saved['label'], 'condition': condition,
+               'value_a': None if result is None else result['value'], 'status': status, 'reason': reason,
+               'artifact_digests': out.get('artifact_digests', {})}
+        # Preserve old row shapes. New reference adoptions are read only from
+        # the immutable case snapshot, never a current asset or provider query.
+        if saved['metadata'].get('environment_references'):
+            row['environment_references'] = deepcopy(saved['metadata']['environment_references'])
+        records.append(row)
     return records
 
 

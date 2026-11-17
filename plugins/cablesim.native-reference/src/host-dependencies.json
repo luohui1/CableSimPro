@@ -21,8 +21,8 @@
   },
   {
     "path": "backend/foundation/contracts.py",
-    "sha256": "3b3c67a4efa07a3f3cfa5eb1571a351d1d0911b9e07c66f302df21972982aa2b",
-    "size_bytes": 11571
+    "sha256": "7c6fbb9396b53ad182c04c69c9a8f75f15ffde12a05abc6514e3d8a793a9c52b",
+    "size_bytes": 17361
   },
   {
     "path": "backend/foundation/study.py",

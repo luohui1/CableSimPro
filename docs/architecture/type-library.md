@@ -68,22 +68,65 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 ## 标准、材料与环境值
 
-`GET /api/library/resources/catalogue?category=materials|environment|manufacturing` 和 `/table?category=...&table_id=...` 读取真实封签数据插件。`POST /api/library/resources/select` 要求固定 `release_digest/data_sha256/standard/edition/locator/quantity/record_id/conditions`，返回数值、适用条件、出处和可信分档。选择记录不直接修改工程，也不代表批准。
+### 封签查询与完整来源回执
 
-基础资源的 `Quantity.dimension` 另支持标准数据已有的 `mass_density`、`resistivity`、`volumetric_heat_capacity`、`dimensionless`。相应 SI 单位为 `kg/m3`、`ohm.m`、`J/(m3.K)`、`1`，接受原文的 `kg/m³`、`Ω·m`、`J/(m³·K)` 等值写法，原显示值和原单位仍保留。不同量纲的单位、布尔值及数字字符串明确拒绝。真实的 Huang 密度、IEC 电阻率与介电常数、Nielsen 体积热容可经查询、选择、`POST /api/foundation/assets/import` 和资源回读保存为来源完整的草稿，不因此写入工程或批准材料。T1 的生成类型与量纲显示应同步这四个既有名字。
+`GET /api/library/resources/catalogue?category=materials|environment|manufacturing` 和 `/table?category=...&table_id=...` 读取真实封签数据插件。`POST /api/library/resources/select` 接受同一个 `Selection`：`{release_digest,data_sha256,standard,edition,locator,quantity,record_id,conditions}`。必须使用查询返回的固定身份，并明确填写原表要求的条件；区间谓词不能当作实际条件，范围值不能取中点。
 
-此次对 `backend/foundation/contracts.py` 只追加上述量纲与单位；实际依赖闭包中仅 `cablesim.native-reference` 引用该文件，因此该插件发行升为 `1.0.7` 并重封签。原有计算算法和能力方法版本 `1.0.0` 不变，不以静态封签检查代替原生仿真验证。
+选择响应保留完整 `record`、`conditions`、`trust`、`method`、`release_digest/data_sha256/request_sha256/artifact_sha256`，并另给显式 SI 换算后的 `quantity` 与 `quantity_status`。不支持的物理量或单位返回 `quantity:null`、`quantity_status:unsupported` 及原因，不能据此创建可采用的参考值。`record` 中原值、原单位、标准/文献及版次、表/条款、印刷页/PDF 页、原件和记录摘要、核验状态及限制保持原样。选择始终为 `approval:not_granted`、`applied_to_workspace:false`。
 
-现有资源操作应按用途分别接入：
+资料进入同一个 `AssetRepository`，材料使用 `AssetRelease.kind=material`，敷设环境使用 `kind=installation`。每个参数对应一项 `reference_evidence`：`{schema_version:"cablesim.resource-reference/1",parameter,quantity,selection,receipt,record_sha256}`。`receipt` 是上述完整选择响应，`quantity` 必须是 SI 且与资产参数一致，参数名不能重复；单项回执不超过 32 KiB，带回执的完整资源定义不超过 512 KiB。没有该字段的旧资源仍省略空字段序列化，保持原内容摘要。
 
-| 接口 | 保存的内容与边界 |
+新采用会向本机封签提供方重新查询，核对固定发行、数据、原记录、方法、SI 数值、可信分档和完整回执；自算一个一致的摘要不能证明资料可采用。`request_sha256` 是当次执行身份，不作为再次执行时应相等的数值证据。草稿预览与确认每次均实际查询，仅在其余回执内容完全相同时复用本服务此前发出的完整回执；进程重启或回执失效后须重新预览。历史来源读取保存的回执，不替换成当前数据发行。
+
+基础 `Quantity` 支持 `mass_density/resistivity/volumetric_heat_capacity/dimensionless`，SI 单位分别为 `kg/m3`、`ohm.m`、`J/(m3.K)`、`1`；热阻率使用 `K.m/W`。原文 `kg/m³`、`Ω·m`、`J/(m³·K)`、`K·m/W` 等明确等值写法可以换算，原显示值与单位仍保留。绝对温度才允许 `°C/℃/degC → K`，不把温差当绝对温度。不同量纲、未知单位、布尔值或数字字符串均不能靠猜测转换。
+
+本轮 `backend/foundation/contracts.py` 同时追加回执契约和单位支持；依赖该文件的 `cablesim.native-reference` 已按依赖闭包重封签为发行 `1.0.8`，能力方法版本仍为 `1.0.0`。没有修改其计算算法，也不以封签校验代替原生仿真验证。
+
+### 资料草稿、人工确认与发布
+
+以下接口均位于 `/api/library/resources` 下；两类草稿使用调用方预先确定的同一 `asset_id/version` 完成预览与确认，不接受客户端提供数值或自行拼接权威回执。
+
+| 接口 | 请求与结果 |
 | --- | --- |
-| `POST /api/library/resources/select` | 选择固定版本参考记录，`applied_to_workspace:false`。 |
-| `POST /api/types/{wid}/resources/bind` 及 `/resources/material-preview`、`/resources/material-confirm` | 绑定及确认材料或标准出处，不替换材料物性。 |
-| `GET /api/types/{wid}/material-comparison` 与 `POST /api/types/{wid}/material-comparison/adopt` | 比较并按现有门禁逐项采用适用材料值，写入新工程修订和来源。 |
-| `POST /api/design/workspaces/{wid}/section-template` | 应用既有的受限敷设模板。 |
+| `POST /materials/draft-preview` | `{asset_id,version,name,selections:[{parameter,selection:Selection}]}`，1–5 个不重复物性。返回完整 `release/content_sha256/preview_digest`、`schema_version:cablesim.material-reference-draft/1`、`persisted:false`。 |
+| `POST /environment/draft-preview` | `{asset_id,version,name,selections:[Selection]}`，1–3 个不重复目标字段。返回完整 `release/content_sha256/preview_digest` 和参考可信档。 |
+| `POST /materials/draft`、`POST /environment/draft` | 原预览请求增加 `preview_digest` 和严格布尔值 `human_confirmed:true`，并要求 `X-CableSim-Actor: human`；服务端重新核对后返回 201 和普通资源草稿详情。 |
 
-普通 `component`、`assembly`、`study_template` 尚无通用的“应用到工程”接口，继续列为未完成；参考选择、来源绑定和材料值采用不能相互冒充。
+两种预览都不入库、不修改工程，Agent 可以请求。修改选择后必须重新预览；人工创建草稿须提交已核对预览的同一组输入，确认时内容不再匹配返回 409。来源可信档保持 `reference`，草稿不构成厂家实测、材料合格或工程批准。
+
+草稿审核与发布复用 `POST /api/foundation/assets/{resource_id}/transition`，提交 `expected_revision/content_sha256/action/acknowledge_sources/note`，依现有状态机依次 `review`、`publish`。资源发布仅允许后续引用，不自动绑定或采用任何参数。
+
+### 材料逐属性采用与旧 Types 修订
+
+材料目标仅支持 `density`、`volumetric_heat_capacity`、`electrical_resistivity_20`、`relative_permittivity`、`thermal_resistivity`。原记录的物理量必须与目标字段一致，不从热导率倒算热阻率，不从名称推断材料配方。
+
+先通过 `GET /api/types/{wid}/resources` 获取目标与已发布资源，再使用原有 `POST /api/types/{wid}/resources/bind`，请求 `{request_id,expected_revision,role:"material",target_id:material_id,resource_id}`；也可走既有 `/resources/material-preview`、`/resources/material-confirm`。绑定只固定资源版本及输入身份。绑定发生变化会产生新修订；后续预览必须使用返回的当前工作空间修订号。
+
+`POST /api/library/resources/materials/preview` 请求为 `{workspace_id,expected_revision,material_id,property,resource_id,content_sha256}`。响应给出 `schema_version:cablesim.material-reference-preview/1`、`revision/document_sha256`、固定 `resource`、完整 `evidence`、逐条件 `comparison`、`adoptable/reason`、限制及 `preview_digest`。用途、材料类别、电压、配方、交流条件和温度口径依据已保存的型号事实逐项核对；缺事实或条件不符时保留候选来源，`adoptable:false`。名称、勾选确认、来源绑定均不能补齐缺失事实。
+
+`POST /api/library/resources/materials/adopt` 在同一预览请求上增加 `request_id`、`preview_digest`、`human_confirmed:true`、`acknowledge_reference_limits:true`；`operation` 固定为 `adopt_resource_material_value`，可使用服务端默认值。此写入要求人工头，并在原 `Types.adopt_material_value` 的事务内重新检查修订号、固定绑定、完整证据、预览和锁，再只改指定物性，返回旧 Types 的新工作空间快照。来源保存前值、前来源、固定资产身份及完整回执；既存修订和运行不改写。同一请求可幂等重试，过期输入或绑定返回 409。
+
+`GET /api/types/{wid}/material-comparison?revision=n` 继续提供原有比较和历史读取。带 `reference_evidence` 的新资料必须经上述明确预览及采用接口，旧 `/material-comparison/adopt` 不能绕过这些门禁。
+
+### 环境逐字段预览与已有批量计算
+
+环境仅映射 `depth_m`、`soil_rho_k_m_w`、`ambient_temperature_c`。`POST /api/library/resources/environment/preview` 请求为 `{workspace_id,expected_revision,row,resources:[{resource_id,content_sha256,parameter}],conditions}`。`row` 使用前述完整 `RatingRow`，埋深、热阻率、温度、频率、接地和来源均须明确给出；排列、间距、排管等仍受旧契约约束。每个目标字段只能固定一个已发布资料版本。
+
+预览返回 `workspace_id/expected_revision/workspace_sha256/case_id/before/proposed/conditions/changes/target_facts/preview_digest`、可信档及限制。每条 `changes` 包含前后值、SI 量、`resource_id/asset_ref/reference_evidence`；此时 `applied_to_workspace:false`。空气与地中资料不混用，地温资料的深度须与工况相符，温度须在 `conditions.temperature_basis` 中明确原表最高、最低或季节口径。
+
+目标必须是独立型号，芯数与排列一致，且只有一个可明确定位的运行回路。预览核对型号已保存的交流频率及该字段来源；参考涉及电压时还核对实际系统电压及其来源，并另行检查型号额定电压范围。额定电压不代替实际系统电压，客户端填一个看似匹配的条件也不能覆盖已保存事实。多个匹配回路、所需系统事实或来源缺失、与当前域冲突均拒绝。
+
+缺少真实运行条件时，使用既有 `PUT /api/types/{wid}/document` 保存 `{request_id,expected_revision,document}`，由旧 Types 执行修订号比较与写入（CAS）。研究假设须在完整文档及 `provenance` 中明确标为研究输入，系统频率/电压来源分别使用 `/circuits/{JSON Pointer 转义后的回路 id}/system/frequency`、`.../voltage` 路径；不能把结构查看的占位系统或额定值自动转换成工况。保存后重新读取规格与工作空间修订，再做环境预览。该步骤不由参考接口自动完成。
+
+采用使用原 `POST /api/type-library/series/{id}/batch` 的 `operation:calculate`，在原批量请求上增加 `environment_references:[{...环境预览请求,preview_digest,human_confirmed:true}]`。每项 `(workspace_id,row.case_id)` 必须唯一且属于所选规格；批量 `rows` 必须与预览的 `proposed` 完全相同，仍需原有人工头、`expected_versions/expected_revisions`、完整方法参数和范围确认。服务端再次核对后，将完整采用回执存入普通 `BatchCase.metadata.environment_references`，并在相应计算输入字段保存资产来源；不修改厂家型号原始材料或结构。
+
+运行行的可选 `environment_references` 仅从该历史 `BatchCase.metadata` 投影，保存 `human_confirmed:true`、`adopted_to:saved_rating_condition`、参考可信档及未批准状态。之后的资料派生、废止或发行变化不改写旧运行；没有采用记录的旧运行不新增空字段，旧批量请求身份也不因空引用列表变化。
+
+真实正例采用 IEC 60287-3-1—2017 `Table 2` 的 `iec60287-3-1-table2/r2/thermal_resistivity`：原值 1.0 K·m/W，SI 为 1.0 `K.m/W`，印刷第 7 页/PDF 第 39 页，方法版本 `0.9.0`。原件摘要为 `618e8d8cd829a15cb0bdcf08af4d73afc0b8928a3ea0eeb42bdc75cc87b08f63`，记录摘要为 `bcb4c7549feaaaa00890740eb50af37d3fa15ec84f1c3986cd1d2a5b31f6afaa`。测试以人民三芯公开结构为基础，另经旧 Types 保存有出处的三相 50 Hz 研究工况，在明确 `national_reference:unavailable`、`soil_moisture:moist`、`weather_pattern:regular_rain` 的研究场景中，将热阻率 1.2 改为 1.0 后运行旧载流量方法。这些场景条件不是厂家属性，也不是现场勘测结果。
+
+A.4 的 `laying_depth` 原始摘录可以浏览、创建参考草稿、发布和交换，但原文没有明确能映射到 `RatingRow.depth_m` 的中心测量基准。直埋和排管采用均返回 `ENVIRONMENT_DEPTH_REFERENCE_UNSUPPORTED`，用户补一个“中心”条件也不能替代来源证据。A.4 土壤热阻率 1–1.2 的区间不得取中点；1 m 深度的地温不能套到 0.7 m；110 kV 型号、缺系统电压或伪填低电压均不能绕过适用性检查。
+
+实现与回归依据为 `backend/kernel/resource_data.py`、`material_references.py`、`environment_references.py`、旧 `type_versions.py` / `type_library_operations.py`，以及 `tests/test_material_references.py`、`tests/test_environment_references.py`。这些受限字段接口不表示完整材料库、标准全文或两套完整行业示例已验收。普通 `component`、`assembly`、`study_template` 仍无通用应用接口；既有受限敷设模板继续使用 `POST /api/design/workspaces/{wid}/section-template`。
 
 ## 公开样本对照
 
@@ -135,6 +178,8 @@ Agent 应展示每项的 `source`、`method`、`confidence`、`usage`、`conditi
 ## 两台机器之间的数据搬运
 
 型号使用 `/api/type-library/exchange/export`（`{series_ids,format:json|xlsx}`）；材料与已保存工程输入使用 `/api/library/exchange/export`（`{asset_ids,workspace_ids,format}`）。每组接口都有 multipart `/preview` 和 `/import`：提交 `file`、预览的 `reviewed_sha256`、`confirmed:true`、`request_id` 及人工头。
+
+材料和 `installation` 环境资料都通过同一资源交换接口搬运。JSON/XLSX 保留完整 `AssetRelease.parameters/sources/reference_evidence`、固定身份及 `content_sha256`，不把回执缩成来源文字，也不替换原记录或条件。导入校验结构、摘要、参数和回执的一致性；新资源成为本机草稿，`approval_inherited:false`。同身份同内容的本机资源可复用并保留本机状态，同版本异内容整包拒绝。来源方发布状态只作为交换证据，不能批准本机资源或自动采用数值；新采用仍须在本机重新核对封签依据、固定版本及适用条件。环境运行的 `BatchCase.metadata` 和完整审批/运行历史不在此输入交换范围内，需要原样搬运时使用数据库备份恢复。
 
 Excel 含可读索引与完整传输内容，JSON 与 Excel 具有相同语义摘要。导入前验证原件、型号/资源/工程摘要和身份关系；任何同名系列或版本冲突整包拒绝。型号包携带当前版本与原始结构表；新机创建草稿并记录来源机的版本身份，不继承批准或运行历史。交换元数据采用固定字段白名单，不能指定本机对象、工作区、审核状态或运行身份；重新计算文件摘要也不能绕过此检查。尚未改版的设计修改须先建立新版本才能导出。完整历史、所有附件和运行备份继续使用 `scripts/workspace_db.py backup/restore`。
 

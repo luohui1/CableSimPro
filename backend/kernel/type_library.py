@@ -21,6 +21,7 @@ from . import candidates, factory_tables as tables
 from .published_guidance import validate_published_guidance
 from .type_import_models import SeriesDeclaration, build_rows
 from .type_versions import NewType, Branch
+from .environment_references import EnvironmentAdoption
 
 
 def encoded(value):
@@ -79,6 +80,7 @@ class Batch(StrictModel):
     scope_acknowledged: Literal[True]
     parameters: dict = Field(default_factory=dict)
     rows: list[dict] = Field(default_factory=list, max_length=100)
+    environment_references: list[EnvironmentAdoption] = Field(default_factory=list, max_length=300)
     action: Literal['submit', 'approve', 'publish'] = 'submit'
     note: str = Field(default='', max_length=1000)
 
@@ -94,6 +96,12 @@ class Batch(StrictModel):
             raise ValueError('须为每个所选规格指定唯一且准确的型号版本和保存修订号。')
         if self.operation == 'review' and not self.note.strip():
             raise ValueError('批量审核须填写意见。')
+        if self.environment_references:
+            if self.operation != 'calculate':
+                raise ValueError('环境参考只能用于载流量计算工况。')
+            targets = [(str(item.workspace_id), item.row.case_id) for item in self.environment_references]
+            if len(targets) != len(set(targets)):
+                raise ValueError('同一型号和工况只能确认一份环境预览。')
         return self
 
 

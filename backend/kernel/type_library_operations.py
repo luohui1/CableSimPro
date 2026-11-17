@@ -16,6 +16,8 @@ from . import factory_tables as tables
 from .type_versions import Adopt, Submit, Approval, Publish
 from .rating_conditions import RatingTableDefinition, table_definition
 from .rating_table import rating_rows
+from .environment_references import adopt_for_batch
+from .resource_data import ResourceData
 from .catalogue_core import CoreError, library as studio_library, product
 
 
@@ -109,6 +111,10 @@ def _review(service, series_id, specs, body, actor):
 def run_batch(service, series_id, body, actor):
     service.types._human(actor)
     request = body.model_dump(mode='json')
+    if not body.environment_references:
+        # Preserve the request identity of batches saved before this optional
+        # reference lane existed, including idempotent replays after upgrading.
+        request.pop('environment_references', None)
     request['series_id'] = series_id
     with service.lock, service.store.db(True) as db:
         replay = service._replay(db, body.request_id, request)
@@ -121,6 +127,9 @@ def run_batch(service, series_id, body, actor):
             return {**json.loads(prior['payload']), 'status': prior['status']}
         _, declaration = service._series(db, series_id)
         specs = [service._spec(db, identifier) for identifier in body.spec_ids]
+        if any(str(item.workspace_id) not in {spec['workspace_id'] for spec in specs}
+               for item in body.environment_references):
+            tables.fail('ENVIRONMENT_TARGET_MISSING', '环境预览须对应本批所选型号，不能附带其他工程的引用。')
         if any(spec['series_id'] != series_id or spec['version'] != body.expected_versions[spec['id']]
                or spec['id'] in body.expected_revisions and spec['workspace_revision'] != body.expected_revisions[spec['id']]
                for spec in specs):
@@ -176,6 +185,9 @@ def run_batch(service, series_id, body, actor):
                     plugin = service.research.registry('cablesim.iec60287').get('cablesim.iec60287')
                     definition = table_definition(workspace, RatingTableDefinition(expected_revision=workspace['revision'],
                         rows=body.rows, parameters=body.parameters), {**service.research.pin(plugin), 'capability': 'steady-rating'})
+                    if body.environment_references:
+                        adopt_for_batch(ResourceData(service.research.executor), service.types.assets,
+                            service.research, workspace, definition, body.environment_references)
                 item.update(_run(service, spec, definition, child_request(body.request_id, spec['id'], body.operation)))
             except (HTTPException, ValidationError, CoreError, ValueError) as error:
                 item.update(failure(error))

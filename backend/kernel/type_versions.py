@@ -519,6 +519,10 @@ def compare_material(document, material, resource):
                          and not isinstance(r['value'], bool) and isfinite(r['value']) and finite_record(r)], 'status': status, 'reason': reason,
                      'delta': delta, 'percent': percent,
                      'design_source': source, 'adoptable': reference is not None and status in ('different', 'design_missing')})
+    if resource['release'].get('reference_evidence'):
+        from .material_references import evidence_rows
+        references = evidence_rows(document, material, resource)
+        rows = [references.get(row['id'], row) for row in rows]
     return rows
 
 
@@ -1192,6 +1196,9 @@ class Types:
             item = next((r for r in compare_material(state['domain'], material, resource) if r['id'] == body.property), None) if material else None
             if not item or not item['adoptable']:
                 raise HTTPException(422, {'field': item['path'] if item else body.material_id, 'message': item['reason'] or '该值已一致，无需新建修订。' if item else '请选择可核对的物性；不替换缺项或条件不符的值。'})
+            if item['reference'].get('resource_reference'):
+                from .material_references import verify_material_adoption
+                verify_material_adoption(self, db, row, state, body)
             document = deepcopy(state['domain'])
             saved = next(m for m in document['materials'] if m['id'] == body.material_id)
             saved[body.property] = item['reference']['value']
