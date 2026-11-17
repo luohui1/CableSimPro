@@ -140,7 +140,8 @@ def _sheet_name(workbook, heading, trace=False):
     base = prefix + re.sub(r'[\\/*?:\[\]]', ' ', heading).strip(" '")
     base = (base or '工程记录')[:31]
     name, index = base, 2
-    while name in workbook.sheetnames:
+    reserved = {item.casefold() for item in (*workbook.sheetnames, '文件信息', _RAW_SHEET, _INDEX_SHEET)}
+    while name.casefold() in reserved:
         suffix = ' ' + str(index)
         name = base[:31 - len(suffix)] + suffix
         index += 1

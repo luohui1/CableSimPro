@@ -84,3 +84,18 @@ def test_xlsx_cannot_silently_round_a_model_before_rendering():
     with pytest.raises(HTTPException) as error:
         render_xlsx(model)
     assert error.value.detail['code'] == 'FORMAL_SOURCE_INTEGRITY'
+
+
+@pytest.mark.parametrize('heading', ['追溯数值', '追溯原文', '文件信息'])
+def test_saved_study_title_cannot_rename_reserved_trace_sheets(heading):
+    model = serializer_model()
+    model['sections'][0]['heading'] = heading
+    model.pop('model_digest')
+    model['model_digest'] = jsonsha(model)
+    workbook = load_workbook(BytesIO(render_xlsx(model)))
+    assert workbook['追溯数值']['A1'].value == 'table_id'
+    assert workbook['追溯原文']['A1'].value == 'chunk_index'
+    assert workbook['文件信息']['A1'].value == '计算书'
+    for values in list(workbook['追溯数值'].values)[1:]:
+        assert workbook[values[3]][values[4]].value == values[5]
+    workbook.close()
