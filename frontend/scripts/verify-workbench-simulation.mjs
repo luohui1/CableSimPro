@@ -358,6 +358,7 @@ await walkthrough('simulation', async ({
             font:parseFloat(getComputedStyle(node).fontSize),scrollHeight:node.scrollHeight,clientHeight:node.clientHeight,
             wraps:node.scrollWidth<=node.clientWidth+1};});
           check('已保存来源可以在工作区完整展开阅读',sourceLayout.inView&&sourceLayout.font>=13&&sourceLayout.wraps,sourceLayout);
+          await expect(sourceInput).toBeInViewport({ratio:1});
           await capture('03-full-source-readable');
           if(sourceLayout.scrollHeight>sourceLayout.clientHeight+1){
             await sourceInput.press('Control+End');
@@ -394,8 +395,12 @@ await walkthrough('simulation', async ({
         && alerts.some(text => /请填写.*(?:网格|尺寸)|(?:网格|尺寸).*必填/.test(text)),
       evidence.parameters.missing);
       await mesh.scrollIntoViewIfNeeded();
-      await capture('04-empty-required-mesh');
       if (await missingNotice.isVisible()) await missingNotice.scrollIntoViewIfNeeded();
+      if(report.phase==='after'){
+        await expect(mesh).toBeInViewport({ratio:1});
+        await expect(missingNotice).toBeInViewport({ratio:1});
+      }
+      await capture('04-empty-required-mesh');
     });
 
     await step('05-save-fem-parameters', async () => {

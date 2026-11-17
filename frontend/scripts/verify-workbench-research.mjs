@@ -107,9 +107,9 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       await expect(projectTable.locator('tbody tr')).toHaveCount(projectStudies.length);
       const createdStudy = projectStudies.find(item => item.id === createdSid);
       const savedRuns = await api(`/api/workspaces/${createdWid}/studies/${createdSid}/runs?view=summary&limit=100`);
-      const studyRow = projectTable.getByRole('row').filter({ has: studyLink });
-      const stateCell = studyRow.getByRole('cell').last();
-      await expect(stateCell).toBeVisible();
+      const studyRow = projectTable.getByRole('row').filter({ has: page.getByRole('link', { name: '直埋载流量 · ' + tag, exact: true }) });
+      const stateCell = studyRow.locator('.status-mark');
+      await expect(stateCell).toHaveText('未运行');
       const stateText = (await stateCell.innerText()).trim();
       await capture('01-project-directory-keyboard-navigation');
       check('尚无运行的新研究在工程目录显示未运行', createdStudy?.latest_run == null

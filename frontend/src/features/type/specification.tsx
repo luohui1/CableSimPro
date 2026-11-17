@@ -101,7 +101,14 @@ export function TypeSpecification({ tab }: { tab: string }) {
       </> : tab === 'revisions' ? revisionRows.length ? <DataTable label="文档修订记录" showGroups={false} rowLabel={row => text(row.version)} groups={[{ id: 'revisions', label: '修订', rows: revisionRows }]} columns={[{ id: 'version', label: '文件版本', render: row => text(row.version) }, { id: 'summary', label: '变更摘要', wrap: true, render: row => text(row.summary) }, { id: 'author', label: '编制人', render: row => text(row.author) }, { id: 'created', label: '日期', render: row => text(row.created).slice(0, 10) }]} /> : <EmptyState title="尚未提交文档评审" description="提交时记录文件版本、变更摘要、编制人与日期。" /> : <div className="type-specification-layout">
         <div className="type-specification-navigation">{tab === 'content' && <nav aria-label="规格书章节">{chapters.map((name, index) => <button key={name} title={name} aria-label={name} aria-current={chapter === markers[index] ? 'page' : undefined} onClick={() => { setChapter(markers[index]); const section=preview.current?.contentDocument?.querySelector(`[data-specification-section="${markers[index]}"]`); const dock=preview.current?.closest('.workbench-dock-body'); if(section&&dock&&preview.current) dock.scrollTo({top:preview.current.offsetTop+(section as HTMLElement).offsetTop,behavior:'instant'}); }}>{index + 1} {chapterLabels[index] || name}</button>)}</nav>}
         {!!checks.filter(check=>check.blocking===true).length && <Button size="compact" onClick={() => { const first=checks.find(check=>check.blocking===true), destination=destinations[text(first?.channel)]; navigation.navigate(typePath(state.workspace!.id,...(destination || ['specification','review'] as [string,string]),navigation.location.theme)); }}>{checks.filter(check=>check.blocking===true).length} 项阻止发布 · 查看第一项</Button>}</div>
-        <iframe ref={preview} title="正式规格书预览" sandbox="allow-same-origin" srcDoc={iframeHtml} height={previewHeight} onLoad={() => { const doc=preview.current?.contentDocument; if(doc) { setPreviewHeight(Math.max(400,doc.documentElement.scrollHeight)); setChapter('cover'); preview.current?.closest('.workbench-dock-body')?.scrollTo({top:0,behavior:'instant'}); } }} />
+        <iframe ref={preview} title="正式规格书预览" sandbox="allow-same-origin" srcDoc={iframeHtml} height={previewHeight} onLoad={() => {
+          const doc = preview.current?.contentDocument;
+          if (!doc) return;
+          setPreviewHeight(Math.max(400, doc.documentElement.scrollHeight));
+          // A remounted preview starts at its cover; keep the chapter and dock in sync.
+          setChapter('cover');
+          preview.current?.closest('.workbench-dock-body')?.scrollTo({ top: 0, behavior: 'instant' });
+        }} />
         {audience === 'internal' && <details className="type-specification-checks"><summary>来源与运行</summary>{sources.map((source, index) => <p key={index}>{channelLabels[text(source.channel)]} · <EvidenceDigest value={source.run_id} /></p>)}<p>规格书 <EvidenceDigest value={spec.digest} /></p></details>}
       </div>}
     </>}

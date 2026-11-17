@@ -6,7 +6,7 @@ import { moduleConfiguration, rootModule, studyEntryTab } from '@/lib/study-conf
 import { moduleBehavior, moduleDefinitions } from '@/pages/study-modules';
 import { femConclusionQuery } from '@/components/study-fem-conclusion';
 import { inputContractQuery } from '@/api/input-contracts';
-import { contractFields } from '@/lib/heavy-components';
+import { contractFields, seriesChart, studySweep } from '@/lib/heavy-components';
 
 /** Match the workbench's existing redirects before choosing a saved-run view. */
 export function studyRunDestination(module: string, tab: string, definition?: StudyDefinition) {
@@ -26,9 +26,9 @@ export function studyRunDestination(module: string, tab: string, definition?: St
 /** Prepare only the requested scan surface while its saved data is loading. */
 function prefetchStudyView(module: string, tab: string, hasSavedRun: boolean) {
   if (module !== 'sweep' || !['curve', 'points'].includes(tab)) return;
-  void import('@/components/study-sweep').catch(() => { /* The visible module retains its loading/error boundary. */ });
+  void studySweep.preload().catch(() => { /* The visible module retains its loading/error boundary. */ });
   if (tab === 'curve' && hasSavedRun)
-    void import('@/components/series-chart').catch(() => { /* The chart keeps its own loading/error boundary. */ });
+    void seriesChart.preload().catch(() => { /* The chart keeps its own loading/error boundary. */ });
 }
 
 /** Selection cards share one cache; the selected capability owns its full schema. */

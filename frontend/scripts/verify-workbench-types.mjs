@@ -630,6 +630,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await expect(row(absentShort.id).locator('.type-scope-declaration')).toHaveCount(0);
       check('短路缺少保存运行没有限定范围绕行入口', true, absentShort);
     }
+    const initialBlocker = row(absentShort?.id || ids[0]);
+    await initialBlocker.scrollIntoViewIfNeeded();
+    await expect(initialBlocker, '限定范围前的真实阻断项完整进入截图视口').toBeInViewport({ ratio: 1 });
     await capture('教学交付-逐项限定范围前仍保留真实阻断');
     const endpoint = `/api/types/${id}/release-scope`;
     async function confirm(key, reason) {
@@ -676,6 +679,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
           : `本次隔离教学交付不含“${title}”的符合性结论；设计条件或依据尚不完整，须补齐并重新核对后另行交付。`;
       const receipt = await confirm(key, reason);
       if (!captured.has(category)) {
+        const declared = excluded().locator('.type-review-item').filter({ hasText: reason });
+        await declared.scrollIntoViewIfNeeded();
+        await expect(declared, category + '的已保存声明完整进入截图视口').toBeInViewport({ ratio: 1 });
         await capture('教学交付-明确声明不含-' + category); captured.add(category);
       }
       if (index === 0) {
@@ -691,6 +697,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         expect(restored.payload.checks.find(item => item.id === key)).toEqual(checkRow);
         expect(restored.payload.release_exclusions.some(item => item.check_id === key)).toBe(false);
         check('撤销限定范围恢复原检查阻断及完整证据', true, { check: key, original: checkRow });
+        await row(key).scrollIntoViewIfNeeded();
+        await expect(row(key), '撤销后恢复的原检查项完整进入截图视口').toBeInViewport({ ratio: 1 });
         await capture('教学交付-撤销不含声明后恢复原缺项');
         await confirm(key, reason);
       }
@@ -728,7 +736,28 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading');
     await page.getByRole('tab', { name: '审核与发布', exact: true }).click();
     await expect(excluded().locator('.type-review-item')).toHaveCount(declarations.size);
-    await capture('教学交付-重载保留逐项不含声明和剩余阻断');
+    await openChecks();
+    // Remaining blockers and a long declaration list need separate viewports.
+    const remaining = after.payload.checks.filter(item => item.blocking);
+    if (remaining.length) {
+      const blocker = row(absentShort?.id || remaining[0].id);
+      await blocker.scrollIntoViewIfNeeded();
+      await expect(blocker, '重载后的剩余阻断详情完整进入截图视口').toBeInViewport({ ratio: 1 });
+      await capture('教学交付-重载保留真实剩余阻断详情');
+    }
+    const decisions = excluded().locator('.type-review-item');
+    const declarationHeader = excluded().locator(':scope > header');
+    await declarationHeader.scrollIntoViewIfNeeded();
+    await expect(declarationHeader, '声明分组及数量完整进入截图视口').toBeInViewport({ ratio: 1 });
+    await capture('教学交付-重载保留声明分组和数量');
+    await decisions.first().scrollIntoViewIfNeeded();
+    await expect(decisions.first(), '重载后的首项声明完整进入截图视口').toBeInViewport({ ratio: 1 });
+    await capture('教学交付-重载保留逐项声明首项');
+    if (declarations.size > 1) {
+      await decisions.last().scrollIntoViewIfNeeded();
+      await expect(decisions.last(), '重载后的末项声明完整进入截图视口').toBeInViewport({ ratio: 1 });
+      await capture('教学交付-重载保留逐项声明末项');
+    }
   }
 
   const options = await api('/api/types/creation-options');
@@ -1393,6 +1422,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const before = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
     const chapters = page.getByRole('navigation', { name: '规格书章节', exact: true });
     await chapters.getByRole('button', { name: '结构尺寸表', exact: true }).click();
+    await expect(chapters.getByRole('button', { name: '结构尺寸表', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="structure"]')).toBeVisible();
     await capture('规格书-内部审核稿结构章节与缺项');
     const finishPdfEvidence = observeOriginalPdf(main.id, '内部审核稿');
@@ -1414,11 +1444,22 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       });
     } finally { await finishPdfEvidence(downloaded); }
     await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading');
-    await expect(chapters.getByRole('button').first()).toHaveAttribute('aria-current', 'page');
+    const currentChapter = chapters.locator('button[aria-current="page"]');
+    await expect(currentChapter).toHaveCount(1);
+    await expect(currentChapter).toHaveAttribute('aria-label', '封面');
+    const coverHeading = page.frameLocator('iframe[title="正式规格书预览"]')
+      .locator('[data-specification-section="cover"]').getByRole('heading', { name: '产品规格书', exact: true });
+    await expect(coverHeading).toBeInViewport({ ratio: 1 });
+    const bounds = await coverHeading.boundingBox(), dockBounds = await page.locator('.workbench-dock-body').boundingBox();
+    const navigationBounds = await page.locator('.type-specification-navigation').boundingBox();
+    check('内部审核稿导出后封面正文与当前章节一致', Boolean(bounds && dockBounds && navigationBounds
+      && bounds.y >= Math.max(dockBounds.y, navigationBounds.y + navigationBounds.height)
+      && bounds.y + bounds.height <= dockBounds.y + dockBounds.height
+      && bounds.x >= dockBounds.x && bounds.x + bounds.width <= dockBounds.x + dockBounds.width), {
+      chapter: await currentChapter.getAttribute('aria-label'),
+      heading: await coverHeading.innerText(), bounds, dockBounds, navigationBounds,
+    });
     await expect(chapters.getByRole('button', { name: '结构尺寸表', exact: true })).not.toHaveAttribute('aria-current', 'page');
-    const cover = page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="cover"]');
-    await expect(cover).toBeInViewport();
-    check('审核稿导出后重新打开的封面与章节导航一致', true, { chapter: await chapters.locator('[aria-current="page"]').innerText() });
     await capture('规格书-内部审核稿导出后封面与章节一致');
   });
 
