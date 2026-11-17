@@ -43,6 +43,12 @@ def test_input_contracts_refuse_live_source_or_manifest_drift(tmp_path,monkeypat
         else:
             from backend.plugin_host.registry import Plugin
             monkeypatch.setattr(Plugin,'verify',lambda self:(_ for _ in ()).throw(OSError('file changing')))
+            # A cached, fully warmed read does not call verify without a source
+            # event. Rewrite the isolated source unchanged to require a fresh
+            # verification, then exercise its read failure, not a digest drift.
+            unchanged = source.read_bytes()
+            source.write_bytes(unchanged)
+            assert source.read_bytes() == unchanged
         response=client.get('/api/input-contracts')
         assert response.status_code==409,response.text
         assert response.json()['detail']['code']==code
