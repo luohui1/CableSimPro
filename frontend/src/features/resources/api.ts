@@ -57,8 +57,9 @@ export function transitionConfirmed(asset: Asset, request: TransitionRequest, ac
 }
 export function downloadAssetDefinitions(assets: Asset[]) {
   // One file avoids browser multi-download blocking. Each entry retains its own immutable version and digest.
-  const body = assets.length === 1 ? { schema_version: 'csp-asset/0.1', release: assets[0].release } : {
-    schema_version: 'cablesim.resource-export/1', items: assets.map(asset => ({ id: asset.id, revision: asset.revision,
+  const body = {
+    schema_version: 'cablesim.resource-export/1', items: assets.map(asset => ({ id: asset.id, asset_id: asset.asset_id,
+      version: asset.version, revision: asset.revision,
       content_sha256: asset.content_sha256, status: asset.status, definition: { schema_version: 'csp-asset/0.1', release: asset.release } })),
   };
   const url = URL.createObjectURL(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json;charset=utf-8' }));

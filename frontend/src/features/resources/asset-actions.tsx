@@ -9,13 +9,13 @@ import { SourceBadge } from '@/components/source-badge';
 import { publishedTypes } from '@/features/type/api';
 import { propertyLabel, referenceCitation, referenceData, referenceNumber } from '@/lib/reference-data';
 import { deriveAsset, findAssetVersion, uncertainWrite } from './api';
-import { assetActions, assetStatuses, assetUnit, comparableRelease, sourceKinds, transitionProblem, validVersion, type Asset, type AssetAction } from './definitions';
+import { assetActions, assetKinds, assetStatuses, assetUnit, comparableRelease, sourceKinds, transitionProblem, validVersion, type Asset, type AssetAction } from './definitions';
 import './resources.css';
 
 export function AssetEvidence({ asset }: { asset: Asset }) {
   const references = referenceData(asset.release.sources);
   return <div className="resource-action-evidence">
-    <p>{asset.name} · {asset.version} · {assetStatuses[asset.status]} · 第 {asset.revision} 次修订</p>
+    <p>{assetKinds[asset.kind]} · {asset.name} · {asset.version} · {assetStatuses[asset.status]} · 第 {asset.revision} 次修订</p>
     <details><summary>参数、来源与固定版本依据</summary>
       <dl>{(asset.release.parameters || []).map(parameter => <div key={parameter.name}><dt>{propertyLabel(parameter.name)}</dt><dd>{referenceNumber(parameter.quantity.value)} {assetUnit(parameter.quantity.unit)}{parameter.overridable ? ' · 允许显式覆盖' : ''}</dd></div>)}</dl>
       {!asset.release.parameters?.length && <p>没有登记计算参数；来源摘录不自动填成计算输入。</p>}

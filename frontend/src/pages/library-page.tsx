@@ -42,6 +42,9 @@ const groups = {
   templates: { title: "模板与计算方案", kinds: ["installation", "study_template"], empty: "还没有敷设模板或计算方案" },
   standards: { title: "标准与规则", kinds: ["rule"], empty: "还没有规则" },
 } as const;
+type ResourceGroup = keyof typeof groups;
+type DialogOrigin = { key: string; group: ResourceGroup };
+const resourceGroup = (kind: AssetKind): ResourceGroup => (Object.entries(groups).find(([, group]) => (group.kinds as readonly string[]).includes(kind))?.[0] || 'materials') as ResourceGroup;
 const statuses: Record<string, string> = {
   draft: "草稿",
   reviewed: "已审核",
@@ -94,9 +97,9 @@ function assetGroups(asset: Record<string, unknown>): PropertyGroup[] {
       return { label: conditions.length === 1 ? "全部物性" : applies.map((row) => propertyLabel(row.property)).join("、") || `条件 ${index + 1}`, value: condition };
     }),
   });
-  // 摘录以外的计算参数（同名物性已在上面列出，不重复）
-  const covered = new Set(data.values.map((row) => row.property));
-  const parameters = (Array.isArray(release.parameters) ? release.parameters : []).map(optionalRecord).filter((row) => !covered.has(text(row.name)));
+  // A source excerpt and a saved calculation input are separate facts, even
+  // when they share a property name or currently have the same numeric value.
+  const parameters = (Array.isArray(release.parameters) ? release.parameters : []).map(optionalRecord);
   if (parameters.length) groups.push({
     label: "计算参数",
     items: parameters.map((row) => {
@@ -141,9 +144,12 @@ export function AssetsPage() {
     [fileName, setFileName] = useState("");
   const [standardsTab, setStandardsTab] = useState('basis');
   const [offset, setOffset] = useState(0), [chosen, setChosen] = useState<Record<string, string>>({}), [batchAction, setBatchAction] = useState<ResourceOperation>('export');
-  const [editor, setEditor] = useState<{ key: string; open: boolean; asset?: Asset; resume?: ReturnType<typeof pendingAssetEdit> } | null>(null);
-  const [operation, setOperation] = useState<{ key: string; open: boolean; action: ResourceOperation; ids: { id: string; name: string }[]; resume?: ReturnType<typeof pendingResourceOperation> } | null>(null);
-  const [derivation, setDerivation] = useState<{ key: string; open: boolean; asset: Asset; resume?: ReturnType<typeof pendingAssetDerivation> } | null>(null);
+  const [editor, setEditor] = useState<(DialogOrigin & { open: boolean; asset?: Asset; resume?: ReturnType<typeof pendingAssetEdit> }) | null>(null);
+  const [operation, setOperation] = useState<(DialogOrigin & { open: boolean; action: ResourceOperation; ids: { id: string; name: string }[]; resume?: ReturnType<typeof pendingResourceOperation> }) | null>(null);
+  const [derivation, setDerivation] = useState<(DialogOrigin & { open: boolean; asset: Asset; resume?: ReturnType<typeof pendingAssetDerivation> }) | null>(null);
+  const [savedElsewhere, setSavedElsewhere] = useState<Asset | null>(null);
+  const dialogKeys = useRef({ editor: editor?.key, operation: operation?.key, derivation: derivation?.key });
+  dialogKeys.current = { editor: editor?.key, operation: operation?.key, derivation: derivation?.key };
   const browsingBasis = groupId === 'standards' && standardsTab === 'basis';
   const filePicker = useRef<HTMLInputElement>(null);
   const importVisible = useRef(open); importVisible.current = open;
@@ -156,6 +162,7 @@ export function AssetsPage() {
   useEffect(() => {
     setQ(''); setKind('all'); setStatus('all'); setOffset(0); setChosen({});
     changeImportOpen(false);
+    setEditor(null); setOperation(null); setDerivation(null); setSavedElsewhere(null);
   }, [groupId]);
   // 接口一次只按一个类别筛选：本组每个类别各取一页再合并，避免在前端截断分页
   const shown = kind === "all" || !(group.kinds as readonly string[]).includes(kind) ? group.kinds : [kind as AssetKind];
@@ -194,6 +201,12 @@ export function AssetsPage() {
       } catch {
         throw Error("请输入有效 JSON；尚未创建资源。");
       }
+      if (optionalRecord(value).schema_version === 'cablesim.resource-export/1') {
+        const items = optionalRecord(value).items;
+        if (!Array.isArray(items) || items.length !== 1) throw Error('此处每次导入一个资源草稿。请使用单项导出文件；批量包需逐项选择定义后导入。');
+        value = optionalRecord(items[0]).definition;
+        if (optionalRecord(value).schema_version !== 'csp-asset/0.1' || !optionalRecord(value).release) throw Error('导出文件缺少完整资源定义，尚未创建资源。');
+      }
       const release = (optionalRecord(value).release || value) as components['schemas']['AssetRelease'];
       if (!(group.kinds as readonly string[]).includes(release.kind)) throw Error('文件类别不属于当前资源页，请切换到对应类别后导入。');
       const receipt = rememberAssetEdit(release);
@@ -202,7 +215,7 @@ export function AssetsPage() {
         if (!uncertainWrite(problem)) forgetAssetEdit(receipt.token);
         else if (mounted.current && importVisible.current && currentGroup.current === origin.group
           && importGeneration.current === origin.generation && pendingAssetEdit()?.token === receipt.token) {
-          changeImportOpen(false); setEditor({ key: receipt.token, open: true, resume: receipt });
+          changeImportOpen(false); setEditor({ key: crypto.randomUUID(), group: origin.group, open: true, resume: receipt });
         }
         throw problem;
       }
@@ -236,21 +249,41 @@ export function AssetsPage() {
       void queries.invalidateQueries({ queryKey: [key] });
     }
   };
-  const saved = (asset: Asset) => {
-    setEditor(null); setDerivation(null); setQ(asset.name); setKind('all'); setStatus('all'); setOffset(0); setSelected(asset.id); refresh();
+  const currentDialog = (type: keyof typeof dialogKeys.current, origin: DialogOrigin) => mounted.current
+    && currentGroup.current === origin.group && dialogKeys.current[type] === origin.key;
+  const closeDialog = (type: keyof typeof dialogKeys.current, origin: DialogOrigin) => {
+    if (!currentDialog(type, origin)) return;
+    if (type === 'editor') setEditor(null);
+    else if (type === 'derivation') setDerivation(null);
+    else setOperation(null);
+  };
+  const openResource = (id: string, targetGroup: ResourceGroup) => {
+    setSavedElsewhere(null);
+    if (targetGroup === currentGroup.current) { clearFilters(); setSelected(id); }
+    else void navigate({ to: '/resources/$group', params: { group: targetGroup }, search: (previous: Record<string, unknown>): { theme: 'light' | 'dark'; item: string } => ({ theme: previous.theme === 'dark' ? 'dark' : 'light', item: id }) });
+  };
+  const saved = (type: 'editor' | 'derivation', origin: DialogOrigin, asset: Asset) => {
+    if (!currentDialog(type, origin)) return;
+    closeDialog(type, origin); refresh();
+    if (resourceGroup(asset.kind) !== currentGroup.current) {
+      // A global pending receipt can be recovered from another category. Keep
+      // that category and selection until the user explicitly opens the result.
+      setSavedElsewhere(asset); return;
+    }
+    setSavedElsewhere(null); setQ(asset.name); setKind('all'); setStatus('all'); setOffset(0); setSelected(asset.id);
   };
   const editReceipt = pendingAssetEdit(), deriveReceipt = pendingAssetDerivation(), operationReceipt = pendingResourceOperation();
   const unresolved = !!editReceipt || !!deriveReceipt || !!operationReceipt?.items.some(item => ['uncertain', 'running'].includes(item.state));
   const openEditor = (asset?: Asset) => {
     const resume = pendingAssetEdit();
-    setEditor({ key: resume?.token || crypto.randomUUID(), open: true, asset: resume?.previous || asset, resume });
+    setEditor({ key: crypto.randomUUID(), group: groupId, open: true, asset: resume?.previous || asset, resume });
   };
   const openOperation = (action: ResourceOperation, ids: { id: string; name: string }[]) => {
     const resume = pendingResourceOperation();
-    setOperation({ key: resume?.token || crypto.randomUUID(), open: true, action: resume?.action || action, ids: resume?.items.map(item => ({ id: item.id, name: item.name })) || ids, resume });
+    setOperation({ key: crypto.randomUUID(), group: groupId, open: true, action: resume?.action || action, ids: resume?.items.map(item => ({ id: item.id, name: item.name })) || ids, resume });
   };
   const openDerivation = (asset: Asset) => {
-    const resume = pendingAssetDerivation(); setDerivation({ key: resume?.token || crypto.randomUUID(), open: true, asset: resume?.asset || asset, resume });
+    const resume = pendingAssetDerivation(); setDerivation({ key: crypto.randomUUID(), group: groupId, open: true, asset: resume?.asset || asset, resume });
   };
   const modalOpen = open || !!editor?.open || !!operation?.open || !!derivation?.open;
   const selectedCount = Object.keys(chosen).length;
@@ -298,6 +331,10 @@ export function AssetsPage() {
             {editReceipt && <Button variant={modalOpen ? 'outline' : 'primary'} onClick={() => openEditor()}>恢复未确认保存</Button>}
             {deriveReceipt && <Button variant={modalOpen || !!editReceipt ? 'outline' : 'primary'} onClick={() => openDerivation(deriveReceipt.asset)}>恢复未确认派生</Button>}
             {operationReceipt && <Button variant={modalOpen || !!editReceipt || !!deriveReceipt ? 'outline' : 'primary'} onClick={() => openOperation(operationReceipt.action, operationReceipt.items)}>恢复资源操作</Button>}
+          </div>}
+          {savedElsewhere && <div className="resource-batch-toolbar" role="status"><span>{kinds[savedElsewhere.kind]}“{savedElsewhere.name}” · {savedElsewhere.version} 已保存，当前资源类别与选择保持不变。</span>
+            <Button onClick={() => openResource(savedElsewhere.id, resourceGroup(savedElsewhere.kind))}>打开该资源</Button>
+            <Button variant="ghost" onClick={() => setSavedElsewhere(null)}>关闭保存提示</Button>
           </div>}
           <Toolbar label="资源筛选">
             <label className="search-field">
@@ -374,9 +411,13 @@ export function AssetsPage() {
           </div>
         </>
       )}
-      {editor && <AssetEditor key={editor.key} open={editor.open} kinds={[...group.kinds]} asset={editor.asset} resume={editor.resume} onClose={() => setEditor(null)} onSaved={saved} />}
-      {operation && <ResourceOperationsDialog key={operation.key} open={operation.open} operation={operation.action} ids={operation.ids} resume={operation.resume} onClose={() => setOperation(null)} onChanged={refresh} onInspect={id => { clearFilters(); setSelected(id); }} />}
-      {derivation && <DeriveAssetDialog key={derivation.key} open={derivation.open} asset={derivation.asset} resume={derivation.resume} onClose={() => setDerivation(null)} onSaved={saved} />}
+      {editor && editor.group === groupId && <AssetEditor key={editor.key} open={editor.open} kinds={[...group.kinds]} asset={editor.asset} resume={editor.resume} onClose={() => closeDialog('editor', editor)} onSaved={asset => saved('editor', editor, asset)} />}
+      {operation && operation.group === groupId && <ResourceOperationsDialog key={operation.key} open={operation.open} operation={operation.action} ids={operation.ids} resume={operation.resume} onClose={() => closeDialog('operation', operation)} onChanged={() => { if (currentDialog('operation', operation)) refresh(); }} onInspect={id => {
+        if (!currentDialog('operation', operation)) return;
+        const target = operation.resume?.items.find(item => item.id === id)?.asset || operation.resume?.items.find(item => item.asset)?.asset;
+        openResource(id, target ? resourceGroup(target.kind) : operation.group);
+      }} />}
+      {derivation && derivation.group === groupId && <DeriveAssetDialog key={derivation.key} open={derivation.open} asset={derivation.asset} resume={derivation.resume} onClose={() => closeDialog('derivation', derivation)} onSaved={asset => saved('derivation', derivation, asset)} />}
       <Dialog
         open={open}
         onOpenChange={changeImportOpen}
