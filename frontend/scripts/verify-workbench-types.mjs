@@ -14,6 +14,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   const layers = () => page.getByRole('table', { name: '型号分层', exact: true });
   const dirty = async () => await toolbar().locator('.command-state').count() > 0
     && (await toolbar().locator('.command-state').innerText()).includes('未保存');
+  async function primary(label, context) {
+    const buttons = page.locator('.type-root .button-primary:visible');
+    await expect(buttons, context + '只显示一个主操作').toHaveCount(1);
+    await expect(buttons).toHaveText(label);
+    check(context + '唯一主操作为' + label, true, { buttons: await buttons.allInnerTexts() });
+    return buttons;
+  }
   let teachingSource;
   async function teachingDesign() {
     if (teachingSource) return teachingSource;
@@ -388,7 +395,21 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     if (!check('库引用起点可开始', Boolean(source), await dialog.innerText())) return null;
     await choose('型号版本', source.name + ' · ' + versionLabel(source.version), dialog);
     await capture('库引用-固定型号版本与来源');
-    return create(dialog, 'library');
+    const created = await create(dialog, 'library');
+    const next = await primary('标准核对', '新建型号的已保存结构页');
+    await expect(next).toBeEnabled();
+    const writesBefore = report.writes.length;
+    await next.click();
+    await expect(page).toHaveURL(new RegExp('/types/' + created.id + '/standard-check/results'));
+    await primary('执行标准核对', '结构下一步进入标准核对页');
+    const afterNavigation = await workspace(created.id);
+    check('结构下一步只导航而不自动保存计算或批准', afterNavigation.revision === created.revision
+      && JSON.stringify(afterNavigation.domain) === JSON.stringify(created.domain)
+      && report.writes.length === writesBefore, { workspace: created.id, writes: report.writes.slice(writesBefore) });
+    await capture('结构下一步-真实进入标准核对且未自动运行');
+    await module('结构 ·');
+    await primary('标准核对', '返回已保存结构页');
+    return created;
   });
 
   let editFixture;
@@ -410,6 +431,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await input.press('Enter');
     await expect(rename).toBeHidden();
     await expect.poll(dirty).toBe(true);
+    await primary('保存', '型号名称编辑后');
     const uncommitted = await workspace(editFixture.id);
     check('确认名称仅修改草稿而不隐式保存', uncommitted.revision === before.revision
       && JSON.stringify(uncommitted.domain) === JSON.stringify(before.domain), { workspace: before.id, revision: before.revision });
@@ -422,6 +444,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       revision: saved.revision, plan: saved.type_lifecycle?.name,
     });
     await expectIdentity(saved);
+    await primary('标准核对', '型号名称真实保存后');
     await capture('型号名称-真实保存与独立方案身份');
 
     await opener.click();
@@ -435,7 +458,30 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     check('取消改名未写入保存版本且焦点返回原入口', cancelled.revision === saved.revision
       && JSON.stringify(cancelled.domain) === JSON.stringify(saved.domain), { workspace: saved.id, revision: cancelled.revision });
     await expect(page.locator('.topbar h1')).toContainText(title);
+    await primary('标准核对', 'Escape取消名称编辑后');
     await capture('型号名称-Escape取消且焦点返回入口');
+
+    await module('方案对比');
+    await expect(page.locator('[data-type-page="comparison-results"]')).not.toHaveAttribute('data-type-state', 'loading');
+    const comparisonPrimary = await page.getByRole('button', { name: '采纳为新版本草稿', exact: true }).isVisible()
+      ? '采纳为新版本草稿' : '建立方案';
+    await primary(comparisonPrimary, '比较页已保存状态');
+    const comparisonWrites = report.writes.length;
+    await opener.click();
+    await input.fill(name('比较页未保存名称'));
+    await input.press('Enter');
+    await expect(rename).toBeHidden();
+    await expect.poll(dirty).toBe(true);
+    await primary('保存', '比较页有未保存输入时');
+    await capture('方案对比-未保存输入以保存为唯一主操作');
+    await (await command('撤销')).click();
+    await expect.poll(dirty).toBe(false);
+    await primary(comparisonPrimary, '比较页撤销未保存输入后');
+    const comparisonCancelled = await workspace(editFixture.id);
+    check('比较页取消输入不写入保存版本或自动建立方案', comparisonCancelled.revision === saved.revision
+      && JSON.stringify(comparisonCancelled.domain) === JSON.stringify(saved.domain) && report.writes.length === comparisonWrites,
+    { workspace: saved.id, revision: comparisonCancelled.revision, writes: report.writes.slice(comparisonWrites) });
+    await capture('方案对比-取消后恢复方案主操作');
   });
 
   await attempt('02c-结构来源逐字录入保存并撤销未保存修改', async () => {
@@ -460,6 +506,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await input.fill(enteredReference);
     await input.press('Tab');
     await expect.poll(dirty).toBe(true);
+    await primary('保存', '结构来源未保存时');
     const uncommitted = await workspace(editFixture.id);
     check('来源录入仅进入草稿且未自动批准或保存', uncommitted.revision === before.revision
       && JSON.stringify(uncommitted.domain) === JSON.stringify(before.domain), { workspace: before.id, path: sourcePath });
@@ -468,6 +515,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await undo.click();
     await expect.poll(dirty).toBe(false);
     await expect(input).toHaveValue(previousText);
+    await primary('标准核对', '撤销结构来源编辑后');
     const cancelled = await workspace(editFixture.id);
     check('撤销来源编辑恢复原出处且保存修订未改变', cancelled.revision === before.revision
       && JSON.stringify(cancelled.domain) === JSON.stringify(before.domain), { workspace: before.id, revision: cancelled.revision });
@@ -478,6 +526,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await input.press('Tab');
     await expect.poll(dirty).toBe(true);
     const saved = await save(editFixture.id), source = saved.domain.provenance[sourcePath];
+    await primary('标准核对', '结构来源真实保存后');
     expect({ ...saved.domain, provenance: before.domain.provenance }).toEqual(before.domain);
     for (const [key, value] of Object.entries(before.domain.provenance || {})) {
       if (key !== sourcePath) expect(saved.domain.provenance[key]).toEqual(value);
@@ -835,6 +884,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await attempt(`08-${analysis.module}-填写方法条件并运行`, async () => {
       await module(analysis.module);
       await page.getByRole('tab', { name: '方法参数', exact: true }).click();
+      await primary('试算', analysis.module + '方法参数未编辑时');
       // Units come from the installed method contract: degrees C, Hz and seconds.
       // These are explicit isolated teaching conditions, not manufacturer evidence.
       for (const [label, value] of analysis.inputs) await field(label, value);
@@ -850,9 +900,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       } else {
         await choose('金属容量校核口径', '绝热容量');
       }
+      await primary('保存', analysis.module + '方法参数有未保存修改时');
       await capture(analysis.module + '-明示教学方法条件');
       await page.getByRole('button', { name: '保存方法条件', exact: true }).click();
       await savedState();
+      await primary('试算', analysis.module + '方法参数保存后');
       await page.getByRole('tab', { name: '结果', exact: true }).click();
       if (!await run('计算' + analysis.module, analysis.result)) return;
       const table = page.getByRole('table', { name: analysis.module, exact: true });
@@ -1021,6 +1073,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
           .filter(node => /auto|scroll|hidden/.test(getComputedStyle(node).overflowX))
           .every(node => node.scrollWidth <= node.clientWidth + 1);
     }), await differences.innerText());
+    await primary('采纳为新版本草稿', '已有独立改版的比较页');
     await capture('改版-原型号与独立方案参数对比');
   });
 
