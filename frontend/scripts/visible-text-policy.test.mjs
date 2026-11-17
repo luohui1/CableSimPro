@@ -47,6 +47,7 @@ test('布局与文字巡检保留真实附录和算例引用且记录豁免理�
 test('文献引用豁免不放行裸编号、混合露出或扩展路径', async () => {
   const texts = ['A/B', 'Case2/10', '附录 A/B；内部 A/B', 'TB880 Case2/10；内部 Case2/10',
     '附录 A/B/parameters', 'TB880 Case2/10/parameters', 'TB881 Case2/10',
+    '附录 A/B\\parameters', 'TB880 Case2/10\\parameters',
     '附录 A/B；/parameters/duration_s', 'TB880 Case2/10；cablesim.type-electrical'];
   for (const text of texts) {
     assert.ok(identifyText(text).some(match => !exceptionFor({ ...match, text, layer: 'ordinary' })), text);

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { walkthrough } from './verify-workbench-support.mjs';
 
 // Run with isolated-e2e.mjs and the engineering demo database. All writes below
@@ -279,15 +280,239 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       report.shortCircuitTransfers.push(trace);
     }
   }
+  const digest = value => createHash('sha256').update(value).digest('hex');
+  async function savedNotationInputs(id) {
+    const [saved, studies] = await Promise.all([workspace(id), api(`/api/workspaces/${id}/studies`)]);
+    return {
+      workspace: Object.fromEntries(['id', 'revision', 'domain', 'type_reference', 'type_creation', 'type_plan_source', 'type_lifecycle', 'resource_bindings']
+        .filter(key => key in saved).map(key => [key, saved[key]])),
+      studies: studies.map(({ id, revision, definition }) => ({ id, revision, definition })).sort((a, b) => a.id.localeCompare(b.id)),
+    };
+  }
+  async function notationGeometry(locator, token, iframe) {
+    const result = await locator.evaluate((node, needle) => {
+      const rect = value => ({ left: value.left, top: value.top, right: value.right, bottom: value.bottom, width: value.width, height: value.height });
+      const bounds = node.getBoundingClientRect(), style = getComputedStyle(node), runs = [];
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const text = walker.currentNode, parent = text.parentElement;
+        if (!text.textContent?.trim() || !parent) continue;
+        const range = document.createRange(); range.selectNodeContents(text);
+        const font = getComputedStyle(parent), matches = [];
+        for (let start = text.textContent.indexOf(needle); start >= 0; start = text.textContent.indexOf(needle, start + needle.length)) {
+          const match = document.createRange(); match.setStart(text, start); match.setEnd(text, start + needle.length);
+          matches.push(...[...match.getClientRects()].map(rect));
+        }
+        runs.push({ text: text.textContent, fontSize: parseFloat(font.fontSize), fontFamily: font.fontFamily,
+          lineHeight: font.lineHeight, rects: [...range.getClientRects()].map(rect), matches });
+      }
+      let clip = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+      const ancestors = [];
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        const css = getComputedStyle(parent), box = parent.getBoundingClientRect();
+        if (/(hidden|auto|scroll|clip)/.test(css.overflowX)) { clip.left = Math.max(clip.left, box.left); clip.right = Math.min(clip.right, box.right); }
+        if (/(hidden|auto|scroll|clip)/.test(css.overflowY)) { clip.top = Math.max(clip.top, box.top); clip.bottom = Math.min(clip.bottom, box.bottom); }
+        ancestors.push({ tag: parent.tagName, className: parent.className, box: rect(box), overflowX: css.overflowX,
+          overflowY: css.overflowY, clientWidth: parent.clientWidth, scrollWidth: parent.scrollWidth, scrollTop: parent.scrollTop });
+      }
+      return { text: node.textContent, html: node.outerHTML, bounds: rect(bounds), clip, runs, ancestors,
+        fontSize: parseFloat(style.fontSize), lineHeight: style.lineHeight, whiteSpace: style.whiteSpace,
+        overflowWrap: style.overflowWrap, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
+        section: node.closest('[data-specification-section]')?.getAttribute('data-specification-section') || null };
+    }, token);
+    const absolute = await locator.boundingBox();
+    if (!absolute) throw new Error('原文节点没有可采集的屏幕位置');
+    const offset = { x: absolute.x - result.bounds.left, y: absolute.y - result.bounds.top };
+    let outer = { left: 0, top: 0, right: size.width, bottom: size.height };
+    if (iframe) outer = await iframe.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      const clip = { left: Math.max(0, box.left), top: Math.max(0, box.top), right: Math.min(innerWidth, box.right), bottom: Math.min(innerHeight, box.bottom) };
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        const css = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+        if (/(hidden|auto|scroll|clip)/.test(css.overflowX)) { clip.left = Math.max(clip.left, bounds.left); clip.right = Math.min(clip.right, bounds.right); }
+        if (/(hidden|auto|scroll|clip)/.test(css.overflowY)) { clip.top = Math.max(clip.top, bounds.top); clip.bottom = Math.min(clip.bottom, bounds.bottom); }
+      }
+      return clip;
+    });
+    const clip = { left: Math.max(outer.left, result.clip.left + offset.x), top: Math.max(outer.top, result.clip.top + offset.y),
+      right: Math.min(outer.right, result.clip.right + offset.x), bottom: Math.min(outer.bottom, result.clip.bottom + offset.y) };
+    const matches = result.runs.flatMap(run => run.matches).map(rect => ({ ...rect,
+      left: rect.left + offset.x, right: rect.right + offset.x, top: rect.top + offset.y, bottom: rect.bottom + offset.y }));
+    return { ...result, offset, viewportClip: clip, viewportMatches: matches,
+      tokenFullyVisible: matches.length > 0 && matches.every(rect => rect.width > 0 && rect.height > 0
+        && rect.left >= clip.left - 1 && rect.right <= clip.right + 1 && rect.top >= clip.top - 1 && rect.bottom <= clip.bottom + 1),
+      minimumFontSize: Math.min(...result.runs.map(run => run.fontSize)),
+      textWithinHorizontalBounds: result.runs.every(run => run.rects.every(rect => rect.left >= result.bounds.left - 1 && rect.right <= result.bounds.right + 1)) };
+  }
+  async function captureNotationEvidence(id, label, specification = false) {
+    // Evidence is collected independently of the existing visible-name failure.
+    // Scroll real controls only; rendered text, source HTML and inputs stay intact.
+    const sequence = (report.notationEvidence ||= []).length + 1, prefix = `notation-${size.width}-${tag}-${sequence}`;
+    const entry = { label, ...size, workspace: id, kind: specification ? 'formal-specification' : 'standard-result', files: [], targets: [] };
+    report.notationEvidence.push(entry);
+    const write = async (suffix, value) => {
+      const file = prefix + suffix; await fs.writeFile(path.join(out, file), value); entry.files.push(file); return file;
+    };
+    const iframe = specification ? page.locator('iframe[title="正式规格书预览"]') : null;
+    const surface = specification ? page.frameLocator('iframe[title="正式规格书预览"]') : page;
+    let before, specBefore, frameBefore;
+    try {
+      before = await savedNotationInputs(id);
+      await write('-saved-before.json', JSON.stringify(before, null, 2));
+      await expect(surface.locator('body')).toBeVisible();
+      await surface.locator('body').evaluate(async () => { await document.fonts.ready; });
+      if (specification) {
+        specBefore = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+        await write('-host-before.html', specBefore.html);
+        await write('-specification-before.json', JSON.stringify(specBefore, null, 2));
+        frameBefore = await iframe.getAttribute('srcdoc');
+        await write('-iframe-before.html', frameBefore || '');
+        await write('-iframe-aria.txt', await surface.locator('body').ariaSnapshot());
+        await write('-iframe-text.txt', await surface.locator('body').textContent() || '');
+      } else await write('-body-aria.txt', await page.locator('body').ariaSnapshot());
+      for (const token of specification ? ['Case2/10', '附录 A/B'] : ['附录 A/B']) {
+        const targets = surface.getByText(token, { exact: false });
+        try { await expect(targets.first()).toBeAttached(); }
+        catch (error) {
+          entry.targets.push({ token, error: error.message });
+          check(label + '保留原文 ' + token, false, { token, evidence: prefix, error: error.message }, { fatal: false });
+          continue;
+        }
+        const count = await targets.count();
+        check(label + '保留原文 ' + token, count > 0, { token, count, evidence: prefix }, { fatal: false });
+        for (let index = 0; index < count; index++) {
+          const target = targets.nth(index), item = { token, index }; entry.targets.push(item);
+          try {
+            await target.scrollIntoViewIfNeeded();
+            let geometry = await notationGeometry(target, token, iframe);
+            // A long table cell can exceed a viewport. Centre the actual token
+            // with wheel input instead of moving or splitting its text nodes.
+            for (let turn = 0; turn < 4 && !geometry.tokenFullyVisible; turn++) {
+              const first = geometry.viewportMatches[0], clip = geometry.viewportClip;
+              if (!first || clip.right <= clip.left || clip.bottom <= clip.top) break;
+              const delta = (first.top + first.bottom - clip.top - clip.bottom) / 2;
+              if (Math.abs(delta) < 1) break;
+              await page.mouse.move((clip.left + clip.right) / 2, (clip.top + clip.bottom) / 2);
+              await page.mouse.wheel(0, delta);
+              try {
+                await expect.poll(async () => (await notationGeometry(target, token, iframe)).viewportMatches[0]?.top,
+                  { timeout: 3000 }).not.toBe(first.top);
+              } catch { break; }
+              geometry = await notationGeometry(target, token, iframe);
+            }
+            await expect.poll(() => target.evaluate(node => new Promise(resolve => {
+              const before = node.getBoundingClientRect();
+              requestAnimationFrame(() => requestAnimationFrame(() => {
+                const after = node.getBoundingClientRect();
+                resolve(Math.abs(after.left - before.left) < 1 && Math.abs(after.top - before.top) < 1);
+              }));
+            })), { timeout: 3000 }).toBe(true);
+            geometry = await notationGeometry(target, token, iframe);
+            const shot = await capture(label + '-' + (token === 'Case2/10' ? '算例来源' : '附录诊断') + '-' + (index + 1));
+            item.screenshot = shot.screenshot;
+            item.geometry = await write(`-target-${entry.targets.length}.json`, JSON.stringify(geometry, null, 2));
+            item.originalText = await write(`-target-${entry.targets.length}.txt`, geometry.text || '');
+            check(label + '原文目标实际位于截图可视区 ' + token + '-' + (index + 1), geometry.tokenFullyVisible,
+              { screenshot: shot.screenshot, geometry: item.geometry, clip: geometry.viewportClip, matches: geometry.viewportMatches }, { fatal: false });
+            check(label + '原文字号与水平边界 ' + token + '-' + (index + 1), geometry.minimumFontSize >= 13 && geometry.textWithinHorizontalBounds,
+              { screenshot: shot.screenshot, geometry: item.geometry, minimumFontSize: geometry.minimumFontSize }, { fatal: false });
+          } catch (error) {
+            item.error = error.message;
+            const shot = await capture(label + '-原文定位失败-' + entry.targets.length).catch(() => null);
+            item.screenshot = shot?.screenshot;
+            check(label + '原文位置取证 ' + token + '-' + (index + 1), false, item, { fatal: false });
+          }
+        }
+      }
+    } catch (error) {
+      entry.error = error.message;
+      check(label + '独立原文取证', false, { error: error.message, evidence: prefix }, { fatal: false });
+    } finally {
+      try {
+        const after = await savedNotationInputs(id);
+        await write('-saved-after.json', JSON.stringify(after, null, 2));
+        check(label + '滚动未改动保存输入引用及方法版本', Boolean(before) && JSON.stringify(after) === JSON.stringify(before),
+          { before: prefix + '-saved-before.json', after: prefix + '-saved-after.json' }, { fatal: false });
+        if (specification && specBefore) {
+          const specAfter = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+          const frameAfter = await iframe.getAttribute('srcdoc');
+          await write('-host-after.html', specAfter.html);
+          await write('-specification-after.json', JSON.stringify(specAfter, null, 2));
+          entry.htmlIdentity = { before: digest(specBefore.html), after: digest(specAfter.html),
+            iframeBefore: digest(frameBefore || ''), iframeAfter: digest(frameAfter || ''), specificationDigest: specAfter.digest };
+          check(label + '正式HTML与规格书版本原文未改写', specBefore.html === specAfter.html && frameBefore === frameAfter
+            && specBefore.digest === specAfter.digest && JSON.stringify(specBefore.payload) === JSON.stringify(specAfter.payload)
+            && JSON.stringify(specBefore.lifecycle) === JSON.stringify(specAfter.lifecycle), entry.htmlIdentity, { fatal: false });
+        }
+      } catch (error) {
+        entry.identityError = error.message;
+        check(label + '原文与保存身份回读', false, { error: error.message, evidence: prefix }, { fatal: false });
+      }
+      try {
+        await write('-evidence.json', JSON.stringify(entry, null, 2));
+        if (specification) {
+          const cover = page.getByRole('navigation', { name: '规格书章节', exact: true }).getByRole('button').first();
+          if (await cover.isVisible()) await cover.click();
+        }
+      } catch (error) {
+        entry.finishError = error.message;
+        check(label + '原文取证保存与章节恢复', false, { error: error.message, evidence: prefix }, { fatal: false });
+      }
+    }
+  }
+  function observeOriginalPdf(id, label) {
+    const pending = [], responses = [], sequence = (report.pdfOriginalEvidence ||= []).length + 1;
+    const prefix = `original-pdf-${size.width}-${tag}-${sequence}`;
+    const onResponse = response => {
+      const url = new URL(response.url());
+      if (url.pathname !== `/api/types/${id}/specification/file`) return;
+      const headers = response.headers();
+      const item = { url: response.url(), status: response.status(), method: response.request().method(),
+        requestIdentity: Object.fromEntries(url.searchParams),
+        hostIdentity: { artifact: headers['x-artifact-sha256'], specification: headers['x-specification-sha256'], audience: headers['x-specification-audience'] } };
+      responses.push(item);
+      pending.push((async () => {
+        try {
+          const bytes = await response.body();
+          item.file = prefix + '-' + responses.indexOf(item) + (response.ok() ? '.pdf' : '.txt');
+          await fs.writeFile(path.join(out, item.file), bytes);
+          item.bytes = bytes.length; item.sha256 = digest(bytes); item.pdf = bytes.subarray(0, 5).toString() === '%PDF-';
+        } catch (error) { item.error = error.message; }
+      })());
+    };
+    page.on('response', onResponse);
+    return async downloaded => {
+      page.off('response', onResponse); await Promise.all(pending);
+      const evidence = { label, ...size, workspace: id, responses,
+        status: downloaded ? 'downloaded' : 'no-download', explanation: downloaded ? '对照同次真实UI导出响应字节' : '本次真实流程没有下载PDF；保留原生成或下载失败，不另行绕过门槛。' };
+      report.pdfOriginalEvidence.push(evidence);
+      try {
+        if (downloaded) {
+          const bytes = await fs.readFile(downloaded); evidence.download = { file: path.basename(downloaded), bytes: bytes.length, sha256: digest(bytes) };
+          const original = responses.find(item => item.pdf && item.sha256 === evidence.download.sha256
+            && item.sha256 === item.hostIdentity.artifact && item.hostIdentity.specification === item.requestIdentity.specification_digest
+            && item.hostIdentity.audience === item.requestIdentity.audience);
+          evidence.identicalBytes = Boolean(original && bytes.equals(await fs.readFile(path.join(out, original.file))));
+          check(label + '下载PDF与宿主原始响应逐字节一致', evidence.identicalBytes, evidence, { fatal: false });
+        }
+        await fs.writeFile(path.join(out, prefix + '.json'), JSON.stringify(evidence, null, 2));
+      } catch (error) {
+        evidence.error = error.message;
+        check(label + 'PDF原始字节取证', false, { error: error.message, evidence: prefix }, { fatal: false });
+      }
+    };
+  }
   async function generateSpecification(id, label, suffix, expectedIncomplete = false) {
     await module('规格书');
     await choose('文档版本', '客户版');
     await page.getByRole('tab', { name: '内容', exact: true }).click();
     await expect(page.getByTitle('正式规格书预览')).toBeVisible();
     await capture(label + '-生成前缺项与章节');
+    if (suffix === 'teaching') await captureNotationEvidence(id, label + '-生成前原文', true);
     const generate = await command('生成规格书', true);
     if (!check(label + '有可启动的生成操作', generate && await generate.isEnabled(), await visibleText())) return;
-    let download;
+    let download, downloaded;
+    const finishPdfEvidence = observeOriginalPdf(id, label);
     const listener = item => { download = item; };
     page.on('download', listener);
     try {
@@ -317,13 +542,18 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await expect.poll(() => Boolean(download), { timeout: 60000 }).toBe(true);
       const filename = path.join(out, `types-${size.width}-${tag}-${suffix}-customer.pdf`);
       await download.saveAs(filename);
+      downloaded = filename;
       const bytes = await fs.readFile(filename);
       const spec = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
       check(label + '客户下载是有效PDF且引用五项当前结果', bytes.subarray(0, 5).toString() === '%PDF-'
         && spec.payload.sources.length === 5 && spec.payload.sources.every(source => source.freshness === 'current'), {
         file: path.basename(filename), bytes: bytes.length, sources: spec.payload.sources,
       });
-    } finally { page.off('download', listener); }
+    } finally {
+      page.off('download', listener);
+      await finishPdfEvidence(downloaded);
+      if (suffix === 'teaching') await captureNotationEvidence(id, label + '-生成后原文', true);
+    }
   }
   async function reviewSpecification(id, label, expectedIncomplete = false) {
     await module('规格书');
@@ -350,7 +580,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await capture(label + '-审核缺项定位到结构字段');
       return;
     }
-    if (!check(label + '具备提交审核的完整输入与结果', spec.ready && blockers.length === 0, { ready: spec.ready, blockers })) {
+    if (!check(label + '满足当前声明范围的提交审核条件', spec.ready && blockers.length === 0, { ready: spec.ready, blockers, exclusions: spec.payload.release_exclusions || [] })) {
       const submit = page.getByRole('button', { name: '提交评审', exact: true });
       check(label + '校核未闭合时禁止发布并显示实际原因', await submit.isDisabled() && blockers.length > 0, await visibleText());
       return;
@@ -1151,20 +1381,24 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await chapters.getByRole('button', { name: '结构尺寸表', exact: true }).click();
     await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="structure"]')).toBeVisible();
     await capture('规格书-内部审核稿结构章节与缺项');
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 180000 }),
-      page.getByRole('button', { name: '导出内部审核稿', exact: true }).click(),
-    ]);
-    const filename = path.join(out, `types-${size.width}-${tag}-internal.pdf`);
-    await download.saveAs(filename);
-    const bytes = await fs.readFile(filename);
-    const after = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
-    check('内部审核稿下载是有效PDF且保留原校核与生命周期', bytes.subarray(0, 5).toString() === '%PDF-'
-      && after.ready === before.ready && after.lifecycle.status === before.lifecycle.status
-      && JSON.stringify(after.payload.checks) === JSON.stringify(before.payload.checks), {
-      file: path.basename(filename), bytes: bytes.length, ready: after.ready,
-      blockers: after.payload.checks.filter(item => item.blocking).map(item => item.id),
-    });
+    const finishPdfEvidence = observeOriginalPdf(main.id, '内部审核稿');
+    let downloaded;
+    try {
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 180000 }),
+        page.getByRole('button', { name: '导出内部审核稿', exact: true }).click(),
+      ]);
+      const filename = path.join(out, `types-${size.width}-${tag}-internal.pdf`);
+      await download.saveAs(filename); downloaded = filename;
+      const bytes = await fs.readFile(filename);
+      const after = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
+      check('内部审核稿下载是有效PDF且保留原校核与生命周期', bytes.subarray(0, 5).toString() === '%PDF-'
+        && after.ready === before.ready && after.lifecycle.status === before.lifecycle.status
+        && JSON.stringify(after.payload.checks) === JSON.stringify(before.payload.checks), {
+        file: path.basename(filename), bytes: bytes.length, ready: after.ready,
+        blockers: after.payload.checks.filter(item => item.blocking).map(item => item.id),
+      });
+    } finally { await finishPdfEvidence(downloaded); }
   });
 
   await attempt('11-缺项草稿保留审核门禁并定位字段', () => reviewSpecification(main.id, '缺项草稿规格书', true));
@@ -1281,6 +1515,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await module('标准核对');
     if (!await run('执行标准核对', 'standard-check-results')) return;
     await expect(page.getByRole('table', { name: '标准核对', exact: true })).toBeVisible();
+    await captureNotationEvidence(delivery.id, '教学标准核对-附录原文');
   });
   const celsius = value => Number((value - 273.15).toPrecision(12));
   for (const analysis of [

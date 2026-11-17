@@ -29,9 +29,9 @@ export function internalTokens(text) {
 export function engineeringReferenceException(text, token) {
   if (typeof text !== 'string' || !text.includes(token)) return null;
   const citation = token === 'A/B'
-    ? { id: 'standard-annex', pattern: /附录\s+A\/B(?![A-Za-z0-9_./-])/g }
+    ? { id: 'standard-annex', pattern: /附录\s+A\/B(?![A-Za-z0-9_./\\-])/g }
     : token === 'Case2/10'
-      ? { id: 'tb880-examples', pattern: /\bTB\s*880\s+Case2\/10(?![A-Za-z0-9_./-])/g }
+      ? { id: 'tb880-examples', pattern: /\bTB\s*880\s+Case2\/10(?![A-Za-z0-9_./\\-])/g }
       : null;
   if (!citation) return null;
   // A second, uncited occurrence in the same node must still be reported.
