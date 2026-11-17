@@ -226,11 +226,15 @@ def validate_model_refs(model: dict) -> None:
                 body_text.append(section['heading'])
                 body_text.extend(paragraph['text'] for paragraph in section.get('paragraphs', []))
                 body_text.extend(figure.get('title', '') for figure in section.get('figures', []))
+                for figure in section.get('figures', []):
+                    geometry = referenced_value(model, figure['geometry_ref'])
+                    body_text.extend(str(row.get('label') or '') for row in geometry.get('layers', []))
                 for table_id in section['table_ids']:
                     table = model['tables'][table_id]
                     body_text.append(table.get('title', ''))
                     body_text.extend(column['label'] for column in table['columns'])
                     body_text.extend(cell['raw_text'] for row in table['rows'] for cell in row['cells'].values())
+                    body_text.extend(str(cell.get('unit') or '') for row in table['rows'] for cell in row['cells'].values())
         if not saw_trace or set(used) != set(model['tables']) or len(used) != len(set(used)):
             raise ValueError('交付表格或追溯章节缺失、重复。')
         if sum(len(table['rows']) for table in model['tables'].values()) > MAX_ROWS:
@@ -265,6 +269,7 @@ def validate_model_refs(model: dict) -> None:
         for item in model['signatures']:
             if not item.get('evidence_ref') and any(item.get(key) for key in ('name', 'date')):
                 raise ValueError('签栏没有真实记录依据。')
+            body_text.extend(str(item.get(key) or '') for key in ('label', 'name', 'date'))
         if any(re.search(r'\b(?:x-)?cablesim\.[a-zA-Z0-9_.-]+', text) for text in body_text):
             raise ValueError('正文含有原始方法标识，须使用保存的方法名称或放入追溯章节。')
         if 'source_digest' in model and model['source_digest'] != jsonsha(model['sources']):
