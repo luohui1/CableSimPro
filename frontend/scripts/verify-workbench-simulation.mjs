@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { walkthrough } from './verify-workbench-support.mjs';
 import { parameterSchema } from '../src/lib/study-parameter-form.ts';
+import { displayName, displayText } from '../src/lib/display-names.ts';
 
 await walkthrough('simulation', async ({
   page, expect, base, api, choose, capture, step, check, out, size, tag, report,
@@ -39,7 +40,7 @@ await walkthrough('simulation', async ({
     expect(Number.isFinite(value),pointer+' 必须来自明确值').toBe(true);
     const field=parameterSchema(schemaAt(schema,pointer),schema), unit=field['x-unit'] || parameterSchema(schemaAt(schema,pointer.slice(0,pointer.lastIndexOf('/'))),schema)['x-unit'] || {};
     const group=await editor(scope,pointer),input=group.locator('input').first();
-    await input.fill(String(Number((value*(unit.scale ?? 1)+(unit.offset ?? 0)).toPrecision(14))));await input.press('Tab');
+    await input.fill(String(value*(unit.scale ?? 1)+(unit.offset ?? 0)));await input.press('Tab');
   }
   async function select(scope,pointer,value,schema) {
     const group=await editor(scope,pointer);await group.getByRole('combobox').click();
@@ -51,6 +52,17 @@ await walkthrough('simulation', async ({
     const group=await editor(scope,pointer),detail=group.locator('details').first();
     if(await detail.count() && await detail.getAttribute('open')===null)await detail.locator(':scope > summary').click();
     await group.locator('textarea,input').first().fill(value);
+  }
+  async function inheritedChoice(scope, schema, pointer, value) {
+    const field=parameterSchema(schemaAt(schema,pointer),schema);
+    expect(field.enum, pointer+' 必须由真实契约接受保存值').toContain(value);
+    const label=field['x-enum-labels']?.[value] || displayName(value);
+    await expect((await editor(scope,pointer)).getByRole('combobox')).toContainText(displayText(label));
+  }
+  async function showCreateAction(dialog) {
+    const action=dialog.getByRole('button',{name:'建立研究',exact:true});
+    await action.scrollIntoViewIfNeeded();
+    await expect(action).toBeInViewport({ratio:1});
   }
 
   try {
@@ -67,17 +79,24 @@ await walkthrough('simulation', async ({
       || iecStudies.find(row => row.definition.driver?.kind === 'single') || iecStudies[0];
     expect(iec, '发布库须提供已保存的 IEC 研究，不能伪造基线').toBeTruthy();
     expect(thermal, '发布库须提供真实有限元输入，以检查被新建卡点阻断的后续页面').toBeTruthy();
-    const referenceThermal=thermalStudies.find(row=>row.workspace===iec.workspace) || thermal;
+    const referenceThermal=thermalStudies.find(row=>row.workspace===iec.workspace);
+    expect(referenceThermal,'对照边界必须来自同一工程的真实保存研究').toBeTruthy();
     const referenceParameters=configuration(referenceThermal).parameters;
+    const bounds=referenceParameters.domain_options?.bounds_m;
+    expect(bounds,'有限域来自真实保存有限元研究的 domain_options，不生成占位边界').toHaveLength(4);
     evidence.source = {
       iec: { workspace: iec.workspace, study: iec.id, title: iec.definition.title },
       thermal: { workspace: thermal.workspace, study: thermal.id, title: thermal.definition.title },
+      comparisonReference: { workspace:referenceThermal.workspace, study:referenceThermal.id, revision:referenceThermal.revision,
+        path:'/parameters/domain_options/bounds_m', bounds },
       downstreamScope: '新建对照若受阻，后续参数与预检独立使用发布库既有有限元输入；不算新建链路通过。',
     };
 
     await step('01-saved-iec-study', async () => {
       await page.goto(`${base}/studies/${iec.id}/ampacity/results?workspace=${iec.workspace}&theme=light`);
       await expect(page.getByRole('navigation', { name: '工程浏览器', exact: true })).toBeVisible();
+      await expect(page.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+      await expect(page.getByText('正在读取保存工况的模型输入',{exact:true})).toHaveCount(0);
       await check('能从已保存的 IEC 研究开始有限元对照', true, evidence.source.iec);
     });
 
@@ -103,6 +122,8 @@ await walkthrough('simulation', async ({
       const editors = await dialog.locator('[data-field-path] input, input[data-field-path], [data-field-path] [role="combobox"], textarea').count();
       evidence.comparison.editorCount = editors;
       await capture('02-comparison-parameters-before-submit');
+      await showCreateAction(dialog);
+      await capture('02-comparison-create-action');
       await check('新建有限元对照能填写必要参数', editors > 0, {
         step: '当前工程 → 新建研究 → IEC 与有限元对比',
         editorCount: editors,
@@ -113,28 +134,35 @@ await walkthrough('simulation', async ({
         const contracts=await api('/api/input-contracts?'+new URLSearchParams(pin));
         const schema=contracts.find(row=>row.method.release_digest===pin.release_digest && row.method.capability===pin.capability).parameter_schema;
         await choose('方法参数来源',`沿用已保存 IEC 参数 · ${iec.definition.title}`,dialog);
+        for(const key of ['t4_form','eddy','rating_mode']){
+          const value=iec.definition.parameters[key];
+          if(value!==undefined && value!==null)await inheritedChoice(dialog,schema,'/iec/'+key,value);
+        }
+        await check('切换参数来源保留已保存 IEC 的真实选项',true,{t4_form:iec.definition.parameters.t4_form,eddy:iec.definition.parameters.eddy,rating_mode:iec.definition.parameters.rating_mode});
         // An empty required field must be caught locally and receive focus.
         await dialog.getByRole('button',{name:'建立研究',exact:true}).click();
         await expect(dialog.locator('[role="alert"]:visible').first()).toBeVisible();
+        await expect((await editor(dialog,'/section_id')).getByRole('combobox')).toBeFocused();
         const incomplete=await dialog.locator('[aria-invalid=true]').count();
         await check('创建缺项以真实字段标记并可修复',incomplete>0,{invalidFields:incomplete});
         await capture('02-comparison-missing-required-fields');
         await select(dialog,'/section_id',undefined,schema);
         await select(dialog,'/load_id',undefined,schema);
         await select(dialog,'/controls/operation','temperature',schema);
-        const controls={mesh_size_m:referenceParameters.mesh.size_m,far_mesh_size_m:referenceParameters.mesh.far_size_m,mesh_transition_m:referenceParameters.mesh.transition_m,max_nodes:referenceParameters.mesh.max_nodes,
+        // Mesh sizes come from the saved study. The node budget is an explicit
+        // numerical control for this comparison, whose contract has a lower cap.
+        const controls={mesh_size_m:referenceParameters.mesh.size_m,far_mesh_size_m:referenceParameters.mesh.far_size_m,mesh_transition_m:referenceParameters.mesh.transition_m,max_nodes:100000,
           tolerance_k:0.001,max_iterations:50,relaxation:0.7,current_upper_a:1000,current_tolerance_a:0.5};
         for(const [key,value] of Object.entries(controls))await number(dialog,schema,'/controls/'+key,value);
         await select(dialog,'/controls/rated_circuit',undefined,schema);
-        const bounds=referenceParameters.bounds_m;
-        expect(bounds,'有限域来自真实保存有限元研究，不生成占位边界').toHaveLength(4);
         for(const [index,value] of bounds.entries())await number(dialog,schema,'/bounds_m/'+index,value);
-        await source(dialog,'/source',`界面输入走查：边界与网格明确沿用保存研究「${referenceThermal.definition.title}」修订 ${referenceThermal.revision}；IEC 输入沿用「${iec.definition.title}」修订 ${iec.revision}。迭代与电流搜索控制由本次走查明确填写；未提交求解，不形成工程结论。`);
+        await source(dialog,'/source',`界面输入走查：边界与网格尺寸明确沿用同工程保存研究「${referenceThermal.definition.title}」修订 ${referenceThermal.revision}；IEC 输入沿用「${iec.definition.title}」修订 ${iec.revision}。最大节点数 100000、迭代与电流搜索控制由本次走查明确填写；未提交求解，不形成工程结论。`);
         const ackTitle=parameterSchema(schema.properties.frozen_coefficients_acknowledged,schema).title;
         const toggle=dialog.getByRole('switch',{name:new RegExp(ackTitle)});
         const parents=await toggle.locator('xpath=ancestor::details[not(@open)]').all();
         for(const parent of parents.reverse())await parent.locator(':scope > summary').click();
         if(await toggle.getAttribute('aria-checked')!=='true')await toggle.click();
+        await showCreateAction(dialog);
         await capture('02-comparison-filled-sourced-inputs');
       }
       const pending = page.waitForResponse(response => response.request().method() === 'POST'
@@ -149,6 +177,14 @@ await walkthrough('simulation', async ({
         createdComparison=evidence.comparison.response;
         const params=createdComparison.definition.parameters;
         check('创建保留降序网格尺度与真实来源',JSON.stringify(params.mesh_scales)==='[1.5,1,0.75]' && !!params.source && params.iec.ks===iec.definition.parameters.ks,{meshScales:params.mesh_scales,source:params.source,iecKs:params.iec.ks});
+        const saved=await api(studyPath({workspace:iec.workspace,id:createdComparison.id}));
+        for(const key of ['t4_form','eddy','rating_mode','ks','kp','corrugated_gap'])if(key in iec.definition.parameters){
+          expect(saved.definition.parameters.iec[key],`保存后 IEC ${key} 须保留来源原值`).toEqual(iec.definition.parameters[key]);
+        }
+        expect(saved.definition.parameters.bounds_m,'保存负坐标与边界顺序').toEqual(bounds);
+        expect(saved.definition.parameters.section_id,'截面引用属于原边界的保存工程').toBe(referenceParameters.domain_options.section_id);
+        expect(saved.definition.parameters.load_id,'负荷引用属于原边界的保存工程').toBe(referenceParameters.domain_options.load_id);
+        check('创建后的真实 API 保留 IEC 来源精度、选项与负坐标',true,{iec:saved.definition.parameters.iec,bounds:saved.definition.parameters.bounds_m});
       } else {
         await expect(dialog.getByRole('alert')).toBeVisible();
         evidence.comparison.message = await dialog.getByRole('alert').innerText();
@@ -345,7 +381,7 @@ await walkthrough('simulation', async ({
         await capture('08-native-missing-inputs');
         await select(dialog,'/domain_options/section_id',undefined,schema);
         await select(dialog,'/domain_options/load_id',undefined,schema);
-        for(const [index,value] of referenceParameters.bounds_m.entries())await number(dialog,schema,'/domain_options/bounds_m/'+index,value);
+        for(const [index,value] of bounds.entries())await number(dialog,schema,'/domain_options/bounds_m/'+index,value);
         // Deliberately do not fabricate loss coefficients or material evidence.
         // Empty groups are explicit input omissions for the host's real preflight.
         for(const path of ['/domain_options/boundaries','/domain_options/per_cable','/domain_options/duct_air','/resistance_temperature_k']){
