@@ -190,12 +190,14 @@ def test_rating_table_reuses_the_old_compiler_and_each_write_waits(client):
     scope = open_session(client, workspace)
     before = counts(client)
     arguments = rating_arguments()
+    for row, source in zip(arguments['rows'], ('flat', 'air')): row['source'] = source
     expected = client.post('/api/design/workspaces/' + workspace['id'] + '/rating-table-definition',
                            json={**{key: value for key, value in arguments.items() if key != 'title'},
                                  'expected_revision': workspace['revision']}).json()
     pending = propose(client, scope, 'propose_rating_table', arguments)
     assert counts(client) == before
     assert len([row for row in pending['changes'] if row['path'].endswith('/ambient_temperature_c')]) == 2
+    assert [row['after'] for row in pending['changes'] if row['path'].startswith('/rows/') and row['path'].endswith('/source')] == ['flat', 'air']
     source = next(row for row in pending['changes'] if row['path'] == '/parameters/source')
     assert source['after'] == arguments['parameters']['source'] and source['unit'] is None
     method_change = next(row for row in pending['changes'] if row['path'] == '/method')
@@ -206,6 +208,7 @@ def test_rating_table_reuses_the_old_compiler_and_each_write_waits(client):
     assert counts(client)['studies'] == before['studies'] + 1 and counts(client)['study_runs'] == before['study_runs']
     saved = client.get('/api/workspaces/' + workspace['id'] + '/studies/' + created['study_id']).json()
     assert {key: saved['definition']['driver'][key] for key in expected['driver']} == expected['driver']
+    assert [row['metadata']['condition']['source'] for row in saved['definition']['driver']['cases']] == ['flat', 'air']
     assert saved['definition']['method_input'] == expected['method_input']
     scope = resume(client, scope)
     pending_run = propose(client, scope, 'propose_study_run', {'study_id': created['study_id']})
@@ -270,6 +273,10 @@ def test_resource_reader_uses_original_json_pages_and_refuses_unscoped_or_unlist
     assert result['data']['page']['next_offset'] == 3
     assert result['data']['source']['read_only'] is True
     continuation = result['data']['next_read']['arguments']
+    missing_digest = call(client, 'resource_read', {key: value for key, value in continuation.items() if key != 'expected_digest'}, scope['session'], scope['turn']).json()
+    issue = missing_digest['diagnostics'][0]
+    assert issue['code'] == 'RESOURCE_DIGEST_REQUIRED' and issue['path'] == '/expected_digest'
+    assert '首段' in issue['message'] and 'next_read' in issue['message']
     second = call(client, 'resource_read', continuation, scope['session'], scope['turn']).json()
     assert [item['value'] for item in second['data']['page']['items']] == asset['release']['parameters'][3:6]
     assert client.get('/api/foundation/assets/' + asset['id']).json() == asset

@@ -23,9 +23,11 @@ def schema():
         'workspace_id': {'type': 'string', 'format': 'uuid'},
         'run_id': {'type': 'string', 'format': 'uuid'},
         'view': {'type': 'string', 'maxLength': 500, 'description': '返回对象内的JSON Pointer；表行用 /rows。'},
-        'offset': {'type': 'integer', 'minimum': 0}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 20},
+        'offset': {'type': 'integer', 'minimum': 0,
+                   'description': '大于0时必须提供首段的 expected_digest；优先原样使用 next_read 续读。'},
+        'limit': {'type': 'integer', 'minimum': 1, 'maximum': 20},
         'expected_digest': {'type': 'string', 'pattern': '^[a-f0-9]{64}$',
-                            'description': '续读时使用 source.response_digest；对象变化则拒绝混读。'},
+                            'description': 'offset大于0时必填，使用首段 source.response_digest；对象变化则拒绝混读。'},
     }, ['kind'])
     result['oneOf'] = [{'properties': {'kind': {'const': kind}},
                        'required': [field for field in mapping.values() if field != 'workspace_id']}
@@ -41,6 +43,8 @@ def read(actions, task, arguments):
     kind = arguments['kind']
     if kind not in ROUTES:
         fail('RESOURCE_NOT_ALLOWED', '只读取明确开放的资源正文；不调用任意接口。', '/kind')
+    if arguments.get('offset', 0) > 0 and not arguments.get('expected_digest'):
+        fail('RESOURCE_DIGEST_REQUIRED', '续读资源正文必须绑定首段摘要。请先以 offset=0 读取首段，再按返回的 next_read 原样继续。', '/expected_digest')
     route_path, mapping = ROUTES[kind]
     extra = (set(arguments) & SELECTORS) - set(mapping.values()) - {'workspace_id'}
     if extra:

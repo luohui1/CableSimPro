@@ -89,8 +89,9 @@ def prepare(actions, task, state, arguments):
         for key in applicable:
             if key == 'spacing_m' and key not in arguments['rows'][index]: continue
             value = values[key]
+            shown = VALUES.get(value, value) if key in ('layout', 'bonding', 'rating_basis') else value
             changes.append({'path': '/rows/' + str(index) + '/' + key, 'label': row.name + ' · ' + LABELS[key][0],
-                            'before': None, 'after': VALUES.get(value, value) if isinstance(value, str) else value,
+                            'before': None, 'after': shown,
                             'unit': LABELS[key][1]})
     for point in review_points(request.parameters, capability, definition['method_input']):
         changes.append({'path': point['path'], 'label': point['label'], 'before': None,

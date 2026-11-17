@@ -6,7 +6,7 @@ description: 老平台载流量表：查找型号或研究已经保存的条件�
 # 载流量表
 
 1. 用 `object_find`、`type_read`、`study_list` 定位准确型号版本和已有载流量研究。不要把型号设计和库版本混用。
-2. 用 `run_list` 定位准确的已保存表运行，再用 `resource_read(kind="rating_table", run_id=...)` 读取行。`view` 是返回数据中的 JSON Pointer，可用 `/rows` 分页；根据 `next_offset` 继续，不能把第一页称为全表。保留敷设、埋深、土壤热阻率、环境温度、方法版本、来源及每行状态。失败或缺项行不给估计值。
+2. 用 `run_list` 定位准确的已保存表运行，再用 `resource_read(kind="rating_table", run_id=...)` 读取行。`view` 是返回数据中的 JSON Pointer，可用 `/rows` 分页；续读原样沿用 `next_read.arguments` 中的对象、位置和 `expected_digest`，不能去掉摘要或把第一页称为全表。保留敷设、埋深、土壤热阻率、环境温度、方法版本、来源及每行状态。失败或缺项行不给估计值。
 3. 新算条件必须由工程师给全，并经 `type_read(view="input")` 与保存型号输入核对。先检查 `propose_rating_table` 的实际参数契约，逐行明确名称、敷设、埋深、土壤热阻率、环境、频率、间距、接地、额定口径与来源；排管还需完整管参数。不能用接口默认值冒充已知工况。
 4. 用 `propose_rating_table` 提出整张表的定义，待人接受后才产生研究。读取返回的准确 `study_id`，另用 `propose_study_run` 提出运行并等待接受。此工具复用老平台的工况编译和批量研究，不建立另一套表；每次修改条件都先提出新方案。
 5. 运行后用 `resource_read` 读取该确切运行，卡片逐行展示并跳到老型号的同一保存表。要交付已有结果，用 `propose_delivery` 提案并等待接受；只有返回真实保存文件才展示下载。文件未包含表时不要声称已经写进规格书，也不伪造 CSV 下载接口。
