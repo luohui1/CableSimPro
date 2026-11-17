@@ -102,7 +102,8 @@ def corrupt(bundle, kind):
         change_fact_source(spec, outer)
     elif kind == 'common_declaration_changed':
         bundle['series'][0]['declaration']['common']['conductor_screen_thickness'] *= 2
-    elif kind in ('standard_value_changed', 'standard_condition_changed', 'standard_release_changed'):
+    elif kind in ('standard_value_changed', 'standard_condition_changed', 'standard_release_changed',
+                  'standard_version_older', 'standard_version_future'):
         fact = next(fact for fact in facts if fact['source']['origin'] == 'standard')
         reference = fact['source']['reference']
         if kind == 'standard_value_changed':
@@ -114,9 +115,15 @@ def corrupt(bundle, kind):
         elif kind == 'standard_condition_changed':
             reference['query']['conditions']['area_m2'] *= 2
             reference['query_sha256'] = fingerprint(reference['query'])
-        else:
+        elif kind == 'standard_release_changed':
             reference['release_digest'] = '0' * 64
             fact['method']['release_digest'] = reference['release_digest']
+        else:
+            # Keep the real record and all data/release digests. Only the
+            # claimed method identity changes, consistently in both locations.
+            version = '0.8.0' if kind == 'standard_version_older' else '999.0.0'
+            reference['plugin_version'] = version
+            fact['method']['version'] = version
         change_fact_source(spec, fact)
     else:
         raise AssertionError(kind)
@@ -129,7 +136,7 @@ def test_self_consistent_files_cannot_delete_or_change_catalogue_evidence(tmp_pa
                    'empty_method', 'wrong_unit', 'formula_value', 'boolean_value', 'trust_upgrade',
                    'changed_cell', 'missing_sheet', 'missing_row', 'source_trust_upgrade',
                    'common_declaration_changed', 'standard_value_changed', 'standard_condition_changed',
-                   'standard_release_changed')
+                   'standard_release_changed', 'standard_version_older', 'standard_version_future')
     with TestClient(create_app(tmp_path / 'target.sqlite')) as client:
         for kind in corruptions:
             bundle = corrupt(deepcopy(exported['original']), kind)
@@ -143,6 +150,8 @@ def test_self_consistent_files_cannot_delete_or_change_catalogue_evidence(tmp_pa
                 assert response.json()['detail']['code'] == 'TYPE_EXCHANGE_EVIDENCE', (kind, response.text)
                 if kind == 'standard_value_changed':
                     assert '封签' in response.text
+                if kind in ('standard_version_older', 'standard_version_future'):
+                    assert '标准方法版本' in response.text and '封签发行' in response.text
             assert client.get('/api/type-library/series').json() == {'items': []}
             assert client.get('/api/domain-cable-models').json() == []
             assert client.get('/api/workspaces').json() == []

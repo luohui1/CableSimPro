@@ -212,6 +212,9 @@ class ExchangeEvidence:
             if (actual['id'] != expected['id'] or actual['record_sha256'] != expected['record_sha256']
                     or actual['source_sha256'] != expected['source_sha256']):
                 invalid('交换文件的固定标准记录与已封签原始依据不一致。')
-            if historical['plugin_version'] == references[identity]['plugin_version']:
-                if any(historical[key] != references[identity][key] for key in ('data_sha256', 'release_digest')):
-                    invalid('同一版本的标准依据数据或发行摘要不一致。')
+            # Only the installed release has a verified manifest. An unchanged
+            # record cannot authenticate a different historical method version.
+            if historical['plugin_version'] != references[identity]['plugin_version']:
+                invalid('本机无法核验交换文件声明的标准方法版本；请恢复对应封签发行后重试，不以当前版本替换原记录。')
+            if any(historical[key] != references[identity][key] for key in ('data_sha256', 'release_digest')):
+                invalid('同一版本的标准依据数据或发行摘要不一致。')

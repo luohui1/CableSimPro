@@ -207,27 +207,39 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       let releaseResponse;
       const release = new Promise(resolve => { releaseResponse = resolve; });
       const ready = Promise.withResolvers();
+      const routed = Promise.withResolvers();
       const delayed = async route => {
         try {
           const response = await route.fetch({ timeout: 180000 });
           ready.resolve(response);
           await release;
           await route.fulfill({ response });
-        } catch (error) { ready.reject(error); throw error; }
+          routed.resolve();
+        } catch (error) {
+          try { await route.abort(); }
+          catch (abortError) { report.failures.push({ viewport: viewport.width, phase: '中止失败的预览请求', message: String(abortError) }); }
+          ready.reject(error); routed.reject(error);
+        }
       };
       await page.route('**/api/type-library/imports/preview', delayed, { times: 1 });
       try {
-        const delivered = page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 });
-        await page.getByRole('button', { name: '逐行校验并预览', exact: true }).click();
-        const actual = await ready.promise;
-        assert.equal(actual.ok(), true, await actual.text());
-        if (action === 'edit') await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`人民 YJV22 已核对 ${viewport.width} ${stamp}`);
-        else await page.getByRole('button', { name: '上一步', exact: true }).click();
-        releaseResponse();
-        assert.equal((await delivered).ok(), true);
+        const [delivered] = await afterAction(Promise.all([
+          page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 }),
+          routed.promise,
+        ]), async () => {
+          const actual = await afterAction(ready.promise,
+            () => page.getByRole('button', { name: '逐行校验并预览', exact: true }).click());
+          assert.equal(actual.ok(), true, await actual.text());
+          if (action === 'edit') await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`人民 YJV22 已核对 ${viewport.width} ${stamp}`);
+          else await page.getByRole('button', { name: '上一步', exact: true }).click();
+          releaseResponse();
+        });
+        assert.equal(delivered.ok(), true);
         await expect(page.getByRole('alert')).toContainText('本次旧预览已作废');
         await expect(page.getByRole('heading', { name: action === 'edit' ? '填写系列声明与来源' : '确认列映射', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: /^确认入库/ })).toHaveCount(0);
+        await page.getByRole('alert').scrollIntoViewIfNeeded();
+        await expect(page.getByRole('alert')).toBeInViewport({ ratio: 1 });
         await capture(action === 'edit' ? '修改声明后旧预览拒绝生效' : '返回列映射后旧预览拒绝跳转');
         if (action === 'back') await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
         await expect(page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true })).toHaveValue(`人民 YJV22 已核对 ${viewport.width} ${stamp}`);
