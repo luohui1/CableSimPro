@@ -23,17 +23,18 @@ from .contracts import ToolResult
 from .security import redact
 from .session_scope import is_type
 from .tool_registry import Tool, TEXT, object_schema
+from .external_parameters import review_points
 
 
 READ_SCOPES = {
     'method_list': 'global', 'type_creation_options': 'global',
-    'structure_import_inspect': 'global', 'study_compare': 'workspace',
+    'structure_import_inspect': 'global', 'study_compare': 'workspace', 'resource_read': 'workspace',
 }
 ACTION_SCOPES = {
     'propose_study': 'workspace', 'propose_study_run': 'workspace',
     'propose_delivery': 'workspace', 'propose_type_create': 'workspace',
     'propose_standard_structure': 'workspace', 'propose_type_basis': 'type',
-    'propose_type_specification': 'type',
+    'propose_type_specification': 'type', 'propose_rating_table': 'type',
 }
 SCOPES = {**READ_SCOPES, **ACTION_SCOPES}
 RUN_IDS = {'type': 'array', 'minItems': 1, 'maxItems': 2,
@@ -41,11 +42,15 @@ RUN_IDS = {'type': 'array', 'minItems': 1, 'maxItems': 2,
 
 
 def tools():
+    from .external_rating import schema as rating_schema
+    from .external_resources import schema as resource_schema
     definitions = [
         ('method_list', '读取计算方法', 'read', '读取已安装方法的准确版本和能力；参数须继续用 plugin_inspect 读取，不猜方法标识或缺失数据。', object_schema()),
         ('type_creation_options', '读取型号创建起点', 'read', '读取旧平台实际型号版本及其摘要、标准结构输入契约。不会新建型号。', object_schema()),
         ('structure_import_inspect', '检查结构表导入能力', 'read', '检查老平台是否接入厂家 Excel/CSV 结构表。未接入时明确拒绝，不调用另一套产品库。', object_schema({'filename': {'type': 'string', 'maxLength': 255}})),
         ('study_compare', '比较保存运行', 'read', '比较同工程内两条真实保存运行，先看输入差异，再看同量纲结果；不重新计算。', object_schema({'run_ids': {**RUN_IDS, 'minItems': 2}}, ['run_ids'])),
+        ('resource_read', '读取资源正文', 'read', '仅读取旧平台资产定义、厂家资料页或保存提取结果，以及本工作区的载流量表。固定资源白名单、准确对象标识、摘要与分页；不上传、不运行，不接受URL或任意接口。', resource_schema()),
+        ('propose_rating_table', '提出保存载流量表研究', 'propose', '仅本型号：按旧平台工况契约编译并提议保存载流量表研究。逐行明确条件、口径、单位与来源，不补默认工程值。人接受只保存定义；运行与导出分别另行接受。', rating_schema()),
         ('propose_study', '提出新建研究', 'propose', '在当前工程或型号建立研究提案。source_study_id 可复制本工程准确保存的方法、参数和驱动；否则须明确 method 与 parameters。接受只保存研究，不运行。basis_request_id 只能引用本型号已接受的标准依据查询。', object_schema({
             'title': TEXT, 'source_study_id': TEXT, 'method': Method.model_json_schema(),
             'parameters': {'type': 'object'}, 'basis_request_id': TEXT,
@@ -105,6 +110,9 @@ class ExternalActions:
         return study, selected
 
     def dispatch(self, task, name, args):
+        if name == 'resource_read':
+            from .external_resources import read
+            return read(self, task, args)
         if name == 'method_list':
             methods = [{**{key: row[key] for key in ('method', 'name', 'description', 'platform_supported')},
                         'capabilities': [{key: cap[key] for key in ('id', 'title', 'description', 'preview', 'parameter_fields') if key in cap}
@@ -116,7 +124,7 @@ class ExternalActions:
             return ToolResult(status='ok', summary='已读取型号库版本与标准结构契约。', data=self.types.creation_options())
         if name == 'structure_import_inspect':
             return ToolResult(status='error', summary='老平台尚未接入厂家 Excel/CSV 结构表的预览与批量入库接口，不能导入或核对这张表。',
-                diagnostics=[{'code': 'STRUCTURE_IMPORT_UNAVAILABLE', 'message': '缺少结构表上传、列映射预览与批量草稿提交接口（T3）。原始文件未写入型号库。', 'recoverable': True}],
+                diagnostics=[{'code': 'STRUCTURE_IMPORT_UNAVAILABLE', 'message': '缺少结构表上传、列映射预览与批量草稿提交接口。原始文件未写入型号库。', 'recoverable': True}],
                 data={'available': False, 'formats': ['xlsx', 'csv'], 'workbench_path': '/resources/cables/imports',
                       'required_contract': ['upload: immutable file id and SHA256', 'preview: rows, sources, missing fields and preview digest', 'commit: exact preview digest and human proposal id; atomic version drafts']},
                 next_actions=['请在资源库核对已有厂家 PDF 导入能力；Excel/CSV 结构表须待批量导入接口接入后重试。'])
@@ -174,17 +182,18 @@ class ExternalActions:
             action['definition'] = configuration.model_dump(mode='json', exclude={'expected_revision'})
             change('研究名称', args['title'])
             change('方法', plugin.manifest.name + ' ' + plugin.manifest.version + ' · ' + capability.title)
-            for point in self.broker.parameter_points(configuration.parameters,
-                    capability.parameter_schema.model_dump(mode='json', by_alias=True, exclude_none=True)):
+            for point in review_points(configuration.parameters, capability, document):
                 change(point['label'], point['value'], point['unit'], path=point['path'])
             checks.append('只新建研究定义；运行、修改输入及导出都须另行接受。')
+        elif name == 'propose_rating_table':
+            from .external_rating import prepare
+            action['definition'], changes, assumptions = prepare(self, task, state, args)
+            checks.extend(['接受只保存本型号的完整工况定义；不会计算或改写型号结构。',
+                           '每行保留明确条件与来源；运行、导出均须另外接受。'])
         elif name == 'propose_study_run':
             study, selected = self.study(task, args['study_id'], args.get('module'))
-            plugin, capability = self.research.resolve(selected['method'])
-            if not capability.preview or (hasattr(self.research.executor, 'required') and self.research.executor.required(plugin.manifest.id, capability.id)):
-                fail('NATIVE_EXECUTION_UNAVAILABLE', '此方法需要原生或超算执行；请在工作台确认计算位置和核时后提交，边车不在本机代算。')
-            if selected.get('task') in ('transient-temperature', 'sheath-losses', 'electrothermal-steady', 'iec-fem-comparison'):
-                fail('NATIVE_EXECUTION_UNAVAILABLE', '此研究须通过工作台提交超算。')
+            from .external_execution import require_local
+            plugin, capability = require_local(self.research, selected)
             action.update(study_revision=study['revision'], method=selected['method'])
             change('研究', study['definition']['title'])
             change('方法', plugin.manifest.name + ' ' + plugin.manifest.version + ' · ' + capability.title)
@@ -385,7 +394,7 @@ class ExternalActions:
         self.current(task)
         name, args, wid = proposal['action'], proposal['arguments'], task['workspace_id']
         if name not in ACTION_SCOPES: fail('ACTION_NOT_ALLOWED', '此方案的操作不在已审查白名单。', status=403)
-        if name == 'propose_study':
+        if name in ('propose_study', 'propose_rating_table'):
             if args.get('source_study_id'):
                 original, _ = self.study(task, args['source_study_id'])
                 if original['revision'] != args['source_study_revision']:
@@ -400,6 +409,8 @@ class ExternalActions:
             saved, selected = self.study(task, args['study_id'], args.get('module'))
             if saved['revision'] != args['study_revision'] or selected['method'] != args['method']:
                 fail('PROPOSAL_STALE', '研究配置在审阅期间已变化；未运行。', status=409)
+            from .external_execution import require_local
+            require_local(self.research, selected)
             checked = self.research.preflight(wid, saved['id'], task['workspace_revision'], saved['revision'], args.get('module'))
             if not checked['ready'] or checked.get('partial'):
                 from .external_preflight import refusal
