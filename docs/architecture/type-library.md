@@ -4,15 +4,15 @@
 
 ## 结构表导入
 
-1. `POST /api/type-library/imports/upload`：multipart `file`，支持 XLSX、CSV 和旧 XLS。返回 `upload_id`、原件 SHA-256、工作表、表头与建议列映射。仅完全匹配随附样本内容摘要时提供样本声明。
+1. `POST /api/type-library/imports/upload`：multipart `file`，支持 XLSX、CSV 和旧 XLS；非空原件不超过 10 MiB，界面与接口使用相同限制。返回 `upload_id`、原件 SHA-256、工作表、表头与建议列映射。仅完全匹配随附样本内容摘要时提供样本声明。
 2. `GET /api/type-library/vocabulary`：字段单位、建模参数及其参考出处；参考值必须由操作者明确选用。
 3. `GET/POST /api/type-library/mappings`：保存和复用 `{name,mapping,headers}`。列索引从 0 开始，不允许两字段映射同一列。
-4. `POST /api/type-library/imports/preview`：`{upload_id,sheet,first_data_row,mapping,series}`，起始行从 1 开始。返回固定的 `preview_id` / `preview_digest`、每行数值、错误单元格、缺项、来源与结构闭合说明。公式不求值，不使用缓存值。
-5. `POST /api/type-library/imports/commit`：`{preview_id,preview_digest,request_id,human_confirmed:true,skip_errors:false}`，要求 `X-CableSim-Actor: human`。预览、原件或请求摘要不一致会拒绝；存在错误行默认整批拒绝。只有明确选择 `skip_errors:true` 才跳过已显示的错误行。
+4. `POST /api/type-library/imports/preview`：`{upload_id,sheet,first_data_row,mapping,series}`，起始行从 1 开始。返回固定的 `preview_id` / `preview_digest`、每行数值、错误单元格、缺项、来源与结构闭合说明。公式不求值，不使用缓存值；规范型号模型的范围错误也返回原表单元格，保留原数与其余正确行，不变成整表 500。
+5. `POST /api/type-library/imports/commit`：`{preview_id,preview_digest,request_id,human_confirmed:true,skip_errors:false}`，要求 `X-CableSim-Actor: human`。预览、原件或请求摘要不一致会拒绝；预览固定的标准查询发行或封签改变时返回 `409 / IMPORT_STANDARDS_CHANGED`，必须重新预览和人工确认，不静默换版。存在错误行默认整批拒绝。只有明确选择 `skip_errors:true` 才跳过已显示的错误行。
 
 `series` 声明包括名称、厂家、原样本型号、芯数、U0/U/Um（V）、执行标准的明确版本、系列共用值及逐项出处，以及显式建模参数。不能从型号名称唯一识别材料时须填写材料声明。GB/T 3956 标准电阻上限必须单独选择 `resistance_basis: standard_limit`，保留完整标准记录，不标作厂家实测。
 
-每个原始数值都有 SI 值和原表显示值、文件摘要、表名、行列、方法名/版本和可信分档。缺项可保存为不完整资料；不生成虚构层厚、材料参数或载流量。完整型号只是工程草稿，来源确认与产品审核是不同的动作。
+每个原始数值都有 SI 值和原表显示值、文件摘要、表名、行列、方法名/版本和可信分档。1 至 16 芯缺项资料可保存为现有型号草稿，2 芯、5 芯等多芯记录不猜坐标、层厚、导体直径或温限；不完整型号不能计算。完整型号也只是工程草稿，来源确认与产品审核是不同的动作。已被系列、型号设计、资料提案或研究引用的原始型号不能删除，避免破坏来源和历史版本。
 
 ## 系列、版本与批量操作
 
@@ -36,7 +36,7 @@
 
 结构提案使用 `POST /api/types/creation-proposals`，人工采纳使用 `POST /api/types`；不重复实现标准结构生成。单规格载流量表使用 `POST /api/design/workspaces/{wid}/rating-table-definition`，研究保存、预检和运行沿用 `/api/workspaces/{wid}/studies`。GB 50217 校正继续通过已安装方法的研究接口执行，必须提供有明确来源和适用工况的基准电流。规格书、计算书与三维模型保持原接口。
 
-Agent 可以上传原件、提出映射、请求预览和展示结果；不能把人工头或确认字段作为自动批准手段。T2 的 Studio 宿主接入此组接口后应删除原先型号 JSON 存储；这组接口不访问 Studio 的用户数据目录。
+Agent 可以上传原件、提出映射、请求预览和展示结果；不能把人工头或确认字段作为自动批准手段。T2 的 Studio 宿主接入此组接口后应删除原先独立的 `library.sqlite` 型号存储；这组接口不访问 Studio 的用户数据目录。
 
 ## 标准、材料与环境值
 
@@ -50,4 +50,4 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 型号使用 `/api/type-library/exchange/export`（`{series_ids,format:json|xlsx}`）；材料与已保存工程输入使用 `/api/library/exchange/export`（`{asset_ids,workspace_ids,format}`）。每组接口都有 multipart `/preview` 和 `/import`：提交 `file`、预览的 `reviewed_sha256`、`confirmed:true`、`request_id` 及人工头。
 
-Excel 含可读索引与完整传输内容，JSON 与 Excel 具有相同语义摘要。导入前验证原件、型号/资源/工程摘要和身份关系；任何同名系列或版本冲突整包拒绝。型号包携带当前版本与原始结构表；新机创建草稿并记录来源机的版本身份，不继承批准或运行历史。尚未改版的设计修改须先建立新版本才能导出。完整历史、所有附件和运行备份继续使用 `scripts/workspace_db.py backup/restore`。
+Excel 含可读索引与完整传输内容，JSON 与 Excel 具有相同语义摘要。导入前验证原件、型号/资源/工程摘要和身份关系；任何同名系列或版本冲突整包拒绝。型号包携带当前版本与原始结构表；新机创建草稿并记录来源机的版本身份，不继承批准或运行历史。交换元数据采用固定字段白名单，不能指定本机对象、工作区、审核状态或运行身份；重新计算文件摘要也不能绕过此检查。尚未改版的设计修改须先建立新版本才能导出。完整历史、所有附件和运行备份继续使用 `scripts/workspace_db.py backup/restore`。

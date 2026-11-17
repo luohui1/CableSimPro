@@ -194,12 +194,15 @@ class TypeLibrary:
             upload = self._upload(db, body.upload_id)
         rows, skipped = tables.mapped_rows(upload, body.sheet, body.first_data_row, body.mapping)
         declaration = body.series.model_dump(mode='json', exclude_none=True)
+        from .import_standards import preview_selection
+        execution_standards = preview_selection(self.research, declaration['standards'])
         built = build_rows(upload, body.sheet, rows, declaration, body.mapping)
         if not built:
             tables.fail('TABLE_NO_ROWS', '没有可预览的规格行，请核对工作表、起始行和列映射。')
         payload = {'upload_id': str(body.upload_id), 'file': upload['file'], 'sha256': upload['sha256'],
                    'sheet': body.sheet, 'first_data_row': body.first_data_row, 'mapping': body.mapping, 'series': declaration,
                    'rows': built, 'skipped': skipped, 'method': tables.IMPORT_METHOD,
+                   'execution_standards': execution_standards,
                    'valid_count': sum(r['status'] != 'error' for r in built),
                    'error_count': sum(r['status'] == 'error' for r in built),
                    'incomplete_count': sum(r['status'] == 'incomplete' for r in built)}
@@ -208,9 +211,13 @@ class TypeLibrary:
             db.execute('INSERT INTO type_table_previews VALUES(?,?,?,?,?)', (identifier, str(body.upload_id), encoded(payload), digest, stamp()))
         return {'preview_id': identifier, 'preview_digest': digest, **payload}
 
-    def _insert_spec(self, db, series_id, item, actor, request):
+    def _insert_spec(self, db, series_id, item, actor, request, execution_standards=None):
         spec_id, model_id = str(uuid4()), str(uuid4())
-        payload = item['payload']
+        payload = deepcopy(item['payload'])
+        from .import_standards import confirmed_source
+        source = confirmed_source(execution_standards or {})
+        if source:
+            payload.setdefault('sources', {})['/execution_standards'] = source
         digest = fingerprint(payload)
         db.execute('INSERT INTO domain_cable_models VALUES(?,?,?,?,?)',
                    (model_id, encoded(payload), digest, 'incomplete' if payload.get('specification') else 'draft', stamp()))
@@ -242,6 +249,8 @@ class TypeLibrary:
             upload = self._upload(db, payload['upload_id'])
             if upload['sha256'] != payload['sha256']:
                 tables.fail('TABLE_SOURCE_CHANGED', '预览与原件不一致；未写入型号。', 409)
+            from .import_standards import verify_selection
+            verify_selection(self.research, payload.get('execution_standards'))
             if payload['error_count'] and not body.skip_errors:
                 tables.fail('TABLE_ROWS_INVALID', '存在错误行；请修正原表，或明确选择跳过错误行后重新确认。')
             good = [row for row in payload['rows'] if row['status'] != 'error']
@@ -252,7 +261,8 @@ class TypeLibrary:
                 tables.fail('TYPE_SERIES_EXISTS', '同名系列已存在，请修改系列名称后重新预览。', 409)
             series_id = str(uuid4())
             db.execute('INSERT INTO type_series VALUES(?,?,?,?,?)', (series_id, declaration['name'], encoded(declaration), stamp(), reviewer))
-            specs = [self._insert_spec(db, series_id, item, actor, body.request_id) for item in good]
+            specs = [self._insert_spec(db, series_id, item, actor, body.request_id,
+                                      payload.get('execution_standards')) for item in good]
             result = {'series_id': series_id, 'created': len(specs), 'specs': specs, 'preview_digest': body.preview_digest,
                       'skipped_rows': [r['row_number'] for r in payload['rows'] if r['status'] == 'error'],
                       'state': 'draft', 'message': '已保存为待核对草稿；未审核或发布任何工程型号。'}
@@ -286,10 +296,10 @@ class TypeLibrary:
         results = []
         for run in db.execute('SELECT id,study,status,input_digest,created FROM study_runs WHERE workspace=? ORDER BY created DESC', (saved['workspace'],)):
             results.append(dict(run))
-        result = {'id': str(identifier), 'series_id': row['series'], 'key': row['spec_key'], 'name': candidate['payload']['name'],
+        result = {**metadata, 'id': str(identifier), 'series_id': row['series'], 'key': row['spec_key'], 'name': candidate['payload']['name'],
                   'version': saved['version'], 'model_id': saved['model'], 'workspace_id': saved['workspace'],
                   'workspace_revision': workspace['revision'], 'content_sha256': candidate['digest'], 'state': status,
-                  'submission': dict(submission) if submission else None, **metadata, 'results': results}
+                  'submission': dict(submission) if submission else None, 'results': results}
         # Engineering edits are read from their ordinary workspace. Import cells
         # remain the original evidence, explicitly separate from the current draft.
         result['has_design_changes'] = fingerprint(state['domain']) != metadata.get('version_document_sha256', (state.get('type_creation') or {}).get('initial_document_sha256'))

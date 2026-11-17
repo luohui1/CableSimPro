@@ -8,6 +8,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import BytesIO
 import json
+import math
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -25,6 +26,9 @@ from .workspace import fingerprint, stamp
 
 
 SCHEMA = 'cablesim.type-library-exchange/1'
+METADATA_FIELDS = {'row_number', 'name', 'key', 'area_m2', 'values', 'issues', 'missing', 'status',
+                   'derivation', 'closure', 'warnings', 'source_model_digest', 'version_note',
+                   'parent_version', 'version_document_sha256', 'exchange_origin'}
 
 
 class Selection(StrictModel):
@@ -79,17 +83,27 @@ def validate_bundle(value):
             metadata = item['metadata']
             if not isinstance(metadata, dict) or not {'key', 'area_m2', 'values', 'missing', 'name', 'status'} <= set(metadata):
                 tables.fail('TYPE_EXCHANGE_SPEC', '规格缺少逐数值来源或缺项说明。')
+            if set(metadata) - METADATA_FIELDS:
+                tables.fail('TYPE_EXCHANGE_METADATA', '规格附带了未定义的元数据；本机型号身份、工作区、审核状态和运行记录不能由交换文件指定。')
+            if (not isinstance(metadata['key'], str) or not metadata['key'].strip()
+                    or metadata['name'] != payload.name or metadata['status'] not in ('ready', 'incomplete')
+                    or type(metadata['area_m2']) not in (int, float) or not math.isfinite(metadata['area_m2'])
+                    or not isinstance(metadata['missing'], list) or not all(isinstance(item, str) for item in metadata['missing'])):
+                tables.fail('TYPE_EXCHANGE_METADATA', '规格名称、状态、截面或缺项说明无效。')
             if metadata['key'] in keys or not isinstance(metadata['values'], list):
                 tables.fail('TYPE_EXCHANGE_SPEC', '规格重复或来源列表无效。')
             keys.add(metadata['key'])
             cable = payload.cable_type
             cores = len(cable.cores) if cable else payload.specification.cores
             area = cable.cores[0].conductor.nominal_area if cable else payload.specification.area_m2
+            u0 = cable.rating.u0 if cable else payload.specification.u0_v
             voltage = cable.rating.u if cable else payload.specification.voltage_v
-            if cores != declaration.cores or voltage != declaration.u_v or abs(area - metadata['area_m2']) > 1e-12:
+            if (cores != declaration.cores or u0 != declaration.u0_v or voltage != declaration.u_v
+                    or abs(area - metadata['area_m2']) > 1e-12 or metadata['key'] != f'{cores}×{area * 1e6:g}'):
                 tables.fail('TYPE_EXCHANGE_SERIES', '型号电压、芯数或截面与系列不一致。')
             for fact in metadata['values']:
-                if not isinstance(fact, dict) or not {'key', 'value', 'unit', 'source', 'method', 'confidence'} <= set(fact):
+                if (not isinstance(fact, dict) or not {'key', 'value', 'unit', 'source', 'method', 'confidence'} <= set(fact)
+                        or not isinstance(fact['source'], dict) or not isinstance(fact['method'], dict)):
                     tables.fail('TYPE_EXCHANGE_SOURCE', '每个规格值须有来源、方法版本和可信分档。')
                 digest = fact['source'].get('file_sha256')
                 if digest and digest not in files:
