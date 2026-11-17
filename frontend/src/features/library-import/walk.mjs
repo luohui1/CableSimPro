@@ -430,6 +430,11 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await expect(confirmReference).toBeDisabled();
       await expect(assumptionsDialog.getByLabel('确认研究参考假设', { exact: true })).not.toBeChecked();
       await expect(assumptionsTable.getByRole('row')).toHaveCount(compared.reference_scenario.assumptions.length + 1);
+      const translatedReferences = new Map(sample.id === 'bahra-mv' ? [
+        ['not in the catalogue; assumed for this comparison', '目录未列；本次研究参考对照所作假设。'],
+        ["IEC 60287-1-1:2023 Table 3, unfilled XLPE up to 18 kV; standard reference values, not the manufacturer's", 'IEC 60287-1-1:2023 表 3，18 kV 及以下的未填充型 XLPE；标准参考值，不是厂家给定值。'],
+        ['IEC 60287-1-1:2023 Table 1', 'IEC 60287-1-1:2023 表 1'],
+      ] : []);
       for (const [index, assumption] of compared.reference_scenario.assumptions.entries()) {
         assert.deepEqual([assumption.confidence, assumption.manufacturer_data], ['reference', false]);
         assert.ok(assumption.source.reference && assumption.source.version && /^[a-f0-9]{64}$/.test(assumption.source.file_sha256));
@@ -439,7 +444,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
         else if (assumption.value === null) await expect(cells.nth(1)).toHaveText('未提供');
         else await expect(cells.nth(1).getByRole('textbox')).toHaveValue(typeof assumption.value === 'string' ? assumption.value : JSON.stringify(assumption.value, null, 2));
         await expect(cells.nth(2)).toHaveText(assumption.unit ?? '不适用');
-        await expect(cells.nth(3)).toContainText(assumption.source.reference);
+        await expect(cells.nth(3)).toContainText(translatedReferences.get(assumption.source.reference) ?? assumption.source.reference);
         await expect(cells.nth(3)).toContainText(assumption.source.version);
         await expect(cells.nth(3)).toContainText(assumption.source.file_sha256);
       }
@@ -450,6 +455,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await assumptionsDialog.getByText('展开完整原始声明', { exact: true }).click();
       const rawDeclaration = assumptionsDialog.getByRole('textbox', { name: '完整原始研究声明 JSON', exact: true });
       await expect(rawDeclaration).toHaveValue(JSON.stringify(compared.reference_scenario.raw_assumptions, null, 2));
+      for (const original of translatedReferences.keys()) assert.ok((await rawDeclaration.inputValue()).includes(original), '中文解释不得改变原始研究声明中的来源原文');
       await rawDeclaration.evaluate(element => element.scrollIntoView({ block: 'start' }));
       await capture(`${sample.id}-完整原始研究声明`);
       assert.equal(comparisonRequests(), beforeConfirmation, '查看假设和原始声明不得触发参考计算');

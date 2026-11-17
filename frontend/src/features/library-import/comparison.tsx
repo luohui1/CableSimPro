@@ -14,6 +14,11 @@ const STATUS = { declared_input: '输入保真，非独立验证', missing: '缺
 const number = (value: number | null, digits = 3) => value === null ? '—' : value.toLocaleString('zh-CN', { maximumFractionDigits: digits, useGrouping: false });
 const percent = (value: number | null) => value === null ? '—' : `${number(value * 100, 2)} %`;
 const SOURCE_SECTIONS: Record<string, string> = { 'construction table': '结构表', 'technical information': '技术信息', 'rating assumptions': '载流量计算假设' };
+const REFERENCE_EXPLANATIONS = new Map([
+  ['not in the catalogue; assumed for this comparison', '目录未列；本次研究参考对照所作假设。'],
+  ["IEC 60287-1-1:2023 Table 3, unfilled XLPE up to 18 kV; standard reference values, not the manufacturer's", 'IEC 60287-1-1:2023 表 3，18 kV 及以下的未填充型 XLPE；标准参考值，不是厂家给定值。'],
+  ['IEC 60287-1-1:2023 Table 1', 'IEC 60287-1-1:2023 表 1'],
+]);
 function sourceLocation(value: string) {
   return value.replace(/(construction table|technical information|rating assumptions): printed p\. (\d+) \/ PDF p\. (\d+)/g,
     (_match, section: string, printedPage: string, pdfPage: string) => `${SOURCE_SECTIONS[section]}：印刷第 ${printedPage} 页 / PDF 第 ${pdfPage} 页`);
@@ -111,7 +116,7 @@ export function CatalogueComparison() {
             { id: 'parameter', label: '研究假设或参数', wrap: true, render: row => row.label },
             { id: 'value', label: '原始值', wrap: true, render: row => <AssumptionValue assumption={row} /> },
             { id: 'unit', label: '单位', wrap: true, render: row => row.unit ?? '不适用' },
-            { id: 'source', label: '原始出处与版本', wrap: true, render: row => <div className="library-import-issues"><span>{row.source.reference}</span><span>版本：{row.source.version}</span>{row.source.file_sha256 && <span className="library-import-digest">资料 SHA-256：{row.source.file_sha256}</span>}<span className="muted">研究参考声明，非厂家数据</span></div> },
+            { id: 'source', label: '原始出处与版本', wrap: true, render: row => <div className="library-import-issues"><span>{REFERENCE_EXPLANATIONS.get(row.source.reference) ?? row.source.reference}</span><span>版本：{row.source.version}</span>{row.source.file_sha256 && <span className="library-import-digest">资料 SHA-256：{row.source.file_sha256}</span>}<span className="muted">研究参考声明，非厂家数据</span></div> },
           ]} />
           <details className="library-import-details">
             <summary>展开完整原始声明</summary>
