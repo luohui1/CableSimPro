@@ -9,6 +9,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+from textwrap import dedent
 import time
 from uuid import uuid4
 import zipfile
@@ -408,3 +409,117 @@ def test_config_resolves_paths_and_keeps_keys_only_in_environment(tmp_path, monk
     config_path.write_text('[model]\nbase_url="https://user:secret@example.test/v1"\n', encoding="utf-8")
     with pytest.raises(RuntimeError, match="凭据"):
         release_support.config(config_path)
+
+
+def test_release_sources_support_isolated_manufacturer_structure_preview(tmp_path):
+    from scripts import build_release
+
+    source = Path(__file__).resolve().parents[1]
+    bundle, outside = tmp_path / "program", tmp_path / "outside"
+    bundle.mkdir()
+    outside.mkdir()
+    build_release.copy_sources(source, bundle)
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "-z", "--", "studio/core/studio_core"], cwd=source
+    ).decode().split("\0")
+    expected = {name.removeprefix("studio/") for name in tracked if name}
+    assert {
+        "core/studio_core/__init__.py",
+        "core/studio_core/structure.py",
+        "core/studio_core/catalogues/people_mv_xlpe.json",
+        "core/studio_core/catalogues/bahra_mv_lead_sheathed.json",
+    } <= expected
+    assert all(name.startswith("core/studio_core/") for name in expected)
+    # Every tracked module/data file must be copied; future modules cannot be omitted.
+    assert {p.relative_to(bundle / "studio").as_posix()
+            for p in (bundle / "studio").rglob("*") if p.is_file()} == expected
+    assert all((bundle / "studio" / name).read_bytes() ==
+               (source / "studio" / name).read_bytes() for name in expected)
+    code = dedent("""
+        from copy import deepcopy
+        import json
+        from pathlib import Path
+        import subprocess
+        import sys
+
+        bundle = Path(sys.argv[1]).resolve()
+        assert Path.cwd() != bundle and not Path.cwd().is_relative_to(bundle)
+        sys.path.insert(0, str(bundle))
+        import backend.main as main
+        from backend.kernel import factory_tables, public_catalogues, type_import_models
+        from studio.core.studio_core import structure
+
+        for module in (main, factory_tables, public_catalogues, type_import_models, structure):
+            assert Path(module.__file__).resolve().is_relative_to(bundle), module.__file__
+        assert structure.reference_modelling()
+        calls = []
+        allowed = {"lookup": "cablesim.standards-basis",
+                   "model-completion": "cablesim.iec60287"}
+
+        def audit(event, args):
+            if event == "socket.connect":
+                raise AssertionError("The packaged preview must remain offline")
+            if event == "subprocess.Popen":
+                _, command, cwd, _ = args
+                request = json.loads((Path(cwd) / "input/request.json").read_text("utf-8"))
+                plugin = allowed[request["capability"]]
+                root = bundle / "plugins" / plugin
+                manifest = json.loads((root / "plugin.json").read_text("utf-8"))
+                expected = [sys.executable, "-I", str(root / manifest["runtime"]["entry"])]
+                assert command == (subprocess.list2cmdline(expected)
+                                   if isinstance(command, str) else expected)
+                calls.append([plugin, request["capability"], len(request["cases"])])
+
+        sys.addaudithook(audit)
+        upload = factory_tables.read("people-mv.xlsx", public_catalogues.sample_bytes("people-mv"))
+        declaration = next(item for item in public_catalogues.match_sample(upload["sha256"])
+                           if item["table"] == "three-core")
+        sheet = declaration["sheet"]
+        inspected = next(item for item in factory_tables.inspect(upload)["sheets"]
+                         if item["name"] == sheet)
+        assert inspected["table"] and inspected["first_data_row"] == declaration["first_data_row"]
+        rows, _ = factory_tables.mapped_rows(upload, sheet, declaration["first_data_row"],
+                                              declaration["mapping"])
+        series = type_import_models.SeriesDeclaration.model_validate(declaration["series"]).model_dump()
+        assert len(rows) == 11 and all(not row["issues"] and "r20" not in row["values"] for row in rows)
+        assert "r20" not in series["common"] and series["resistance_basis"] == "standard_limit"
+        ready = type_import_models.build_rows(upload, sheet, rows, series, declaration["mapping"])
+        assert len(ready) == 11
+        for row in ready:
+            assert row["status"] == "ready" and not row["missing"] and not row["issues"], row
+            payload, method = row["payload"], row["derivation"]
+            assert payload["confirmed"] is False and len(payload["cable_type"]["cores"]) == 3
+            assert method["kind"] == "plugin" and method["plugin_id"] == "cablesim.iec60287"
+            assert method["capability"] == "model-completion" and method["plugin_version"]
+            assert len(method["request_sha256"]) == len(method["manifest_sha256"]) == 64
+            source = payload["sources"]["/cable_type"]
+            assert source["kind"] == "derived" and source["reviewed"] is False
+            assert json.loads(source["reference"])["method"] == method
+            assert json.loads(payload["sources"]["area"]["reference"])["file_sha256"] == upload["sha256"]
+
+        stated = deepcopy(series)
+        stated["resistance_basis"] = "stated"
+        before = len(calls)
+        incomplete = type_import_models.build_rows(upload, sheet, rows, stated, declaration["mapping"])
+        assert len(incomplete) == 11 and len(calls) == before
+        for row in incomplete:
+            assert row["status"] == "incomplete" and not row["issues"], row
+            assert factory_tables.FIELDS["r20"][0] in row["missing"]
+            assert row["payload"].get("cable_type") is None
+            assert "r20" not in row["payload"]["specification"]["values"]
+        print(json.dumps({"ready": len(ready), "missing_r20": len(incomplete), "plugin_calls": calls}))
+    """)
+    environment = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "WINDIR") if key in os.environ}
+    environment.update(CABLESIM_DB=str(outside / "engineering.sqlite"),
+                       CABLESIM_DATASETS_DIR=str(outside / "datasets"),
+                       CABLESIM_REPRODUCTION_LIBRARY=str(outside / "library"),
+                       CABLESIM_AGENT_KEY_STORE="memory")
+    result = subprocess.run([sys.executable, "-I", "-B", "-c", code, str(bundle)],
+                            cwd=outside, env=environment, capture_output=True,
+                            text=True, encoding="utf-8", errors="replace", timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {
+        "ready": 11, "missing_r20": 11,
+        "plugin_calls": [["cablesim.standards-basis", "lookup", 11],
+                         ["cablesim.iec60287", "model-completion", 11]],
+    }

@@ -19,6 +19,9 @@ from scripts.release_support import FORMAT, MANIFEST, ROOT, digest, target, utf8
 from scripts import release_native
 
 SOURCE_ROOTS = {"backend", "cablesim_sdk", "plugin-spec", "plugins"}
+# Include the complete canonical manufacturer-structure Python package, including
+# new modules and JSON catalogues, without bundling the standalone Studio app.
+SOURCE_PACKAGE_PREFIXES = ("studio/core/studio_core/",)
 SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh")
 SEED_SCRIPTS = ("seed-engineering-demo.py", "engineering_resources.py")
 
@@ -51,7 +54,8 @@ def wheel_lock(wheels: Path) -> str:
 def copy_sources(root: Path, destination: Path) -> None:
     tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
     for name in tracked:
-        if not name or name.split("/")[0] not in SOURCE_ROOTS:
+        if not name or (name.split("/")[0] not in SOURCE_ROOTS
+                        and not any(name.startswith(prefix) for prefix in SOURCE_PACKAGE_PREFIXES)):
             continue
         source = root / name
         if not source.is_file() or source.is_symlink():
