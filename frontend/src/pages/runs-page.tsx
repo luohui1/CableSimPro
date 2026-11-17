@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo, useState } from "react";
-import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
-import { indexAll, indexObjects, type ObjectCard } from "@/api/object-index";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import type { ObjectCard } from "@/api/object-index";
 import { message, text } from "@/api/client";
 import { CatalogShell } from "@/components/catalog-shell";
 import { DataTable } from "@/components/data-table";
@@ -12,12 +12,10 @@ import { Button } from "@/components/ui/button";
 import { HpcJobList } from "@/features/field/hpc-job-list";
 import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
-import { studyRuns, typeIndex } from '@/api/research';
+import { studyRuns } from '@/api/research';
+import { runOwnerCardsQuery, runRecordsQuery, runTypeIndexQuery } from '@/lib/catalog-queries';
 import { runOwnerName, runPresentation, scopedRunOrdinals } from '@/lib/run-presentation';
 
-// One screen of recent records first. Older records retain the same explicit
-// pagination and scoped numbering, without authenticating unseen FEM histories.
-const PAGE = 10;
 const short = formatDateTime;
 
 // Full integrity/currentness checks are CPU work on the real host. Avoid sending
@@ -46,21 +44,15 @@ export function RunsPage() {
   const readSummary = useMemo(summaryReader, []);
   const [q, setQ] = useState("");
   const query = useDeferredValue(q.trim());
-  const runs = useInfiniteQuery({
-    queryKey: ["index-objects", "run", query],
-    queryFn: ({ signal, pageParam }) => indexObjects({ kind: "run", q: query, limit: PAGE, offset: pageParam }, signal),
-    initialPageParam: 0,
-    getNextPageParam: (last, pages) => { const loaded = pages.reduce((sum, page) => sum + page.items.length, 0); return loaded < last.total ? loaded : undefined; },
-    placeholderData: keepPreviousData,
-  });
+  const runs = useInfiniteQuery(runRecordsQuery(query));
   const rows = (runs.data?.pages.flatMap((page) => page.items) || []) as (ObjectCard & { id: string })[];
   const total = runs.data?.pages[0]?.total;
   // Ownership needs saved study cards, not every study's full input and latest result.
   // Keep the same card query as the sidebar; result summaries are still read from
   // their authoritative per-study endpoint before numbering or displaying headlines.
-  const studies = useQuery({ queryKey: ['study-index', 'sidebar-cards'], queryFn: ({ signal }) => indexAll('study', signal),
+  const studies = useQuery({ ...runOwnerCardsQuery(),
     select: result => result.items.filter(card => !!card.parent).map(card => ({ id: card.id, name: card.name, workspace: card.parent!.id })) });
-  const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
+  const types = useQuery(runTypeIndexQuery());
   const typeIds = new Set((types.data || []).map(row => String(row.id)));
   const visibleParents = new Set(rows.filter(row => row.parent?.kind === 'study').map(row => row.parent!.id));
   const typeWorkspaces = new Set((studies.data || []).filter(study => visibleParents.has(study.id) && typeIds.has(study.workspace)).map(study => study.workspace));

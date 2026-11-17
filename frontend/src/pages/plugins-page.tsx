@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { methodCatalog, studyIndex } from "@/api/research";
+import { studyIndex } from "@/api/research";
+import { pluginCatalogQuery } from '@/lib/catalog-queries';
 import { message, optionalRecord, text } from "@/api/client";
 import { objectRelations, type ObjectCard, type ValidationMetric } from "@/api/object-index";
 import { downloadJson } from "@/lib/download";
@@ -47,7 +48,7 @@ const resource = (row: Row, role: string) => list(row.resources).map(optionalRec
 
 /** 插件：左侧按领域分组的已安装插件，右侧逐项剖析选中插件（能力、验证、范围、运行策略、被谁使用）。 */
 export function PluginsPage() {
-  const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
+  const catalog = useQuery(pluginCatalogQuery());
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
   const { theme } = usePageTheme();
   const { pid } = useParams({ strict: false }) as { pid?: string };
