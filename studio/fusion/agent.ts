@@ -30,7 +30,7 @@ interface Waiting extends RecordedProposal {
 
 /** The review shows backend values in their declared display units, including missing values. */
 function valueText(value: unknown, unit?: string | null): string {
-  const text = value === null || value === undefined ? '—' : typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : JSON.stringify(value);
+  const text = value === null || value === undefined ? '—' : typeof value === 'string' ? value : typeof value === 'boolean' ? (value ? '是' : '否') : typeof value === 'number' ? String(value) : JSON.stringify(value);
   return unit && unit !== '1' && text !== '—' ? `${text} ${unit}` : text;
 }
 
