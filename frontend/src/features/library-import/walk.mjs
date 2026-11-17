@@ -526,7 +526,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const bahraDigest = createHash('sha256').update(await fs.readFile(bahraPath)).digest('hex');
     const bahraManifest = (await readApi('/api/type-library/samples')).find(sample => sample.id === 'bahra-mv');
     assert.equal(bahraManifest?.sha256, bahraDigest, '下载字节须匹配本次服务发布的原件摘要');
-    const bahraOriginal = JSON.parse(await fs.readFile(path.join(root, 'studio/core/studio_core/catalogues/bahra_mv_lead_sheathed.json'), 'utf8'));
+    const bahraOriginal = JSON.parse(await fs.readFile(path.join(root, 'backend/kernel/catalogue_core/catalogues/bahra_mv_lead_sheathed.json'), 'utf8'));
     const bahraColumns = [
       ['area', 'mm²', 'm2', 1e-6], ['conductor_diameter', 'mm', 'm', 1e-3],
       ['insulation_thickness', 'mm', 'm', 1e-3], ['metallic_sheath_thickness', 'mm', 'm', 1e-3],
