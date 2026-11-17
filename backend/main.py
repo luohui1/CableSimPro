@@ -77,7 +77,10 @@ class LocalBoundary:
 
 
 def create_app(db_path: str | Path | None = None) -> FastAPI:
-    workspace_store = WorkspaceStore(db_path or os.environ.get('CABLESIM_DB', str(ROOT/'.data/cablesim.sqlite')))
+    database = Path(db_path or os.environ.get('CABLESIM_DB', str(ROOT/'.data/cablesim.sqlite')))
+    # A clean checkout or a fresh install has no data directory yet; SQLite does not create it.
+    database.parent.mkdir(parents=True, exist_ok=True)
+    workspace_store = WorkspaceStore(str(database))
     assets = AssetRepository(workspace_store.path)
     research = Research(workspace_store)
     from .kernel.host_api import Previews, make_router as host_api_router
