@@ -1,6 +1,8 @@
 """All public sizes, real sealed methods, and the canonical upload workflow."""
 from hashlib import sha256
 from io import BytesIO
+import json
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
@@ -123,6 +125,7 @@ def test_people_every_size_keeps_real_refusals_and_missing_reference_values(agre
 
 def test_public_samples_import_into_canonical_models_without_synthetic_facts(tmp_path, monkeypatch, agreement):
     from backend.main import create_app
+    from backend.kernel.type_versions import declared_execution_standards
     from frontend.scripts.catalogue_seed import import_public_catalogues, calculate_factory_series
     monkeypatch.setenv('CABLESIM_DATASETS_DIR', str(tmp_path / 'datasets'))
     monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'library'))
@@ -155,6 +158,12 @@ def test_public_samples_import_into_canonical_models_without_synthetic_facts(tmp
                     assert 'insulation_screen_thickness' not in values
                     assert not detail['results']
                 else:
+                    workspace = client.get('/api/workspaces/' + saved['workspace_id']).json()
+                    declarations = declared_execution_standards(workspace['domain'])
+                    assert {item['standard'] for item in declarations} == {'GB/T 12706.2—2020', 'GB/T 3956—2008'}
+                    assert all(len(item['source_digest']) == 64 for item in declarations)
+                    assert all(not source['reviewed'] for path, source in model['payload']['sources'].items()
+                               if path != '/execution_standards')
                     assert values['r20']['source']['origin'] == 'standard'
                     assert values['r20']['source']['kind'] == 'standard'
                     reference = values['r20']['source']['reference']
@@ -163,6 +172,18 @@ def test_public_samples_import_into_canonical_models_without_synthetic_facts(tmp
                     assert reference['data_sha256'] and reference['artifact_digest']
         calculated = calculate_factory_series(client, receipts)
         assert calculated['specifications'] == 11
+        assert len(calculated['specification_drafts']) == 11
+        for draft in calculated['specification_drafts']:
+            assert draft['snapshot']['payload']['workspace_id'] == draft['workspace_id']
+            assert draft['ready'] is False and draft['blockers']
+            assert draft['snapshot']['lifecycle']['approval'] is None
+            assert draft['generation']['status'] == 'blocked' and draft['generation']['channel'] == 'geometry'
+            assert any(check['id'] == 'geometry/mass' for check in draft['blockers'])
+            current = client.get(draft['endpoint']).json()
+            assert current['digest'] == draft['digest']
+            assert set(current['payload']['results']) >= {'standards', 'rating', 'geometry'}
+            assert all(source['freshness'] == 'current' for source in current['payload']['sources'])
+        assert len(calculated['generation_runs']) == 11
         expected = {row['area_mm2']: row['metrics']['ampacity']['value'] for row in agreement['people-mv']['rows']
                     if row['table'] == 'three-core'}
         assert len(calculated['check']['items']) == len(calculated['calculate']['items']) == 11
@@ -174,3 +195,41 @@ def test_public_samples_import_into_canonical_models_without_synthetic_facts(tmp
         # The display declaration must not alter the original PDF identity.
         assert receipts[0]['source']['dataset_manufacturer_label'] == '人民电缆集团'
         assert receipts[0]['source']['url'].startswith('https://www.chinapeople.com/')
+
+
+def test_import_standard_selection_requires_an_exact_edition_and_human_confirmation(tmp_path, monkeypatch):
+    from backend.main import create_app
+    from backend.kernel.type_versions import declared_execution_standards
+    monkeypatch.setenv('CABLESIM_DATASETS_DIR', str(tmp_path / 'datasets'))
+    monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'library'))
+    with TestClient(create_app(tmp_path / 'selection.sqlite')) as client:
+        uploaded = client.post('/api/type-library/imports/upload', files={
+            'file': ('people-mv.xlsx', sample_bytes('people-mv'))}).json()
+        declaration = next(item for item in uploaded['declarations'] if item['table'] == 'three-core')
+        declaration['series']['standards'] += ['GB/T 3956', 'GB/T 3956—2099']
+        response = client.post('/api/type-library/imports/preview', json={
+            'upload_id': uploaded['upload_id'], **{key: declaration[key] for key in
+                ('sheet', 'first_data_row', 'mapping', 'series')}})
+        assert response.status_code == 200, response.text
+        preview = response.json()
+        selection = preview['execution_standards']
+        assert {item['declared'] for item in selection['missing']} == {'GB/T 3956', 'GB/T 3956—2099'}
+        assert {item['standard']: item['source_digest'] for item in selection['items']} == {
+            'GB/T 12706.2—2020': '3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d',
+            'GB/T 3956—2008': 'b9a118e1282b4eeee6ec6ae4653e8c80e0a42beee0df5bf84360c4876a856939'}
+        assert all(item['evidence']['artifact_digest'] and item['method']['release_digest'] for item in selection['items'])
+        assert all('/execution_standards' not in row['payload']['sources'] for row in preview['rows'])
+        body = {'preview_id': preview['preview_id'], 'preview_digest': preview['preview_digest'],
+                'request_id': str(uuid4()), 'human_confirmed': True, 'skip_errors': False}
+        assert client.post('/api/type-library/imports/commit', json=body,
+                           headers={'X-CableSim-Actor': 'agent'}).status_code == 403
+        response = client.post('/api/type-library/imports/commit', json=body,
+                               headers={'X-CableSim-Actor': 'human'})
+        assert response.status_code == 201, response.text
+        spec = response.json()['specs'][0]
+        workspace = client.get('/api/workspaces/' + spec['workspace_id']).json()
+        source = workspace['domain']['provenance']['/execution_standards']
+        assert json.loads(source['reference'])['selection'] == selection
+        assert len(declared_execution_standards(workspace['domain'])) == 2
+        snapshot = client.get('/api/types/' + spec['workspace_id'] + '/specification').json()
+        assert snapshot['lifecycle']['approval'] is None and snapshot['ready'] is False

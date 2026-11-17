@@ -152,6 +152,12 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert public_specs == 59 and len(receipt['public_catalogues']) == 5
     factory = receipt['factory_series_calculations']
     assert factory['specifications'] == 11
+    assert len(factory['specification_drafts']) == 11
+    assert all(item['snapshot']['lifecycle']['approval'] is None and item['blockers']
+               for item in factory['specification_drafts'])
+    assert all(item['generation']['status'] == 'blocked' and item['generation']['channel'] == 'geometry'
+               for item in factory['specification_drafts'])
+    assert len(factory['generation_runs']) == 11
     factory_runs = [item for operation in ('check', 'calculate') for item in factory[operation]['items']]
     assert len(factory_runs) == 22 and all(item['status'] == 'succeeded' and item['run_id'] for item in factory_runs)
     assert receipt['examples']['factory']['series_ids']
@@ -204,7 +210,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
                   if key.startswith('/factory_measurements/') and key.endswith('/minimum_overlap')]
         assert len(overlaps)==3 and all(json.loads(item['reference'])['label']=='教学示例实测' for item in overlaps)
         assert connection.execute('SELECT COUNT(*) FROM engineering_type_releases WHERE workspace=?',(teaching['workspace'],)).fetchone()[0] == 0
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 4+len(type_runs)+len(factory_runs)+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 4+len(type_runs)+len(factory_runs)+len(factory['generation_runs'])+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
         if has_chengnan:
             single=next(s for s in receipt['studies'] if '波纹品字形有限元' in s['title'])
             if imported_chengnan:

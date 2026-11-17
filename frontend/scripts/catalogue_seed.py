@@ -43,6 +43,7 @@ def import_public_catalogues(client):
             result.append({'sample_id': sample['id'], 'sheet': declaration['sheet'], 'table': declaration['table'],
                            'source': sample['source'], 'workbook_sha256': uploaded['sha256'],
                            'preview_digest': preview['preview_digest'], 'series_id': committed['series_id'],
+                           'execution_standards': preview['execution_standards'],
                            'specs': committed['specs'], 'incomplete_count': preview['incomplete_count'],
                            'state': 'draft', 'human_reviewed': False})
     return result
@@ -64,7 +65,19 @@ def calculate_factory_series(client, catalogues):
     parameters['solver']['max_iterations'] = 300
     parameters['source'] = ('IEC 60287 对照方法：ks=kp=1，T4 exact，涡流项 ignored；'
                             '铜带纵向电阻按系列声明模型，非任意补值。数值收敛阈值1e-8 A、最多300次。')
-    result = {}
+    result, generation = {}, {}
+    for spec in specs:
+        response = client.post('/api/types/' + spec['workspace_id'] + '/specification/generate', json={
+            'request_id': str(uuid4()), 'expected_revision': spec['workspace_revision'],
+            'scope_acknowledged': True, 'audience': 'internal'})
+        if response.status_code >= 400:
+            raise RuntimeError('发布系列规格书生成请求失败：' + response.text)
+        attempt = response.json()
+        if attempt.get('status') not in ('generated', 'blocked'):
+            raise RuntimeError('发布系列规格书缺少可解释的生成状态：' + str(attempt))
+        generation[spec['id']] = attempt
+    # A generation attempt may create its own standards study. Run the requested
+    # library checks afterwards so their saved evidence remains current.
     for operation in ('check', 'calculate'):
         body = {'request_id': str(uuid4()), 'operation': operation,
                 'spec_ids': [item['id'] for item in specs],
@@ -84,4 +97,23 @@ def calculate_factory_series(client, catalogues):
         if len(batch['items']) != len(specs) or batch['status'] != 'succeeded':
             raise RuntimeError('发布系列没有完成全部规格的真实方法运行：' + str(batch))
         result[operation] = batch
-    return {'series_id': selected['series_id'], 'specifications': len(specs), **result}
+    documents = []
+    for spec in specs:
+        endpoint = '/api/types/' + spec['workspace_id'] + '/specification?audience=internal&view=detail'
+        response = client.get(endpoint)
+        if response.status_code >= 400:
+            raise RuntimeError('发布系列规格书草稿无法打开：' + response.text)
+        snapshot = response.json()
+        if snapshot['payload']['workspace_id'] != spec['workspace_id'] or snapshot['lifecycle']['approval'] is not None:
+            raise RuntimeError('发布系列规格书身份或审核状态异常：' + spec['name'])
+        documents.append({'spec_id': spec['id'], 'workspace_id': spec['workspace_id'], 'name': spec['name'],
+                          'endpoint': endpoint, 'digest': snapshot['digest'], 'ready': snapshot['ready'],
+                          'generation': generation[spec['id']],
+                          'snapshot': {key: snapshot[key] for key in ('payload', 'digest', 'lifecycle', 'audience')},
+                          'blockers': [{key: check[key] for key in ('id', 'channel', 'message')}
+                                       for check in snapshot['payload']['checks'] if check['blocking']]})
+    generation_runs = [{**source, 'workspace_id': document['workspace_id']}
+                       for document in documents for source in document['snapshot']['payload']['sources']
+                       if source['channel'] not in ('standards', 'rating')]
+    return {'series_id': selected['series_id'], 'specifications': len(specs),
+            'specification_drafts': documents, 'generation_runs': generation_runs, **result}

@@ -311,6 +311,15 @@ class Gate:
         with self.step('3×300可编辑结构入口','GET /api/design/cable-models','3D线程'):
             require(model is not None,'TYPE_SEED_MISSING','发布库缺YJV22 3×300结构和规格书条件。','前端线程（发布种子）；3D线程')
         w=self.api('POST','/api/design/type-workspaces',{'model_id':model['id'],'content_sha256':model['content_sha256']},owner='3D线程')
+        # A new draft has no chosen execution-standard editions. Follow the
+        # same explicit resource/edition selection as the release example;
+        # this attaches identities only, without filling physical values or
+        # approving a product. An undeclared standard must still refuse.
+        from frontend.scripts.engineering_resources import bind_demo_resources
+        with self.step('选择型号执行标准与参考资源','POST /api/types/{wid}/resources/migrate','数据线程'):
+            bind_demo_resources(lambda path, method='GET', body=None:
+                                self.api(method,path,body,owner='数据线程'),w['id'],'mv')
+            w=self.api('GET','/api/workspaces/'+w['id'])
         root=f'/api/types/{w["id"]}/specification'
         def generate(workspace):
             value=self.api('POST',root+'/generate',{'expected_revision':workspace['revision'],'request_id':str(uuid4()),'scope_acknowledged':True},owner='3D线程（规格书）；研究线程（计算）')
