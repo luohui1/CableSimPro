@@ -119,6 +119,20 @@ async function acceptEach(session: string, verify?: (proposal: Proposal) => Prom
   throw new Error('The workflow exceeded its expected number of human decisions');
 }
 
+function savedSpecification(view: ChatView, state: FlowState) {
+  const completed = steps(view).filter(step => step.tool === 'propose_type_specification' && step.status === 'done');
+  assert.equal(completed.length, 1, 'the accepted specification must remain a completed step in the actual conversation');
+  const card = completed[0].card;
+  assert.ok(card?.kind === 'saved_file', 'the specification step must retain its downloadable file card alongside earlier cards for this type');
+  assert.equal(card.document_kind, '规格书');
+  assert.equal(card.format, 'pdf');
+  assert.ok(state.typeId && state.file, 'the file card needs the actual accepted type and saved file receipt');
+  assert.equal(card.href, `cablesim:type/${encodeURIComponent(state.typeId)}`);
+  assert.equal(card.download_url, state.file);
+  assert.match(card.download_url, /^\/api\/agent\/files\//);
+  return card;
+}
+
 test('a read answer and its result card use the exact saved platform figures', async () => {
   const state = installStudyRead(faux, fixture);
   const { session } = await sidecar.agent.send(undefined, '研究的结论是什么，受什么限制？');
@@ -204,7 +218,9 @@ test('create a type, revise its insulation, run standard checks and save its int
   assert.equal(state.done, true);
   assert.ok(steps(view).some(step => step.tool === 'propose_type_changes' && step.status === 'done'));
   assert.ok(steps(view).some(step => step.tool === 'propose_study_run' && step.status === 'done'));
-  const response = await fetch(url + state.file!);
+  const file = savedSpecification(view, state);
+  const response = await fetch(url + file.download_url);
+  assert.ok(response.ok);
   assert.equal(response.headers.get('content-type')?.split(';')[0], 'application/pdf');
   const pdf = Buffer.from(await response.arrayBuffer());
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
@@ -264,7 +280,8 @@ test('an existing type with saved calculation evidence completes input paging, r
   const run = await api(`/api/workspaces/${state.typeId}/studies/${state.study}/runs/${state.run}`);
   assert.equal(run.status, 'succeeded');
   assert.equal(run.integrity, 'verified');
-  const response = await fetch(url + state.file!);
+  const file = savedSpecification(view, state);
+  const response = await fetch(url + file.download_url);
   assert.ok(response.ok);
   assert.equal(response.headers.get('content-type')?.split(';')[0], 'application/pdf');
   assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
