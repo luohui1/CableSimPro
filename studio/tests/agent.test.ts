@@ -54,8 +54,9 @@ test('the agent has the studio\'s operations and a skill reader, and is told not
   assert.ok(seen.prompt.includes('数字') && seen.prompt.includes('审阅'));
 
   // What the model is actually sent, not what the session layer says it holds: the skills by name, and no path of this machine in any spelling.
-  // (The repository's name is checked here and not on the session layer's text: where the repository is checked out may carry it.)
-  for (const leak of ['CableSimPro', '开发约定', 'AGENTS.md', 'CLAUDE.md', '仓库卫生']) {
+  // The product name may appear in shared platform skills. Actual checkout
+  // paths and repository instruction files must still never reach the model.
+  for (const leak of ['开发约定', 'AGENTS.md', 'CLAUDE.md', '仓库卫生']) {
     assert.ok(!sent.includes(leak), `the request does not carry "${leak}"`);
   }
   assert.ok(!sent.includes('<cwd>'), 'the working folder is left out');
@@ -111,12 +112,12 @@ test('the reader opens a skill and refuses every other file', async () => {
   ]);
   await app.agent.send(session, '校核载流量前先读技能');
   await app.agent.idle(session);
-  assert.ok(skill.includes('载流量校核与选型') && skill.includes('必须停下来问人'));
+  assert.ok(skill.includes('载流量研究') && skill.includes('propose_study_run') && skill.includes('不得跳过批准'));
   assert.ok(refusal.includes('只能读取技能文件') && !refusal.includes('开发约定'));
-  assert.ok(byName.includes('型号改版'));
+  assert.ok(byName.includes('propose_type_changes') && byName.includes('propose_type_specification'));
   const view = await app.agent.view(session);
   assert.deepEqual(steps(view).map(step => [step.label, step.target, step.status]),
-    [['读取技能', '技能「载流量校核与选型」', 'done'], ['读取技能', undefined, 'failed'], ['读取技能', '技能「型号改版」', 'done']]);
+    [['读取技能', '技能「载流量研究」', 'done'], ['读取技能', undefined, 'failed'], ['读取技能', '技能「修改型号结构」', 'done']]);
 });
 
 test('review, approval and issue are refused for the agent before anything else is looked at', async () => {

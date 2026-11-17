@@ -11,7 +11,6 @@ import { Button, IconButton } from './ui/button';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 import { LazyCreateStudyDialog as CreateStudyDialog } from './lazy-create-study-dialog';
-import { AgentTaskList } from '@/features/agent/task-list';
 
 type Slot = (element: HTMLElement | null) => void;
 
@@ -80,8 +79,6 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
     <ToggleGroup type="single" value={mode} onValueChange={value => value && setMode(value)} className="sidebar-mode" aria-label="模式">
       <ToggleGroupItem value="workbench">工作台</ToggleGroupItem><ToggleGroupItem value="agent">Agent</ToggleGroupItem>
     </ToggleGroup>
-    {/* Agent 模式下左栏换成任务列表 */}
-    {mode === 'agent' ? <AgentTaskList theme={theme} /> : <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="secondary" className="sidebar-new"><Icon name="action/add" /><span>新建</span></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -125,7 +122,6 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       <Link className="module-item" to="/validation" search={{ theme, snapshot: '' }} aria-current={at('/validation')} title="验证算例"><Icon name="result/evidence" /><span>验证算例</span></Link>
       {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
     </nav>
-    </>}
     <nav className="sidebar-foot" aria-label="系统">
       <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="sidebar-user"><Icon name="nav/settings" /><span>本机用户</span><Icon name="action/chevrons-up-down" /></Button></DropdownMenuTrigger><DropdownMenuContent align="start"><DropdownMenuItem onSelect={onTheme}>{theme === 'light' ? '切换深色模式' : '切换浅色模式'}</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigate({ to: '/settings', search: { theme } })}>设置</DropdownMenuItem>{import.meta.env.DEV && <DropdownMenuItem onSelect={() => void navigate({ to: '/gallery', search: { theme } })}>组件陈列（开发）</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>
     </nav>
