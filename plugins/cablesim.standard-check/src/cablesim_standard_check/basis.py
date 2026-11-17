@@ -6,6 +6,11 @@ from pathlib import Path
 
 RECORDS=json.loads((Path(__file__).parent/'basis-records.json').read_text('utf-8'))
 
+
+class BasisIntegrityError(ValueError):
+    """A supplied sealed reference is invalid, not missing engineering input."""
+
+
 def digest(value):
     return sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
@@ -94,6 +99,15 @@ def criterion(reference, unit, inputs):
     return value*scale,comparison,None
 
 def validate(ref,query):
+    try:
+        return _validate(ref,query)
+    except ValueError as error:
+        raise BasisIntegrityError(str(error)) from error
+    except (KeyError,TypeError,AttributeError) as error:
+        raise BasisIntegrityError('basis_references：封签依据结构不完整或非法。') from error
+
+
+def _validate(ref,query):
     if ref.get('schema')!='cablesim.standard-basis-ref/1' or ref.get('query')!=query: raise ValueError('basis_references：依据与当前型号条件不一致，请重新取依据。')
     record=ref.get('record',{});bare={k:v for k,v in record.items() if k not in ('record_sha256','citation')}
     # Whole-library digests remain in the receipt for traceability. Adding an
@@ -118,6 +132,25 @@ def validate(ref,query):
         elif not (math.isclose(actual,predicate,rel_tol=1e-12) if isinstance(actual,(int,float)) and isinstance(predicate,(int,float)) else actual==predicate):
             raise ValueError('basis_references：依据行条件与当前型号不一致。')
     return record
+
+
+def validate_list(ref,query):
+    """Keep list receipts under the same hard integrity gate as single rows."""
+    try:
+        if ref.get('schema') != 'cablesim.standard-basis-list-ref/1' or ref.get('query') != query or ref.get('query_sha256') != digest(query) or ref.get('plugin_version') != RECORDS['plugin_version']:
+            raise BasisIntegrityError('依据表封签发行与查询条件不一致，请重新取依据。')
+        if not isinstance(ref.get('records'),list) or not ref['records']:
+            raise BasisIntegrityError('依据表封签记录缺失；未收录的表须明确返回 uncovered。')
+        for record in ref['records']:
+            bare = {k:v for k,v in record.items() if k not in ('record_sha256','citation')}
+            if RECORDS['records'].get(record['id']) != digest(bare) or record.get('verification',{}).get('status') != 'verified':
+                raise BasisIntegrityError('依据表封签记录摘要或核验状态不一致。')
+        return ref['records']
+    except BasisIntegrityError:
+        raise
+    except (ValueError,KeyError,TypeError,AttributeError) as error:
+        raise BasisIntegrityError('依据表封签记录结构不完整或非法。') from error
+
 
 def apply(checker,parameters):
     from .manufacturing import execute

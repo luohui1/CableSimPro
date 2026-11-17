@@ -188,7 +188,7 @@ def test_real_requirement_basis_and_executor_use_220kv_tables_without_pass_claim
             result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
                 {'case_id': 'extra-high', 'input': document, 'parameters': parameters}])
             assert result.cases[0].status == 'succeeded', result.cases[0].error
-            assert result.plugin_version == result.method_version == '1.8.0'
+            assert result.plugin_version == result.method_version == '1.8.2'
             return result.cases[0].artifacts['x-cablesim.standard-check']
 
         checked = execute(document, parameters)

@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.8.1'
+VERSION = '1.8.2'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -1000,7 +1000,7 @@ def check(document, parameters):
     else:
         common = [(layer, root + f'.common_layers.{i}') for i, layer in enumerate(cable['common_layers'])]
         report.mv_common(common, core_diameters)
-    from cablesim_standard_check.basis import apply, digest
+    from cablesim_standard_check.basis import apply, digest, BasisIntegrityError
     annex_queries = {}
     calculated, annex_error, other_construction = None, None, False
     # Eligibility is established by the current declared structure. A complete
@@ -1013,6 +1013,8 @@ def check(document, parameters):
             calculated = calculate(values,family,parameters.get('basis_references',{}))
         except NeedQueries as pending:
             annex_queries = pending.queries
+        except BasisIntegrityError:
+            raise
         except OtherCoveringConstruction as error:
             annex_error, other_construction = str(error), True
         except (ValueError,KeyError) as error:

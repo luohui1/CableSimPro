@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.8.1",
+      "method_version": "1.8.2",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,7 +227,7 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.8.1",
+      "method_version": "1.8.2",
       "analysis": "geometry_proposal",
       "solver": "local",
       "input_schema": "cablesim.cable-design-request/2",
@@ -759,8 +759,8 @@
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "304f865c520b82de1ed072861167da707a71fff565ba024de737a6b8123feb6f",
-      "size_bytes": 13068
+      "sha256": "3118abc38e3d93a29362c1f370b491e08f8d1caf920a4b5c266978853383ae6a",
+      "size_bytes": 14741
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -769,8 +769,8 @@
     },
     {
       "path": "src/cablesim_standard_check/coverings.py",
-      "sha256": "4c5270dc2c37df0e8295b0d2fefac4e99009cf0d412e0979499a0a7d50ecbe63",
-      "size_bytes": 14690
+      "sha256": "db3098d8f37bb812f5910256ece6106597a0459c636b52564da24a368b9f987a",
+      "size_bytes": 14036
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
@@ -784,8 +784,8 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "2cd6d8057ac08fb9138a0580201f96524ce9d6426ed92c09dbfd1449bd074928",
-      "size_bytes": 65082
+      "sha256": "2e52b7c179f33f109dc3ab69444c510e03d62e3d6ae75909cff3608a345c6ec9",
+      "size_bytes": 65157
     },
     {
       "path": "src/cablesim_standard_check/manufacturing.py",

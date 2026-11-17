@@ -47,10 +47,48 @@ def test_fixed_basis_pages_and_pass_fail(tmp_path,hv,area,nominal,page,pdf,r20):
         failed=plugin.check(changed,{**params,'basis_cable_sha256':digest(changed['cable_types'][0])})
         assert item(failed,'insulation-nominal')['verdict']=='failed'
         assert item(failed,'insulation-nominal')['citation']==insulation['citation']
-        bad=deepcopy(params);reference=next(ref for ref in bad['basis_references'].values() if ref['record']['quantity']['key']=='insulation_nominal')
+        # The receipt now also contains an Annex insulation lookup. Target the
+        # exact row consumed above, not the first equal quantity in a mapping.
+        bad=deepcopy(params);reference=bad['basis_references'][insulation['id']]
+        assert reference==insulation['basis_reference']
         reference['record']['value']=.1
         reference['record_sha256']=digest({k:v for k,v in reference['record'].items() if k not in ('record_sha256','citation')})
         with pytest.raises(ValueError,match='封签'): plugin.check(document,bad)
+        if not hv:
+            from cablesim_standard_check.basis import BasisIntegrityError
+            refs=params['basis_references']
+            assert refs['insulation']['record']['id']==insulation['basis_reference']['record']['id']
+            trace=checked['fictitious_diameter_trace']
+            consumed={step['record']['id'] for step in trace}
+            assert all(refs[key]['record']['id'] in consumed for key in
+                       ('annex_conductor','annex_bedding','annex_oversheath'))
+            assert item(checked,'oversheath-nominal')['limit']==3.5
+            # Each altered record was actually consumed by the successful
+            # chain. Recomputing the caller's own hash cannot reseal its value.
+            cases=[]
+            for key in ('insulation','annex_conductor','annex_bedding','annex_oversheath','annex_screen_table'):
+                tampered=deepcopy(params);ref=tampered['basis_references'][key]
+                if key=='annex_screen_table':
+                    selected_id=refs['annex_screen_increment']['record']['id']
+                    assert selected_id in consumed
+                    record=next(record for record in ref['records'] if record['id']==selected_id)
+                else:
+                    record=ref['record']
+                record['value']=.1
+                forged=digest({k:v for k,v in record.items() if k not in ('record_sha256','citation')})
+                record['record_sha256']=forged
+                if key!='annex_screen_table':ref['record_sha256']=forged
+                with pytest.raises(BasisIntegrityError,match='封签'):
+                    plugin.check(document,tampered)
+                cases.append({'case_id':key,'input':document,'parameters':tampered})
+            # The real plugin process must reject the whole case without a
+            # partial requirements artifact, not turn bad evidence into gaps.
+            rejected=app.state.research.executor.run('cablesim.standard-check','dimensions',cases)
+            assert len(rejected.cases)==len(cases)
+            for case in rejected.cases:
+                assert case.status=='not_applicable' and not case.artifacts
+                assert case.error['code']=='STANDARD_INPUT_INVALID'
+                assert '封签' in case.error['message']
         if hv:
             unsupported=deepcopy(document)
             insulation_material=unsupported['cable_types'][0]['cores'][0]['layers'][1]['material']

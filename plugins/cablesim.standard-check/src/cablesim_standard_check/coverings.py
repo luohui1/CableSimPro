@@ -5,7 +5,7 @@ the fictitious diameter. Only explicitly selected PVC extruded covering and
 optional double steel-tape armour are generated here.
 """
 from .annex import DiameterChain, decimal, evidence, MissingBasis
-from .basis import RECORDS, digest
+from .basis import validate_list
 
 
 class NeedQueries(Exception):
@@ -61,13 +61,7 @@ def calculate(values, family, refs):
         if ref.get('uncovered'):
             raise MissingBasis(standard+'—2020 '+locator+'：本库暂未收录此护层条件；可先生成绝缘线芯，补齐依据后再生成完整护层。')
         if listed:
-            if ref.get('schema') != 'cablesim.standard-basis-list-ref/1' or ref.get('query') != q or ref.get('query_sha256') != digest(q) or ref.get('plugin_version') != RECORDS['plugin_version']:
-                raise ValueError('依据表发行与查询条件不一致，请重新取依据。')
-            for record in ref['records']:
-                bare = {k:v for k,v in record.items() if k not in ('record_sha256','citation')}
-                if RECORDS['records'].get(record['id']) != digest(bare) or record.get('verification',{}).get('status') != 'verified':
-                    raise ValueError('依据表记录摘要或核验状态不一致。')
-            return ref['records']
+            return validate_list(ref,q)
         return evidence(ref,q)
 
     rounding = query('annex_rounding','B.1','fictitious_rounding')
