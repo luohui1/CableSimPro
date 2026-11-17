@@ -114,6 +114,10 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await page.locator('.topbar-actions').getByRole('button', { name: '导入资源草稿', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '导入资源草稿', exact: true });
     await expect(dialog).toBeVisible();
+    // Closing preserves the engineer's draft; explicitly begin this import empty.
+    const definition = dialog.getByRole('textbox', { name: '定义内容', exact: true });
+    await definition.fill('');
+    await expect(definition).toHaveValue('');
     await expect(dialog.getByRole('button', { name: '校验并导入', exact: true })).toBeDisabled();
     await capture(`${group}-import-empty`);
     // A file chosen by the engineer is the product's supported import path.
@@ -181,7 +185,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     return saved;
   }
 
-  async function transition(group, saved, action, label) {
+  async function transition(group, saved, action, label, standard) {
     await searchResource(group, saved.name, saved.version);
     const opener = properties.getByRole('button', { name: label, exact: true });
     await expect(opener).toBeEnabled();
@@ -199,8 +203,10 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     }
     await expect(dialog.getByRole('button', { name: new RegExp(`^确认${label}`) })).toBeDisabled();
     await dialog.locator('summary').filter({ hasText: '参数、来源与固定版本依据' }).click();
-    await expect(dialog).toContainText('隔离浏览器验收');
-    await dialog.getByRole('textbox', { name: '资源操作说明', exact: true }).fill(`隔离验收${label}：已查看本条定义、单位与手工出处，仅验证版本流程，不作为工程物性依据。`);
+    await expect(dialog).toContainText(standard ? standard.standard : '隔离浏览器验收');
+    await dialog.getByRole('textbox', { name: '资源操作说明', exact: true }).fill(standard
+      ? `隔离浏览器验收${label}：仅核对 ${standard.standard} 的版本声明与原来源摘要一致，完整保留出处；不是内容工程认证，不批准型号、要求或计算结果。`
+      : `隔离验收${label}：已查看本条定义、单位与手工出处，仅验证版本流程，不作为工程物性依据。`);
     if (action === 'review') {
       await expect(dialog.getByRole('button', { name: '确认核对来源 1 项', exact: true })).toBeDisabled();
       await dialog.getByRole('checkbox', { name: `已核对资源 ${saved.name}`, exact: true }).check();
@@ -261,13 +267,16 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     }
     await page.getByRole('button', { name: role === 'material' ? '绑定材料版本' : '绑定标准版本', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: role === 'material' ? '绑定材料资源版本' : '绑定执行标准版本', exact: true });
-    await expect(dialog.getByRole('combobox', { name: role === 'material' ? '设计材料' : '执行标准', exact: true })).toContainText(target.name);
+    const targetLabel = role === 'material' ? '设计材料' : '执行标准';
+    const targetSelect = dialog.getByRole('combobox', { name: targetLabel, exact: true });
+    if (role === 'standard' && !(await targetSelect.innerText()).includes(target.name)) await choose(targetLabel, target.name, dialog);
+    await expect(targetSelect).toContainText(target.name);
     return { dialog, target, view };
   }
 
-  async function bindPublishedResource(group, published, draft) {
+  async function bindPublishedResource(group, published, draft, targetId) {
     const role = published.kind === 'material' ? 'material' : 'standard';
-    const context = await openTypeBinding(role);
+    const context = await openTypeBinding(role, targetId);
     if (!context) return;
     const { dialog, target, view } = context;
     const before = await api(`/api/workspaces/${referenceWorkspace.id}`);
@@ -328,17 +337,140 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     check(`${groupTitles[group]}新版本发布及旧版本停用不漂移原引用`, newer.status === 'published' && old.status === 'deprecated' &&
       newer.id !== old.id && newer.asset_id === old.asset_id && JSON.stringify(pin) === JSON.stringify(savedBinding.pin), { old: old.id, newer: newer.id, pin });
     check(`${groupTitles[group]}资源改版后原工程物性保持不变`, JSON.stringify(saved.domain) === JSON.stringify(savedBinding.domain));
-    await context.dialog.getByRole('combobox', { name: '资源版本', exact: true }).click();
+    const resourceSelect = context.dialog.getByRole('combobox', { name: '资源版本', exact: true });
+    await expect(resourceSelect).toContainText(old.name);
+    await expect(resourceSelect).toContainText(old.version);
+    await expect(resourceSelect).toContainText('当前固定，不能新选');
+    await expect(context.dialog.getByRole('button', { name: '确认绑定', exact: true })).toBeDisabled();
+    await expect(context.dialog.getByText(context.target.reason, { exact: false })).toBeVisible();
+    await capture(`${group}-historical-pin-retained`);
+    await resourceSelect.click();
     await expect(page.getByRole('listbox')).toBeVisible();
+    const oldOption = page.getByRole('option').filter({ hasText: `${old.name} · ${old.version}` });
+    const newOption = page.getByRole('option', { name: `${newer.name} · ${newer.version}`, exact: true });
+    await expect(oldOption).toBeVisible();
+    await expect(oldOption).toHaveAttribute('aria-disabled', 'true');
+    await expect(newOption).toBeVisible();
+    await expect(newOption).toBeEnabled();
     check(`${groupTitles[group]}已停用版本不能新选且新发布版本可明确选择`,
       !context.view.resources.some(item => item.id === old.id) && context.view.resources.some(item => item.id === newer.id) &&
-      await page.getByRole('option', { name: `${old.name} · ${old.version}`, exact: true }).count() === 0 &&
-      await page.getByRole('option', { name: `${newer.name} · ${newer.version}`, exact: true }).isVisible(), { oldVersion: old.version, newVersion: newer.version });
+      await oldOption.getAttribute('aria-disabled') === 'true' && await newOption.isEnabled(),
+    { oldVersion: old.version, newVersion: newer.version, reason: context.target.reason });
     await capture(`${group}-old-pin-and-new-version-eligibility`);
-    await page.keyboard.press('Escape');
+    await newOption.click();
+    await expect(resourceSelect).toContainText(newer.version);
+    await expect(context.dialog.getByRole('button', { name: '确认绑定', exact: true })).toBeEnabled();
+    await capture(`${group}-new-version-selected-before-cancel`);
     await context.dialog.getByRole('button', { name: '关闭', exact: true }).click();
     const reread = await api(`/api/workspaces/${referenceWorkspace.id}`);
     check(`${groupTitles[group]}查看新版本并取消没有写入或升级引用`, reread.revision === saved.revision && JSON.stringify(reread.type_resource_bindings?.[role]?.[savedBinding.target]) === JSON.stringify(savedBinding.pin));
+  }
+
+  async function declareSourcedStandard() {
+    if (!check('真实标准声明使用经UI建立的隔离型号', !!referenceWorkspace,
+      '固定型号创建尚未完成，不能借用或修改其他设计。', { fatal: false })) return null;
+    await page.goto(referenceWorkspace.url);
+    await page.getByRole('navigation', { name: '型号浏览器', exact: true }).getByRole('button', { name: /^要求与标准/ }).click();
+    await page.getByRole('tab', { name: '执行标准', exact: true }).click();
+    const before = await api(`/api/workspaces/${referenceWorkspace.id}`), writesBefore = report.writes.length;
+    const basisPath = `/api/design/type-workspaces/${referenceWorkspace.id}/requirements/basis`;
+    const reading = page.waitForResponse(response => new URL(response.url()).pathname === basisPath && response.request().method() === 'POST');
+    await page.getByRole('button', { name: '声明执行标准', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '确认执行标准版本', exact: true });
+    const response = await reading, plan = await response.json();
+    report.standardReferences ||= [];
+    const trace = { width: size.width, workspace: referenceWorkspace.id, plan, sources: [] };
+    report.standardReferences.push(trace);
+    check('执行版本来自当前输入的真实依据查询', response.ok() && plan.workspace_revision === before.revision
+      && Array.isArray(plan.undeclared_standards) && plan.undeclared_standards.length > 0,
+    { status: response.status(), revision: before.revision, plan });
+    const declarations = plan.undeclared_standards;
+    for (const declaration of declarations) {
+      check('待声明版本有真实标准名和来源摘要', typeof declaration.standard === 'string' && !!declaration.standard
+        && /^[a-f0-9]{64}$/.test(declaration.source_digest), declaration);
+      await expect(dialog).toContainText(declaration.standard);
+      const catalogue = await api(`/api/foundation/assets?kind=rule&status=published&q=${encodeURIComponent(declaration.standard)}&limit=100&offset=0`);
+      // The unchanged seed edition is the source. Previously derived local test
+      // versions are not silently treated as a newer edition of the standard.
+      const candidates = catalogue.items.filter(item => item.name === declaration.standard && !item.version.includes('-'));
+      const matches = [];
+      for (const candidate of candidates) {
+        const source = await api(`/api/foundation/assets/${candidate.id}`);
+        const matched = source.release.sources.some(item => {
+          if (item.kind !== 'standard' || item.reviewed !== true) return false;
+          try {
+            const reference = JSON.parse(item.reference);
+            return reference.schema === 'cablesim.reference-data/1' && reference.standard === declaration.standard
+              && reference.source_digest === declaration.source_digest;
+          } catch { return false; }
+        });
+        if (matched && source.status === 'published' && source.reviewed_sha256 === source.content_sha256) matches.push(source);
+      }
+      check('声明版本与已发布原标准的完整出处精确一致', matches.length === 1,
+        { declaration, candidates: candidates.map(item => ({ id: item.id, name: item.name, version: item.version })), matches: matches.map(item => item.id) });
+      trace.sources.push({ declaration, source: matches[0] });
+    }
+    const confirm = dialog.getByRole('button', { name: '确认执行标准并查询依据', exact: true });
+    await expect(confirm).toBeDisabled();
+    await expect(dialog).toContainText('要求批准需单独确认');
+    await capture('standard-real-editions-before-explicit-confirmation');
+    await dialog.getByRole('checkbox', { name: '已核对执行标准版本', exact: true }).check();
+    await expect(confirm).toBeEnabled();
+    const rereading = page.waitForResponse(value => new URL(value.url()).pathname === basisPath && value.request().method() === 'POST');
+    await confirm.click();
+    const resolvedResponse = await rereading, resolved = await resolvedResponse.json();
+    trace.resolved = resolved;
+    await expect(dialog.getByLabel('当前输入标准依据', { exact: true })).toBeVisible();
+    check('声明后重新查询真实固定依据且保留未覆盖条件', resolvedResponse.ok()
+      && Array.isArray(resolved.undeclared_standards) && resolved.undeclared_standards.length === 0,
+    { status: resolvedResponse.status(), missing: resolved.missing, missing_fields: resolved.missing_fields, undeclared: resolved.undeclared_standards });
+    await capture('standard-real-editions-resolved-without-product-approval');
+    await dialog.getByRole('button', { name: '返回要求清单', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByLabel('已声明执行标准', { exact: true })).toBeVisible();
+    const saved = await api(`/api/workspaces/${referenceWorkspace.id}`);
+    const declarationSource = saved.domain?.provenance?.['/execution_standards'];
+    let savedDeclaration;
+    try { savedDeclaration = JSON.parse(declarationSource?.reference || 'null'); } catch { savedDeclaration = null; }
+    check('显式声明保存返回的版本与摘要而不捏造标准', declarationSource?.kind === 'standard' && declarationSource.reviewed === true
+      && savedDeclaration?.schema === 'cablesim.execution-standards/1'
+      && declarations.every(item => savedDeclaration.items?.some(value => value.standard === item.standard && value.source_digest === item.source_digest))
+      && saved.revision === before.revision + 1 && resolved.workspace_revision === saved.revision,
+    { beforeRevision: before.revision, afterRevision: saved.revision, declaration: savedDeclaration });
+    const oldDomain = structuredClone(before.domain), newDomain = structuredClone(saved.domain);
+    delete oldDomain.provenance['/execution_standards']; delete newDomain.provenance['/execution_standards'];
+    check('版本声明不更改结构物性且未替用户批准要求或型号', JSON.stringify(oldDomain) === JSON.stringify(newDomain)
+      && !report.writes.slice(writesBefore).some(write => /\/requirements\/reviews|\/approve(?:\/|$)|\/publish(?:\/|$)/.test(write.path)),
+    { writes: report.writes.slice(writesBefore), scope: '仅核验执行版本声明与原来源一致；不代表内容工程认证。' });
+    const view = await api(`/api/types/${referenceWorkspace.id}/resources`), selected = trace.sources[0];
+    const target = view.targets.find(item => item.role === 'standard' && item.declaration === true
+      && item.name === selected.declaration.standard && item.input_digest !== null);
+    check('真实执行版本声明产生可绑定目标', !!target,
+      { declaration: selected.declaration, targets: view.targets.filter(item => item.role === 'standard') });
+    trace.target = target.id;
+    return { ...selected, target: target.id, originals: trace.sources.map(item => item.source) };
+  }
+
+  async function deriveSourcedStandard(source, version) {
+    await openGroup('standards');
+    await searchResource('standards', source.name, source.version);
+    await properties.getByRole('button', { name: '派生新版本', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '派生新版本', exact: true });
+    await expect(dialog.getByRole('button', { name: '建立新版本草稿', exact: true })).toBeDisabled();
+    await expect(dialog).toContainText('原版本及既有引用保持固定');
+    await dialog.getByRole('textbox', { name: '新版本号', exact: true }).fill(version);
+    await capture('standard-sourced-local-version-before-creation');
+    await dialog.getByRole('button', { name: '建立新版本草稿', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await page.waitForURL(url => !!url.searchParams.get('item') && url.searchParams.get('item') !== source.id);
+    const derived = await inspectSelectedResource(source.name), original = await api(`/api/foundation/assets/${source.id}`);
+    check('隔离本地标准版本完整保留出处且原版本未变化', derived.id !== source.id && derived.asset_id === source.asset_id
+      && derived.version === version && derived.status === 'draft' && derived.revision === 1
+      && JSON.stringify(derived.release) === JSON.stringify({ ...source.release, version })
+      && original.status === source.status && original.revision === source.revision && original.content_sha256 === source.content_sha256,
+    { original: source.id, derived: derived.id, version, sources: derived.release.sources });
+    await capture('standard-sourced-local-version-draft');
+    return derived;
   }
 
   async function lifecycle(group, imported, draft) {
@@ -362,7 +494,9 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     current = await transition(group, current, 'return_to_draft', '退回草稿');
     current = await transition(group, current, 'review', '核对来源');
     current = await transition(group, current, 'publish', '发布');
-    if (['material', 'rule'].includes(current.kind)) {
+    // A hand-entered temperature rule is a resource workflow fixture, not a
+    // declaration of a GB standard. The sourced standard journey below is separate.
+    if (current.kind === 'material') {
       await branch(`${groupTitles[group]}发布版本固定引用到型号`, () => bindPublishedResource(group, current, draft));
       await openGroup(group); await searchResource(group, current.name, current.version);
     }
@@ -645,6 +779,33 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
         await expect(tooltip).toContainText(reference.standard);
         if (reference.source_digest) await expect(tooltip).toContainText(reference.source_digest);
         if (index === 0) await capture('material-source-evidence-keyboard-focus');
+        const tooltipGeometry = await tooltip.evaluate(node => {
+          const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+          const bounds = { left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+            right: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+            top: box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop),
+            bottom: box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom) };
+          const inside = rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1
+            && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1;
+          const rectOf = rect => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom });
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), lines = [], clipped = [];
+          while (walker.nextNode()) {
+            const text = walker.currentNode;
+            if (!text.textContent.trim() || text.parentElement.closest('[aria-hidden="true"],svg')) continue;
+            const range = document.createRange(); range.selectNodeContents(text);
+            for (const rect of range.getClientRects()) if (rect.width && rect.height) {
+              lines.push(rectOf(rect));
+              if (!inside(rect)) clipped.push({ text: text.textContent.trim(), ...rectOf(rect) });
+            }
+          }
+          const content = node.querySelector('.source-badge-detail'), contentBox = content?.getBoundingClientRect();
+          return { bounds, box: rectOf(box), lines, clipped,
+            contentInside: !!contentBox && inside(contentBox),
+            inViewport: box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight };
+        });
+        check('材料来源浮层完整文字逐行位于浮层与视口内', tooltipGeometry.inViewport && tooltipGeometry.contentInside
+          && tooltipGeometry.lines.length > 0 && tooltipGeometry.clipped.length === 0,
+        { resource: asset.id, property: reference.property, ...tooltipGeometry });
         await page.keyboard.press('Escape');
         await expect(tooltip).toBeHidden();
         await source.hover();
@@ -686,7 +847,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     });
     if (after && imported) versions = await branch(`${groupTitles[group]}编辑审核发布派生与停用`, () => lifecycle(group, imported, typed));
     if (after && typed && versions) await branch(`${groupTitles[group]}批量导出核对与发布`, () => batch(group, typed, versions));
-    if (after && versions && ['material', 'rule'].includes(kind)) await branch(`${groupTitles[group]}历史固定引用与新版本资格`, () => verifyPinnedHistory(group, versions));
+    if (after && versions && kind === 'material') await branch(`${groupTitles[group]}历史固定引用与新版本资格`, () => verifyPinnedHistory(group, versions));
     if (after && group === 'templates') await branch('核对组织模板应用契约边界', async () => {
       await openGroup(group);
       await main.locator('summary').filter({ hasText: '模板作用域' }).click();
@@ -700,6 +861,39 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
   }
 
   if (after) {
+    const standard = await branch('由真实型号条件声明执行标准并核对原始来源', declareSourcedStandard);
+    if (standard) {
+      const versionBase = standard.source.version.split('-')[0];
+      const versions = await branch('从真实标准建立隔离本地版本并明确核对发布', async () => {
+        let original = await deriveSourcedStandard(standard.source, `${versionBase}-t1-${marker}-first`);
+        original = await transition('standards', original, 'review', '核对来源', standard.declaration);
+        original = await transition('standards', original, 'publish', '发布', standard.declaration);
+        const derived = await deriveSourcedStandard(original, `${versionBase}-t1-${marker}-next`);
+        return { original, derived };
+      });
+      if (versions) {
+        await branch('真实标准固定引用到型号且下一草稿不能新选', () =>
+          bindPublishedResource('standards', versions.original, versions.derived, standard.target));
+        const changed = await branch('仅停用隔离旧版本并发布保留出处的新版本', async () => {
+          await openGroup('standards');
+          const original = await transition('standards', versions.original, 'deprecate', '停用', standard.declaration);
+          let derived = await transition('standards', versions.derived, 'review', '核对来源', standard.declaration);
+          derived = await transition('standards', derived, 'publish', '发布', standard.declaration);
+          return { original, derived };
+        });
+        if (changed) await branch('真实标准旧固定引用保留与新版本选择取消', () => verifyPinnedHistory('standards', changed));
+      }
+      await branch('标准引用走查未改写原始种子标准', async () => {
+        for (const original of standard.originals) {
+          const saved = await api(`/api/foundation/assets/${original.id}`);
+          check('原始标准版本状态修订摘要和全部出处保持不变', saved.status === original.status && saved.revision === original.revision
+            && saved.content_sha256 === original.content_sha256 && JSON.stringify(saved.release) === JSON.stringify(original.release)
+            && JSON.stringify(saved.events) === JSON.stringify(original.events),
+          { id: saved.id, name: saved.name, version: saved.version, revision: saved.revision, digest: saved.content_sha256 });
+        }
+      });
+    }
+
     await branch('标准参考与修改后计算参数分别显示并导出单项', async () => {
       const catalogue = await api('/api/foundation/assets?kind=material&status=published&q=XLPE&limit=100&offset=0');
       let source;
