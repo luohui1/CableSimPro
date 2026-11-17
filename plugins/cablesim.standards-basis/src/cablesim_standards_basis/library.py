@@ -8,7 +8,7 @@ from math import isclose, isfinite
 from pathlib import Path
 import re
 
-VERSION = '0.8.0'
+VERSION = '0.9.0'
 DATA = Path(__file__).parent
 NUMERIC_FIELDS = {'area_m2', 'screen_area_m2', 'diameter_m', 'u0_v', 'u_v', 'um_v', 'core_count',
                   'conductor_class', 'nominal_thickness_m', 'duration_s'}

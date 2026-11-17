@@ -15,7 +15,7 @@ from cablesim_type_electrical.inputs import ElectricalParameters, ShortCircuitPa
 from cablesim_type_electrical.sequence import sequence_results
 from cablesim_type_electrical.short_basis import queries as short_queries, material_constants, record as basis_record, attach as attach_basis
 
-VERSION = '1.2.2'
+VERSION = '1.2.3'
 METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':VERSION}
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 

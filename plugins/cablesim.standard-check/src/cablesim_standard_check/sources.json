@@ -42,7 +42,7 @@
     "status": "original-verified",
     "source_format": "official_preview_image",
     "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
-    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+    "scope": "仅编制并核对有独立固定依据的表2–4及明确制造数值；Part1的最薄金属套、绝缘偏心与完整产品试验仍未覆盖。"
   },
   "ehv-scope": {
     "standard": "GB/T 18890.2—2015",
@@ -52,7 +52,7 @@
     "status": "original-verified",
     "source_format": "official_preview_image",
     "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
-    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+    "scope": "仅编制并核对有独立固定依据的表2–4及明确制造数值；Part1的最薄金属套、绝缘偏心与完整产品试验仍未覆盖。"
   },
   "ehv-coverings": {
     "standard": "GB/T 18890.2—2015",
@@ -62,7 +62,7 @@
     "status": "original-verified",
     "source_format": "official_preview_image",
     "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
-    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+    "scope": "仅编制并核对有独立固定依据的表2–4及明确制造数值；Part1的最薄金属套、绝缘偏心与完整产品试验仍未覆盖。"
   },
   "ehv-tests": {
     "standard": "GB/T 18890.2—2015",
@@ -72,6 +72,26 @@
     "status": "original-verified",
     "source_format": "official_preview_image",
     "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
-    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+    "scope": "仅编制并核对有独立固定依据的表2–4及明确制造数值；Part1的最薄金属套、绝缘偏心与完整产品试验仍未覆盖。"
+  },
+  "ehv-screens": {
+    "standard": "GB/T 18890.2—2015",
+    "file_name": "gbt18890-2-2015-page-10.png",
+    "sha256": "05345b221d1a902c2d2d3b28ffecf77b5dbdca719b766b188693ebb7b7286f25",
+    "page_offset": 4,
+    "status": "original-verified",
+    "source_format": "official_preview_image",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+    "scope": "仅编制并核对有独立固定依据的表2–4及明确制造数值；Part1的最薄金属套、绝缘偏心与完整产品试验仍未覆盖。"
+  },
+  "ehv-metal": {
+    "standard": "GB/T 18890.2—2015",
+    "file_name": "gbt18890-2-2015-page-11.png",
+    "sha256": "45d6bf33108e17860034a2020a86cbd07c8257ca83ededf1c43d91687df3ab26",
+    "page_offset": 4,
+    "status": "original-verified",
+    "source_format": "official_preview_image",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+    "scope": "仅编制并核对有独立固定依据的表2–4及明确制造数值；Part1的最薄金属套、绝缘偏心与完整产品试验仍未覆盖。"
   }
 }

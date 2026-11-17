@@ -233,5 +233,5 @@ def test_real_host_process_check_run_errors_retries_and_citation(tmp_path):
     assert answer['records'][0]['value']==5.5 and answer['approval']=='not_granted'
     retry=executor.run('cablesim.standards-basis','lookup',[valid])
     assert retry.cases[0].artifacts['x-cablesim.standards-basis']==answer
-    assert run.plugin_version==checked.plugin_version=='0.8.0'
+    assert run.plugin_version==checked.plugin_version=='0.9.0'
     assert len(run.request_sha256)==len(checked.request_sha256)==64

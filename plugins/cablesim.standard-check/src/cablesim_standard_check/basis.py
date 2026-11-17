@@ -136,7 +136,7 @@ def apply(checker,parameters):
         if not ref or row['id'] not in plan:
             reason = '本库暂未收录 · 下一轮；保留此标准版本与要求。'
             if checker.family == 'ehv':
-                reason = (row.get('reason') or reason) if row['id'] not in plan else '此电压、材料与截面组合没有已固定的表 2/3 依据；不插值、换版或套用 110 kV。'
+                reason = (row.get('reason') or reason) if row['id'] not in plan else '此电压、材料、截面与制造条件组合没有已固定依据；不插值、换版或套用 110 kV。'
             row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason=reason);continue
         record=validate(ref,plan[row['id']])
         row.update(basis_reference=ref,citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'])

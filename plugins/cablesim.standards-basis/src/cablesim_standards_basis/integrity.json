@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-integrity/1",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "files": {
     "records-lv.json": {
       "sha256": "59ca00d4d6cb31d6ac058453e08b92c5dc26c695777fe64c29bf76fd183a808a",
@@ -91,16 +91,16 @@
       "size_bytes": 240802
     },
     "records-extra-high.json": {
-      "sha256": "e6d5d3c85f1a297be33144e4b9008ec75e06b106820b1e43438dc60285ffc251",
-      "size_bytes": 77007
+      "sha256": "f14b0261fb2fc00cb8c28b9f008279c1f02f88e86340da0453eab3d32cf622ca",
+      "size_bytes": 184744
     },
     "basis.json": {
-      "sha256": "ddd7003a62dd925385db76aaeba72556417609af05775de8e4a4a8ad6672345d",
-      "size_bytes": 417718
+      "sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+      "size_bytes": 428684
     },
     "verification.json": {
-      "sha256": "6d21b5d9f7726996be096d50f91b60af6b6d06d0dd535b36a639b9eb722fa30b",
-      "size_bytes": 489488
+      "sha256": "fa8b9f74c16a4fcf07aa560da19c26f09093a44eb183c21d29862f6cd611237e",
+      "size_bytes": 501838
     }
   }
 }

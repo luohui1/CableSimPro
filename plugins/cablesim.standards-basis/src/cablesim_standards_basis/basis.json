@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-basis/1",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "rights": {
     "status": "not_assessed",
     "use": "用户持有标准的受控结构化摘录；不包含标准全文；不宣称许可已评估或合规批准"
@@ -322,6 +322,45 @@
       "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
       "printed_page": 9,
       "preview_page": 13,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-10.png",
+      "sha256": "05345b221d1a902c2d2d3b28ffecf77b5dbdca719b766b188693ebb7b7286f25",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 6,
+      "preview_page": 10,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-11.png",
+      "sha256": "45d6bf33108e17860034a2020a86cbd07c8257ca83ededf1c43d91687df3ab26",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 7,
+      "preview_page": 11,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-12.png",
+      "sha256": "54dcdae0bd1374affddd1b8ff5a64d6d77809e0080e68c4f9eff042e9f318291",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 8,
+      "preview_page": 12,
       "retrieved": "2026-11-17",
       "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
     }
@@ -951,6 +990,19 @@
     "screen_kind": {
       "type": "string",
       "description": "金属屏蔽结构：copper_wire或copper_tape；与半导电screened分开"
+    },
+    "metal_sheath_form": {
+      "type": "string",
+      "enum": [
+        "smooth",
+        "corrugated"
+      ],
+      "description": "外护套内的金属套构造；皱纹套无外护套平均厚度判据"
+    },
+    "nominal_thickness_m": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "明确声明的标称厚度，SI m；不得以实测平均值代入"
     }
   },
   "tables": [
@@ -13726,6 +13778,315 @@
         "ehv-表3/r3/thickness",
         "ehv-表3/r4/thickness"
       ]
+    },
+    {
+      "id": "ehv-表4",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.6.2",
+      "table": "表 4",
+      "title": "金属套标称厚度",
+      "quantities": [
+        {
+          "key": "metal_sheath_nominal",
+          "name": "金属套标称厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 12,
+      "column_count": 2,
+      "record_count": 24,
+      "record_ids": [
+        "ehv-表4/r1/lead",
+        "ehv-表4/r1/corrugated_aluminium",
+        "ehv-表4/r2/lead",
+        "ehv-表4/r2/corrugated_aluminium",
+        "ehv-表4/r3/lead",
+        "ehv-表4/r3/corrugated_aluminium",
+        "ehv-表4/r4/lead",
+        "ehv-表4/r4/corrugated_aluminium",
+        "ehv-表4/r5/lead",
+        "ehv-表4/r5/corrugated_aluminium",
+        "ehv-表4/r6/lead",
+        "ehv-表4/r6/corrugated_aluminium",
+        "ehv-表4/r7/lead",
+        "ehv-表4/r7/corrugated_aluminium",
+        "ehv-表4/r8/lead",
+        "ehv-表4/r8/corrugated_aluminium",
+        "ehv-表4/r9/lead",
+        "ehv-表4/r9/corrugated_aluminium",
+        "ehv-表4/r10/lead",
+        "ehv-表4/r10/corrugated_aluminium",
+        "ehv-表4/r11/lead",
+        "ehv-表4/r11/corrugated_aluminium",
+        "ehv-表4/r12/lead",
+        "ehv-表4/r12/corrugated_aluminium"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.3.2-reference",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.3.2",
+      "table": "",
+      "title": "导体屏蔽复合层近似厚度",
+      "quantities": [
+        {
+          "key": "conductor_screen_nominal_reference",
+          "name": "导体屏蔽复合层近似厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.3.2-reference/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.3.2-minimum",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.3.2",
+      "table": "",
+      "title": "挤包导体屏蔽最薄点",
+      "quantities": [
+        {
+          "key": "conductor_screen_min",
+          "name": "挤包导体屏蔽最薄点",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.3.2-minimum/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.3.3-reference",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.3.3",
+      "table": "",
+      "title": "绝缘屏蔽近似厚度",
+      "quantities": [
+        {
+          "key": "insulation_screen_nominal_reference",
+          "name": "绝缘屏蔽近似厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.3.3-reference/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.3.3-minimum",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.3.3",
+      "table": "",
+      "title": "绝缘屏蔽最薄点",
+      "quantities": [
+        {
+          "key": "insulation_screen_min",
+          "name": "绝缘屏蔽最薄点",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.3.3-minimum/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.5.2-wire",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.5.2",
+      "table": "",
+      "title": "铜屏蔽丝标称直径下限",
+      "quantities": [
+        {
+          "key": "screen_wire_nominal_min",
+          "name": "铜屏蔽丝标称直径下限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.5.2-wire/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.5.2-gap",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.5.2",
+      "table": "",
+      "title": "相邻铜屏蔽丝平均间隙上限",
+      "quantities": [
+        {
+          "key": "screen_wire_gap_max",
+          "name": "相邻铜屏蔽丝平均间隙上限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.5.2-gap/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.6.1-purity",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.6.1",
+      "table": "",
+      "title": "皱纹铝套铝纯度下限",
+      "quantities": [
+        {
+          "key": "aluminium_sheath_purity_min",
+          "name": "皱纹铝套铝纯度下限",
+          "dimension": "dimensionless",
+          "unit": "%"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.6.1-purity/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.6.1-elongation",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.6.1",
+      "table": "",
+      "title": "焊接铝带伸长率下限",
+      "quantities": [
+        {
+          "key": "aluminium_strip_elongation_min",
+          "name": "焊接铝带伸长率下限",
+          "dimension": "dimensionless",
+          "unit": "%"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.6.1-elongation/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.7.2-nominal",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.7.2",
+      "table": "",
+      "title": "外护套标称总厚度",
+      "quantities": [
+        {
+          "key": "oversheath_nominal",
+          "name": "外护套标称总厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.7.2-nominal/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.7.2-mean",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.7.2",
+      "table": "",
+      "title": "非皱纹金属套外护套平均厚度下限",
+      "quantities": [
+        {
+          "key": "oversheath_mean_min",
+          "name": "非皱纹金属套外护套平均厚度下限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.7.2-mean/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.7.2-minimum",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.7.2",
+      "table": "",
+      "title": "外护套最薄点",
+      "quantities": [
+        {
+          "key": "nonmetal_sheath_min",
+          "name": "外护套最薄点",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.7.2-minimum/r1/value"
+      ]
+    },
+    {
+      "id": "ehv-rule-6.7.3-ratio",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.7.3",
+      "table": "",
+      "title": "计入外护套的挤包半导电层厚度比上限",
+      "quantities": [
+        {
+          "key": "oversheath_semiconductor_ratio_max",
+          "name": "计入外护套的挤包半导电层厚度比上限",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "ehv-rule-6.7.3-ratio/r1/value"
+      ]
     }
   ],
   "not_covered": [
@@ -13974,24 +14335,26 @@
       "standard": "GB/T 18890.2",
       "edition": "2015",
       "locators": [
-        "6.1.2 导体形状与圆整度",
-        "表 4 及护层条款",
-        "8.2、表 6–8 试验判据与完整程序",
-        "附录 A/B"
+        "6.1.2 导体结构与圆整度",
+        "6.4 缓冲与纵向阻水层的完整工艺条件",
+        "6.5 金属屏蔽短路容量与电阻要求",
+        "8.2、表 6–9 完整试验程序及判据",
+        "附录 A/B 材料试验"
       ],
-      "reason": "此次仅放行逐格核验的表 2 与表 3。其余结构、材料试验、尺寸程序和成品试验未绑定执行；尺寸与电阻通过不能代替完整产品认证。"
+      "reason": "已逐格核验表2–4及6.3.2/6.3.3、6.5.2、6.6.1、6.7.2/6.7.3的数值与适用条件。GB/T18890.1引用的最小金属套厚度、绝缘偏心及完整型式/预鉴定试验仍未覆盖；不得宣称产品完整合格。"
     },
     {
       "standard": "GB/T 18890.1",
       "edition": "2015",
       "locators": [
         "10.6.2 绝缘最小厚度与偏心率",
+        "10.7.1/10.7.2 金属套最小厚度",
         "第 9 章例行试验",
         "第 10 章抽样试验",
         "第 12 章型式试验",
         "第 13 章预鉴定试验"
       ],
-      "reason": "GB/T 18890.2—2015 6.2.2 与 8.2（正文第 5、9 页）明确引用；尚未取得并逐项核验 Part 1 判据，不以 110 kV 或 GB/T 12706 方法代替。"
+      "reason": "GB/T18890.2—2015明确引用Part1。仅发布已核验Part2原文数字；Part1未逐项核验，不以110kV或GB/T12706方法代替。"
     }
   ],
   "record_files": [
@@ -14455,11 +14818,24 @@
     },
     {
       "name": "records-extra-high.json",
-      "sha256": "e6d5d3c85f1a297be33144e4b9008ec75e06b106820b1e43438dc60285ffc251",
-      "size_bytes": 77007,
+      "sha256": "f14b0261fb2fc00cb8c28b9f008279c1f02f88e86340da0453eab3d32cf622ca",
+      "size_bytes": 184744,
       "table_ids": [
+        "ehv-rule-6.3.2-minimum",
+        "ehv-rule-6.3.2-reference",
+        "ehv-rule-6.3.3-minimum",
+        "ehv-rule-6.3.3-reference",
+        "ehv-rule-6.5.2-gap",
+        "ehv-rule-6.5.2-wire",
+        "ehv-rule-6.6.1-elongation",
+        "ehv-rule-6.6.1-purity",
+        "ehv-rule-6.7.2-mean",
+        "ehv-rule-6.7.2-minimum",
+        "ehv-rule-6.7.2-nominal",
+        "ehv-rule-6.7.3-ratio",
         "ehv-表2",
-        "ehv-表3"
+        "ehv-表3",
+        "ehv-表4"
       ]
     }
   ]

@@ -735,6 +735,10 @@
         "clause": "6.5.2",
         "printed_page": 6,
         "limit": 1
+      },
+      "ehv": {
+        "clause": "6.5.2",
+        "printed_page": 7
       }
     },
     "screen-wire-gap": {
@@ -754,6 +758,11 @@
         "clause": "6.5.2，式 (1)",
         "printed_page": 6,
         "limit": 4,
+        "formula": "G = [π(D+d) − nd] / n"
+      },
+      "ehv": {
+        "clause": "6.5.2，式 (1)",
+        "printed_page": 7,
         "formula": "G = [π(D+d) − nd] / n"
       }
     },
@@ -835,6 +844,10 @@
         "offset": 0.7,
         "minimum": 1.2,
         "smooth_aluminium_mm": 1.8
+      },
+      "ehv": {
+        "clause": "6.6.2，表 4",
+        "printed_page": 8
       }
     },
     "sheath-minimum": {
@@ -859,6 +872,10 @@
         "printed_page": 6,
         "factor": 0.95,
         "offset": -0.1
+      },
+      "ehv": {
+        "clause": "6.6.2 → GB/T 18890.1—2015 10.7.1 / 10.7.2",
+        "printed_page": 8
       }
     },
     "conductor_screen-minimum": {
@@ -1148,6 +1165,10 @@
           "1": 1.4,
           "3": 1.8
         }
+      },
+      "ehv": {
+        "clause": "6.7.2",
+        "printed_page": 8
       }
     },
     "oversheath-minimum": {
@@ -1180,6 +1201,10 @@
         "printed_page": 7,
         "factor": 0.8,
         "offset": -0.2
+      },
+      "ehv": {
+        "clause": "6.7.2",
+        "printed_page": 8
       }
     },
     "conductor-wire-count": {
@@ -1222,6 +1247,24 @@
       "ehv": {
         "clause": "8.2 → GB/T 18890.1—2015 第 13 章",
         "printed_page": 9
+      }
+    },
+    "conductor-screen-minimum": {
+      "ehv": {
+        "clause": "6.3.2",
+        "printed_page": 6
+      }
+    },
+    "insulation-screen-minimum": {
+      "ehv": {
+        "clause": "6.3.3",
+        "printed_page": 6
+      }
+    },
+    "oversheath-mean": {
+      "ehv": {
+        "clause": "6.7.2",
+        "printed_page": 8
       }
     }
   },

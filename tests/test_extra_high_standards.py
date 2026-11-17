@@ -1,7 +1,7 @@
 """Official 220 kV table cells and real sealed API/Executor consumers.
 
 The matrices below were read from the national standard's official preview,
-printed page 5 / preview page 9. The process fixture is an explicit test design,
+printed pages 5–9 / preview pages 9–13. The process fixture is an explicit test design,
 not a manufacturer cable or a claim that all product tests have passed.
 """
 from copy import deepcopy
@@ -24,6 +24,9 @@ AREA = [400, 500, 630, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500]
 WIRES = [53, 53, 53, 53, 170, 170, 170, 170, 265, 265, 265, 265]
 R20 = [.0470, .0366, .0283, .0221, .0176, .0151, .0129, .0113, .0101, .0090, .0083, .0072]
 INSULATION = [27, 27, 26, 25, 24, 24, 24, 24, 24, 24, 24, 24]
+LEAD = [2.7, 2.7, 2.8, 2.8, 2.8, 2.9, 3.0, 3.1, 3.1, 3.2, 3.3, 3.4]
+ALUMINIUM = [2.4, 2.4, 2.4, 2.4, 2.6, 2.6, 2.6, 2.6, 2.8, 2.8, 2.8, 2.8]
+COVERINGS_SHA256 = '54dcdae0bd1374affddd1b8ff5a64d6d77809e0080e68c4f9eff042e9f318291'
 
 
 def request(area=2200, quantity='insulation_nominal', **conditions):
@@ -58,8 +61,55 @@ def test_all_official_cells_and_scope_have_two_independent_routes():
     tables = {table['id']: table for table in library.data['tables']}
     assert tables['ehv-表2']['record_count'] == 24
     assert tables['ehv-表3']['record_count'] == 4
+    assert tables['ehv-表4']['record_count'] == 24
     assert any(gap['standard'] == 'GB/T 18890.1' and '第 12 章型式试验' in gap['locators']
                for gap in library.data['not_covered'])
+
+
+def manufacturing_request(locator, quantity, *, area=2200, **conditions):
+    query = request(area)
+    return {**query, 'locator': locator, 'quantity': quantity,
+            'conditions': {**query['conditions'], **conditions}}
+
+
+def test_official_metal_sheath_cells_and_manufacturing_limits_are_exact_and_scoped():
+    library = library_module.BasisLibrary()
+    for area, lead, aluminium in zip(AREA, LEAD, ALUMINIUM):
+        for material, expected in [('lead', lead), ('corrugated_aluminium', aluminium)]:
+            answer = library.query(manufacturing_request('表 4', 'metal_sheath_nominal', area=area,
+                                                        sheath_material=material))
+            record = answer['records'][0]
+            assert answer['status'] == 'resolved' and answer['approval'] == 'not_granted'
+            assert record['value'] == expected and record['source_sha256'] == COVERINGS_SHA256
+            assert (record['printed_page'], record['pdf_page']) == (8, 12)
+    cells = [
+        ('6.3.2', 'conductor_screen_nominal_reference', 2.0, 'approximate', {'screen_construction': 'tape_plus_extruded'}),
+        ('6.3.2', 'conductor_screen_min', .8, 'minimum', {'measurement_role': 'extruded_conductor_screen'}),
+        ('6.3.3', 'insulation_screen_nominal_reference', 1.0, 'approximate', {}),
+        ('6.3.3', 'insulation_screen_min', .5, 'minimum', {'measurement_role': 'extruded_insulation_screen'}),
+        ('6.5.2', 'screen_wire_nominal_min', 1.0, 'minimum', {'screen_kind': 'copper_wire'}),
+        ('6.5.2', 'screen_wire_gap_max', 4.0, 'maximum', {'screen_kind': 'copper_wire'}),
+        ('6.6.1', 'aluminium_sheath_purity_min', 99.50, 'minimum', {'sheath_material': 'corrugated_aluminium'}),
+        ('6.6.1', 'aluminium_strip_elongation_min', 16.0, 'minimum', {'sheath_material': 'corrugated_aluminium'}),
+        ('6.7.2', 'oversheath_nominal', 5.0, 'nominal', {'sheath_compound': 'ST7'}),
+        ('6.7.2', 'oversheath_mean_min', 5.0, 'minimum', {'sheath_compound': 'ST2', 'metal_sheath_form': 'smooth', 'nominal_thickness_m': .005}),
+        ('6.7.2', 'nonmetal_sheath_min', 4.2, 'minimum', {'sheath_compound': 'ST7'}),
+        ('6.7.3', 'oversheath_semiconductor_ratio_max', .20, 'maximum', {'sheath_compound': 'ST7', 'screen_construction': 'bonded_extruded_oversheath_layer'}),
+    ]
+    for locator, quantity, expected, criterion, conditions in cells:
+        answer = library.query(manufacturing_request(locator, quantity, **conditions))
+        assert answer['status'] == 'resolved', answer
+        record = answer['records'][0]
+        assert record['value'] == expected and record['criterion'] == criterion
+        evidence = library.verification['tables'][record['verification']['evidence_id']]
+        assert {method['id'] for method in evidence['methods']} == {'official-preview-visual', 'tesseract-page-ocr'}
+        assert evidence['comparison']['differences'] == []
+        assert library.query(manufacturing_request(locator, quantity, area=1100, **conditions))['status'] == 'not_covered'
+    assert library.query(manufacturing_request('6.7.2', 'oversheath_mean_min', sheath_compound='ST2',
+        metal_sheath_form='corrugated', nominal_thickness_m=.005))['status'] == 'not_covered'
+    assert library.query(manufacturing_request('6.7.2', 'oversheath_mean_min', sheath_compound='ST2',
+        metal_sheath_form='smooth', nominal_thickness_m=.006))['status'] == 'not_covered'
+    assert library.query(manufacturing_request('6.7.2', 'nonmetal_sheath_min', sheath_compound='ST1'))['status'] == 'not_covered'
 
 
 @pytest.mark.parametrize('change', [
@@ -89,6 +139,20 @@ def design():
     conductor.update(form='segmental', conductor_class=None, diameter=.06,
                      r20=8.3e-6, r20_basis='design', wire_count=265)
     cable['cores'][0]['layers'][1]['thickness'] = .024
+    cable['cores'][0]['layers'][0]['thickness'] = .002
+    cable['common_layers'].insert(1, {'role': 'metallic_sheath', 'material': 'material/al',
+                                    'form': 'corrugated', 'thickness': .0028})
+    cable['common_layers'][-1].update(thickness=.005, minimum_thickness=.0042)
+    document['materials'].append({'id': 'material/al', 'label': '测试用铝套声明',
+                                  'category': 'metal', 'standard_kind': 'aluminium'})
+    for path, value, unit in [
+        ('/cores/core~1c0/layers/conductor_screen/engineering/extruded_minimum_thickness', .0008, 'm'),
+        ('/common_layers/oversheath/engineering/sheath_compound', 'ST7', '1'),
+    ]:
+        document['provenance']['/cable_types/cable_type~1example' + path] = {
+            'kind': 'user', 'reviewed': False,
+            'reference': json.dumps({'schema': 'cablesim.manufacturing-input/1', 'unit': unit,
+                'value': value, 'reference': '明确的单元测试输入，非厂家数据或真实测量'})}
     document.update(circuits=[], sections=[], load_cases=[])
     structure_context(document)
     document['provenance']['/execution_standards'] = {
@@ -115,16 +179,16 @@ def test_real_requirement_basis_and_executor_use_220kv_tables_without_pass_claim
         assert answer.status_code == 200, answer.text
         parameters = {'cable_type_id': document['cable_types'][0]['id'], **answer.json()['parameters']}
         references = parameters['basis_references']
-        assert len(references) == 3
+        assert len(references) == 8
         assert {ref['record']['standard'] for ref in references.values()} == {'GB/T 18890.2'}
-        assert {ref['record']['table'] for ref in references.values()} == {'表 2', '表 3'}
-        assert {ref['plugin_version'] for ref in references.values()} == {'0.8.0'}
+        assert {ref['record']['table'] for ref in references.values()} == {'表 2', '表 3', '表 4', ''}
+        assert {ref['plugin_version'] for ref in references.values()} == {'0.9.0'}
 
         def execute(document, parameters):
             result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
                 {'case_id': 'extra-high', 'input': document, 'parameters': parameters}])
             assert result.cases[0].status == 'succeeded', result.cases[0].error
-            assert result.plugin_version == result.method_version == '1.7.0'
+            assert result.plugin_version == result.method_version == '1.8.0'
             return result.cases[0].artifacts['x-cablesim.standard-check']
 
         checked = execute(document, parameters)
@@ -132,6 +196,13 @@ def test_real_requirement_basis_and_executor_use_220kv_tables_without_pass_claim
             row = item(checked, key)
             assert row['limit'] == expected and row['verdict'] == 'passed'
             assert row['citation'].endswith('第 5 页（官方预览 第 9 页）')
+        for key, expected in [('conductor-screen-minimum', .8), ('insulation-screen-minimum', .5),
+                              ('sheath-nominal', 2.8), ('oversheath-nominal', 5), ('oversheath-minimum', 4.2)]:
+            row = item(checked, key)
+            assert row['limit'] == expected and row['verdict'] == 'passed'
+        excluded = next(row for row in checked['not_applicable'] if row['id'].endswith(':oversheath-mean'))
+        assert '无平均厚度要求' in excluded['reason']
+        assert item(checked, 'conductor-screen-minimum')['engineering_sources']
         for key in ('insulation-minimum', 'ehv-type-tests', 'ehv-prequalification-tests'):
             row = item(checked, key)
             assert row['verdict'] == 'uncovered' and row['limit'] is None

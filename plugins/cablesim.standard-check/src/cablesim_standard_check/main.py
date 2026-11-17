@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.7.0'
+VERSION = '1.8.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -960,7 +960,7 @@ class _Check:
             'label': cable['label'],
             'method_version': VERSION,
             'input_sha256': sha256(json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()).hexdigest(),
-            'sources': [SOURCES[k] for k in ((family, 'ehv-scope', 'ehv-coverings', 'ehv-tests') if family == 'ehv' else (family, 'conductor'))],
+            'sources': [SOURCES[k] for k in ((family, 'ehv-scope', 'ehv-screens', 'ehv-metal', 'ehv-coverings', 'ehv-tests') if family == 'ehv' else (family, 'conductor'))],
             'rows': rows,
             'not_applicable': self.not_applicable,
             'fictitious_diameter_trace': trace,
@@ -982,8 +982,10 @@ def check(document, parameters):
     if report.family == 'ehv':
         from cablesim_standard_check.extra_high import populate
         from cablesim_standard_check.basis import apply, digest
+        from cablesim_standard_check.manufacturing import finish
         populate(report)
         apply(report, parameters)
+        finish(report)
         return {**report.result(), 'basis_auxiliary_queries': {},
                 'basis_cable_sha256': digest(report.cable)}
     cable, root = report.cable, report.root
