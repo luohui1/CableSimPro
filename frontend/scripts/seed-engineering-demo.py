@@ -346,6 +346,7 @@ def release_identity():
     from frontend.scripts.engineering_resources import identity as resource_identity
     from backend.foundation.reproduction_library import bundled_evidence
     from backend.kernel.hpc_evidence import evidence_availability
+    from backend.kernel.public_catalogues import sample_manifest
     registry = Registry()
     for plugin in registry.plugins.values():
         plugin.verify()
@@ -353,7 +354,10 @@ def release_identity():
     hv,hv_digest = bundled_hv()
     evidence = evidence_availability(verify=True)
     chengnan = evidence_availability(verify=True,scope='chengnan')
-    return {'seed_revision':15, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':16, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+            'public_catalogues':{item['id']:{'workbook_sha256':item['sha256'], 'source_sha256':item['source']['sha256'],
+                                           'declarations_sha256':fingerprint(item['declarations'])}
+                                 for item in sample_manifest()},
             'engineering_evidence':evidence['snapshot_id'],
             'engineering_evidence_imported':evidence['available'],
             'chengnan_engineering_evidence_imported':chengnan['available'],
@@ -660,6 +664,19 @@ def build_release_seed(staged, database, identity):
                        {'kind':'single'},parameters=deepcopy(hv_data['parameters']),
                        input_sources={'/parameters':{'kind':'user','reviewed':False,
                            'reference':hv_data['scope']+'；'+hv_data['sources']['buffer_reference']['reference']+'；'+hv_data['sources']['geometry_reference']['reference']}})
+            hv_soil = next(i for i, material in enumerate(hv_workspace['domain']['materials'])
+                           if material['id'] == hv_workspace['domain']['sections'][0]['medium']['material'])
+            hv_circuit = hv_workspace['domain']['circuits'][0]['id']
+            hv_field = f'/input/materials/{hv_soil}/thermal_resistivity'
+            save_study(hv_workspace,'城南线路 · 110 kV 土壤热阻率扫描','sweep',
+                       {'kind':'sweep','rating_basis':'simultaneous','target_entity':hv_circuit,
+                        'target_condition':'rating-simultaneous',
+                        'samples':[{'label':f'{value:g} K*m/W','changes':{hv_field:value}}
+                                   for value in (.6,.8,1.,1.2,1.5,2.)]},
+                       parameters=deepcopy(hv_data['parameters']),
+                       input_sources={'/driver':{'kind':'user','reviewed':False,
+                           'reference':'研究院参数扫描示例：土壤热阻率 0.6、0.8、1.0、1.2、1.5、2.0 K·m/W 是显式研究取值，非现场测量；其余参数保持城南线路公开参考设计。'},
+                           '/parameters':{'kind':'user','reviewed':False,'reference':hv_data['scope']}})
             if native_evidence is None:
                 native_evidence = release_temperature_input(api,workspace,parameters)
                 from backend.kernel.hpc_evidence import evidence_availability
@@ -667,8 +684,23 @@ def build_release_seed(staged, database, identity):
                 print(result['engineering_evidence_availability']['message'],flush=True)
             result['studies'].append(native_evidence)
             if chengnan_evidence is None:
+                from backend.kernel.hpc_evidence import evidence_availability
+                result['chengnan_engineering_evidence_availability'] = evidence_availability(scope='chengnan')
                 chengnan_evidence=release_chengnan_input(api,hv_workspace)
             if chengnan_evidence:result['studies'].append(chengnan_evidence)
+            from frontend.scripts.catalogue_seed import import_public_catalogues, calculate_factory_series
+            result['public_catalogues'] = import_public_catalogues(client)
+            result['factory_series_calculations'] = calculate_factory_series(client, result['public_catalogues'])
+            result['examples'] = {
+                'factory': {'title':'电缆厂 · 8.7/15 kV 完整系列',
+                            'series_ids':[item['series_id'] for item in result['public_catalogues'] if item['sample_id']=='people-mv'],
+                            'calculated_series_id':result['factory_series_calculations']['series_id'],
+                            'workspace':workspace['id'], 'scope':'原厂公开表完整规格；工程补充逐项声明，导入版本保持草稿。'},
+                'institute': {'title':'研究院 · 110 kV 参数研究', 'workspace':hv_workspace['id'],
+                              'studies':[item['study'] for item in result['studies'] if item.get('workspace')==hv_workspace['id']],
+                              'fem_available':bool(identity['chengnan_engineering_evidence_imported']),
+                              'scope':'IEC 直埋校核及土壤热阻率扫描；有限元只接收封签的已有工件。'},
+            }
             # Later seed operations must not silently age an earlier result.
             for item in result['studies']:
                 if item.get('run') and not item.get('saved_evidence'):

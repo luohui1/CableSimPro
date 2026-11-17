@@ -147,7 +147,17 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     from backend.kernel.hpc_evidence import evidence_index
     has_chengnan=bool(evidence_index()[0].get('supplementary_receipts'))
     imported_chengnan=receipt['identity']['chengnan_engineering_evidence_imported']
-    assert receipt['complete'] and len(receipt['studies']) == 4+int(has_chengnan) and len(receipt['types']) == 3
+    assert receipt['complete'] and len(receipt['studies']) == 5+int(has_chengnan) and len(receipt['types']) == 3
+    public_specs = sum(len(item['specs']) for item in receipt['public_catalogues'])
+    assert public_specs == 59 and len(receipt['public_catalogues']) == 5
+    factory = receipt['factory_series_calculations']
+    assert factory['specifications'] == 11
+    factory_runs = [item for operation in ('check', 'calculate') for item in factory[operation]['items']]
+    assert len(factory_runs) == 22 and all(item['status'] == 'succeeded' and item['run_id'] for item in factory_runs)
+    assert receipt['examples']['factory']['series_ids']
+    assert receipt['examples']['institute']['fem_available'] is imported_chengnan
+    hv_sweep = next(row for row in receipt['studies'] if row['title'] == '城南线路 · 110 kV 土壤热阻率扫描')
+    assert hv_sweep['run'] and hv_sweep['status'] == 'succeeded'
     assert receipt['identity'] == seed.release_identity()
     assert receipt['identity']['engineering_resources']
     assert len(receipt['engineering_resources']) == 28
@@ -160,7 +170,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         assert not without['engineering_evidence_imported']
         assert without['engineering_evidence']==receipt['identity']['engineering_evidence']
         assert without!=receipt['identity']
-    assert sum(bool(row.get('run')) for row in receipt['studies']) == (4 if with_evidence else 3)+int(imported_chengnan)
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == (5 if with_evidence else 4)+int(imported_chengnan)
     type_runs=[module for item in receipt['types'] for module in item['modules'] if module.get('run')]
     assert len(type_runs)>=6
     assert all(item['status'] in ('succeeded','partial') for item in type_runs)
@@ -186,7 +196,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
-        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (6 if with_evidence else 5)
+        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (6 if with_evidence else 5)+public_specs
         teaching_state = json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?',(teaching['workspace'],)).fetchone()[0])
         assert len(teaching_state['domain']['measurements']) == 12
         assert all(json.loads(item['source']['reference'])['label']=='教学示例实测' for item in teaching_state['domain']['measurements'])
@@ -194,7 +204,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
                   if key.startswith('/factory_measurements/') and key.endswith('/minimum_overlap')]
         assert len(overlaps)==3 and all(json.loads(item['reference'])['label']=='教学示例实测' for item in overlaps)
         assert connection.execute('SELECT COUNT(*) FROM engineering_type_releases WHERE workspace=?',(teaching['workspace'],)).fetchone()[0] == 0
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 4+len(type_runs)+len(factory_runs)+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
         if has_chengnan:
             single=next(s for s in receipt['studies'] if '波纹品字形有限元' in s['title'])
             if imported_chengnan:
@@ -234,8 +244,11 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='rule' AND status='published'").fetchone()[0] == 7
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
         public=[c for c in candidates if c.get('specification')]
-        assert len(public)==10 and len(candidates)==12
-        assert all(c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700 for c in public)
+        assert len(public)==23 and len(candidates)==12+public_specs
+        huayuan=[c for c in public if c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700]
+        bahra=[c for c in public if c['specification']['designation']=='CU/XLPE/LC/PVC']
+        assert len(huayuan)==10 and len(bahra)==13
+        assert all(c['specification']['missing'] for c in bahra)
         assert not any(c['confirmed'] for c in candidates)
         hv_run=json.loads(connection.execute('SELECT output FROM study_runs WHERE id=?',(hv['run'],)).fetchone()[0])
         quantities=hv_run['cases'][0]['results']
@@ -268,7 +281,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert development.read_bytes() == b'development database sentinel'
 
 
-@pytest.mark.parametrize('change', ['plugins', 'models', 'engineering_resources'])
+@pytest.mark.parametrize('change', ['plugins', 'models', 'engineering_resources', 'public_catalogues'])
 def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, monkeypatch, change):
     spec=importlib.util.spec_from_file_location('upgraded_seed',Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py')
     seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)
