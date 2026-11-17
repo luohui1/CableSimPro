@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
 import { displayName } from '@/lib/display-names';
+import { countInputChanges } from '@/lib/input-changes';
 import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
 import { useStudy } from "@/components/study-provider";
@@ -276,7 +277,14 @@ export function StudyWorkspace() {
   const methodPin = optionalRecord(moduleConfiguration(shownDefinition, module)?.method || shownDefinition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
   const capabilityEntry = (Array.isArray(pluginEntry?.capabilities) ? pluginEntry!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(methodPin.capability));
-  const edits = context.dirty ? Math.max(1, Object.keys(context.domainDraft?.fields || {}).length + Object.keys(context.draft?.parameterFields || {}).length) : 0;
+  const domainEdits = context.domainDraft ? countInputChanges(context.domainDraft.base, context.domainDraft.document, Object.keys(context.domainDraft.fields)) : 0;
+  const draftDefinition = context.draft?.definition || study.definition;
+  const parameterPaths = Object.values(context.draft?.parameterFields || {}).map(field =>
+    (draftDefinition.modules?.[field.module] ? `/modules/${field.module}` : '')
+    + (field.crosscheck === undefined ? '/parameters' : `/crosschecks/${field.crosscheck}/parameters`) + field.path);
+  const studyEdits = context.draft ? countInputChanges(context.draft.base.definition, draftDefinition, parameterPaths)
+    + (context.draft.title !== context.draft.base.title ? 1 : 0) : 0;
+  const edits = context.dirty ? Math.max(1, domainEdits + studyEdits + Object.keys(context.moduleInputs).length) : 0;
   // 浏览子模块不会改变研究状态；状态来自研究保存的最近运行摘要。
   const overallRun = optionalRecord(study.raw.latest_run);
   const methodPresentationNotice = useMethodPresentationNotice(study, search.run ? run : overallRun.id ? overallRun : undefined);

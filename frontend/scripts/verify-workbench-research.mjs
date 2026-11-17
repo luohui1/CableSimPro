@@ -43,6 +43,9 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
   const url = new URL(page.url());
   const sid = url.pathname.split('/')[2], wid = url.searchParams.get('workspace');
   expect(wid).toBeTruthy();
+  if (report.phase === 'after') {
+    expect((await api(`/api/workspaces/${wid}`)).domain.name).toBe('直埋线路 · ' + tag);
+  }
   const prefix = `/api/workspaces/${wid}/studies/${sid}`;
   await step('02-installation-load-and-environment', async () => {
     await page.getByRole('button', { name: '更多绘图工具', exact: true }).click();
@@ -55,7 +58,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     if (await page.locator('.drawing-secondary-tools').isVisible()) await page.keyboard.press('Escape');
     await fill('介质热阻率', '0.8');
     await fill('回路 1 · 电流', '500');
-    check('草稿显示改了几项', /改了\s*\d+\s*项|\d+\s*项修改/.test(await command().innerText()));
+    check('草稿显示改了几项', /改了\s*\d+\s*项|\d+\s*(?:项修改|处未保存)/.test(await command().innerText()));
     await command().getByRole('button', { name: '保存修改', exact: true }).click();
     await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
   });
@@ -138,6 +141,15 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await page.keyboard.press('Control+s');
     await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
     await expect(page.locator('.study-history-line')).toBeVisible();
+    const oldRun = await api(prefix + '/runs/' + first.id);
+    check('输入保存后旧运行保持历史且不能当作当前结果交付', oldRun.freshness === 'historical', oldRun.freshness);
+    const reportButton = command().getByRole('button', { name: '生成计算书', exact: true });
+    if (await reportButton.isVisible()) await expect(reportButton).toBeDisabled();
+    else {
+      await command().getByRole('button', { name: '更多操作', exact: true }).click();
+      await expect(page.getByRole('menuitem', { name: '生成计算书', exact: true })).toBeDisabled();
+      await page.keyboard.press('Escape');
+    }
     await capture('06-previous-result-is-historical');
     second = await run(first.id);
     const preserved = await api(prefix + '/runs/' + first.id);
@@ -190,5 +202,16 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     check('计算书引用本次保存运行及准确输入输出摘要', !!source
       && source.input_digest === second.input_digest && source.output_digest === second.output_digest,
       { run: second.id, delivery: deliveryId, source });
+  });
+  await independent('09-create-type-from-research', async () => {
+    await page.goto(base + '/?theme=light');
+    await page.getByRole('button', { name: '新建研究', exact: true }).first().click();
+    const create = page.getByRole('dialog', {name:'新建研究',exact:true});
+    const entry = create.getByRole('button', {name:'新建型号',exact:true});
+    if (!check('研究中的新建型号入口可操作', await entry.count() > 0)) return;
+    await entry.click();
+    await page.waitForURL(/\/types\?/);
+    await expect(page.getByRole('dialog')).toContainText('新建型号');
+    await expect(page.getByRole('textbox', {name:'型号名称',exact:true})).toBeVisible();
   });
 });

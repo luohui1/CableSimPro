@@ -101,6 +101,13 @@ export function projectStudiesQuery(wid: string) {
   });
 }
 
+/** Saved bytes are immutable; their currentness against edited inputs is not. */
+export async function invalidateSavedStudyResults(client: QueryClient, wid: string | undefined) {
+  if (!wid) return;
+  await Promise.all(['saved-run', 'saved-field-view', 'fem-conclusion', 'study-compare-runs'].map(key =>
+    client.invalidateQueries({queryKey:[key,wid],refetchType:'none'})));
+}
+
 export function studyRunsQuery(client: QueryClient, wid: string | undefined, sid: string, run: string, module = '', tab = '') {
   const evidence = ['detail', 'validation', 'sources', 'inputs', 'parameters'].includes(tab) || module === 'method-compare';
   return queryOptions({
