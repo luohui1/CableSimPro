@@ -10,7 +10,7 @@ import { displayName, displayText } from '../src/lib/display-names.ts';
 await walkthrough('simulation', async ({
   page, expect, base, api, choose, capture, step, check, out, size, tag, report,
 }) => {
-  const evidence = { source: {}, comparison: {}, parameters: {}, preflight: {}, nativeRuns: [] };
+  const evidence = { source: {}, comparison: {}, parameters: {}, preflight: {}, focus: [], nativeRuns: [] };
   const onRequest = request => {
     if (request.method() === 'POST' && /\/runs$/.test(new URL(request.url()).pathname)) {
       evidence.nativeRuns.push({ url: request.url(), body: request.postDataJSON() });
@@ -63,6 +63,90 @@ await walkthrough('simulation', async ({
     const action=dialog.getByRole('button',{name:'建立研究',exact:true});
     await action.scrollIntoViewIfNeeded();
     await expect(action).toBeInViewport({ratio:1});
+  }
+  async function expectInvalidFocus(control, pointer) {
+    try {
+      await expect(control).toBeEnabled();
+      await expect(control).toHaveAttribute('aria-invalid','true');
+      await expect(control).toBeFocused();
+    } finally {
+      // Inspect only: never repair focus from the test or hide its original failure.
+      const state=await control.evaluate(target=>{
+        const describe=node=>node instanceof Element ? {
+          tag:node.tagName,id:node.id,role:node.getAttribute('role'),
+          path:node.closest('[data-field-path]')?.getAttribute('data-field-path'),
+          invalid:node.getAttribute('aria-invalid'),disabled:node.matches(':disabled'),
+        } : null;
+        return {target:describe(target),active:describe(document.activeElement),focused:target===document.activeElement};
+      }).catch(error=>({inspectionError:error.message}));
+      evidence.focus.push({pointer,...state});
+    }
+  }
+  async function inspectMethodVersion(method) {
+    const control=form.getByRole('combobox',{name:'方法版本',exact:true});
+    await control.scrollIntoViewIfNeeded();
+    const cards=await api('/api/methods?view=summary');
+    const card=cards.find(row=>row.method.plugin_id===method.plugin_id
+      && row.method.version===method.version && row.method.release_digest===method.release_digest
+      && row.capabilities.some(capability=>capability.id===method.capability));
+    expect(card,'方法名称须来自保存 pin 对应的真实方法清单').toBeTruthy();
+    const capability=card.capabilities.find(row=>row.id===method.capability);
+    const selectedText=(await control.locator(':scope > span').first().innerText()).trim();
+    expect(selectedText).toBe(displayText(`${card.name} · ${capability.title} · ${method.version}`));
+    const layout=await control.evaluate(button=>{
+      const rect=element=>{
+        const box=element.getBoundingClientRect();
+        return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:box.width,height:box.height};
+      };
+      const value=button.querySelector(':scope > span:first-child'),arrow=button.querySelector('[data-select-arrow]');
+      const range=document.createRange();range.selectNodeContents(value);
+      const label=button.labels[0],field=button.closest('.select-field');
+      const ancestors=[];
+      for(let node=field;node;node=node.parentElement){
+        if(node.clientWidth && /auto|scroll/.test(getComputedStyle(node).overflowX))
+          ancestors.push({selector:node.className || node.tagName,width:node.clientWidth,scrollWidth:node.scrollWidth});
+      }
+      return {button:rect(button),field:rect(field),label:rect(label),arrow:rect(arrow),
+        text:[...range.getClientRects()].map(box=>({left:box.left,right:box.right,top:box.top,bottom:box.bottom})),
+        ancestors,viewport:innerWidth};
+    });
+    evidence.parameters.methodVersion={method,selectedText,layout};
+    await check('方法版本独占整行且完整文字、箭头不越界，无横向滚动',
+      Math.abs(layout.button.height-36)<1 && layout.label.bottom<=layout.button.top
+      && Math.abs(layout.button.width-layout.field.width)<1
+      && layout.button.left>=0 && layout.button.right<=layout.viewport
+      && layout.arrow.left>=layout.button.left && layout.arrow.right<=layout.button.right
+      && layout.arrow.top>=layout.button.top && layout.arrow.bottom<=layout.button.bottom
+      && layout.text.every(box=>box.left>=layout.button.left && box.right<=layout.arrow.left
+        && box.top>=layout.button.top && box.bottom<=layout.button.bottom)
+      && layout.ancestors.every(node=>node.scrollWidth<=node.width+1),
+      evidence.parameters.methodVersion);
+    await capture('03-method-version-complete');
+    await control.focus();await page.keyboard.press('Enter');
+    const listbox=page.getByRole('listbox');await expect(listbox).toBeVisible();
+    const options=listbox.getByRole('option');
+    expect(await options.count(),'已保存方法必须有可核对的真实版本选项').toBeGreaterThan(0);
+    const labels=[];
+    for(const option of await options.all()){
+      await option.scrollIntoViewIfNeeded();
+      const measured=await option.evaluate(node=>{
+        const value=node.querySelector(':scope > span:first-child'),range=document.createRange();
+        range.selectNodeContents(value);
+        const box=node.getBoundingClientRect(),list=node.closest('[role="listbox"]');
+        return {text:value.textContent.trim(),left:box.left,right:box.right,top:box.top,bottom:box.bottom,
+          textRects:[...range.getClientRects()].map(rect=>({left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom})),
+          width:list.clientWidth,scrollWidth:list.scrollWidth,viewport:innerWidth};
+      });
+      labels.push(measured.text);
+      await check('方法版本选项完整可读且不产生横向滚动',measured.left>=0 && measured.right<=measured.viewport
+        && measured.scrollWidth<=measured.width+1 && measured.textRects.every(rect=>rect.left>=measured.left
+          && rect.right<=measured.right && rect.top>=measured.top && rect.bottom<=measured.bottom),measured);
+    }
+    expect(labels).toContain(selectedText);
+    evidence.parameters.methodVersion.options=labels;
+    await capture('03-method-version-options');
+    await page.keyboard.press('Escape');await expect(control).toBeFocused();
+    await expect(control.locator(':scope > span').first()).toHaveText(selectedText);
   }
 
   try {
@@ -142,7 +226,7 @@ await walkthrough('simulation', async ({
         // An empty required field must be caught locally and receive focus.
         await dialog.getByRole('button',{name:'建立研究',exact:true}).click();
         await expect(dialog.locator('[role="alert"]:visible').first()).toBeVisible();
-        await expect((await editor(dialog,'/section_id')).getByRole('combobox')).toBeFocused();
+        await expectInvalidFocus((await editor(dialog,'/section_id')).getByRole('combobox'),'/section_id');
         const incomplete=await dialog.locator('[aria-invalid=true]').count();
         await check('创建缺项以真实字段标记并可修复',incomplete>0,{invalidFields:incomplete});
         await capture('02-comparison-missing-required-fields');
@@ -214,6 +298,7 @@ await walkthrough('simulation', async ({
       await expect(form).toBeVisible();
       await expect(mesh).toBeVisible();
       await expect(mesh).toBeEditable();
+      await inspectMethodVersion(configuration(thermal).method);
       evidence.parameters.originalMm = await mesh.inputValue();
       evidence.parameters.fields = await form.locator('[data-field-path]').evaluateAll(nodes =>
         [...new Set(nodes.map(node => node.dataset.fieldPath))],
@@ -253,8 +338,7 @@ await walkthrough('simulation', async ({
       const alerts = await page.getByRole('alert').allTextContents();
       evidence.parameters.missing = { ...feedback, alerts };
       if(report.phase==='after'){
-        await expect(mesh).toHaveAttribute('aria-invalid','true');
-        await expect(mesh).toBeFocused();
+        await expectInvalidFocus(mesh,'/mesh/size_m');
         check('保存缺项聚焦对应必填网格且读屏可识别错误',true,{path:'/mesh/size_m',invalid:await mesh.getAttribute('aria-invalid')});
       }
       await check('缺少网格参数时保留输入并说明原因', feedback.value === ''

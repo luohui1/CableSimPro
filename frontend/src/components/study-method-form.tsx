@@ -58,13 +58,15 @@ export function StudyMethodForm({
   const context = useStudy();
   const form=useRef<HTMLDivElement>(null);
   useEffect(()=>{
-    if(!context.saveError || historical)return;
+    if(!context.saveError || historical || context.saving)return;
     const invalid=Object.values(context.draft?.parameterFields || {}).find(field=>{
       if(field.module!==module)return false;
       try{committedParameter(field);return false;}catch{return true;}
     });
-    if(invalid)requestAnimationFrame(()=>focusParameterField(form.current,invalid.path));
-  },[context.saveError,historical,module]);
+    if(!invalid)return;
+    const frame=requestAnimationFrame(()=>focusParameterField(form.current,invalid.path));
+    return ()=>cancelAnimationFrame(frame);
+  },[context.saveError,context.saving,historical,module]);
   const [initialMethod,setInitialMethod]=useState('');
   const definition =
     snapshot || context.draft?.definition || context.study.definition;
@@ -166,7 +168,7 @@ export function StudyMethodForm({
             method.release_digest,
           ].join(":"),
           label:
-            text(entry.name) + " · " + method.version,
+            text(entry.name) + " · " + text(cap.title) + " · " + method.version,
           method,
         },
       ];
