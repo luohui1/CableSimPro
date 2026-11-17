@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.8.0",
+      "method_version": "1.8.1",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,7 +227,7 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.8.0",
+      "method_version": "1.8.1",
       "analysis": "geometry_proposal",
       "solver": "local",
       "input_schema": "cablesim.cable-design-request/2",
@@ -759,7 +759,7 @@
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "a3d67c9b68cb712d8aa3d61c2f4289b5535f9ccf761436f2afc92c902a97bb8b",
+      "sha256": "304f865c520b82de1ed072861167da707a71fff565ba024de737a6b8123feb6f",
       "size_bytes": 13068
     },
     {
@@ -769,8 +769,8 @@
     },
     {
       "path": "src/cablesim_standard_check/coverings.py",
-      "sha256": "1377ef416bd772b62d4c3e3917196d5e359bba0f645422d031c722c053963bd2",
-      "size_bytes": 13785
+      "sha256": "4c5270dc2c37df0e8295b0d2fefac4e99009cf0d412e0979499a0a7d50ecbe63",
+      "size_bytes": 14690
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
@@ -784,13 +784,13 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "fa52696bf0311320e8a2bc60b3fbc2bfcb4ff5a7f64e51ff7fe34f24e1c0d175",
-      "size_bytes": 62419
+      "sha256": "2cd6d8057ac08fb9138a0580201f96524ce9d6426ed92c09dbfd1449bd074928",
+      "size_bytes": 65082
     },
     {
       "path": "src/cablesim_standard_check/manufacturing.py",
-      "sha256": "4fbb8c6db7f24d81fe3f4db7e3283db000eaf1baccb947c5ed48dd7b93c11783",
-      "size_bytes": 15503
+      "sha256": "825a02ce883b19a953d96a82e07aa8cd503f1ab1ba7360e48dd0fcd3d718aa88",
+      "size_bytes": 15742
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",

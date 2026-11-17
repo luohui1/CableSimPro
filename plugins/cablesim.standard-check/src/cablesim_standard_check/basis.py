@@ -57,9 +57,9 @@ def queries(checker):
                 missing('/materials/'+escape(layer['material'])+'/standard_kind','金属材料标准类别')
             continue
         elif key=='oversheath-minimum' and not hv:
-            query.update(locator='17.5.3' if family!='mv1' else '15.5.3',quantity='nonmetal_sheath_min')
+            query.update(locator='17.5.3' if family!='mv1' else '16.5.3',quantity='nonmetal_sheath_min')
         elif key=='insulation-minimum' and not hv:
-            query.update(locator='17.5.2' if family!='mv1' else '15.5.2',quantity='insulation_min')
+            query.update(locator='17.5.2' if family!='mv1' else '16.5.2',quantity='insulation_min')
         elif key=='insulation-uniformity' and not hv and family!='mv1':
             query.update(locator='17.5.2',quantity='insulation_eccentricity_max')
         elif key in ('screen-tape-nominal','screen-tape-minimum','screen-overlap','screen-overlap-minimum') and not hv:

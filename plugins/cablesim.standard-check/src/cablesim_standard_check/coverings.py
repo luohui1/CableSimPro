@@ -13,6 +13,10 @@ class NeedQueries(Exception):
         self.queries = queries
 
 
+class OtherCoveringConstruction(ValueError):
+    """An explicitly declared construction belongs to a different existing rule."""
+
+
 def calculate(values, family, refs):
     part = {'mv1':'1','mv2':'2','mv3':'3'}[family]
     standard = 'GB/T 12706.'+part
@@ -160,13 +164,20 @@ def from_cable(cable, materials):
     if ('conductor_screen' in layers) != ('insulation_screen' in layers):
         raise ValueError('缺字段：请补齐导体与绝缘半导电屏蔽两层，不能推测 screened 条件。')
     if any(l['role'] not in ('bedding','armour','oversheath') for l in cable['common_layers']):
+        if all(l['role'] in ('bedding','armour','oversheath','filler','binder','separator','metallic_sheath')
+               for l in cable['common_layers']):
+            raise OtherCoveringConstruction('完整挤包护层分支不覆盖已声明的填充、包带、隔离套或金属套；仅可保留其自身已核验且条件齐备的构造规则。')
         raise ValueError('附加填充外包、包带或隔离套分支尚未覆盖；不忽略附加厚度。')
+    if common.get('bedding',{}).get('form') == 'tape':
+        raise OtherCoveringConstruction('完整挤包护层分支不覆盖绕包内衬；须按已核验的绕包、填充和附加垫层规则核对。')
     if common.get('bedding',{}).get('form') != 'smooth':
         raise ValueError('完整护层计算仅覆盖挤包内衬；绕包及附加垫层须按对应条款设计。')
     result={'construction':{1:'single_core',3:'three_core',4:'four_core'}.get(len(cores),'unsupported'),
         'area_m2':first['conductor']['nominal_area'],'voltage':str(int(cable['rating']['u0']))+'/'+str(int(cable['rating']['u'])),
         'screened':'yes' if 'conductor_screen' in layers else 'no','armour':'steel_tape' if 'armour' in common else 'none',
         'insulation_thickness_m':layers['insulation']['thickness']}
+    if common.get('armour',{}).get('form') == 'wires':
+        raise OtherCoveringConstruction('完整双钢带护层分支不覆盖钢丝铠装；须按其已核验的丝径与反向扎带规则核对。')
     if 'armour' in common and (common['armour'].get('form')!='tape' or common['armour'].get('tape_count')!=2):
         raise ValueError('当前铠装不属于已接入的双带构造，不能套用其假设增量。')
     result['bedding_thickness_m']=common['bedding']['thickness']

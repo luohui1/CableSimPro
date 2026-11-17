@@ -102,7 +102,10 @@ def execute(checker, row, record):
         nominal=item.get('thickness')
         if record['quantity']['unit']!='mm' or value.get('kind')!='affine' or value.get('x')!='nominal_lining_thickness':
             raise ValueError('挤包内衬依据的公式或单位不兼容。')
-        row['formula_inputs']={'t_n_mm':nominal*1000 if nominal is not None else None}
+        # The diameter chain may already have a higher required nominal value.
+        # Keep that input; do not reduce the minimum by a thin design declaration.
+        inputs=row.get('formula_inputs') or {}
+        row['formula_inputs']={**inputs,'t_n_mm':inputs.get('t_n_mm',nominal*1000 if nominal is not None else None)}
         row['formula']=f"{value['a']} × 内衬标称厚度 + ({value['b']}) mm"
         row['reason']='缺字段：内衬实测最薄点；按 17.5 测量并记录试样，不使用外护套或设计标称值代替。'
         return False  # Generic affine comparison below uses this explicit unit conversion.
