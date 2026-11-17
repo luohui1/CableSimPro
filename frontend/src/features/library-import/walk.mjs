@@ -10,6 +10,7 @@ import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 import { walkShortBasis } from './short-basis-walk.mjs';
 import { walkManufacturer } from './manufacturer-walk.mjs';
 import { walkResources } from './resource-walk.mjs';
+import { exportResourceExchange, safeRequestHeaders, saveRawResponse } from './resource-exchange-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -110,7 +111,9 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await page.getByRole('option', { name: option, exact: true }).click();
       return;
     }
+    await expect(field).toBeEnabled();
     await field.focus();
+    await expect(field).toBeFocused();
     await page.keyboard.press('Enter');
     const choices = page.getByRole('option');
     await expect(page.getByRole('option', { name: option, exact: true })).toBeVisible();
@@ -128,7 +131,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(field).toBeFocused();
   }
   async function recordResponse(name, response, body) {
-    await fs.writeFile(path.join(out, `${viewport.width}-${name}.json`), JSON.stringify({ request: response.request().postDataJSON(), status: response.status(), response: body }, null, 2));
+    const raw = await saveRawResponse(response, path.join(out, `${viewport.width}-${name}-raw.json`));
+    await fs.writeFile(path.join(out, `${viewport.width}-${name}.json`), JSON.stringify({ request: response.request().postDataJSON(), request_headers: safeRequestHeaders(response.request()), status: response.status(), response: body, raw_response: raw }, null, 2));
   }
   async function advanceSheet() {
     await page.getByRole('button', { name: '确认工作表，设置列映射', exact: true }).click();
@@ -1019,6 +1023,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report });
     await walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report,
       previousCalculation: { request: ratedResponse.request().postDataJSON(), response: rated } });
+    const resourceAudit = JSON.parse(await fs.readFile(path.join(out, `${viewport.width}-resources-summary.json`), 'utf8'));
+    exchangeTasks.push(await exportResourceExchange({ page, base, viewport, out, root, expect, capture, readApi, resourceAudit, report }));
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

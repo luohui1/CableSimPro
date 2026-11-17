@@ -5,7 +5,9 @@ import { DataTable } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select } from '@/components/ui/select';
 import { libraryRequest } from './api';
+import { ResourceExchange } from './resource-exchange';
 
 interface ExchangePreview {
   file_sha256: string; bundle_sha256: string; original_file_count: number; state: string; message: string;
@@ -30,6 +32,15 @@ export async function downloadSeries(seriesId: string, format: 'json' | 'xlsx') 
 }
 
 export function ExchangeImport({ onOpenSeries }: { onOpenSeries: (id: string) => void }) {
+  const [content, setContent] = useState('series');
+  return <div className="library-import-stack">
+    <div className="library-import-fields library-import-fields-pair"><Select label="交换内容" value={content} onChange={setContent}
+      options={[{ value: 'series', label: '型号系列' }, { value: 'resources', label: '材料、环境与工程' }]} /></div>
+    {content === 'series' ? <SeriesExchangeImport onOpenSeries={onOpenSeries} /> : <ResourceExchange />}
+  </div>;
+}
+
+function SeriesExchangeImport({ onOpenSeries }: { onOpenSeries: (id: string) => void }) {
   const client = useQueryClient();
   const picker = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
