@@ -179,6 +179,13 @@ jobs:
           for name in ('people-mv', 'bahra-mv'):
               (output / (name + '.json')).write_text(json.dumps(reference_report(name), ensure_ascii=False, indent=2), encoding='utf-8')
           PY
+      - name: Verify transcribed values against pinned manufacturer PDFs
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          mkdir -p .tmp/catalogue-source-audit
+          python scripts/verify_catalogue_originals.py --output .tmp/catalogue-source-audit/report 2>&1 | tee .tmp/catalogue-source-audit/audit.log
       - uses: actions/upload-artifact@v4
         if: ${{ always() && runner.os == 'Linux' }}
         with:
@@ -188,6 +195,7 @@ jobs:
           path: |
             .tmp/library-import-walk/
             .tmp/library-release-acceptance/
+            .tmp/catalogue-source-audit/
             .data/release/engineering.seed.json
           if-no-files-found: error
       - uses: actions/cache/restore@v4
