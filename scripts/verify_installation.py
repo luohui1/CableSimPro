@@ -355,7 +355,9 @@ class InstallationGate:
             self.artifact(name.replace(".pdf", ".txt"), text.encode("utf-8"))
 
     def wait_ready(self, process: subprocess.Popen) -> None:
-        deadline = time.monotonic() + self.timeout
+        # One public command now performs both installation and startup; keep
+        # the former two phase budgets rather than timing out during offline pip.
+        deadline = time.monotonic() + 2 * self.timeout
         with self.step("安装包启动、健康检查及升级写保护解除") as row:
             pending_checks = 0
             while time.monotonic() < deadline:
@@ -605,23 +607,23 @@ def main() -> int:
                 if args.require_offline:
                     with gate.step("操作系统禁网及实际外网连接探测"):
                         gate.result["offline"] = {"enforcement": args.require_offline, "probes": offline_probe()}
-                with gate.step("无 Node、离线依赖安装"):
-                    with (output / "installation.log").open("wb") as log:
-                        subprocess.run([sys.executable, str(root / "scripts/install_release.py"), "--config", str(configuration), "--no-start"],
-                                       cwd=temporary, env=environment, stdout=log, stderr=subprocess.STDOUT,
-                                       timeout=args.timeout_seconds, check=True)
-                receipt = json.loads((temporary / "data/installations" / (manifest["build_id"] + ".json")).read_text("utf-8"))
-                require(Path(receipt["app_dir"]).resolve() == installed.resolve() and interpreter.is_file(),
-                        "安装回执未指向预期的发行环境。")
-                if args.require_offline:
-                    gate.result["offline"]["installed_before_start_probes"] = installed_offline_probe(interpreter, environment)
+                command = [sys.executable, str(root / "scripts/install_release.py"), "--config", str(configuration), "--no-browser"]
+                gate.artifact("installation-command.json", {"argv": command, "default_start": True,
+                                                            "node_available": False, "combined_log": "startup.log"})
                 with (output / "startup.log").open("wb") as log:
-                    process = subprocess.Popen([str(interpreter), str(installed / "scripts/run_release.py"), "--config", str(configuration), "--no-browser"],
+                    process = subprocess.Popen(command,
                                                cwd=temporary, env=environment, stdout=log, stderr=subprocess.STDOUT,
                                                start_new_session=os.name != "nt",
                                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
                     try:
-                        gate.wait_ready(process)
+                        with gate.step("发行包默认一条命令：无 Node、离线安装并启动"):
+                            gate.wait_ready(process)
+                            receipt = json.loads((temporary / "data/installations" / (manifest["build_id"] + ".json")).read_text("utf-8"))
+                            require(Path(receipt["app_dir"]).resolve() == installed.resolve() and interpreter.is_file(),
+                                    "安装回执未指向预期的发行环境。")
+                            gate.artifact("installation-receipt.json", receipt)
+                            if args.require_offline:
+                                gate.result["offline"]["installed_after_start_probes"] = installed_offline_probe(interpreter, environment)
                         gate.frontend_assets(manifest)
                         if sys.platform == "linux":
                             with gate.step("实际 CAD 插件进程加载发行包私有图形运行库"):
