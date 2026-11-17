@@ -11,6 +11,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle }
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { Disclosure } from '../disclosure';
 import { Icon } from '../icon';
 import { LimitMeter, Metric } from '../metric';
 import { ReviewMark, TierMark, VERDICT, type Review, type Tier, type Verdict } from '../marks';
@@ -158,7 +159,7 @@ export interface Change {
 
 export type ProposalPhase = 'pending' | 'rejecting' | 'accepted' | 'rejected';
 
-export function ProposalCard({ action, subject, changes, phase, consequence, note, onNoteChange, onAccept, onReject, onConfirmReject, onCancelReject, busy }: {
+export function ProposalCard({ action, subject, changes, phase, consequence, note, onNoteChange, onAccept, onReject, onConfirmReject, onCancelReject, busy, collapseChangesAfter }: {
   /** The operation: 修改结构, 新建工程. */
   action: string;
   /** What it acts on: YJV22-8.7/15 kV 3×240 · 第 1 版. */
@@ -174,8 +175,16 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
   onConfirmReject?: () => void;
   onCancelReject?: () => void;
   busy?: boolean;
+  /** Optional compact review for large proposals. Every change stays in the disclosure; decision buttons stay outside it. */
+  collapseChangesAfter?: number;
 }) {
-  const list = <ChangeList changes={changes} />;
+  const long = collapseChangesAfter !== undefined && changes.length > collapseChangesAfter;
+  const changeList = <ChangeList changes={changes} wrap={long} />;
+  const list = long && (phase === 'pending' || phase === 'rejecting')
+    ? <Disclosure title="完整改动" aside={<span className="text-sm text-ink-2">共 {changes.length} 项</span>} className="-mx-4">
+      <div className="px-4 pb-3">{changeList}</div>
+    </Disclosure>
+    : changeList;
   const effects = consequence && <div className="flex items-start gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name="status/warning" className="mt-1 text-attention" /><div className="min-w-0 flex-1">{consequence}</div></div>;
   if (phase === 'accepted' || phase === 'rejected') {
     const accepted = phase === 'accepted';
@@ -219,14 +228,14 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
   </section>;
 }
 
-function ChangeList({ changes }: { changes: Change[] }) {
+function ChangeList({ changes, wrap = false }: { changes: Change[]; wrap?: boolean }) {
   const edits = changes.some(change => change.before !== undefined && change.before !== '—');
-  return <dl className={cn('m-0 grid items-baseline gap-x-3 gap-y-2', edits ? 'grid-cols-change' : 'grid-cols-label')}>
+  return <dl data-proposal-changes className={cn('m-0 grid items-baseline gap-x-3 gap-y-2', edits ? 'grid-cols-change' : 'grid-cols-label')}>
     {changes.map((change, index) => <div key={change.id ?? `${index}/${change.label}`} className="contents">
-      <dt className="min-w-0 truncate text-sm text-ink-2">{change.label}</dt>
-      {edits && <dd className="m-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3">{change.before ?? '—'}</dd>}
+      <dt className={cn('min-w-0 text-sm text-ink-2', wrap ? 'break-words whitespace-normal' : 'truncate')}>{change.label}</dt>
+      {edits && <dd className={cn('m-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3', wrap && 'min-w-0 break-words whitespace-normal')}>{change.before ?? '—'}</dd>}
       {edits && <dd className="m-0 flex items-center self-center text-ink-3" aria-hidden="true"><Icon name="action/arrow-right" /></dd>}
-      <dd className="m-0 min-w-0 text-sm font-medium text-ink tabular-nums">{change.after}</dd>
+      <dd className={cn('m-0 min-w-0 text-sm font-medium text-ink tabular-nums', wrap && 'break-words whitespace-normal')}>{change.after}</dd>
     </div>)}
   </dl>;
 }
