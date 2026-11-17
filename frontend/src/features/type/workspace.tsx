@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
-import { fieldSource } from '@/lib/domain-fields';
+import { fieldSource, pointer } from '@/lib/domain-fields';
 import { sourceKind } from '@/lib/selection-view';
 import { formatNumber } from '@/lib/format';
 import type { LayerTarget } from '@/features/drawing/types';
@@ -33,7 +33,7 @@ import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
 import './type.css';
 import { cleanLabel } from './labels';
-import { StructurePropertyInputs, TypeRatingInputs } from './property-inputs';
+import { StructurePropertyInputs, StructureSourceInput, TypeRatingInputs } from './property-inputs';
 import { TypeInspectorContext } from './inspector';
 const TypeModulePage = deferredView(() => import('./module-page').then(module => ({ default: module.TypeModulePage })));
 import { DesignCard } from './design-card';
@@ -69,6 +69,9 @@ export function TypeWorkspace() {
   const showProperty = useCallback((title: string, groups: PropertyGroup[], extra?: ReactNode) => { setResultProperty({ title, groups, extra }); setCollapsed(false); }, []);
   const clearProperty = useCallback(() => setResultProperty(null), []);
   const document = state.document, cable = document?.cable_types.find(cable => cable.id === cableId) || document?.cable_types[0] || null;
+  const planName = text(optionalRecord(state.workspace?.raw.type_lifecycle).name);
+  const title = cleanLabel(document?.name || '型号工作区') + (planName ? ' · 方案：' + cleanLabel(planName) : '');
+  const sourceCable = document?.cable_types.find(item => location.field === pointer('provenance', pointer('cable_types', item.id)));
   const { rows, structureError } = useMemo(() => {
     try { return { rows: document && cable ? layerRows(document, cable) : [] as ReturnType<typeof layerRows>, structureError: '' }; }
     catch (error) { return { rows: [] as ReturnType<typeof layerRows>, structureError: message(error) }; }
@@ -105,7 +108,10 @@ export function TypeWorkspace() {
   const go = (module: string, tab: string) => navigate(typePath(location.wid!, module, tab, location.theme) + (location.revision ? '&revision=' + location.revision : '') + (location.run && module === location.module ? '&run=' + encodeURIComponent(location.run) : ''));
   function shortcut(event: KeyboardEvent<HTMLDivElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void state.save(); return; }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !(event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) { event.preventDefault(); void state.undo(); }
+    if ((event.ctrlKey || event.metaKey) && !(event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) {
+      if (event.key.toLowerCase() === 'z') { event.preventDefault(); void (event.shiftKey ? state.redo() : state.undo()); }
+      if (event.key.toLowerCase() === 'y') { event.preventDefault(); void state.redo(); }
+    }
     if (event.key === 'Escape' && !(event.target as HTMLElement).closest('input,textarea,[role=dialog],[role=combobox]')) { choose(null); setInfo(''); }
   }
   useEffect(() => {
@@ -114,7 +120,8 @@ export function TypeWorkspace() {
     const fallback=(event:globalThis.KeyboardEvent)=>{
       const target=event.target instanceof HTMLElement?event.target:null;
       if(event.defaultPrevented||!(event.ctrlKey||event.metaKey)||target?.closest('.type-root,input,textarea,[contenteditable=true]')||window.document.querySelector('[role=dialog][data-state=open]'))return;
-      if(event.key.toLowerCase()==='z'){event.preventDefault();void state.undo();}
+      if(event.key.toLowerCase()==='z'){event.preventDefault();void(event.shiftKey?state.redo():state.undo());}
+      if(event.key.toLowerCase()==='y'){event.preventDefault();void state.redo();}
       if(event.key.toLowerCase()==='s'){event.preventDefault();void state.save();}
     };
     window.addEventListener('keydown',fallback);
@@ -126,14 +133,15 @@ export function TypeWorkspace() {
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   useEffect(() => {
     if (location.module !== 'structure' || !location.field) return;
+    if (sourceCable) { setCableId(sourceCable.id); setSelected(null); setInspectorView('input'); setCollapsed(false); }
     const frame = requestAnimationFrame(() => {
       const node = [...window.document.querySelectorAll<HTMLElement>('.type-property-fields [data-field-path]')].find(node => node.dataset.fieldPath === location.field);
       if (!node) return;
       for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
-      node.querySelector<HTMLElement>('input,[role=combobox]')?.focus(); node.scrollIntoView({ block: 'nearest' });
+      node.querySelector<HTMLElement>('input,textarea,[role=combobox]')?.focus(); node.scrollIntoView({ block: 'nearest' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [location.module, location.field, row?.id]);
+  }, [location.module, location.field, row?.id, sourceCable?.id, cable?.id]);
   useEffect(()=>{
     if(!methodModule||!location.field)return;
     const focus=()=>{
@@ -155,7 +163,7 @@ export function TypeWorkspace() {
       { label: '绘图外径', value: formatNumber(row.outerM === null ? null : row.outerM * 2000, 2), unit: 'mm', source: row.outerM === null ? undefined : 'derived', sourceDetail: '参数截面尺寸，原始实体结果见外径与用料页签' },
     ] }]} />
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
-      <div title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
+      <div className="type-material-reference" title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
       <ResourceBindings materialId={row.material.id} />
       {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
   </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} extra={state.workspace.raw.type_creation ? <TypeRatingInputs /> : undefined} /> : null
@@ -179,10 +187,17 @@ export function TypeWorkspace() {
   </nav>;
   // 命令栏与研究工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
   const specification = typeModules.find(entry => entry.id === 'specification');
-  const commandBar = <CommandBar label="型号命令" status={location.module === 'specification' ? undefined : commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)} actions={[
-    { id:'save', label:'保存', icon:'action/save', role:'save', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
-    ...(primaryAction ? [primaryAction] : []),
-    { id:'undo', label:'撤销', icon:'action/undo', priority:10, disabledReason:state.busy||state.readOnly||!state.dirty&&state.workspace?.raw.can_undo!==true?'没有可撤销的修改':undefined, onSelect:()=>void state.undo() },
+  const savePrimary = state.dirty && !state.readOnly && !state.loading && !!state.workspace && !!document;
+  const moduleAction: CommandAction | null = primaryAction
+    ? { ...primaryAction, variant: savePrimary ? 'outline' : primaryAction.variant }
+    : location.module === 'structure' && !state.dirty && !state.readOnly && !state.loading && !state.busy && state.workspace && document && cable
+      ? { id: 'next-standard-check', label: '标准核对', icon: 'module/standard-check', role: 'primary', onSelect: () => go('standard-check', 'results') }
+      : null;
+  const commandBar = <CommandBar label="型号命令" status={state.dirty ? `${state.changeCount} 处未保存` : location.module === 'specification' ? undefined : commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), false)} actions={[
+    { id:'save', label:'保存', icon:'action/save', role:'save', variant:savePrimary?'primary':'outline', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
+    ...(moduleAction ? [moduleAction] : []),
+    { id:'undo', label:'撤销', icon:'action/undo', priority:40, disabledReason:state.readOnly?'此版本只读':state.busy?'正在保存或恢复修改':state.undoReason||(!state.canUndo?'当前模块没有可撤销的修改':undefined), onSelect:()=>void state.undo() },
+    { id:'redo', label:'重做', icon:'action/redo', priority:40, disabledReason:state.readOnly?'此版本只读':state.busy?'正在保存或恢复修改':state.redoReason||(!state.canRedo?'当前模块没有可重做的修改':undefined), onSelect:()=>void state.redo() },
     { id:'study', label:'用于载流量研究', icon:'nav/study', priority:30, disabledReason:state.readOnly?'先基于此版本建立设计草稿':state.dirty?'请先保存型号修改':state.busy||!state.workspace?'型号尚未就绪':undefined, onSelect:()=>setStudyOpen(true) },
     ...(specification&&location.module!=='specification'?[{id:'specification',label:'规格书',icon:'result/report',priority:20,disabledReason:state.dirty?'请先保存修改':undefined,onSelect:()=>go('specification',specification.tabs[0][0])}]:[]),
   ]} />;
@@ -196,10 +211,10 @@ export function TypeWorkspace() {
     {document && <section className="inspector-block" aria-label="型号">
       {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
     </section>}
-    {property}</>}
+    {property}{location.module === 'structure' && cable && <StructureSourceInput cableId={cable.id} />}</>}
     {agentOpened && state.workspace && <div className="type-agent-panel" hidden={inspectorView !== 'agent'}><AgentPanel key={state.workspace.id} workspaceId={state.workspace.id} context={cleanLabel(document?.name || '型号设计')} suggestions={['检查这个型号的问题', '绝缘厚度改到 15.8 mm 会怎样？', '检查规格书还缺哪些来源与结果']} /></div>}
   </div>;
-  return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={statusLabel + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
+  return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={title} status={<StatusMark kind={status} label={statusLabel + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
     actions={<><IconButton icon="action/edit" label="修改型号名称" disabled={state.busy || state.readOnly || !document} onClick={() => { setNewName(document?.name || ''); setRenaming(true); }} /></>}
     property={inspector}>
@@ -221,7 +236,7 @@ export function TypeWorkspace() {
         </div>
         <TabsContent asChild value={dockTab}><div className="type-page workbench-dock-body" aria-label={module?.label || '型号模块'} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
           {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
-          {state.dirty && <p className="type-notice">{state.inputDirty ? evidence.data?.length ? '结构修改待保存；受影响的保存结果为历史，请重算。' : '结构修改待保存。' : '方法条件待保存；可按当前条件试算。'}</p>}
+          {state.dirty && <p className="type-notice">{state.changeCount} 处未保存 · {state.inputDirty ? evidence.data?.length ? '保存后重算受影响的结果。' : '保存后用于计算和交付。' : '保存方法条件后可运行。'}</p>}
           {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
             : location.module === 'structure' ? (dockTab === 'materials' ? <MaterialComparison /> : dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)
               : location.tab !== activeTab ? <ErrorState title="页签不存在" description="选择此模块的有效页签继续。" action={<Button onClick={() => go(location.module, activeTab)}>打开默认页签</Button>} />
