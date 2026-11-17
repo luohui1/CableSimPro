@@ -26,6 +26,8 @@
 .library-import-value textarea { min-height: var(--control-standard); }
 .library-import-details { border-top: 1px solid var(--line); padding-top: var(--space-4); }
 .library-import-details > summary { cursor: pointer; padding-bottom: var(--space-4); font-weight: var(--weight-strong); }
+.library-import-value-conditions > summary { cursor: pointer; color: var(--text); }
+.library-import-value-conditions[open] > summary { margin-bottom: var(--space-2); }
 .library-import-source { color: var(--text-secondary); font-size: var(--text-note); }
 .library-import-digest { font-size: var(--text-note); overflow-wrap: anywhere; word-break: break-all; white-space: normal; }
 .library-import-raw-declaration { font-family: var(--font-code); min-height: calc(var(--space-12) * 5); overflow-wrap: anywhere; white-space: pre-wrap; }

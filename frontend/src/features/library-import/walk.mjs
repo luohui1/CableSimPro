@@ -686,9 +686,57 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     }
     await fs.writeFile(path.join(out, `${viewport.width}-bahra-source-screenshots.json`), JSON.stringify(sourceScreenshots, null, 2));
     assert.deepEqual(sourceScreenshots.flatMap(item => item.fields).sort(), [...catalogueResults].sort());
+    await expect(bahraValues.locator('.library-import-value-conditions')).toHaveCount(11);
+    const conditionFact = bahraFirst.values.find(fact => fact.key === 'short_circuit_conductor');
+    const conditionDetails = bahraValues.getByRole('row', { name: conditionFact.label, exact: true }).locator('.library-import-value-conditions');
+    const conditionToggle = conditionDetails.locator('summary');
+    await expect(conditionDetails).toHaveJSProperty('open', false);
+    if (viewport.width === 1366) {
+      await conditionToggle.focus();
+      await page.keyboard.press('Enter');
+    } else await conditionToggle.click();
+    await expect(conditionDetails).toHaveJSProperty('open', true);
+    const conditionFields = [
+      ['frequency_hz', '交流频率', 'Hz'], ['ground_temperature_c', '土壤温度', '°C'],
+      ['air_temperature_c', '空气温度', '°C'], ['depth_m', '埋深', 'm'],
+      ['soil_thermal_resistivity', '土壤热阻率', 'K·m/W'], ['conductor_temperature_c', '导体温度', '°C'],
+      ['short_circuit_duration_s', '短路持续时间', 's'],
+    ];
+    assert.deepEqual(Object.keys(conditionFact.source.conditions).sort(), [...conditionFields.map(([key]) => key), 'note'].sort());
+    const conditionBlocks = [{ key: 'toggle', element: conditionToggle }, { key: 'missing', element: conditionDetails.getByText('原目录共用条件，按相应性能项目使用。未给出的接地、间距及其他条件仍需补充。', { exact: true }) }];
+    for (const [key, label, unit] of conditionFields) {
+      const element = conditionDetails.getByText(`${label}：${bahraOriginal.conditions[key]} ${unit}`, { exact: true });
+      await expect(element).toHaveCount(1);
+      conditionBlocks.push({ key, element });
+    }
+    assert.equal(bahraOriginal.conditions.note, 'The catalogue states one circuit, thermally isolated from other circuits, rated per the IEC 60287 series with standard IEC 60502-2 dimensions.');
+    conditionBlocks.push({ key: 'note', element: conditionDetails.getByText('原文说明：目录声明为单回路，与其他回路热隔离；按 IEC 60287 系列确定额定值，结构尺寸采用 IEC 60502-2 标准。', { exact: true }) });
+    const conditionScreenshots = [];
+    let conditionStart = 0;
+    while (conditionStart < conditionBlocks.length) {
+      await conditionBlocks[conditionStart].element.evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+      const bounds = await bahraSources.locator('.dialog-body').boundingBox();
+      assert.ok(bounds);
+      let conditionEnd = conditionStart;
+      while (conditionEnd < conditionBlocks.length) {
+        const element = conditionBlocks[conditionEnd].element;
+        const box = await element.boundingBox();
+        if (!box || box.y < bounds.y || box.y + box.height > bounds.y + bounds.height) break;
+        await expect(element).toBeInViewport({ ratio: 1 });
+        conditionEnd++;
+      }
+      assert.ok(conditionEnd > conditionStart, '目录适用条件的每项原值与说明须完整可见');
+      await capture('Bahra一秒短路目录适用条件' + (conditionStart ? '续页' : ''));
+      conditionScreenshots.push({ screenshot: report.screenshots.at(-1), field: conditionFact.key, conditions: conditionBlocks.slice(conditionStart, conditionEnd).map(item => item.key) });
+      conditionStart = conditionEnd;
+    }
+    await fs.writeFile(path.join(out, `${viewport.width}-bahra-condition-screenshots.json`), JSON.stringify({ source: conditionFact.source, screenshots: conditionScreenshots }, null, 2));
+    assert.deepEqual(conditionScreenshots.flatMap(item => item.conditions), conditionBlocks.map(item => item.key));
+    await conditionToggle.click();
+    await expect(conditionDetails).toHaveJSProperty('open', false);
     await page.keyboard.press('Escape');
     await expect(bahraSources).toBeHidden();
-    report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。`);
+    report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});
