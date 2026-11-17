@@ -12,8 +12,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type Frame, type Page } from 'playwright';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
-import { installConditionWorkflow, installImportRefusal, installMissingData, installStudyRead, installStudyWorkflow,
-  installTypeWorkflow, type FlowState } from './fusion-scripts.ts';
+import { gbRequest, installConditionWorkflow, installGbWorkflow, installImportRefusal, installMissingData, installRatingTableWorkflow,
+  installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState } from './fusion-scripts.ts';
 import { probe } from './layout-probe.ts';
 import { scriptedModel } from './support.ts';
 
@@ -92,8 +92,8 @@ async function ready(url: string, child?: ChildProcess): Promise<void> {
     return fetch(url, { signal: AbortSignal.timeout(1500) }).then(response => response.ok).catch(() => false);
   }, url, 60_000);
 }
-async function json<T = any>(base: string, path: string, body?: unknown): Promise<T> {
-  const response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
+async function json<T = any>(base: string, path: string, body?: unknown, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
+  const response = await fetch(base + path, { method: body === undefined ? 'GET' : method,
     headers: body === undefined ? {} : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = clean(await response.text(), 'setup/public-api');
   assert.ok(response.ok, `${response.status} ${path}: ${text.slice(0, 1200)}`);
@@ -275,6 +275,15 @@ try {
     input_source: 'study', method_input: incomplete, expected_revision: workspace.revision });
   record('missing-data-fixture-no-run', (await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${missing.id}/runs`)).items.length === 0,
     { study: missing.id, removed: 'core.conductor.r20, core.conductor.r20_basis', createdThrough: 'public study API' });
+
+  const typeRating = (await json(backendUrl, `/api/workspaces/${type.workspace}/studies`)).find((item: any) =>
+    item.definition.method.plugin_id === 'cablesim.iec60287' && item.definition.driver.kind === 'batch'
+    && item.definition.driver.cases?.every((row: any) => row.metadata?.kind === 'type-rating-table'));
+  assert.ok(typeRating, '发布型号须有已保存的载流量表参数与来源');
+  const gb = await prepareGbFixture((path, body, method) => json(backendUrl, path, body, method), type.workspace);
+  record('gb-baseline-saved-pdf', true, { workspace: gb.workspace, study: gb.baselineStudy, run: gb.baselineRun,
+    baselineA: gb.baselineCurrent, source: gb.baselineSource, pdfSha256: gb.baselineDigest, pdfPage: gb.baselinePage,
+    systemVoltageV: 10000, cableRatedVoltageChanged: false });
 
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
@@ -466,6 +475,110 @@ try {
           artifactDigest: specification.headers.get('x-artifact-sha256'), downloadedBytes: pdf.length });
       await frame.locator('[data-card="file"]').last().scrollIntoViewIfNeeded();
       await shot(page, frame, 'type-specification', { type: typeFlow.typeId, run: typeFlow.run, download: typeFlow.file });
+
+      stage = 'rating-table';
+      await newChat(frame);
+      const tableStudyCount = (await json(backendUrl, `/api/workspaces/${type.workspace}/studies`)).length;
+      const tableFlow = installRatingTableWorkflow(model.faux, { workspace: type.workspace, sourceStudy: typeRating.id,
+        title: `Agent 验收 · ${viewport.width} 明示温度载流量表` });
+      await speak(frame, '给此型号建25 °C和30 °C的三芯单回直埋载流量表。中心埋深0.8 m，土壤1.2 K·m/W，50 Hz，两端接地；这些是我明示的参考工况，不是现场测量。沿用已保存且有出处的计算参数，每次保存和运行先让我接受。');
+      await pending(frame);
+      record(`${viewport.width}/unapproved-rating-table-does-not-write`, (await json(backendUrl, `/api/workspaces/${type.workspace}/studies`)).length === tableStudyCount,
+        { before: tableStudyCount, pending: tableStudyCount });
+      const tableProposal = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
+      const changes = await frame.evaluate(async () => {
+        const session = decodeURIComponent(location.hash.split('/')[2]);
+        const response = await fetch('/agent-sidecar/api/chat/sessions/' + encodeURIComponent(session));
+        return (await response.json()).waiting.at(-1)?.changes ?? [];
+      }) as { label: string; before: string; after: string }[];
+      const allChanges = tableProposal.getByRole('button', { name: /^完整改动/ });
+      assert.ok(changes.length > 8, '真实两工况提案应有完整条件与来源');
+      assert.equal(await allChanges.getAttribute('aria-expanded'), 'false');
+      assert.equal(await tableProposal.locator('[data-proposal-changes]').count(), 0);
+      await allChanges.click();
+      await until(async () => {
+        const value = (await tableProposal.innerText()).replaceAll(/\s/g, '');
+        return changes.every(change => [change.label, change.before, change.after].filter(part => part && part !== '—').every(part => value.includes(part.replaceAll(/\s/g, ''))))
+          && ratingConditions().every(condition => value.includes(condition.name.replaceAll(/\s/g, '')) && value.includes(condition.source.replaceAll(/\s/g, '')));
+      }, '展开载流量表的完整条件、参数、改前改后与来源');
+      await shot(page, frame, 'rating-table-proposal-expanded', { changes: changes.length, type: type.workspace });
+      await allChanges.click();
+      await until(async () => {
+        await tableProposal.scrollIntoViewIfNeeded();
+        return tableProposal.evaluate(element => {
+          const input = document.querySelector('textarea[aria-label="给 Agent 的消息"]');
+          const bottom = (input?.closest('form') ?? input)?.getBoundingClientRect().top ?? innerHeight;
+          const decisions = [...element.querySelectorAll('button')].filter(button => ['接受', '拒绝'].includes(button.textContent!.trim()));
+          return decisions.length === 2 && decisions.every(button => { const box = button.getBoundingClientRect(); return box.top >= 0 && box.bottom <= bottom; });
+        });
+      }, '收起完整改动后接受与拒绝完整可见');
+      record(`${viewport.width}/rating-table-review`, true, { changes: changes.length, initiallyCollapsed: true, allValuesAndSourcesPreserved: true, decisionsVisible: true });
+      await shot(page, frame, 'rating-table-proposal', { changes: changes.length, type: type.workspace });
+      await accept(frame);
+      await pending(frame);
+      record(`${viewport.width}/unapproved-rating-table-run-does-not-write`, (await json(backendUrl, `/api/workspaces/${type.workspace}/studies/${tableFlow.study}/runs`)).items.length === 0,
+        { study: tableFlow.study, runs: 0 });
+      await accept(frame);
+      await waitFlow(tableFlow, '真实载流量表');
+      const savedTable = await json(backendUrl, `/api/design/workspaces/${type.workspace}/rating-table-runs/${tableFlow.run}?view=rows`);
+      assert.deepEqual(tableFlow.table, savedTable.rows);
+      const tableCard = frame.locator('[data-card="rating-table"]').last();
+      await tableCard.waitFor();
+      for (const row of savedTable.rows) {
+        const shown = tableCard.locator(`[data-case-id="${row.case_id}"]`);
+        assert.ok((await shown.innerText()).includes(row.value_a.toFixed(1)));
+      }
+      record(`${viewport.width}/rating-table-saved-values`, savedTable.run.integrity === 'verified', { run: tableFlow.run,
+        rows: savedTable.rows.map((row: any) => ({ case_id: row.case_id, value_a: row.value_a, condition: row.condition, status: row.status })) });
+      await tableCard.scrollIntoViewIfNeeded();
+      await shot(page, frame, 'rating-table-card', { run: tableFlow.run });
+      await tableCard.getByRole('button', { name: '在工作台打开', exact: true }).click();
+      await page.waitForURL(url => url.pathname === `/types/${type.workspace}/rating-table/results` && url.searchParams.get('run') === tableFlow.run);
+      const oldTable = page.getByRole('table', { name: '载流量表', exact: true });
+      await oldTable.waitFor();
+      for (const row of savedTable.rows) await until(async () => (await oldTable.getByRole('row').filter({ hasText: row.name }).innerText()).includes(row.value_a.toFixed(1)), '工作台逐行显示相同保存电流');
+      record(`${viewport.width}/rating-table-workbench-same-run`, true, { run: tableFlow.run, url: page.url(), rowCount: savedTable.rows.length });
+      await shot(page, undefined, 'workbench-rating-table', { run: tableFlow.run, type: type.workspace });
+      await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
+      frame = await agentFrame(page);
+
+      stage = 'gb-correction';
+      await newChat(frame);
+      const gbStudyCount = (await json(backendUrl, `/api/workspaces/${gb.workspace}/studies`)).length;
+      const correction = installGbWorkflow(model.faux, { ...gb, baselineReviewed: true });
+      await speak(frame, gbRequest(gb, true));
+      await pending(frame);
+      record(`${viewport.width}/unapproved-gb-study-does-not-write`, (await json(backendUrl, `/api/workspaces/${gb.workspace}/studies`)).length === gbStudyCount,
+        { before: gbStudyCount, pending: gbStudyCount, baselineConfirmationFrom: 'explicit human message' });
+      const gbProposal = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
+      const gbChanges = gbProposal.getByRole('button', { name: /^完整改动/ });
+      if (await gbChanges.count()) await gbChanges.click();
+      const gbReviewText = (await gbProposal.innerText()).replaceAll(/\s/g, '');
+      assert.ok(gbReviewText.includes(gb.baselineSource.replaceAll(/\s/g, '')) && gbReviewText.includes(gb.baselineDigest)
+        && gbReviewText.includes('基准条件已人工核对'), 'GB人审必须同时保留确认、基准出处、实际PDF摘要和页码');
+      record(`${viewport.width}/gb-baseline-review-visible`, true, { actualSourcePreserved: true, pdfSha256: gb.baselineDigest, pdfPage: gb.baselinePage });
+      await shot(page, frame, 'gb-baseline-proposal', { baselinePage: gb.baselinePage, baselineSha256: gb.baselineDigest });
+      if (await gbChanges.count()) await gbChanges.click();
+      const gbApprovals = await approveAll(frame, correction);
+      const correctedRun = await json(backendUrl, `/api/workspaces/${gb.workspace}/studies/${correction.study}/runs/${correction.run}?view=full`);
+      const artifact = correctedRun.output.cases[0].artifacts['x-cablesim.gb50217-correction'];
+      const gbValue = artifact.corrected_current_a.toFixed(1);
+      record(`${viewport.width}/gb-correction-saved`, gbApprovals === 3 && correctedRun.status === 'succeeded' && correctedRun.integrity === 'verified'
+        && artifact.total_factor === 0.96 && correctedRun.snapshot.definition.parameters.baseline_sha256 === gb.baselineDigest,
+      { run: correction.run, currentA: artifact.corrected_current_a, coefficients: artifact.coefficients, baselinePage: gb.baselinePage, baselineSha256: gb.baselineDigest, file: correction.file });
+      await frame.getByRole('button', { name: '在工作台打开 · 查看已保存运行', exact: true }).last().click();
+      await page.waitForURL(url => url.searchParams.get('run') === correction.run);
+      await until(async () => (await page.getByLabel('GB 50217 校正结论', { exact: true }).innerText()).includes(gbValue), '旧工作台显示同一GB校正电流');
+      await savedDrawing(page, backendUrl, gb.workspace, correction.study!, correction.run!, correction.result!);
+      const coefficientDetails = page.locator('details').filter({ has: page.locator('summary').getByText('校正系数与标准出处', { exact: false }) }).first();
+      if (!await coefficientDetails.evaluate(node => (node as HTMLDetailsElement).open)) await coefficientDetails.locator('summary').click();
+      const coefficients = page.getByRole('table', { name: 'GB 50217 校正系数' });
+      await coefficients.waitFor();
+      for (const item of artifact.coefficients) assert.ok((await coefficients.innerText()).includes(String(item.factor)));
+      record(`${viewport.width}/gb-workbench-same-run`, true, { run: correction.run, currentA: gbValue, url: page.url() });
+      await shot(page, undefined, 'gb-correction-result', { run: correction.run, currentA: gbValue, baselineA: gb.baselineCurrent });
+      await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
+      frame = await agentFrame(page);
 
       stage = 'import-unavailable';
       await newChat(frame);

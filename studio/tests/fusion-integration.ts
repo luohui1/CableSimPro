@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import type { ChatView, Proposal } from '../shared/types.ts';
-import { installConditionWorkflow, installImportRefusal, installMissingData, installStudyRead, installStudyWorkflow, installTypeWorkflow, type FlowState } from './fusion-scripts.ts';
+import { gbRequest, installConditionWorkflow, installGbWorkflow, installImportRefusal, installMissingData, installRatingTableWorkflow,
+  installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState, type GbFixture } from './fusion-scripts.ts';
 import { scriptedModel, steps, toolText } from './support.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -27,6 +28,7 @@ let fixture: { workspace: string; study: string; run: string };
 let manifest: any;
 let workflow: FlowState;
 let studyConversation: string;
+let gbFixture: GbFixture | undefined;
 
 async function port(): Promise<number> {
   const server = createServer();
@@ -36,8 +38,8 @@ async function port(): Promise<number> {
   return value;
 }
 
-async function api<T = any>(path: string, body?: unknown): Promise<T> {
-  const result = await fetch(url + path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+async function api<T = any>(path: string, body?: unknown, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
+  const result = await fetch(url + path, body === undefined ? {} : { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const value = await result.json();
   assert.ok(result.ok, `${path}: ${JSON.stringify(value)}`);
   return value as T;
@@ -131,6 +133,21 @@ function savedSpecification(view: ChatView, state: FlowState) {
   assert.equal(card.download_url, state.file);
   assert.match(card.download_url, /^\/api\/agent\/files\//);
   return card;
+}
+
+async function ratingSource() {
+  const type = manifest.types.find((item: any) => item.name.startsWith('YJV22') && !item.teaching);
+  assert.ok(type?.workspace);
+  const study = (await api<any[]>(`/api/workspaces/${type.workspace}/studies`)).find(item =>
+    item.definition.method.plugin_id === 'cablesim.iec60287' && item.definition.driver.kind === 'batch'
+    && item.definition.driver.cases?.every((row: any) => row.metadata?.kind === 'type-rating-table'));
+  assert.ok(study, 'the real released type must contain declared rating parameters');
+  return { type, study };
+}
+
+async function baselineFixture() {
+  if (!gbFixture) gbFixture = await prepareGbFixture(api, (await ratingSource()).type.workspace);
+  return gbFixture;
 }
 
 test('a read answer and its result card use the exact saved platform figures', async () => {
@@ -287,6 +304,111 @@ test('an existing type with saved calculation evidence completes input paging, r
   assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
   t.diagnostic(JSON.stringify({ existingSavedRuns: evidence.items.length, inputPages,
     toolSteps: completed.length, approvals: accepted.length, linkedChanges, type: state.typeId, run: state.run }));
+});
+
+test('a type rating table saves only accepted explicit conditions and shows the exact immutable platform rows', { timeout: 120_000 }, async () => {
+  const { type, study } = await ratingSource();
+  const before = await api(`/api/workspaces/${type.workspace}`);
+  const count = (await api<any[]>(`/api/workspaces/${type.workspace}/studies`)).length;
+  const state = installRatingTableWorkflow(faux, { workspace: type.workspace, sourceStudy: study.id });
+  const { session } = await sidecar.agent.send(undefined, '按已保存型号的明示参数，建立25 °C和30 °C的三芯单回直埋载流量表；埋深0.8 m，土壤1.2 K·m/W，50 Hz，两端接地，明确参考工况来源；每次保存和运行先让我接受。');
+  const accepted: string[] = [];
+  const view = await acceptEach(session, async proposal => {
+    accepted.push(proposal.operation);
+    if (proposal.operation === 'propose_rating_table') {
+      assert.equal((await api<any[]>(`/api/workspaces/${type.workspace}/studies`)).length, count);
+      assert.deepEqual((await api(`/api/workspaces/${type.workspace}`)).domain, before.domain);
+    }
+    if (proposal.operation === 'propose_study_run') assert.equal((await api(`/api/workspaces/${type.workspace}/studies/${state.study}/runs`)).items.length, 0);
+  });
+  assert.equal(state.failure, undefined);
+  assert.equal(state.done, true);
+  assert.deepEqual(accepted, ['propose_rating_table', 'propose_study_run']);
+  const saved = await api(`/api/design/workspaces/${type.workspace}/rating-table-runs/${state.run}`);
+  assert.equal(saved.run.status, 'succeeded');
+  assert.equal(saved.run.integrity, 'verified');
+  assert.deepEqual(state.table, saved.rows);
+  assert.deepEqual(saved.run.snapshot.definition.parameters, study.definition.parameters);
+  const conditions = ratingConditions();
+  for (let index = 0; index < conditions.length; index += 1) {
+    const row = saved.rows[index], requested = conditions[index];
+    for (const [key, value] of Object.entries(requested)) assert.equal(row.condition[key], value, key);
+    const output = saved.run.output.cases.find((item: any) => item.case_id === row.case_id);
+    const current = output.results.find((item: any) => item.key === 'ampacity' && item.case === 'rating' && item.unit === 'A' && item.status === 'available');
+    assert.equal(row.value_a, current.value);
+  }
+  const card = steps(view).map(step => step.card).findLast(card => card?.kind === 'saved_rating_table');
+  assert.ok(card?.kind === 'saved_rating_table');
+  assert.equal(card.href, `cablesim:type_rating/${type.workspace}?run=${state.run}`);
+  assert.equal(card.view.total, saved.rows.length);
+  assert.deepEqual(card.view.rows.map(row => ({ case_id: row.case_id, value_a: row.value_a, status: row.status })),
+    saved.rows.map((row: any) => ({ case_id: row.case_id, value_a: row.value_a, status: row.status })));
+  assert.ok(card.view.method.endsWith(saved.run.snapshot.definition.method.version));
+  assert.deepEqual((await api(`/api/workspaces/${type.workspace}`)).domain, before.domain, 'the table never rewrites the saved type facts');
+});
+
+test('GB correction uses an explicitly human-confirmed real IEC PDF baseline and preserves the actual coefficients and saved delivery', { timeout: 120_000 }, async () => {
+  const reference = await baselineFixture();
+  const studyCount = (await api<any[]>(`/api/workspaces/${reference.workspace}/studies`)).length;
+  const deliveries = (await api<any[]>(`/api/workspaces/${reference.workspace}/deliveries`)).length;
+  const state = installGbWorkflow(faux, { ...reference, baselineReviewed: true });
+  const { session } = await sidecar.agent.send(undefined, gbRequest(reference, true));
+  const accepted: string[] = [];
+  const view = await acceptEach(session, async proposal => {
+    accepted.push(proposal.operation);
+    if (proposal.operation === 'propose_study') {
+      assert.equal((await api<any[]>(`/api/workspaces/${reference.workspace}/studies`)).length, studyCount);
+      assert.ok(proposal.changes.some(change => change.field.endsWith('baseline_reviewed') && /true|是|已/.test(change.after)), 'the human confirmation stays visible in the proposal');
+      for (const [field, value] of [['baseline_source', reference.baselineSource], ['baseline_sha256', reference.baselineDigest], ['baseline_page', String(reference.baselinePage)]]) {
+        assert.equal(proposal.changes.find(change => change.field.endsWith('/' + field))?.after, value, 'the person must see the exact accepted baseline ' + field);
+      }
+    }
+    if (proposal.operation === 'propose_study_run') assert.equal((await api(`/api/workspaces/${reference.workspace}/studies/${state.study}/runs`)).items.length, 0);
+    if (proposal.operation === 'propose_delivery') assert.equal((await api<any[]>(`/api/workspaces/${reference.workspace}/deliveries`)).length, deliveries);
+  });
+  assert.equal(state.failure, undefined);
+  assert.equal(state.done, true);
+  assert.deepEqual(accepted, ['propose_study', 'propose_study_run', 'propose_delivery']);
+  const run = await api(`/api/workspaces/${reference.workspace}/studies/${state.study}/runs/${state.run}?view=full`);
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.integrity, 'verified');
+  const corrected = run.output.cases[0].artifacts['x-cablesim.gb50217-correction'];
+  assert.equal(corrected.total_factor, 0.96);
+  assert.ok(Math.abs(corrected.corrected_current_a - reference.baselineCurrent * corrected.total_factor) < 1e-8);
+  assert.equal(corrected.coefficients[0].factor, corrected.coefficients[0].record.value);
+  assert.match(corrected.coefficients[0].record.source_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(run.snapshot.definition.parameters.baseline_sha256, reference.baselineDigest);
+  assert.equal(run.snapshot.definition.parameters.baseline_page, reference.baselinePage);
+  const baseline = await api(`/api/workspaces/${reference.workspace}/studies/${reference.baselineStudy}/runs/${reference.baselineRun}?view=full`);
+  assert.deepEqual(run.snapshot.cases[0].input.cable_types, baseline.snapshot.cases[0].input.cable_types, 'correction cannot change the rated voltage or saved cable facts to fit its scope');
+  assert.equal(run.snapshot.cases[0].input.circuits[0].system.voltage, 10000);
+  assert.equal(run.snapshot.cases[0].input.sections[0].medium.surface_temperature, 303.15);
+  assert.equal(baseline.snapshot.cases[0].input.sections[0].medium.surface_temperature, 298.15);
+  const open = steps(view).findLast(step => step.tool === 'run_read')?.card;
+  assert.ok(open?.kind === 'open' && open.href.includes(state.run!), 'GB opens its own exact saved run without pretending to be an IEC temperature card');
+  const response = await fetch(url + state.file!);
+  assert.ok(response.ok);
+  assert.match(await response.text(), /GB 50217|GB50217/);
+});
+
+test('unconfirmed GB baselines and omitted rating-table inputs are explicitly refused without a computed result', { timeout: 120_000 }, async () => {
+  const reference = await baselineFixture();
+  const state = installGbWorkflow(faux, { ...reference, baselineReviewed: false });
+  const { session } = await sidecar.agent.send(undefined, gbRequest(reference, false));
+  const view = await acceptEach(session);
+  assert.equal(state.failure, undefined);
+  assert.equal(state.refused, true);
+  assert.equal((await api(`/api/workspaces/${reference.workspace}/studies/${state.study}/runs`)).items.length, 0);
+  assert.ok(steps(view).some(step => step.tool === 'propose_study_run' && step.status === 'failed'));
+  const { type, study } = await ratingSource();
+  const count = (await api<any[]>(`/api/workspaces/${type.workspace}/studies`)).length;
+  const missing = installRatingTableWorkflow(faux, { workspace: type.workspace, sourceStudy: study.id, missingSoil: true });
+  const other = await sidecar.agent.send(undefined, '建立载流量表，但第一行的土壤热阻率还没有提供，不要代填。');
+  await sidecar.agent.idle(other.session);
+  assert.equal(missing.failure, undefined);
+  assert.equal(missing.refused, true);
+  assert.equal((await api<any[]>(`/api/workspaces/${type.workspace}/studies`)).length, count);
+  assert.equal((await sidecar.agent.view(other.session)).waiting.length, 0);
 });
 
 test('rejecting or stopping a proposed write leaves the real study list unchanged', { timeout: 60_000 }, async () => {
