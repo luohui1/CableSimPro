@@ -213,6 +213,46 @@ def qifan_table_declaration():
     return original, series, row
 
 
+def test_catalogue_results_do_not_change_a_complete_stated_structure():
+    """Boundary fixture only: added performance is not attributed to the Qifan design."""
+    from backend.kernel.type_import_models import build_rows
+    from backend.kernel.public_catalogues import _data
+    _, series, physical = qifan_table_declaration()
+    series.update(name='完整结构与目录性能隔离接口夹具', manufacturer='接口测试（非厂家产品）', origin='demo',
+                  source={'reference': '完整起帆参考结构加独立 Bahra 目录列，仅验证输入隔离，不构成该结构的性能声明。'})
+    data = _data('bahra-mv')
+    published = dict(zip((key for key, _ in data['columns']), data['rows'][0]))
+    performance = {key: published['rating_ground_trefoil' if key == 'ampacity' else key] for key in (
+        'ampacity', 'r_ac_90', 'inductance', 'capacitance', 'short_circuit_conductor', 'short_circuit_sheath',
+        'rating_ground_flat', 'rating_air_trefoil', 'rating_air_flat', 'voltage_drop', 'minimum_bending_radius')}
+    series['reference'] = {'conditions': data['conditions'], 'source': data['source']}
+
+    def preview(values):
+        stream = StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(values)
+        writer.writerow(values.values())
+        upload = factory_tables.read('isolation.csv', stream.getvalue().encode('utf-8-sig'))
+        mapping = {key: index for index, key in enumerate(values)}
+        rows, skipped = factory_tables.mapped_rows(upload, 'isolation', 2, mapping)
+        assert not skipped
+        return build_rows(upload, 'isolation', rows, series, mapping)[0]
+
+    baseline, actual = preview(physical), preview({**physical, **performance})
+    assert baseline['status'] == actual['status'] == 'ready'
+    assert actual['missing'] == actual['issues'] == []
+    assert actual['payload']['specification'] is None
+    assert actual['payload']['cable_type'] == baseline['payload']['cable_type']
+    assert actual['payload']['materials'] == baseline['payload']['materials']
+    facts = {fact['key']: fact for fact in actual['values']}
+    for key, value in performance.items():
+        assert facts[key]['display_value'] == value and facts[key]['usage'] == 'catalogue_result'
+        source = actual['payload']['sources'][key]
+        assert source['kind'] == 'demo' and source['reviewed'] is False
+        assert json.loads(source['reference']) == facts[key]['source']
+        assert facts[key]['source']['conditions'] == data['conditions']
+
+
 @pytest.mark.parametrize('format', ['xlsx', 'csv'])
 def test_actual_upload_preview_commit_of_qifan_reference_keeps_stable_sources(client, format):
     original, series, row = qifan_table_declaration()

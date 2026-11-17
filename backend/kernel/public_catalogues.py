@@ -19,6 +19,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from studio.core.studio_core import catalogue
+from .factory_tables import SOURCE_ONLY_FIELDS
 
 
 SAMPLES = {
@@ -48,7 +49,7 @@ BAHRA_LABELS = {
 BAHRA_FIELDS = {'r_dc_20': 'r20', 'lead_sheath_thickness': 'metallic_sheath_thickness',
                 'rating_ground_trefoil': 'ampacity'}
 IMPORT_FIELDS = {'area', 'conductor_diameter', 'insulation_thickness', 'oversheath_thickness',
-                 'outer_diameter', 'weight', 'r20', 'metallic_sheath_thickness', 'ampacity'}
+                 'outer_diameter', 'weight', 'r20', 'metallic_sheath_thickness'} | SOURCE_ONLY_FIELDS
 
 
 def _data(name):

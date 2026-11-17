@@ -48,6 +48,10 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 `GET /api/type-library/samples` 提供人民电缆和 Bahra 的原始来源及随附表声明；`/samples/{name}.xlsx` 或 `.csv?table=...` 下载可直接导入的结构表。
 
+结构表导入方法 `1.1.0` 完整保留 Bahra 的 13 个规格、每规格 19 列。Rac90、电感、电容、1 s 导体/铅套短路电流、各敷设载流量、电压降和最小弯曲半径属于目录性能事实，标记 `usage: catalogue_result`；它们与原显示值、SI 值、文件 SHA-256、表行列、方法版本及 `reference` 可信档一起保存在型号版本的 `values`，可经规格详情和 JSON/XLSX 交换读取。性能事实的 `source.conditions` 保留系列原有条件，包括 60 Hz、90℃、1 s、敷设环境等；标签保留直埋/空气及品字/平排，电压降保留 V/(A km) 口径。不补猜未发表的接地、间距、金属套初终温或功率因数。
+
+目录性能事实通过明确白名单排除出不完整结构的 `specification.values` 和完整结构构造器，原始来源仍保留在 `sources`；不会用已发表性能倒填材料、构造或计算工况，也不会据此消除缺项或批准型号。原 JSON、下载结构表及摘要保持不变。既存导入事实保留其原方法版本；随附 Bahra 列映射的摘要变化会改变发布种子身份，沿既有先备份再重建流程刷新种子，无需改写旧事实。
+
 `POST /api/type-library/catalogue-comparison/{name}` 返回 `schema: cablesim.catalogue-comparison/2`，不传请求体或传 `{}` 时只读取真实厂家数据，不构造假定结构、不调用载流量求解器。根层 `rows` 逐规格保留原表外径、重量、R20、载流量和来源；厂家结构或工况缺失时，计算值及偏差为 `null`，`missing_fields` 列明缺项。外径或电阻的输入读回标记为 `declared_input`，偏差仍为 `null`，不能用零偏差冒充独立验证。当前两份手册共 59 个规格均缺少独立载流量复现所需的厂家输入，根层 `summary.ampacity_compared` 与 `four_metric_passed` 都为 0。
 
 旧版 Studio 回归保留为独立研究参考情景。响应的 `reference_scenario` 在执行前列明全部假设、单位、依据、方法版本、来源摘要及可信分档；`manufacturer_data` 为 `false`，`reference_calculation` 为 `null`。界面或 Agent 必须先展示完整声明，经操作者明确选择后，才可发送 `{"reference_scenario_confirmed":true}`。该字段只接受布尔值，不接受字符串或数字。执行后的结果只进入独立 `reference_calculation`，保存每个规格实际使用的结构和方法输入；根层厂家 `rows`、缺项、拒绝及通过计数不变。参考计算的差异不计入四项真实厂家数据验收，也不能自动作为型号发布依据。

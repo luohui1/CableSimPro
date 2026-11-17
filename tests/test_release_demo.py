@@ -337,7 +337,26 @@ def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, 
         db.execute("INSERT INTO user_data VALUES ('keep in backup')")
         db.execute("INSERT INTO agent_settings VALUES ('model','\"deepseek-flash\"','2026-10-07T14:55:28')")
     identity=seed.release_identity()
-    old=json.loads(json.dumps(identity));old[change]={}
+    old=json.loads(json.dumps(identity))
+    if change == 'public_catalogues':
+        from backend.kernel import public_catalogues
+        current_declarations = public_catalogues._declarations
+        def old_mapping(name):
+            declarations = current_declarations(name)
+            if name == 'bahra-mv':
+                retained = {'area', 'conductor_diameter', 'insulation_thickness', 'oversheath_thickness',
+                            'outer_diameter', 'weight', 'r20', 'metallic_sheath_thickness', 'ampacity'}
+                declarations[0]['mapping'] = {key: value for key, value in declarations[0]['mapping'].items() if key in retained}
+            return declarations
+        with monkeypatch.context() as previous_mapping:
+            previous_mapping.setattr(public_catalogues, '_declarations', old_mapping)
+            old = seed.release_identity()
+        old_sample, current_sample = old[change]['bahra-mv'], identity[change]['bahra-mv']
+        assert old_sample['workbook_sha256'] == current_sample['workbook_sha256']
+        assert old_sample['source_sha256'] == current_sample['source_sha256']
+        assert old_sample['declarations_sha256'] != current_sample['declarations_sha256']
+    else:
+        old[change]={}
     receipt={'complete':True,'identity':old,'user_note':'keep this too'}
     database.with_suffix('.seed.json').write_text(json.dumps(receipt),encoding='utf-8')
     def build(staged, target, versions):

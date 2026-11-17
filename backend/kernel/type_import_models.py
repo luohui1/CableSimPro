@@ -111,6 +111,9 @@ def source_record(upload, sheet, row, key, series, mapping, origin='table'):
               'field': key, 'origin': origin, 'catalogue': deepcopy(series.get('source') or {}),
               'reference': series.get('common_basis', {}).get(key) if origin == 'series' else None,
               'method': tables.IMPORT_METHOD, 'confidence': 'reference', 'reviewed': False}
+    if key in tables.SOURCE_ONLY_FIELDS:
+        source['usage'] = 'catalogue_result'
+        source['conditions'] = deepcopy(series.get('reference', {}).get('conditions', {}))
     if series.get('origin') == 'demo':
         source['kind'] = 'demo'
     return source
@@ -130,6 +133,8 @@ def numeric_facts(upload, sheet, row, series, mapping):
         facts.append({'key': key, 'label': label, 'value': value * scale, 'unit': tables.SI_UNITS[unit],
                       'display_value': value, 'display_unit': unit, 'source': source_record(upload, sheet, row['row_number'], key, series, mapping, origin),
                       'method': tables.IMPORT_METHOD, 'confidence': 'reference'})
+        if key in tables.SOURCE_ONLY_FIELDS:
+            facts[-1]['usage'] = 'catalogue_result'
         if key in row.get('_standard_values', {}):
             reference = row['_standard_values'][key]
             facts[-1]['source'].update(kind='standard', origin='standard', column=None, reference=reference)
@@ -144,7 +149,7 @@ def _incomplete_payload(series, parts, name, facts, missing):
     values, sources = {}, {}
     for item in facts:
         sources[item['key']] = candidate_source(item['source'])
-        if item['key'] in ('area', 'ampacity'):
+        if item['key'] == 'area' or item['key'] in tables.SOURCE_ONLY_FIELDS:
             continue
         key = aliases.get(item['key'], item['key'])
         values[key] = {'value': item['value'], 'unit': item['unit'], 'source': item['key'],
@@ -294,13 +299,15 @@ def build_rows(upload, sheet, rows, series, mapping):
         item['payload'] = payload
         if series['cores'] == 1 and (parts.get('metal_sheath') or series['u_v'] <= 3000):
             from .stated_single_core import build
-            stated = build(series, parts, name, facts)
+            stated = build(series, parts, name, [fact for fact in facts if fact['key'] not in tables.SOURCE_ONLY_FIELDS])
             item['missing'] = list(dict.fromkeys(missing + stated['missing']))
             item['issues'].extend(stated['issues'])
             item['closure'], item['derivation'], item['warnings'] = stated['closure'], stated['derivation'], stated['warnings']
             if item['issues']:
                 item['status'] = 'error'
             elif stated['payload'] is not None and not item['missing']:
+                stated['payload']['sources'].update({fact['key']: candidate_source(fact['source'])
+                    for fact in facts if fact['key'] in tables.SOURCE_ONLY_FIELDS})
                 item.update(payload=stated['payload'], status='ready')
             else:
                 payload['specification']['missing'] = item['missing'] or ['完整结构尚未形成，请核对声明。']

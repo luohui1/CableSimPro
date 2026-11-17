@@ -6,12 +6,139 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 import pytest
 
 from backend.kernel.catalogue_agreement import reference_report
 from backend.kernel.public_catalogues import (_data, catalogue_reference,
                                                match_sample, sample_bytes, sample_manifest)
 from backend.kernel import factory_tables
+
+
+# In the published PDF / workbook order, with independently stated SI factors.
+BAHRA_FACT_COLUMNS = [
+    ('area', 'mm²', 'm2', 1e-6), ('conductor_diameter', 'mm', 'm', 1e-3),
+    ('insulation_thickness', 'mm', 'm', 1e-3), ('metallic_sheath_thickness', 'mm', 'm', 1e-3),
+    ('oversheath_thickness', 'mm', 'm', 1e-3), ('outer_diameter', 'mm', 'm', 1e-3),
+    ('weight', 'kg/km', 'kg/m', 1e-3), ('r20', 'Ω/km', 'ohm/m', 1e-3),
+    ('r_ac_90', 'Ω/km', 'ohm/m', 1e-3), ('inductance', 'mH/km', 'H/m', 1e-6),
+    ('capacitance', 'uF/km', 'F/m', 1e-9), ('short_circuit_conductor', 'kA', 'A', 1e3),
+    ('short_circuit_sheath', 'kA', 'A', 1e3), ('ampacity', 'A', 'A', 1),
+    ('rating_ground_flat', 'A', 'A', 1), ('rating_air_trefoil', 'A', 'A', 1),
+    ('rating_air_flat', 'A', 'A', 1), ('voltage_drop', 'V/(A km)', 'V/(A m)', 1e-3),
+    ('minimum_bending_radius', 'mm', 'm', 1e-3),
+]
+BAHRA_STRUCTURE_KEYS = {'conductor_diameter', 'insulation_thickness', 'metallic_sheath_thickness',
+                        'oversheath_thickness', 'outer_diameter', 'weight', 'r20'}
+
+
+def assert_bahra_facts(values, row, row_number, workbook_digest, data):
+    facts = {fact['key']: fact for fact in values}
+    assert len(values) == len(facts) == len(row) == 19
+    assert set(facts) == {key for key, *_ in BAHRA_FACT_COLUMNS}
+    for index, ((key, display_unit, unit, factor), original) in enumerate(zip(BAHRA_FACT_COLUMNS, row), 1):
+        fact = facts[key]
+        assert fact['display_value'] == original
+        assert fact['display_unit'] == display_unit and fact['unit'] == unit
+        assert fact['value'] == pytest.approx(original * factor, rel=1e-14, abs=0)
+        assert fact['method'] == {'name': '厂家结构表导入', 'version': '1.1.0'}
+        assert fact['confidence'] == 'reference'
+        source = fact['source']
+        assert source['file_sha256'] == workbook_digest
+        assert source['sheet'] == 'Bahra CU XLPE LC PVC'
+        assert source['row'] == row_number and source['column'] == get_column_letter(index)
+        assert source['field'] == key and source['origin'] == 'table'
+        assert source['kind'] == 'manufacturer' and source['reviewed'] is False
+        assert source['method'] == fact['method'] and source['confidence'] == 'reference'
+        assert source['catalogue'] == data['source']
+        if key not in {'area', *BAHRA_STRUCTURE_KEYS}:
+            assert fact['usage'] == source['usage'] == 'catalogue_result'
+            assert source['conditions'] == data['conditions']
+        else:
+            assert 'usage' not in fact and 'usage' not in source
+
+
+@pytest.mark.parametrize('exchange_format', ['json', 'xlsx'])
+def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tmp_path, monkeypatch, exchange_format):
+    """The original 13 rows are evidence, including unsupported performance outputs."""
+    from backend.main import create_app
+    from backend.kernel.type_library_exchange import parse_file, validate_bundle
+    monkeypatch.setenv('CABLESIM_DATASETS_DIR', str(tmp_path / 'datasets'))
+    monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'library'))
+    data = _data('bahra-mv')
+    assert data['source']['sha256'] == '6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a'
+    with TestClient(create_app(tmp_path / 'first.sqlite')) as first, TestClient(create_app(tmp_path / 'second.sqlite')) as second:
+        original = first.get('/api/type-library/samples/bahra-mv.xlsx')
+        assert original.status_code == 200
+        workbook_digest = sha256(original.content).hexdigest()
+        # ZIP bytes may differ across compression runtimes. Bind this exact
+        # downloaded original, whose immutable PDF source is checked above.
+        manifest = first.get('/api/type-library/samples').json()
+        assert workbook_digest == next(sample['sha256'] for sample in manifest if sample['id'] == 'bahra-mv')
+        assert original.content == sample_bytes('bahra-mv')
+        uploaded = first.post('/api/type-library/imports/upload', files={'file': ('bahra-mv.xlsx', original.content)})
+        assert uploaded.status_code == 201, uploaded.text
+        upload = uploaded.json()
+        declaration = upload['declarations'][0]
+        assert declaration['mapping'] == {key: index for index, (key, *_) in enumerate(BAHRA_FACT_COLUMNS)}
+        assert {column['suggested'] for column in upload['sheets'][0]['columns']} >= {key for key, *_ in BAHRA_FACT_COLUMNS}
+        response = first.post('/api/type-library/imports/preview', json={'upload_id': upload['upload_id'],
+            **{key: declaration[key] for key in ('sheet', 'first_data_row', 'mapping', 'series')}})
+        assert response.status_code == 200, response.text
+        preview = response.json()
+        assert preview['error_count'] == 0 and preview['valid_count'] == preview['incomplete_count'] == 13
+        for row_number, (item, row) in enumerate(zip(preview['rows'], data['rows']), 5):
+            assert_bahra_facts(item['values'], row, row_number, workbook_digest, data)
+            assert set(item['payload']['specification']['values']) == BAHRA_STRUCTURE_KEYS
+            assert item['status'] == 'incomplete' and item['missing']
+            assert not any(key in missing for missing in item['missing'] for key in
+                           {key for key, *_ in BAHRA_FACT_COLUMNS} - {'area', *BAHRA_STRUCTURE_KEYS})
+            for fact in item['values']:
+                assert json.loads(item['payload']['sources'][fact['key']]['reference']) == fact['source']
+        saved = first.post('/api/type-library/imports/commit', headers={'X-CableSim-Actor': 'human'}, json={
+            'preview_id': preview['preview_id'], 'preview_digest': preview['preview_digest'],
+            'request_id': str(uuid4()), 'human_confirmed': True, 'skip_errors': False})
+        assert saved.status_code == 201, saved.text
+        committed = saved.json()
+        assert len(committed['specs']) == 13
+        for row_number, (spec, row) in enumerate(zip(committed['specs'], data['rows']), 5):
+            detail = first.get('/api/type-library/specs/' + spec['id']).json()
+            assert_bahra_facts(detail['values'], row, row_number, workbook_digest, data)
+            assert detail['spec']['state'] == 'draft' and detail['missing'] and detail['results'] == []
+        models = {model['id']: model['payload'] for model in first.get('/api/domain-cable-models').json()}
+        for spec in committed['specs']:
+            assert set(models[spec['model_id']]['specification']['values']) == BAHRA_STRUCTURE_KEYS
+            assert models[spec['model_id']]['cable_type'] is None
+        exported = first.post('/api/type-library/exchange/export', json={
+            'series_ids': [committed['series_id']], 'format': exchange_format})
+        assert exported.status_code == 200, exported.text[:1000]
+        bundle = parse_file('types.' + exchange_format, exported.content, validator=validate_bundle)
+        from base64 import b64decode
+        assert b64decode(bundle['files'][0]['content_base64']) == original.content
+        assert bundle['series'][0]['declaration']['reference']['conditions'] == data['conditions']
+        transfer = {'file': ('types.' + exchange_format, exported.content)}
+        checked = second.post('/api/type-library/exchange/preview', files=transfer)
+        assert checked.status_code == 200, checked.text
+        assert checked.json()['original_file_count'] == 1 and checked.json()['series'][0]['spec_count'] == 13
+        imported = second.post('/api/type-library/exchange/import', files=transfer,
+            headers={'X-CableSim-Actor': 'human'}, data={'reviewed_sha256': checked.json()['file_sha256'],
+                'confirmed': 'true', 'request_id': str(uuid4())})
+        assert imported.status_code == 201, imported.text
+        assert imported.json()['created'] == 13 and imported.json()['state'] == 'draft'
+        series = second.get('/api/type-library/series/' + imported.json()['series'][0]['series_id']).json()
+        assert series['declaration']['reference'] == declaration['series']['reference']
+        models = {model['id']: model['payload'] for model in second.get('/api/domain-cable-models').json()}
+        for row_number, (spec, row) in enumerate(zip(series['specs'], data['rows']), 5):
+            detail = second.get('/api/type-library/specs/' + spec['id']).json()
+            assert_bahra_facts(detail['values'], row, row_number, workbook_digest, data)
+            assert detail['values'] == preview['rows'][row_number - 5]['values']
+            assert set(models[spec['model_id']]['specification']['values']) == BAHRA_STRUCTURE_KEYS
+            assert detail['spec']['state'] == 'draft' and detail['results'] == []
+        report = second.post('/api/type-library/catalogue-comparison/bahra-mv', json={}).json()
+        assert len(report['rows']) == 13 and all(len(row['metrics']) == 4 for row in report['rows'])
+        assert report['summary']['ampacity_refused'] == 13
+        assert report['summary']['ampacity_compared'] == report['summary']['four_metric_passed'] == 0
+        assert report['reference_calculation'] is None
 
 
 def test_original_public_cells_and_units_survive_the_workbook():

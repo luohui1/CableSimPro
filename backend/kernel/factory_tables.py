@@ -19,8 +19,25 @@ from openpyxl.utils import get_column_letter
 
 from studio.core.studio_core import structure
 
-IMPORT_METHOD = {'name': '厂家结构表导入', 'version': '1.0.0'}
+IMPORT_METHOD = {'name': '厂家结构表导入', 'version': '1.1.0'}
 MAX_BYTES, MAX_ROWS, MAX_COLUMNS = 10 * 1024 * 1024, 2000, 80
+# Published performance is evidence, not a replacement for geometry, material
+# properties or operating inputs. This explicit vocabulary is also the whitelist
+# excluded from every constructor; adding a structural field cannot exclude it.
+CATALOGUE_FIELDS = {
+    'ampacity': ('样本载流量', 'A', 1, ['样本载流量', '载流量', 'Ampacity']),
+    'r_ac_90': ('样本90℃交流电阻', 'Ω/km', 1e-3, ['90℃交流电阻', '90°C交流电阻']),
+    'inductance': ('样本电感', 'mH/km', 1e-6, ['电感', 'Inductance']),
+    'capacitance': ('样本电容', 'uF/km', 1e-9, ['电容', 'Capacitance']),
+    'short_circuit_conductor': ('样本导体短路电流（1 s）', 'kA', 1e3, ['导体短路电流1s', '导体短路电流（1s）']),
+    'short_circuit_sheath': ('样本铅套短路电流（1 s）', 'kA', 1e3, ['铅套短路电流1s', '铅套短路电流（1s）']),
+    'rating_ground_flat': ('样本直埋平排载流量', 'A', 1, ['直埋平排样本载流量', '直埋平排载流量']),
+    'rating_air_trefoil': ('样本空气品字形载流量', 'A', 1, ['空气品字形样本载流量', '空气品字形载流量']),
+    'rating_air_flat': ('样本空气平排载流量', 'A', 1, ['空气平排样本载流量', '空气平排载流量']),
+    'voltage_drop': ('样本电压降', 'V/(A km)', 1e-3, ['电压降', 'Voltagedrop']),
+    'minimum_bending_radius': ('样本最小弯曲半径', 'mm', 1e-3, ['最小弯曲半径', 'Minimumbendingradius']),
+}
+SOURCE_ONLY_FIELDS = frozenset(CATALOGUE_FIELDS)
 FIELDS = {**structure.FIELDS,
     'metallic_sheath_thickness': ('金属套厚度', 'mm', .001, ['金属套厚度', '铅套厚度', '铝套厚度', 'Lead sheath thickness']),
     'buffer_thickness': ('缓冲层厚度', 'mm', .001, ['缓冲层厚度', '缓冲层']),
@@ -29,9 +46,10 @@ FIELDS = {**structure.FIELDS,
     'corrugation_pitch': ('金属套波纹节距', 'mm', .001, ['波纹节距', '波距']),
     'screen_wire_diameter': ('屏蔽铜丝直径', 'mm', .001, ['屏蔽铜丝直径', '铜丝直径']),
     'screen_wire_count': ('屏蔽铜丝根数', '根', 1, ['屏蔽铜丝根数', '铜丝根数']),
-    'ampacity': ('样本载流量', 'A', 1, ['样本载流量', '载流量', 'Ampacity']),
+    **CATALOGUE_FIELDS,
 }
-SI_UNITS = {'mm': 'm', 'mm²': 'm2', 'Ω/km': 'ohm/m', 'kg/km': 'kg/m', '根': '1', '%': '1', 'A': 'A'}
+SI_UNITS = {'mm': 'm', 'mm²': 'm2', 'Ω/km': 'ohm/m', 'kg/km': 'kg/m', '根': '1', '%': '1', 'A': 'A',
+            'mH/km': 'H/m', 'uF/km': 'F/m', 'kA': 'A', 'V/(A km)': 'V/(A m)'}
 # A text comma could be either a decimal separator or a thousands separator.
 # Without a declared locale, accepting it would silently change source values.
 NUMBER = re.compile(r'^[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$')
