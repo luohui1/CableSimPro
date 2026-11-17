@@ -22,6 +22,7 @@ export function MethodParameterFields({
   sources,
   references,
   fieldErrors,
+  readOnlyFields,
 }: {
   method: components["schemas"]["Method"];
   values: Record<string, unknown>;
@@ -33,6 +34,8 @@ export function MethodParameterFields({
   sources?: Record<string, { kind?: string }>;
   references?: Record<string, { value: string; label: string }[]>;
   fieldErrors?: Record<string, string>;
+  /** Host UI restrictions for exact scalar parameter paths; never change the contract or saved values. */
+  readOnlyFields?: Readonly<Record<string, string>>;
 }) {
   const query = useQuery(inputContractQuery(method));
   if (query.isPending) return <LoadingState title="正在读取方法参数" />;
@@ -70,6 +73,7 @@ export function MethodParameterFields({
         sources={sources}
         references={references}
         fieldErrors={fieldErrors}
+        readOnlyFields={readOnlyFields}
       /></Suspense>
     </div>
   );

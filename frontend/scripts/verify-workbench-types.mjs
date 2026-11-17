@@ -190,6 +190,74 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     return null;
   }
 
+  async function verifyRatingParameterControls({ wid, sid, definition, draftSource }) {
+    const prefix = `/api/workspaces/${encodeURIComponent(wid)}/studies/${encodeURIComponent(sid)}`;
+    const [studyBefore, workspaceBefore] = await Promise.all([api(prefix), workspace(wid)]);
+    const writesBefore = report.writes.length, start = new URL(page.url());
+    const expectedParameters = (definition || studyBefore.definition).parameters;
+    const form = page.locator('.parameter-form'), mode = form.getByRole('combobox', { name: '额定模式', exact: true });
+    const explanation = page.getByRole('region', { name: '载流量参数说明', exact: true });
+    await expect(mode).toBeDisabled();
+    if (!Object.hasOwn(expectedParameters, 'rating_mode')) await expect(mode).toHaveText('请选择');
+    await expect(explanation).toContainText('计算时同名参数以逐行工况为准');
+    await expect(explanation).toContainText('全局额定模式只读');
+    await expect(explanation).toContainText('空白不表示逐行工况未保存');
+    const modeBefore = await mode.innerText(), wasDirty = await dirty();
+    if (draftSource !== undefined) {
+      expect(wasDirty, '本段必须有真实未保存方法草稿').toBe(true);
+      await expect(form.getByRole('combobox', { name: '运行输出', exact: true })).toBeEnabled();
+      await expect(form.getByLabel('来源', { exact: true })).toHaveValue(draftSource);
+      expect(studyBefore.definition.parameters.source, '已有教学来源草稿尚未写入保存参数').not.toBe(draftSource);
+    }
+    await explanation.scrollIntoViewIfNeeded();
+    await expect(explanation).toBeInViewport({ ratio: 1 });
+    const visibleReason = await explanation.evaluate(node => [...node.querySelectorAll('p')].map(item => ({
+      text: item.textContent, display: getComputedStyle(item).display, font: parseFloat(getComputedStyle(item).fontSize),
+      width: item.clientWidth, scrollWidth: item.scrollWidth,
+    })));
+    check('全局额定模式只读原因与逐行优先级使用可见正文', visibleReason.every(item => item.display !== 'none'
+      && item.font >= 13 && item.width > 0 && item.scrollWidth <= item.width + 1), visibleReason);
+    const label = start.searchParams.has('run') ? '固定运行' : '未保存草稿';
+    const beforeShot = await capture('载流量表-' + label + '-全局模式只读与逐行说明');
+    const conditions = explanation.getByRole('button', { name: '查看逐行工况', exact: true });
+    await conditions.focus();
+    await expect(conditions).toBeFocused();
+    await conditions.press('Enter');
+    await page.waitForURL(url => url.pathname === `/types/${encodeURIComponent(wid)}/rating-table/results`
+      && ['theme', 'run', 'revision'].every(key => url.searchParams.get(key) === start.searchParams.get(key)));
+    await expect(page.getByRole('table', { name: '载流量表', exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: '型号有未保存修改', exact: true })).toHaveCount(0);
+    expect(await dirty(), '同一工况表导航保留原草稿状态').toBe(wasDirty);
+    const resultsUrl = page.url(), resultShot = await capture('载流量表-' + label + '-键盘查看逐行工况');
+    const parameterTab = page.getByRole('tab', { name: '方法参数', exact: true });
+    await parameterTab.focus();
+    await parameterTab.press('Enter');
+    await page.waitForURL(url => url.pathname === start.pathname
+      && ['theme', 'run', 'revision'].every(key => url.searchParams.get(key) === start.searchParams.get(key)));
+    await expect(mode).toBeDisabled();
+    await expect(mode).toHaveText(modeBefore);
+    expect(await dirty(), '返回参数页仍保留原草稿状态').toBe(wasDirty);
+    if (draftSource !== undefined) {
+      await advanced(form);
+      const sourceEditor = form.locator('.parameter-structured[data-field-path="/source"] details.parameter-source');
+      if (await sourceEditor.getAttribute('open') === null) await sourceEditor.locator(':scope > summary').click();
+      await expect(sourceEditor.getByLabel('来源', { exact: true })).toHaveValue(draftSource);
+    }
+    const [studyAfter, workspaceAfter] = await Promise.all([api(prefix), workspace(wid)]);
+    expect(studyAfter.id).toBe(studyBefore.id);
+    expect(studyAfter.revision).toBe(studyBefore.revision);
+    expect(studyAfter.definition).toEqual(studyBefore.definition);
+    expect(workspaceAfter.id).toBe(workspaceBefore.id);
+    expect(workspaceAfter.revision).toBe(workspaceBefore.revision);
+    expect(workspaceAfter.domain).toEqual(workspaceBefore.domain);
+    const evidence = { ...size, workspace: wid, study: sid, run: start.searchParams.get('run'),
+      revision: start.searchParams.get('revision'), start: start.href, results: resultsUrl, returned: page.url(),
+      modeText: modeBefore, parametersBefore: studyBefore.definition.parameters, parametersAfter: studyAfter.definition.parameters,
+      draftSource, wasDirty, visibleReason, screenshots: [beforeShot.screenshot, resultShot.screenshot], writes: report.writes.slice(writesBefore) };
+    (report.ratingParameterNavigation ||= []).push(evidence);
+    check('全局额定模式不可编辑且键盘工况往返保留身份、参数与草稿并且零写入', evidence.writes.length === 0, evidence);
+  }
+
   async function fixedTypeSources() {
     if (fixedTypeArchiveSources) return fixedTypeArchiveSources;
     const found = new Map(), owners = await api('/api/design/type-workspaces');
@@ -393,6 +461,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await openFixed(source.module === 'rating-table' ? '旧批量空间链接打开' : '旧载流量结果链接打开',
         () => page.goto(legacy.href));
       await openFixed('旧入口转到型号后刷新', () => page.reload());
+      if (source.module === 'rating-table') {
+        const parameters = new URL(page.url());
+        parameters.pathname = `/types/${encodeURIComponent(source.wid)}/rating-table/parameters`;
+        parameters.searchParams.set('revision', String(archiveBefore.snapshot.workspace_revision));
+        await page.goto(parameters.href);
+        await verifyRatingParameterControls({ wid: source.wid, sid: source.sid, definition: archiveBefore.snapshot.definition });
+      }
       const openCurrent = page.getByRole('button', { name: '打开当前型号', exact: true });
       if (source.module === 'structure' && await openCurrent.isVisible()) {
         if (size.width === 1366) { await openCurrent.focus(); await openCurrent.press('Enter'); }
@@ -1835,6 +1910,10 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const source = `T1 隔离走查：复用发布教学型号 ${teachingSeed.name} 已保存的方法参数（${parameters.source}）；直埋工况未启用排管分支，管内参数仅按方法合同保留，非现场测量或批准数据。`;
     await fillRatingParameters(parameters, source);
     (report.ratingSources ||= []).push({ ...size, copy: main.id, source: teachingSeed.id, parameters });
+    const beforeSave = (await api(`/api/workspaces/${main.id}/studies`))
+      .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];
+    expect(beforeSave, '新增工况已经保存，方法条件仍是未保存草稿').toBeTruthy();
+    await verifyRatingParameterControls({ wid: main.id, sid: beforeSave.id, draftSource: source });
     await save(main.id);
     const ratingStudy = (await api(`/api/workspaces/${main.id}/studies`))
       .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];

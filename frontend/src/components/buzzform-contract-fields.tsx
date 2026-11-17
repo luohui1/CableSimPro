@@ -15,7 +15,7 @@ import { Select } from './ui/select';
 import { clearParameterDrafts, declaredParameterDefaults, nullableParameter, reindexParameterDrafts } from '@/lib/study-parameter-form';
 import { appendFieldPath, pointerParts } from '@/lib/missing-input';
 
-type Props = ComponentProps<typeof ContractFields>;
+type Props = ComponentProps<typeof ContractFields> & { readOnlyFields?: Readonly<Record<string, string>> };
 type Entry = { name: string; path: string; label: string; ownLabel: string; group: string; groupOrder: number; level: 'basic' | 'advanced' | 'expert'; order: number; field?: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean;
   /** 结构化参数：数值列表、对象数组、按模型对象分项的映射；不进入表单引擎，直接按 SI 写回。 */
   structure?: 'range' | 'list' | 'rows' | 'map' | 'object' | 'source' | 'tuples'; keys?: { value: string; label: string }[]; required?: boolean };
@@ -113,8 +113,12 @@ function stored(entry: Entry, value: unknown): unknown {
   return value;
 }
 export function BuzzformContractFields(props: Props) {
-  const { module, schema, root, prefix, values, readOnly, onChange, onDraftChange = () => {}, draftFields = {}, references, fieldErrors = {} } = props;
-  const entries = useMemo(() => compile(schema, root, prefix, module, readOnly, references), [schema, root, prefix, module, readOnly, references]);
+  const { module, schema, root, prefix, values, readOnly, onChange, onDraftChange = () => {}, draftFields = {}, references, fieldErrors = {}, readOnlyFields } = props;
+  const entries = useMemo(() => compile(schema, root, prefix, module, readOnly, references).map(entry => {
+    const reason = readOnlyFields?.[entry.path];
+    return reason && entry.field ? { ...entry, field: { ...entry.field, readOnly: true,
+      description: [entry.field.description, reason].filter(Boolean).join('\n') } } : entry;
+  }), [schema, root, prefix, module, readOnly, references, readOnlyFields]);
   const valueAt = (entry: Entry) => { let value: unknown = values; for (const part of pointerParts(entry.path.slice(prefix.length))) value = optionalRecord(value)[part]; return value; };
   const defaults = Object.fromEntries(entries.filter(entry => entry.field).map(entry => {
     const value = valueAt(entry);
@@ -129,13 +133,13 @@ export function BuzzformContractFields(props: Props) {
   const registries = { fields: registry, validators: {hostParameter: (value: unknown, args?: unknown) => { try { stored(entries[Number(optionalRecord(args).index)], value); return true; } catch { return false; } }} };
   const listeners = { onChange: ({fieldApi}: { fieldApi: { name: string; state: { value: unknown } } }) => {
     const entry = entries.find(entry => entry.name === fieldApi.name);
-    if (!entry || readOnly) return;
+    if (!entry || readOnly || readOnlyFields?.[entry.path]) return;
     const value = fieldApi.state.value;
     if (entry.spec || entry.json) onDraftChange({module, path: entry.path, text: value === undefined ? '' : String(value), kind: entry.json ? 'json' : entry.integer ? 'integer' : 'number', spec: entry.spec}, module + entry.path);
     else onChange(entry.path, value==='__none__' && nullableParameter(entry.source) ? null : value);
   }, onBlur: ({fieldApi}: { fieldApi: { name: string; state: { value: unknown } } }) => {
     const entry = entries.find(entry => entry.name === fieldApi.name);
-    if (!entry || readOnly || (!entry.spec && !entry.json)) return;
+    if (!entry || readOnly || readOnlyFields?.[entry.path] || (!entry.spec && !entry.json)) return;
     if (!draftFields[module + entry.path]) return;
     try { onChange(entry.path, stored(entry, fieldApi.state.value)); onDraftChange(undefined, module + entry.path); } catch { /* Keep invalid text in the formal draft; Save also validates it. */ }
   } };
