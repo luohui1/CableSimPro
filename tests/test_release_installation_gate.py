@@ -4,7 +4,9 @@ from functools import partial
 from hashlib import sha256
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from threading import Thread
+import venv
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -12,7 +14,15 @@ import pytest
 
 from backend.main import create_app
 from backend.kernel.scenarios import system_models
-from scripts.verify_installation import InstallationGate, validate_rating_values
+from scripts.verify_installation import InstallationGate, loopback_probe, validate_rating_values
+
+
+def test_loopback_preflight_exchanges_bytes_with_actual_temporary_python(tmp_path):
+    environment = tmp_path / "python-environment"
+    venv.EnvBuilder(with_pip=False).create(environment)
+    interpreter = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    observation = loopback_probe(interpreter, dict(os.environ))
+    assert observation == {"python_executable": str(interpreter), "address": "127.0.0.1", "round_trip": True}
 
 
 def test_frontend_http_evidence_rejects_wrong_bytes_and_mime_type(tmp_path):

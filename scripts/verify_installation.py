@@ -31,6 +31,9 @@ from uuid import uuid4
 import zipfile
 
 
+PROBE_ADDRESSES = ("1.1.1.1", "8.8.8.8", "2606:4700:4700::1111")
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
@@ -52,10 +55,10 @@ def extract_release(archive: Path, destination: Path) -> Path:
     return root
 
 
-def offline_probe() -> list[dict]:
+def offline_probe(*, require_blocked: bool = True) -> list[dict]:
     """Actual sockets complement, but do not replace, the CI OS enforcement."""
     observations = []
-    for address in ("1.1.1.1", "8.8.8.8"):
+    for address in PROBE_ADDRESSES:
         try:
             with socket.create_connection((address, 443), timeout=2):
                 connected = True
@@ -64,15 +67,16 @@ def offline_probe() -> list[dict]:
             reason = type(error).__name__
         observations.append({"address": address, "port": 443, "connected": connected,
                              "result": "外网连接成功" if connected else reason})
-    require(not any(item["connected"] for item in observations), "外网仍可连接，拒绝声称离线验证通过。")
+    if require_blocked:
+        require(not any(item["connected"] for item in observations), "外网仍可连接，拒绝声称离线验证通过。")
     return observations
 
 
-def installed_offline_probe(interpreter: Path, environment: dict) -> list[dict]:
+def installed_offline_probe(interpreter: Path, environment: dict, *, require_blocked: bool = True) -> list[dict]:
     """Exercise the installed interpreter as well as the gate's own Python."""
     script = """import json, socket
 observations = []
-for address in ('1.1.1.1', '8.8.8.8'):
+for address in """ + repr(PROBE_ADDRESSES) + """:
     try:
         with socket.create_connection((address, 443), timeout=2):
             connected, result = True, 'connected'
@@ -84,9 +88,47 @@ print(json.dumps(observations))
     response = subprocess.run([str(interpreter), "-c", script], env=environment,
                               capture_output=True, text=True, encoding="utf-8", check=True, timeout=15)
     observations = json.loads(response.stdout)
-    require(len(observations) == 2 and not any(item["connected"] for item in observations),
+    require(len(observations) == len(PROBE_ADDRESSES)
+            and (not require_blocked or not any(item["connected"] for item in observations)),
             "已安装 Python 仍可连接外网，离线验证失败。")
     return observations
+
+
+def loopback_probe(interpreter: Path, environment: dict) -> dict:
+    """Exchange real bytes between the gate and the declared child Python."""
+    script = """import json, socket, sys
+with socket.create_connection(('127.0.0.1', int(sys.argv[1])), timeout=5) as client:
+    client.sendall(b'cablesim-preflight')
+    if client.makefile('rb').read(len(b'loopback-verified')) != b'loopback-verified':
+        raise RuntimeError('Loopback response did not match the request.')
+print(json.dumps({'python_executable': sys.executable, 'address': '127.0.0.1', 'round_trip': True}))
+"""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        listener.settimeout(10)
+        process = subprocess.Popen([str(interpreter), "-c", script, str(listener.getsockname()[1])],
+                                   env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, encoding="utf-8", start_new_session=os.name != "nt",
+                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        try:
+            with listener.accept()[0] as connection:
+                connection.settimeout(5)
+                require(connection.makefile("rb").read(len(b"cablesim-preflight")) == b"cablesim-preflight",
+                        "本机回环探测未收到预期数据。")
+                connection.sendall(b"loopback-verified")
+            stdout, stderr = process.communicate(timeout=10)
+            require(process.returncode == 0, "本机回环探测子进程失败：" + stderr[-1800:])
+            observation = json.loads(stdout)
+            require(Path(observation["python_executable"]).absolute() == interpreter.absolute()
+                    and observation.get("round_trip") is True, "回环探测未使用声明的 Python。")
+            return observation
+        except Exception as error:
+            stop_process(process)
+            _stdout, stderr = process.communicate(timeout=5)
+            raise RuntimeError(f"双 Python 回环通信失败：{error}；子进程：{stderr[-1800:]}") from error
+        finally:
+            stop_process(process)
 
 
 def linux_graphics_probe(interpreter: Path, configuration: Path, installed: Path, inherited: dict) -> dict:
@@ -190,6 +232,7 @@ def windows_firewall(temporary: Path, interpreter: Path, gate):
     script.write_text(r'''param([string]$Action, [string]$Configuration)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+if ($null -ne $PSStyle) { $PSStyle.OutputRendering = 'PlainText' }
 $settings = Get-Content -LiteralPath $Configuration -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($Action -eq 'enable') {
     $profiles = @(Get-NetFirewallProfile | Select-Object Name, @{Name='Enabled';Expression={$_.Enabled.ToString()}})
@@ -203,15 +246,15 @@ if ($Action -eq 'enable') {
     foreach ($program in $settings.programs) {
         $number += 1
         New-NetFirewallRule -DisplayName ($settings.group + '-' + $number) -Group $settings.group `
-            -Direction Outbound -Action Block -Program $program -Profile Any `
-            -RemoteAddress '0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255','::/0' | Out-Null
+            -Direction Outbound -Action Block -Program $program -Profile Any -Enabled True `
+            -RemoteAddress Any | Out-Null
     }
-    $rules = @(Get-NetFirewallRule -Group $settings.group | ForEach-Object {
+    $rules = @(Get-NetFirewallRule -PolicyStore ActiveStore -Group $settings.group | ForEach-Object {
         $application = $_ | Get-NetFirewallApplicationFilter
         $addresses = $_ | Get-NetFirewallAddressFilter
         [pscustomobject]@{name=$_.DisplayName; program=$application.Program;
             enabled=$_.Enabled.ToString(); action=$_.Action.ToString(); direction=$_.Direction.ToString();
-            remote_addresses=@($addresses.RemoteAddress)}
+            profile=$_.Profile.ToString(); remote_addresses=@($addresses.RemoteAddress)}
     })
     ConvertTo-Json -InputObject $rules -Depth 5
 } elseif ($Action -eq 'disable') {
@@ -222,28 +265,58 @@ if ($Action -eq 'enable') {
             Set-NetFirewallProfile -Profile $profile.Name -Enabled $profile.Enabled
         }
     }
+    $remaining = @(Get-NetFirewallRule -PolicyStore ActiveStore -Group $settings.group -ErrorAction SilentlyContinue)
+    if ($remaining.Count -ne 0) { throw 'Offline firewall rules remain active after cleanup.' }
+    $observed = @(Get-NetFirewallProfile | Select-Object Name, @{Name='Enabled';Expression={$_.Enabled.ToString()}})
+    foreach ($profile in $profiles) {
+        $actual = @($observed | Where-Object { $_.Name -eq $profile.Name })
+        if ($actual.Count -ne 1 -or $actual[0].Enabled -ne $profile.Enabled) {
+            throw ('Firewall profile was not restored: ' + $profile.Name)
+        }
+    }
+    ConvertTo-Json -InputObject @{remaining_rule_count=$remaining.Count; restored_profiles=$observed} -Depth 5
 } else { throw 'Unknown firewall action' }
 ''', encoding="utf-8")
 
     def apply(action):
-        response = subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-File", str(script),
-                                   "-Action", action, "-Configuration", str(configuration)],
-                                  capture_output=True, encoding="utf-8", errors="replace", timeout=90)
+        try:
+            response = subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-File", str(script),
+                                       "-Action", action, "-Configuration", str(configuration)],
+                                      capture_output=True, encoding="utf-8", errors="replace", timeout=90)
+        except subprocess.TimeoutExpired as error:
+            with (gate.output / "firewall.log").open("a", encoding="utf-8") as log:
+                log.write(action + "\nPowerShell exceeded 90 seconds.\n")
+            raise RuntimeError(f"Windows 防火墙 {action} 超过 90 秒；查看 firewall.log。") from error
         with (gate.output / "firewall.log").open("a", encoding="utf-8") as log:
             log.write(action + "\n" + response.stdout + response.stderr + "\n")
-        require(response.returncode == 0, "Windows 防火墙操作失败；查看 firewall.log。")
+        details = (response.stderr.strip() or response.stdout.strip())[-1800:]
+        require(response.returncode == 0,
+                f"Windows 防火墙 {action} 失败（退出码 {response.returncode}）：{details}；查看 firewall.log。")
         return response.stdout
 
+    failure = None
     try:
         rules = json.loads(apply("enable").lstrip("\ufeff"))
         require(len(rules) == len(programs) and all(rule["enabled"] == "True"
-                and rule["action"] == "Block" and rule["direction"] == "Outbound" for rule in rules),
+                and rule["action"] == "Block" and rule["direction"] == "Outbound"
+                and rule["profile"] == "Any" and rule["remote_addresses"] == ["Any"] for rule in rules)
+                and {os.path.normcase(str(Path(rule["program"]).resolve())) for rule in rules}
+                == {os.path.normcase(program) for program in programs},
                 "未启用全部应用 Python 的外网阻断规则。")
         gate.artifact("windows-firewall-rules.json", {"scope": "gate Python, installed host and method Python; no companion programs",
-                                                    "programs": programs, "rules": rules})
+                                                    "policy_store": "ActiveStore", "programs": programs, "rules": rules})
         yield
+    except BaseException as error:
+        failure = error
+        raise
     finally:
-        apply("disable")
+        try:
+            cleanup = json.loads(apply("disable").lstrip("\ufeff"))
+            gate.artifact("windows-firewall-cleanup.json", cleanup)
+        except Exception as cleanup_error:
+            if failure is not None:
+                raise RuntimeError(f"原始失败：{failure}；防火墙清理也失败：{cleanup_error}") from cleanup_error
+            raise
 
 
 def no_node_environment(directory: Path) -> dict[str, str]:
@@ -557,9 +630,57 @@ def stop_process(process: subprocess.Popen) -> None:
         process.wait()
 
 
+def firewall_preflight(output: Path, timeout: int) -> int:
+    """Fail before expensive builds if Windows cannot enforce the real guard."""
+    gate = InstallationGate(output, timeout)
+    gate.result.update(transport="Windows firewall preflight / actual Python sockets", preflight_only=True)
+    started = time.monotonic()
+    try:
+        require(os.name == "nt", "Windows 防火墙预检只能在 Windows 执行。")
+        with TemporaryDirectory(prefix="cablesim-firewall-") as directory:
+            temporary = Path(directory)
+            environment = no_node_environment(temporary)
+            virtualenv = temporary / "program/.venv"
+            with gate.step("创建实际临时 Python 环境用于防火墙预检"):
+                with (output / "preflight-python.log").open("wb") as log:
+                    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(virtualenv)],
+                                   env=environment, stdout=log, stderr=subprocess.STDOUT,
+                                   check=True, timeout=min(timeout, 90))
+            interpreter = virtualenv / "Scripts/python.exe"
+            require(interpreter.is_file(), "预检没有生成实际的临时 Python。")
+            with gate.step("记录加规则前双 Python 的真实外网连通性"):
+                baseline = {"gate_python": offline_probe(require_blocked=False),
+                    "temporary_python": installed_offline_probe(interpreter, environment, require_blocked=False)}
+                gate.artifact("external-baseline.json", baseline)
+                require(all(any(probe["connected"] for probe in probes) for probes in baseline.values()),
+                        "预检端点在加规则前已全部不可达，无法实证防火墙阻断；查看 external-baseline.json。")
+            with windows_firewall(temporary, interpreter, gate):
+                with gate.step("有效防火墙下双 Python 外网连接必须失败"):
+                    gate.result["offline"] = {"enforcement": "windows-firewall",
+                        "probes": offline_probe(),
+                        "temporary_python_probes": installed_offline_probe(interpreter, environment)}
+                    gate.result["offline"]["previously_connected_endpoints"] = {
+                        name: [probe["address"] for probe in probes if probe["connected"]]
+                        for name, probes in baseline.items()}
+                with gate.step("有效防火墙下实际双 Python 回环通信必须成功"):
+                    gate.artifact("loopback.json", loopback_probe(interpreter, environment))
+        gate.result["status"] = "passed"
+    except Exception as error:
+        gate.result.update(status="failed", error=str(error), error_type=type(error).__name__)
+    finally:
+        gate.result["elapsed_s"] = round(time.monotonic() - started, 3)
+        (output / "result.json").write_text(json.dumps(gate.result, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({"status": gate.result["status"], "report": str(output / "result.json"),
+                      "error": gate.result.get("error")}, ensure_ascii=False), flush=True)
+    return 0 if gate.result["status"] == "passed" else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--archive", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--archive", type=Path)
+    mode.add_argument("--windows-firewall-preflight", action="store_true",
+                      help="Verify the actual Windows guard before building a release; no installation claim.")
     parser.add_argument("--output", type=Path, required=True, help="New evidence directory; no generated files are committed.")
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--require-offline", choices=("linux-network-namespace", "windows-firewall"))
@@ -568,6 +689,8 @@ def main() -> int:
     output = args.output.resolve()
     require(not output.exists(), "验收输出目录已存在，拒绝覆盖。")
     output.mkdir(parents=True)
+    if args.windows_firewall_preflight:
+        return firewall_preflight(output, args.timeout_seconds)
     gate = InstallationGate(output, args.timeout_seconds)
     process = None
     started = time.monotonic()

@@ -127,6 +127,9 @@ jobs:
           cache-dependency-path: |
             backend/requirements*.txt
             plugins/cablesim.cable-geometry/src/requirements.txt
+      - name: Verify Windows firewall and loopback before expensive builds
+        if: runner.os == 'Windows'
+        run: python scripts/verify_installation.py --windows-firewall-preflight --output artifacts/firewall-preflight-Windows
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -195,5 +198,13 @@ jobs:
           path: |
             artifacts/CableSimPro-${{ runner.os }}.zip
             artifacts/CableSimPro-${{ runner.os }}.zip.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CableSimPro-installation-${{ runner.os }}
+          retention-days: 14
+          path: |
             artifacts/installation-${{ runner.os }}/
+            artifacts/firewall-preflight-${{ runner.os }}/
           if-no-files-found: error
