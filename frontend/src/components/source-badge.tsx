@@ -1,6 +1,7 @@
 import { Icon } from './icon';
 import { displayText } from '@/lib/display-names';
 import { Tooltip } from './ui/tooltip';
+import './source-badge.css';
 
 export const sourceKinds = {
   demo: { label: '教学', icon: 'source/from-document' },
@@ -16,5 +17,5 @@ export type SourceKind = keyof typeof sourceKinds;
 
 export function SourceBadge({ kind, detail }: { kind: SourceKind; detail?: string }) {
   const source = sourceKinds[kind];
-  return <Tooltip content={displayText(detail || source.label)}><button type="button" className="source-badge" aria-label={`来源：${source.label}`}><Icon name={source.icon} /><span>{source.label}</span></button></Tooltip>;
+  return <Tooltip content={<span className="source-badge-detail">{displayText(detail || source.label)}</span>}><button type="button" className="source-badge" aria-label={`来源：${source.label}`}><Icon name={source.icon} /><span>{source.label}</span></button></Tooltip>;
 }
