@@ -86,9 +86,51 @@ async function interrupted(kind: 'study' | 'type', localStatus: 'pending' | 'acc
     assert.ok(entry?.type === 'custom');
     return entry.data as { types: string[]; studies: [string, string][] };
   };
-  return { agent, backend, faux: scripted.faux, id, context, savedAdoption,
+  const savedMessages = () => SessionManager.open(manager.getSessionFile()!, sessions, cwd).buildSessionContext().messages;
+  return { agent, backend, faux: scripted.faux, id, context, savedAdoption, savedMessages,
     close: async () => { await agent.close(); rmSync(home, { recursive: true, force: true }); } };
 }
+
+test('concurrent history reads and a new prompt share recovery and retain the completed continuation on disk', { timeout: 20_000 }, async () => {
+  const fixture = await interrupted('type', 'pending', 'approved', { kind: 'type', workspace_id: NEW_TYPE, type_id: NEW_TYPE });
+  const entered = Promise.withResolvers<void>();
+  const delayed = Promise.withResolvers<void>();
+  const competing = Promise.withResolvers<void>();
+  fixture.backend.proposal = async () => {
+    fixture.backend.lookups += 1;
+    if (fixture.backend.lookups === 1) { entered.resolve(); await delayed.promise; }
+    else competing.resolve();
+    return fixture.backend.saved;
+  };
+  fixture.faux.setResponses([fauxAssistantMessage([fauxText('已核对保存记录，继续处理完成。')])]);
+  const firstRead = fixture.agent.view(fixture.id);
+  await entered.promise;
+  const otherRead = fixture.agent.view(fixture.id);
+  const continuation = fixture.agent.send(fixture.id, '恢复后继续处理这条消息', fixture.context);
+  try {
+    // A competing recovery would bypass the delayed read. Let that continuation finish before the stale reader appends,
+    // reproducing the lost-history window; with one shared recovery the event-loop turn simply releases the waiting read.
+    await Promise.race([competing.promise, new Promise<void>(done => setImmediate(done))]);
+    if (fixture.backend.lookups > 1) { await continuation; await fixture.agent.idle(fixture.id); }
+    delayed.resolve();
+    await Promise.all([firstRead, otherRead, continuation]);
+    await fixture.agent.idle(fixture.id);
+    const saved = fixture.savedMessages();
+    assert.ok(saved.some(message => message.role === 'user' && (typeof message.content === 'string'
+      ? message.content === '恢复后继续处理这条消息' : message.content.some(part => part.type === 'text' && part.text === '恢复后继续处理这条消息'))),
+      'the next restart must retain the new user message');
+    assert.ok(saved.some(message => message.role === 'assistant' && message.content.some(part => part.type === 'text' && part.text === '已核对保存记录，继续处理完成。')),
+      'the next restart must retain the completed assistant answer');
+    assert.equal(saved.filter(message => message.role === 'toolResult' && message.toolCallId === 'interrupted-call').length, 1);
+    assert.equal(fixture.backend.lookups, 1, 'history reads and prompting reconcile the interrupted decision once');
+    assert.deepEqual(fixture.backend.decisions, [], 'reading history never approves or replays a saved write');
+    assert.deepEqual(fixture.backend.calls, []);
+  } finally {
+    delayed.resolve();
+    await Promise.allSettled([firstRead, otherRead, continuation]);
+    await fixture.close();
+  }
+});
 
 for (const kind of ['study', 'type'] as const) for (const localStatus of ['pending', 'accepted'] as const) {
   test(`recovery adopts an approved ${kind} from its receipt when the local step was ${localStatus}, without replaying creation`, async () => {

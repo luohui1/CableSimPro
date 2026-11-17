@@ -73,6 +73,7 @@ export class FusionAgent {
   #given?: ModelConfig;
   #live = new Map<string, Live>();
   #opening = new Map<string, Promise<Live>>();
+  #restoring = new Map<string, Promise<SessionManager>>();
   #catalog?: Promise<BackendTool[]>;
   #titles = new Map<string, string>();
   #waiting = new Map<string, Waiting>();
@@ -225,12 +226,29 @@ export class FusionAgent {
     await this.#tools().catch(() => undefined);
     const live = this.#live.get(id);
     if (live) return this.#viewOf(id, live.session.messages as PiMessage[], live);
-    const { SessionManager } = await pi();
-    const file = SessionManager.findById(this.#cwd, id, this.#sessions);
-    if (!file) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '没有这个对话。' }, 404);
-    const manager = SessionManager.open(file, this.#sessions, this.#cwd);
-    await this.#recover(manager);
+    const manager = await this.#restore(id);
+    const opened = this.#live.get(id);
+    if (opened) return this.#viewOf(id, opened.session.messages as PiMessage[], opened);
     return this.#viewOf(id, manager.buildSessionContext().messages as PiMessage[], undefined, manager);
+  }
+
+  /** History reads and new prompts share recovery. Two managers appending from the same old leaf can hide newer messages on reopen. */
+  #restore(id: string): Promise<SessionManager> {
+    let restoring = this.#restoring.get(id);
+    if (!restoring) {
+      restoring = (async () => {
+        const { SessionManager } = await pi();
+        const live = this.#live.get(id);
+        if (live) return live.manager;
+        const file = SessionManager.findById(this.#cwd, id, this.#sessions);
+        if (!file) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '没有这个对话。' }, 404);
+        const manager = SessionManager.open(file, this.#sessions, this.#cwd);
+        await this.#recover(manager);
+        return manager;
+      })().finally(() => this.#restoring.delete(id));
+      this.#restoring.set(id, restoring);
+    }
+    return restoring;
   }
 
   /** Recover only the identities that a completed creation receipt from the platform confirms, preserving earlier adopted objects. */
@@ -385,15 +403,7 @@ export class FusionAgent {
     if (!config) throw new StudioError({ code: 'MODEL_NOT_CONFIGURED', message: '模型未配置。' + NOT_CONFIGURED }, 409);
     const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await pi();
     for (const dir of [this.#cwd, this.#agentDir, this.#sessions]) mkdirSync(dir, { recursive: true });
-    let manager: SessionManager;
-    if (id) {
-      const file = SessionManager.findById(this.#cwd, id, this.#sessions);
-      if (!file) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '没有这个对话。' }, 404);
-      manager = SessionManager.open(file, this.#sessions, this.#cwd);
-    } else {
-      manager = SessionManager.create(this.#cwd, this.#sessions);
-    }
-    await this.#recover(manager);
+    const manager = id ? await this.#restore(id) : SessionManager.create(this.#cwd, this.#sessions);
     const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, revision: 0,
       adopted: { types: new Set(), studies: new Map() }, attachments: this.#storedAttachments(manager), unsubscribe: () => undefined };
     for (const entry of manager.getEntries()) if (entry.type === 'custom') {
