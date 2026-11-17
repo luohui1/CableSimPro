@@ -28,6 +28,25 @@ const {resultCitation,formulaInput}=await server.ssrLoadModule('/src/features/ty
 const {ratingConditionNumber}=await server.ssrLoadModule('/src/features/type/rating-table.tsx');
 const {SavedFormula}=await server.ssrLoadModule('/src/features/type/saved-formula.tsx');
 const {dimensionBasis}=await server.ssrLoadModule('/src/features/type/dimension-basis.ts');
+const {methodErrorText,MethodErrorDetail}=await server.ssrLoadModule('/src/features/type/method-error.tsx');
+const {structureIssue}=await server.ssrLoadModule('/src/features/type/structure-issue.tsx');
+test('Input-basis rejection and missing coefficients retain their real diagnosis without an installation claim',()=>{
+  const rejected='标准依据快照与已封签的判据不一致，请重新查询当前发行。';
+  assert.match(methodErrorText(rejected),/标准依据/);
+  assert.doesNotMatch(methodErrorText(rejected),/重新安装|文件与发布记录/);
+  const missing='载流量表：/parameters/ks：参数不符合所选封签契约（required）。';
+  assert.equal(methodErrorText(missing),'载流量表：请填写集肤效应系数及其工程来源，再重新计算。');
+  assert.match(renderToStaticMarkup(createElement(MethodErrorDetail,{value:missing})),/\/parameters\/ks/);
+  assert.match(methodErrorText('方法文件摘要不一致，请核对发行'),/重新安装/);
+});
+test('A core-overlap diagnostic locates the real escaped core identity and keeps engineering labels',()=>{
+  const cable=Object.freeze({id:'cable/type',cores:Object.freeze([{id:'core/1'},{id:'core/2'}])});
+  const problem=structureIssue(cable,'cores.core/2：芯坐标造成截面重叠，请提供真实芯位置。');
+  assert.equal(problem.message,'芯 2：芯坐标造成截面重叠，请提供真实芯位置。');
+  assert.equal(problem.path,'/cable_types/cable~1type/cores/core~12/x');
+  assert.deepEqual(problem.target,{scope:'core',coreId:'core/2',role:'conductor'});
+  assert.equal(problem.action,'定位芯 2位置');
+});
 test('Saved short-circuit expression has semantic subscripts; unknown expressions remain verbatim',()=>{
   const html=renderToStaticMarkup(createElement(SavedFormula,{value:'I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}'}));
   assert.match(html,/<sub>AD<\/sub>/);assert.match(html,/<sub>f<\/sub>/);assert.match(html,/<sub>i<\/sub>/);

@@ -44,8 +44,7 @@
 .type-resource-controls{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-2);font-size:var(--text-note)}
 .type-material-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);padding-right:var(--space-2)}
 .type-material-select-all{padding:var(--space-2);font-size:var(--text-note)}
-.type-layer-select{display:inline-flex;align-items:center;gap:var(--space-1)}
-.type-root .data-table[aria-label="型号分层"]:has(.type-layer-select [role=checkbox]) th:first-child{width:var(--space-12)}
+.type-layer-select{display:inline-flex;align-items:center;gap:var(--space-1);white-space:nowrap;font-variant-numeric:tabular-nums}
 .dialog-content:has(.type-material-batch){width:calc(var(--space-12)*18);max-width:calc(100vw - var(--space-8))}
 .type-material-batch{font-size:var(--text-note);display:grid;gap:var(--space-3);min-width:0;max-height:calc(100dvh - var(--space-12)*5);overflow-y:auto;overflow-x:hidden;padding:var(--space-1)}
 .type-material-batch>section{padding-block:var(--space-2);border-bottom:1px solid var(--line);min-width:0}
@@ -107,19 +106,20 @@
 .type-layer-input .number-input input{width:0;flex:1;min-width:0;text-align:right}
 .type-layer-input .source-badge{display:none}
 .type-layer-source .source-badge span{display:none}
-.type-root .data-table[aria-label="型号分层"]{table-layout:fixed}
-.type-root .data-table[aria-label="型号分层"] th:first-child{width:var(--space-12)}
-.type-root .data-table[aria-label="型号分层"] th:nth-child(2){width:calc(var(--space-12)*2)}
-.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(4){width:calc(var(--space-12)*4)}
-.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5){width:calc(var(--space-12)*1.75)}
-.type-root .data-table[aria-label="型号分层"] td:nth-child(2){white-space:normal;overflow-wrap:anywhere}
-.type-root .data-table[aria-label="型号分层"] td:nth-child(3){white-space:nowrap;overflow-wrap:normal}
-.type-root .data-table[aria-label="型号分层"] td:nth-child(2){white-space:nowrap;overflow-wrap:normal}
-.type-root .data-table[aria-label="型号分层"] th:last-child,.type-root .data-table[aria-label="型号分层"] td:last-child{width:calc(var(--space-12)*1.25);white-space:nowrap}
+.type-root .data-table[aria-label="型号分层"]{table-layout:fixed;width:100%;min-width:calc(var(--space-12)*8)}
+.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(5)){min-width:calc(var(--space-12)*11)}
+.type-root .data-table[aria-label="型号分层"] th:first-child{width:calc(var(--space-12) + var(--space-2))}
+.type-root .data-table[aria-label="型号分层"] th:nth-child(3){width:calc(var(--space-12)*3.1)}
+.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(5)) th:nth-child(4){width:calc(var(--space-12)*2)}
+.type-root .data-table[aria-label="型号分层"] td:nth-child(2){white-space:normal;overflow-wrap:anywhere;vertical-align:middle}
+.type-root .data-table[aria-label="型号分层"] th:last-child,.type-root .data-table[aria-label="型号分层"] td:last-child{width:calc(var(--space-12) + var(--space-4));white-space:nowrap}
 .type-root .data-table[aria-label="型号分层"] th,.type-root .data-table[aria-label="型号分层"] td{padding-inline:var(--space-2)}
 .type-root .data-table[aria-label="型号分层"] .type-layer-input .number-input{width:calc(var(--space-12)*2.75)}
-.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5) .unit{display:block}
+.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(5)) th:nth-child(4) .unit{display:block}
 .type-root .data-table[aria-label="型号分层"] .type-readonly-value .source-badge span{display:none}
+.type-layer-identity{display:grid;gap:var(--space-1);min-width:0;padding-block:var(--space-1);line-height:1.5}
+.type-layer-identity>.type-resource-cell{font-size:var(--text-note);color:var(--text-secondary);min-width:0;white-space:normal}
+.type-root .data-table[aria-label="型号分层"] .type-layer-identity .object-link{display:inline;overflow:visible;-webkit-line-clamp:unset;white-space:normal;overflow-wrap:anywhere}
 .type-property-fields{display:grid;gap:var(--space-4);padding:var(--space-4);border-top:1px solid var(--line)}
 .type-property-fields>.type-property-detail>.type-property-fields{padding:var(--space-3) 0;border-top:0}
 .type-property-detail summary{cursor:pointer;color:var(--text-secondary);font-size:var(--text-note)}
@@ -147,7 +147,6 @@
 .type-root .data-table[aria-label="外径与用料"] th:nth-child(4){width:20%}
 .type-root .data-table[aria-label="外径与用料"] th:last-child{width:24%}
 .type-root .data-table[aria-label="外径与用料"] th,.type-root .data-table[aria-label="外径与用料"] td{padding-inline:var(--space-2)}
-@media(max-width:1500px){.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5),.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) td:nth-child(5){display:none}}
 .type-root .dialog-content .table-scroll{max-height:calc(var(--space-12)*5);flex-shrink:0}
 .type-meta{padding:var(--space-3) var(--space-4);font-size:var(--text-note);color:var(--text-secondary)}
 .type-method-error-detail{padding:var(--space-3) var(--space-4);font-size:var(--text-note);color:var(--text-secondary);overflow-wrap:anywhere}
@@ -214,6 +213,10 @@ p.type-meta{font-size:var(--text-note)}
 .type-canvas-frame > .cad-viewport { flex: 1; height: auto; min-height: 0; border: 0; }
 .type-canvas-frame .cad-stage { min-height: 0; }
 .type-canvas-frame > .drawing-frame { flex: 1; height: auto; min-height: 0; border: 0; }
+.type-structure-issue{min-height:0;overflow:auto;padding:var(--space-3);font-size:var(--text-note)}
+.type-structure-issue>details{padding:var(--space-2);overflow-wrap:anywhere}
+.type-structure-issue summary{cursor:pointer;color:var(--text-secondary)}
+.type-structure-issue .state-actions{display:flex;flex-wrap:wrap;gap:var(--space-2)}
 .type-list-toolbar{padding:var(--space-3) 0;flex-wrap:wrap}
 .type-list-toolbar>.select-field{display:flex;flex-direction:row;align-items:center;gap:var(--space-2);margin-left:auto}
 .type-list-toolbar .select-trigger{min-width:calc(var(--space-12)*2.5)}
@@ -243,12 +246,6 @@ p.type-meta{font-size:var(--text-note)}
 .type-root .status-mark,[data-type-page=list] .status-mark,.type-design-card .status-mark{color:var(--text)}
 .type-root .type-property-wrapper .source-badge span{display:none}
 .type-root .type-property-wrapper .select-trigger>span:first-child{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.type-root .data-table[aria-label="型号分层"]{min-width:calc(var(--space-12)*11);width:100%;table-layout:fixed}
-.type-root .data-table[aria-label="型号分层"] th:first-child{width:var(--space-8)}
-.type-root .data-table[aria-label="型号分层"] th:nth-child(2){width:calc(var(--space-12)*1.8)}
-.type-root .data-table[aria-label="型号分层"] th:nth-child(3){width:calc(var(--space-12)*4)}
-.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(4){width:calc(var(--space-12)*4)}
-.type-root .data-table[aria-label="型号分层"] th:last-child{width:var(--space-12)}
 .type-root .data-table[aria-label="型号分层"] td{white-space:normal;overflow-wrap:anywhere;padding:var(--space-2)}
 .type-root .type-resource-cell{flex-wrap:wrap;gap:var(--space-1)}
 .type-root .type-resource-cell .object-link{flex-basis:100%}
@@ -305,7 +302,7 @@ p.type-meta{font-size:var(--text-note)}
 .type-root .property-panel .property-row.is-stacked dd{margin:0;justify-content:flex-start;text-align:left;display:block}
 .type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]){width:100%;min-width:0;table-layout:fixed}
 .type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) :is(th,td){white-space:normal;overflow-wrap:anywhere;vertical-align:top}
-.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) :is(th,td):nth-child(2){white-space:nowrap}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) :is(th,td):nth-child(2){white-space:normal;overflow-wrap:normal}
 .type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:first-child{width:27%}
 .type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:nth-child(2){width:17%}
 .type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:nth-child(3){width:11%}

@@ -15,6 +15,7 @@ import { exportSpecification, generateSpecification, lifecycleAction, typeSpecif
 import { EvidenceDigest } from './evidence-digest';
 import { useTypeCommand } from './command-slot';
 import { ReviewIssues } from './review-issues';
+import { MethodErrorDetail, methodErrorText } from './method-error';
 
 const statuses = { draft: '草稿', submitted: '待人工审核', approved: '已批准', published: '已发布' };
 const channelLabels: Record<string, string> = { geometry: '结构推导', electrical: '电气参数', rating: '载流量表', short_circuit: '短路容量', standards: '标准核对' };
@@ -92,7 +93,7 @@ export function TypeSpecification({ tab }: { tab: string }) {
       {audience === 'internal' && <Button size="compact" disabled={!spec || !!reason || busy} onClick={() => void generate(true)}>导出内部审核稿</Button>}
       {spec && <StatusMark kind={historical ? 'historical' : status === 'published' || status === 'approved' ? 'success' : 'draft'} label={historical ? '已过期' : statuses[status as keyof typeof statuses]} detail={historical ? '输入或来源已变化；重新生成后才能交付当前客户版。' : undefined} />}{reason && <span className="muted">{reason}</span>}
     </div>
-    {error && !action && <p role="alert" className="type-notice is-error">{error}{blockedTarget && <Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, ...blockedTarget, navigation.location.theme))}>查看{channelLabels[blockedChannel]}条件</Button>}</p>}
+    {error && !action && <><p role="alert" className="type-notice is-error">{methodErrorText(error)}{blockedTarget && <Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, ...blockedTarget, navigation.location.theme))}>查看{channelLabels[blockedChannel]}条件</Button>}</p><MethodErrorDetail value={error} /></>}
     {bodyState === 'loading' ? <LoadingState title={busy ? '正在预检并生成规格书，已完成的计算会保留' : '正在读取规格书'} /> : query.error || differentRevision ? <ErrorState title="规格书不可用" description={differentRevision ? reason : message(query.error)} action={<Button onClick={() => void query.refetch()}>重新读取</Button>} /> : !spec ? <EmptyState title="尚无规格书" description="" /> : <>
       {tab === 'review' ? <>
         <div className="type-result-summary"><strong>{checks.filter(check => check.blocking === true).length} 项阻止发布</strong><Button size="compact" disabled={state.dirty || state.readOnly || busy || status !== 'draft' || checks.some(check=>check.blocking===true)} onClick={() => begin('adopt')}>采纳为版本草稿</Button><Button size="compact" disabled={state.dirty || state.readOnly || busy || status === 'published' || checks.some(check=>check.blocking===true) || !spec.ready} onClick={() => begin(nextAction)}>{names[nextAction]}</Button></div>
