@@ -105,7 +105,7 @@ test('a specification typed in is the same kind of object as the imported one it
     modelling: { filler_rhoo: { value: 6, unit: 'K*m/W', reference: '拼错的参数' } } });
   assert.deepEqual([misspelt.status, misspelt.body.error?.code, misspelt.body.error?.path], [422, 'SERIES_INVALID', '/series/modelling/filler_rhoo']);
   const referenced = await op<SeriesCreated>('library.series.create', { name: '手工填写：参考参数', designation: declaration.designation, cores: 3, u0_v: 8700, u_v: 15000,
-    standards: declaration.standards, common: declaration.common, common_basis: declaration.common_basis, reference_modelling: true, outer_diameter_precision_mm: 1 });
+    um_v: declaration.um_v ?? undefined, standards: declaration.standards, common: declaration.common, common_basis: declaration.common_basis, reference_modelling: true, outer_diameter_precision_mm: 1 });
   assert.deepEqual(Object.keys(referenced.declaration.modelling).sort(), Object.keys(declaration.modelling).sort());
   assert.ok(Object.values(referenced.declaration.modelling).every(item => item.reference));
   assert.equal(referenced.declaration.modelling.diameter_rounding.value, declaration.modelling.diameter_rounding.value);

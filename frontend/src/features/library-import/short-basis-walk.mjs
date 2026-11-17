@@ -62,8 +62,10 @@ export async function walkShortBasis({ page, base, viewport, out, capture, expec
   assert.ok(model, '发布库必须包含完整的短路回归教学型号');
   assert.match(model.content_sha256, sha256);
   const cable = model.payload.cable_type, materials = model.payload.materials;
+  assert.equal(cable.construction, 'single_core');
   assert.equal(cable.cores.length, 1);
-  const core = cable.cores[0], insulation = core.layers.find(layer => layer.role === 'insulation');
+  const core = cable.cores[0], insulation = cable.common_layers.find(layer => layer.role === 'insulation');
+  assert.ok(insulation, '单芯教学型号必须在共同层中明确声明绝缘层');
   assert.ok(Math.abs(core.conductor.nominal_area * 1e6 - 400) < 1e-9);
   assert.equal(materials.find(item => item.id === core.conductor.material)?.standard_kind, 'copper_bare', '教学型号必须明确声明导体类别，不能由材料名猜铜');
   assert.equal(materials.find(item => item.id === insulation?.material)?.standard_kind, 'XLPE');
