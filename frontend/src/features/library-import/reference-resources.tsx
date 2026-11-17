@@ -122,7 +122,7 @@ function ReferenceTransition({ asset, action, onClose, onDone }: { asset: Refere
   async function save() {
     setBusy(true); setError('');
     try { onDone(await referencePost<ReferenceAsset>(`/api/foundation/assets/${encodeURIComponent(asset.id)}/transition`, {
-      expected_revision: asset.revision, content_sha256: asset.content_sha256, action, note: note.trim(), acknowledge_sources: true,
+      expected_revision: asset.revision, content_sha256: asset.content_sha256, action, note: note.trim(), acknowledge_sources: true, human_confirmed: true,
     })); } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
   return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} busy={busy} title={action === 'review' ? '核对参考来源' : '发布参考版本'}

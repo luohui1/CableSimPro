@@ -60,7 +60,8 @@ def transition(client, asset, action):
     return api(client, 'POST', '/api/foundation/assets/'+asset['id']+'/transition', {
         'expected_revision': asset['revision'], 'content_sha256': asset['content_sha256'],
         'action': action, 'note': '逐项核对原文、条件、版本和参考性质；不作工程批准。',
-        'acknowledge_sources': True})
+        'acknowledge_sources': True, 'human_confirmed': True},
+        headers={'X-CableSim-Actor': 'human'})
 
 
 def published(client, selections):
@@ -182,7 +183,8 @@ def test_real_copper_references_publish_adopt_and_preserve_history(client):
     assert api(client, 'GET', '/api/workspaces/'+saved['id']+'/revisions/'+str(adopted['revision']))['state']['domain'] == adopted['domain']
     # A subsequent release does not move the historical pin or its source values.
     derived = api(client, 'POST', '/api/foundation/assets/'+asset['id']+'/derive', {
-        'expected_revision': asset['revision'], 'content_sha256': asset['content_sha256'], 'new_version': '1.0.1'})
+        'expected_revision': asset['revision'], 'content_sha256': asset['content_sha256'],
+        'new_version': '1.0.1', 'human_confirmed': True}, headers={'X-CableSim-Actor': 'human'})
     assert derived['content_sha256'] != asset['content_sha256']
     assert derived['release']['reference_evidence'] == asset['release']['reference_evidence']
     asset = transition(client, asset, 'deprecate')
@@ -243,17 +245,17 @@ def test_reference_preview_rechecks_provider_and_expires_after_eviction_or_resta
     confirmation = CreateMaterialReferenceDraft(**request.model_dump(),
         preview_digest=before['preview_digest'], human_confirmed=True)
     with pytest.raises(HTTPException) as evicted:
-        create_material_draft(service, assets, confirmation)
+        create_material_draft(service, assets, confirmation, actor='human')
     assert evicted.value.status_code == 409 and assets.list()['total'] == 0
     refreshed = preview_material_draft(service, request)
     confirmation.preview_digest = refreshed['preview_digest']
     restarted = resource_data.ResourceData(executor)
     with pytest.raises(HTTPException) as lost:
-        create_material_draft(restarted, assets, confirmation)
+        create_material_draft(restarted, assets, confirmation, actor='human')
     assert lost.value.status_code == 409 and assets.list()['total'] == 0
     ready = preview_material_draft(restarted, request)
     confirmation.preview_digest = ready['preview_digest']
-    result = create_material_draft(restarted, assets, confirmation)
+    result = create_material_draft(restarted, assets, confirmation, actor='human')
     assert result['content_sha256'] == ready['content_sha256'] and assets.list()['total'] == 1
 
 
@@ -315,13 +317,16 @@ def test_draft_requeries_identity_rejects_forged_values_and_preserves_old_asset_
                 headers={'X-CableSim-Actor': 'human'})
     corrupt = deepcopy(asset['release'])
     corrupt['reference_evidence'][0]['receipt']['record']['value'] = 1
-    assert client.post('/api/foundation/assets/import', json={'release': corrupt}).status_code == 422
+    assert client.post('/api/foundation/assets/import', json={'release': corrupt, 'human_confirmed': True},
+                       headers={'X-CableSim-Actor': 'human'}).status_code == 422
     duplicate = deepcopy(asset['release'])
     duplicate['reference_evidence'].append(duplicate['reference_evidence'][0])
-    assert client.post('/api/foundation/assets/import', json={'release': duplicate}).status_code == 422
+    assert client.post('/api/foundation/assets/import', json={'release': duplicate, 'human_confirmed': True},
+                       headers={'X-CableSim-Actor': 'human'}).status_code == 422
     oversized = deepcopy(asset['release'])
     oversized['reference_evidence'][0]['receipt']['untrusted_extra'] = 'x' * (32*1024)
-    assert client.post('/api/foundation/assets/import', json={'release': oversized}).status_code == 422
+    assert client.post('/api/foundation/assets/import', json={'release': oversized, 'human_confirmed': True},
+                       headers={'X-CableSim-Actor': 'human'}).status_code == 422
     legacy = {'asset_id': 'material.legacy', 'version': '1.0.0', 'kind': 'material', 'name': '历史资产',
               'parameters': [], 'dependencies': [], 'files': [],
               'sources': [{'kind': 'project_input', 'reference': '历史字段保留，不加入空回执', 'reviewed': False}],
@@ -356,9 +361,10 @@ def test_self_consistent_forged_asset_cannot_bypass_sealed_source_at_adoption(cl
         record['citation'] = '伪造出处'
     if changed == 'artifact_sha256':
         evidence['receipt']['artifact_sha256'] = '0'*64
-    # The existing generic JSON import can establish internal consistency only.
-    # New engineering use re-resolves the provider and refuses the forged value.
-    imported = client.post('/api/foundation/assets/import', json={'release': release})
+    # Even explicit human import establishes only internal consistency.
+    # Engineering use re-resolves the provider and refuses the forged value.
+    imported = client.post('/api/foundation/assets/import', json={'release': release, 'human_confirmed': True},
+                           headers={'X-CableSim-Actor': 'human'})
     if changed == 'receipt_quantity':
         assert imported.status_code == 422
         assert any('RESOURCE_REFERENCE_QUANTITY_MISMATCH' in error['msg'] for error in imported.json()['detail'])

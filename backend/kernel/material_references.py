@@ -119,13 +119,15 @@ def preview_material_draft(service: ResourceData, body: MaterialReferenceDraft):
     return {**payload, 'preview_digest': fingerprint(payload)}
 
 
-def create_material_draft(service: ResourceData, assets, body: CreateMaterialReferenceDraft):
+def create_material_draft(service: ResourceData, assets, body: CreateMaterialReferenceDraft, *,
+                          actor: str | None = None):
     preview = preview_material_draft(service, body)
     if preview['preview_digest'] != body.preview_digest:
         raise HTTPException(409, {'code': 'RESOURCE_DRAFT_PREVIEW_CHANGED',
             'message': '资料草稿预览已变化，请重新核对来源和数值。'})
     return assets.create(AssetRelease.model_validate(preview['release']),
-                         '人工核对固定封签依据后创建材料参考草稿；尚未审核、发布或采用。')
+                         '人工核对固定封签依据后创建材料参考草稿；尚未审核、发布或采用。',
+                         actor=actor, human_confirmed=body.human_confirmed)
 
 
 def _identity(document, material):
@@ -317,7 +319,7 @@ def make_router(service: ResourceData, assets, types):
         if x_cablesim_actor != 'human':
             raise HTTPException(403, {'code': 'HUMAN_RESOURCE_DRAFT_REQUIRED',
                 'message': 'Agent 可预览资料提案，创建本地草稿须由人工确认。'})
-        return create_material_draft(service, assets, body)
+        return create_material_draft(service, assets, body, actor=x_cablesim_actor)
 
     @router.post('/preview')
     def preview(body: MaterialReferencePreview):

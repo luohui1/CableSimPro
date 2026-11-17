@@ -334,7 +334,8 @@ def make_router(service, assets, research):
         if result['preview_digest'] != body.preview_digest:
             fail('ENVIRONMENT_DRAFT_CHANGED', '资料预览已变化，请重新核对；未创建草稿。', 409)
         return assets.create(AssetRelease.model_validate(result['release']),
-            '从封签环境参考创建草稿；保留参考分档，尚未采用到工况。')
+            '从封签环境参考创建草稿；保留参考分档，尚未采用到工况。',
+            actor=x_cablesim_actor, human_confirmed=body.human_confirmed)
 
     @router.post('/preview')
     def preview_asset(body: EnvironmentPreview):

@@ -112,8 +112,8 @@ def publish_asset(client, value):
     for action in ('review', 'publish'):
         response = client.post('/api/foundation/assets/' + value['id'] + '/transition', json={
             'expected_revision': value['revision'], 'content_sha256': value['content_sha256'],
-            'action': action, 'acknowledge_sources': True,
-            'note': '人工核对原表及明确研究条件；保留参考分档，不是现场测量。'})
+            'action': action, 'acknowledge_sources': True, 'human_confirmed': True,
+            'note': '人工核对原表及明确研究条件；保留参考分档，不是现场测量。'}, headers=HUMAN)
         assert response.status_code == 200, response.text
         value = response.json()
     return value
@@ -194,7 +194,7 @@ def test_real_reference_publication_preview_and_actual_rating_keep_fixed_evidenc
     # A separately published asset version does not rewrite saved calculations.
     derived = client.post('/api/foundation/assets/' + value['id'] + '/derive', json={
         'expected_revision': value['revision'], 'content_sha256': value['content_sha256'],
-        'new_version': '1.1.0'})
+        'new_version': '1.1.0', 'human_confirmed': True}, headers=HUMAN)
     assert derived.status_code == 201, derived.text
     newer = publish_asset(client, derived.json())
     assert newer['content_sha256'] != value['content_sha256']
@@ -202,7 +202,8 @@ def test_real_reference_publication_preview_and_actual_rating_keep_fixed_evidenc
     assert fixed['changes'][0]['asset_ref']['version'] == '1.0.0'
     retired = client.post('/api/foundation/assets/' + value['id'] + '/transition', json={
         'expected_revision': value['revision'], 'content_sha256': value['content_sha256'],
-        'action': 'deprecate', 'note': '后续研究改用单独发布版本；既有计算回执保持原值。'})
+        'action': 'deprecate', 'note': '后续研究改用单独发布版本；既有计算回执保持原值。',
+        'human_confirmed': True}, headers=HUMAN)
     assert retired.status_code == 200, retired.text
     assert client.post(ROOT + '/preview', json=request).status_code == 422
     assert client.get(url).json()['snapshot'] == saved['snapshot']
@@ -347,7 +348,7 @@ def test_changed_pin_edited_number_and_changed_row_refuse_before_saving_study(co
     release['asset_id'] += '.edited'
     release['parameters'][0]['quantity']['value'] = .8
     release['reference_evidence'][0]['quantity']['value'] = .8
-    imported = client.post('/api/foundation/assets/import', json={'release': release})
+    imported = client.post('/api/foundation/assets/import', json={'release': release, 'human_confirmed': True}, headers=HUMAN)
     assert imported.status_code == 422 and 'RESOURCE_REFERENCE_QUANTITY_MISMATCH' in imported.text
     # Even a self-consistent forged receipt is insufficient: the sealed
     # provider, rather than a client-supplied digest, owns the published value.
@@ -358,7 +359,7 @@ def test_changed_pin_edited_number_and_changed_row_refuse_before_saving_study(co
     record['record_sha256'] = content_hash({key: value for key, value in record.items()
                                           if key not in ('record_sha256', 'citation')})
     evidence['record_sha256'] = record['record_sha256']
-    imported = client.post('/api/foundation/assets/import', json={'release': release})
+    imported = client.post('/api/foundation/assets/import', json={'release': release, 'human_confirmed': True}, headers=HUMAN)
     assert imported.status_code == 201, imported.text
     altered = publish_asset(client, imported.json())
     changed = preview_request(spec, altered, selection)
