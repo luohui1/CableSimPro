@@ -139,7 +139,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1 libxrender1
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: occt
         with:
           path: |
             .data/occt-toolchain
@@ -148,6 +149,15 @@ jobs:
           key: release-occt-${{ runner.os }}-${{ hashFiles('frontend/src/features/cad/native/**', 'frontend/src/features/cad/prepare-runtime.mjs', 'scripts/prepare_release_frontend.py', 'scripts/release_toolchains.json') }}
       - name: Prepare verified OCCT assets from pinned sources
         run: python scripts/prepare_release_frontend.py --jobs 4 --download-cache .data/occt-downloads
+      - name: Preserve verified OCCT assets before installation checks
+        if: steps.occt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .data/occt-toolchain
+            .data/occt-downloads
+            frontend/src/features/cad/node_modules/.cache/cablesim-occt
+          key: ${{ steps.occt.outputs.cache-primary-key }}
       - name: Build the shipped frontend
         working-directory: frontend
         run: |
