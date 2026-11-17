@@ -1,11 +1,12 @@
-"""Content-cache invalidation from Windows directory change notifications.
+"""Content-cache invalidation from native directory change notifications.
 
 No timestamp trust. Missing/failed/overflowed notifications force a fresh content
-check. Other platforms retain the existing per-read hashing policy.
+check. Unsupported platforms retain the existing per-read hashing policy.
 """
 import ctypes
 from functools import lru_cache
 import os
+import sys
 from contextlib import suppress
 import struct
 import json
@@ -173,18 +174,22 @@ class SourceWatch:
     def __init__(self,root,*,release_only=False):
         self.root=root;self.handles=[];self.epoch=0;self.healthy=False
         self.release_only=release_only;self.shared_files=None
-        if os.name=='nt':
+        self.directory_changes = DirectoryChanges if os.name == 'nt' else None
+        if sys.platform.startswith('linux'):
+            from .source_notifications import LinuxDirectoryChanges
+            self.directory_changes = LinuxDirectoryChanges
+        if self.directory_changes is not None:
             try:self.configure()
             except OSError:self.close()
 
     def configure(self):
         self.close();self.epoch+=1
         try:
-            self.handles.append(DirectoryChanges(self.root,False))
+            self.handles.append(self.directory_changes(self.root,False))
             for name in ('backend','cablesim_sdk','plugins'):
                 path=self.root/name
                 relevance = (lambda relative: self.shared_change('backend/'+relative)) if name=='backend' and self.release_only else None
-                if path.is_dir():self.handles.append(DirectoryChanges(path,True,relevance))
+                if path.is_dir():self.handles.append(self.directory_changes(path,True,relevance))
             self.load_shared_files()
             self.healthy=True
         except OSError:
@@ -209,7 +214,7 @@ class SourceWatch:
 
     def snapshot(self):
         if not self.healthy:
-            if os.name != 'nt': return None
+            if self.directory_changes is None: return None
             try:self.configure()
             except OSError:return None
         try:
@@ -227,4 +232,7 @@ class SourceWatch:
         self.handles=[];self.healthy=False
 
     def __del__(self):
-        for handle in getattr(self,'handles',()):defer_close(handle)
+        for handle in getattr(self,'handles',()):
+            if os.name == 'nt':defer_close(handle)
+            else:
+                with suppress(OSError):handle.close()
