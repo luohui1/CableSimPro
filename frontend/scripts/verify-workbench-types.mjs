@@ -195,6 +195,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const [studyBefore, workspaceBefore] = await Promise.all([api(prefix), workspace(wid)]);
     const writesBefore = report.writes.length, start = new URL(page.url());
     const expectedParameters = (definition || studyBefore.definition).parameters;
+    const fixedParameters = [], fixedConditions = [];
     const form = page.locator('.parameter-form'), mode = form.getByRole('combobox', { name: '额定模式', exact: true });
     const explanation = page.getByRole('region', { name: '载流量参数说明', exact: true });
     await expect(mode).toBeDisabled();
@@ -203,6 +204,26 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(explanation).toContainText('全局额定模式只读');
     await expect(explanation).toContainText('空白不表示逐行工况未保存');
     const modeBefore = await mode.innerText(), wasDirty = await dirty();
+    async function verifyFixedParameters() {
+      if (!start.searchParams.has('run')) return;
+      await advanced(form);
+      for (const [key, label] of [['ks', '集肤效应系数'], ['kp', '邻近效应系数']]) {
+        if (!Object.hasOwn(expectedParameters, key)) continue;
+        const input = form.getByLabel(new RegExp('^(?:\\*\\s*)?' + label + '$'));
+        await expect(input).toHaveValue(String(expectedParameters[key]));
+        await expect(input).not.toBeEditable();
+        fixedParameters.push({ key, value: await input.inputValue(), readOnly: true });
+      }
+      if (typeof expectedParameters.source === 'string') {
+        const sourceEditor = form.locator('.parameter-structured[data-field-path="/source"] details.parameter-source');
+        if (await sourceEditor.getAttribute('open') === null) await sourceEditor.locator(':scope > summary').click();
+        const input = sourceEditor.getByLabel('来源', { exact: true });
+        await expect(input).toHaveValue(expectedParameters.source);
+        await expect(input).not.toBeEditable();
+        fixedParameters.push({ key: 'source', value: await input.inputValue(), readOnly: true });
+      }
+    }
+    await verifyFixedParameters();
     if (draftSource !== undefined) {
       expect(wasDirty, '本段必须有真实未保存方法草稿').toBe(true);
       await expect(form.getByRole('combobox', { name: '运行输出', exact: true })).toBeEnabled();
@@ -228,6 +249,34 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.getByRole('table', { name: '载流量表', exact: true })).toBeVisible();
     await expect(page.getByRole('dialog', { name: '型号有未保存修改', exact: true })).toHaveCount(0);
     expect(await dirty(), '同一工况表导航保留原草稿状态').toBe(wasDirty);
+    if (start.searchParams.has('run')) {
+      const conditions = definition.driver.cases.map(item => item.metadata.condition);
+      const table = page.getByRole('table', { name: '载流量表', exact: true });
+      for (const condition of conditions) {
+        const row = table.getByRole('row', { name: condition.name, exact: true });
+        await row.focus(); await row.press('Enter');
+        const editor = page.locator('details.type-rating-edit');
+        await expect(editor.locator(':scope > summary')).toHaveText('所选工况条件 · ' + condition.name);
+        if (await editor.getAttribute('open') === null) await editor.locator(':scope > summary').click();
+        await expect(editor.getByLabel('工况名称', { exact: true })).toHaveValue(condition.name);
+        await expect(editor.getByLabel('工况名称', { exact: true })).not.toBeEditable();
+        const observed = { caseId: condition.case_id, name: condition.name };
+        const conditionFields = [['ambient_temperature_c', '环境温度'],
+          ...(condition.layout === 'air' ? [] : [['depth_m', '中心埋深'], ['soil_rho_k_m_w', '土壤热阻率']]),
+          ['spacing_m', '中心距']];
+        for (const [key, label] of conditionFields) {
+          const input = editor.getByRole('textbox', { name: condition.name + ' ' + label, exact: true });
+          await expect(input).toHaveValue(condition[key] == null ? '' : String(condition[key]));
+          await expect(input).not.toBeEditable(); observed[key] = await input.inputValue();
+        }
+        const sourceInput = editor.getByLabel('条件来源', { exact: true });
+        await expect(sourceInput).toHaveValue(condition.source || '');
+        await expect(sourceInput).not.toBeEditable();
+        await expect(editor.getByRole('combobox', { name: '排列', exact: true })).toBeDisabled();
+        await expect(editor.getByRole('combobox', { name: '载流量口径', exact: true })).toBeDisabled();
+        fixedConditions.push({ ...observed, source: await sourceInput.inputValue(), readOnly: true });
+      }
+    }
     const resultsUrl = page.url(), resultShot = await capture('载流量表-' + label + '-键盘查看逐行工况');
     const parameterTab = page.getByRole('tab', { name: '方法参数', exact: true });
     await parameterTab.focus();
@@ -236,6 +285,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       && ['theme', 'run', 'revision'].every(key => url.searchParams.get(key) === start.searchParams.get(key)));
     await expect(mode).toBeDisabled();
     await expect(mode).toHaveText(modeBefore);
+    await verifyFixedParameters();
     expect(await dirty(), '返回参数页仍保留原草稿状态').toBe(wasDirty);
     if (draftSource !== undefined) {
       await advanced(form);
@@ -253,7 +303,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const evidence = { ...size, workspace: wid, study: sid, run: start.searchParams.get('run'),
       revision: start.searchParams.get('revision'), start: start.href, results: resultsUrl, returned: page.url(),
       modeText: modeBefore, parametersBefore: studyBefore.definition.parameters, parametersAfter: studyAfter.definition.parameters,
-      draftSource, wasDirty, visibleReason, screenshots: [beforeShot.screenshot, resultShot.screenshot], writes: report.writes.slice(writesBefore) };
+      fixedParameters, fixedConditions, draftSource, wasDirty, visibleReason,
+      screenshots: [beforeShot.screenshot, resultShot.screenshot], writes: report.writes.slice(writesBefore) };
     (report.ratingParameterNavigation ||= []).push(evidence);
     check('全局额定模式不可编辑且键盘工况往返保留身份、参数与草稿并且零写入', evidence.writes.length === 0, evidence);
   }
@@ -318,14 +369,94 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       currentWorkspaceRevision: current.revision, method: archiveBefore.snapshot.definition.method,
       applicable: true, navigations: [] };
     (report.fixedTypeRunNavigation ||= []).push(evidence);
-    const historyRequests = [], historyEndpoint = '/api/types/' + encodeURIComponent(source.wid) + '/display-runs';
+    const historyRequests = [], historyByRequest = new WeakMap(), historyUpdates = new Set();
+    const historyEndpoint = '/api/types/' + encodeURIComponent(source.wid) + '/display-runs';
+    evidence.historyRequests = historyRequests;
+    const notifyHistory = () => { for (const wake of [...historyUpdates]) wake(); };
     const onHistoryRequest = request => {
       const url = new URL(request.url());
-      if (request.method() === 'GET' && url.pathname === historyEndpoint && !url.searchParams.has('recent'))
-        historyRequests.push({ url: url.pathname + url.search, after: Number(url.searchParams.get('after')),
-          limit: Number(url.searchParams.get('limit')) });
+      if (request.method() === 'GET' && url.pathname === historyEndpoint && !url.searchParams.has('recent')) {
+        const read = { url: url.pathname + url.search, after: Number(url.searchParams.get('after')),
+          limit: Number(url.searchParams.get('limit')), state: 'requested', requestedAt: Date.now() };
+        historyRequests.push(read); historyByRequest.set(request, read); notifyHistory();
+      }
+    };
+    const onHistoryResponse = response => {
+      const read = historyByRequest.get(response.request());
+      if (!read) return;
+      read.http = response.status(); read.state = 'reading-body';
+      void (async () => {
+        try {
+          expect(read.http, '页面实际完整历史响应必须成功').toBe(200);
+          const bytes = await response.body(), payload = JSON.parse(bytes.toString('utf8'));
+          read.bytes = bytes.length; read.sha256 = createHash('sha256').update(bytes).digest('hex');
+          expect(Array.isArray(payload.items), '完整历史响应必须包含真实运行数组').toBe(true);
+          // This flag means full-directory mode on every page; only a null
+          // next_cursor establishes the end of that actual response chain.
+          expect(payload.history_complete, '历史不能被 recent 摘要冒充').toBe(true);
+          expect(Object.hasOwn(payload, 'next_cursor'), '完整历史响应必须给出末页或下一游标').toBe(true);
+          expect(payload.next_cursor === null || Number.isSafeInteger(payload.next_cursor)
+            && payload.next_cursor > read.after, '完整历史下一游标必须前进或明确结束').toBe(true);
+          read.historyComplete = payload.history_complete; read.nextCursor = payload.next_cursor;
+          read.runs = payload.items.map(run => ({ id: run.id, workspace: run.workspace, study: run.study,
+            sequence: run.sequence, integrity: run.integrity, inputDigest: run.input_digest, outputDigest: run.output_digest,
+            workspaceRevision: run.snapshot?.workspace_revision, studyRevision: run.snapshot?.study_revision,
+            artifactSchemas: (run.output?.cases || []).filter(item => item.status === 'succeeded')
+              .flatMap(item => Object.values(item.artifacts || {}).map(artifact => artifact?.schema)) }));
+          if (read.state !== 'failed') read.state = 'complete';
+        } catch (error) { read.state = 'failed'; read.error = error.message; }
+        finally { read.finishedAt = Date.now(); notifyHistory(); }
+      })();
+    };
+    const onHistoryFailed = request => {
+      const read = historyByRequest.get(request);
+      if (!read) return;
+      // A navigation-aborted history is a failure here, even though the shared
+      // console/network collector excludes ordinary ERR_ABORTED requests.
+      read.state = 'failed'; read.error = request.failure()?.errorText || '完整历史请求失败';
+      read.finishedAt = Date.now(); notifyHistory();
     };
     page.on('request', onHistoryRequest);
+    page.on('response', onHistoryResponse);
+    page.on('requestfailed', onHistoryFailed);
+    async function completedHistory(readsBefore) {
+      const deadline = Date.now() + 30000;
+      for (;;) {
+        const reads = historyRequests.slice(readsBefore), failed = reads.find(read => read.state === 'failed');
+        if (failed) throw new Error('页面完整历史未完成：' + failed.url + ' · ' + failed.error);
+        if (reads.length && reads.every(read => read.state === 'complete') && reads.at(-1).nextCursor === null) {
+          expect(reads.length, '完整历史读取不得越过原有分页上限').toBeLessThanOrEqual(400);
+          for (const [index, read] of reads.entries()) {
+            expect(read.limit).toBe(5);
+            expect(read.after, '实际请求必须连接上一响应的游标，且每页只读一次')
+              .toBe(index === 0 ? 0 : reads[index - 1].nextCursor);
+            expect(read.runs.length).toBeLessThanOrEqual(read.limit);
+            for (const [position, run] of read.runs.entries()) {
+              expect(run.workspace).toBe(source.wid);
+              expect(typeof run.id === 'string' && run.id.length > 0 && Number.isSafeInteger(run.sequence)
+                && run.sequence > (position === 0 ? read.after : read.runs[position - 1].sequence),
+              '历史运行必须有真实且按游标递增的身份').toBe(true);
+            }
+            if (read.nextCursor !== null) expect(read.nextCursor).toBe(read.runs.at(-1)?.sequence);
+          }
+          const runs = reads.flatMap(read => read.runs);
+          expect(new Set(runs.map(run => run.id)).size, '完整历史不能重复同一运行').toBe(runs.length);
+          const selected = runs.filter(run => run.id === source.rid);
+          expect(selected, '页面最终完整历史必须包含确切原运行').toHaveLength(1);
+          expect(selected[0]).toMatchObject({ workspace: source.wid, study: source.sid, integrity: 'verified',
+            inputDigest: archiveBefore.input_digest, outputDigest: archiveBefore.output_digest,
+            workspaceRevision: archiveBefore.snapshot.workspace_revision, studyRevision: archiveBefore.snapshot.study_revision });
+          return reads;
+        }
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw new Error('页面完整历史未在原有 30 秒验证等待内读至末页');
+        await new Promise((resolve, reject) => {
+          const wake = () => { clearTimeout(timer); historyUpdates.delete(wake); resolve(); };
+          const timer = setTimeout(() => { historyUpdates.delete(wake); reject(new Error('页面完整历史响应链未完成')); }, remaining);
+          historyUpdates.add(wake);
+        });
+      }
+    }
     async function openRunRecord() {
       await page.goto(base + '/runs?theme=light');
       const table = page.getByRole('table', { name: '运行', exact: true });
@@ -364,7 +495,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       return { link, href: url.pathname + url.search };
     }
     async function openFixed(label, action) {
-      const readsBefore = historyRequests.length;
+      const readsBefore = historyRequests.length, startedAt = Date.now();
       const [archiveResponse, ratingResponse] = await Promise.all([
         page.waitForResponse(response => {
           const url = new URL(response.url());
@@ -388,6 +519,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         expect(ratingResponse.status(), '界面读取原载流量表结果行').toBe(200);
         const rating = await ratingResponse.json();
         expect(rating.run.id).toBe(source.rid);
+        expect(rating.run.workspace).toBe(source.wid);
+        expect(rating.run.study).toBe(source.sid);
         expect(rating.run.integrity).toBe('verified');
         expect(rating.run.input_digest).toBe(archiveBefore.input_digest);
         expect(rating.run.output_digest).toBe(archiveBefore.output_digest);
@@ -415,18 +548,49 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         await expect(surface.getByRole('button', { name: '添加工况', exact: true })).toBeDisabled();
         await expect(surface.getByRole('checkbox', { name: '选择全部工况', exact: true })).toBeDisabled();
       }
+      const subjectReadyMs = Date.now() - startedAt;
       const shot = await capture('固定型号运行-' + target.label + '-' + label);
-      const historyReads = historyRequests.slice(readsBefore);
-      // The input snapshot and result view must share the same real paged
-      // history, while all existing full-input/digest assertions remain above.
-      check(target.label + ' · ' + label + '的完整历史每页只读取一次', historyReads.length > 0
-        && historyReads.every((read, index) => read.limit === 5 && Number.isInteger(read.after)
-          && (index === 0 ? read.after === 0 : read.after > historyReads[index - 1].after)),
-      { run: source.rid, historyReads }, { fatal: false });
-      evidence.navigations.push({ label, url: page.url(), screenshot: shot.screenshot, archiveHttp: archiveResponse.status(),
+      const navigation = { label, url: page.url(), screenshot: shot.screenshot, archiveHttp: archiveResponse.status(),
         ratingHttp: ratingResponse?.status(), run: observed.id, inputDigest: observed.input_digest,
         outputDigest: observed.output_digest, workspaceRevision: observed.snapshot.workspace_revision,
-        studyRevision: observed.snapshot.study_revision, historyReads });
+        studyRevision: observed.snapshot.study_revision, subjectReadyMs, subjectCaptureMs: Date.now() - startedAt,
+        historyAtCapture: historyRequests.slice(readsBefore).map(read => ({ after: read.after, state: read.state, nextCursor: read.nextCursor })) };
+      evidence.navigations.push(navigation);
+      // This verification wait starts after the ready-subject screenshot. It
+      // does not replace first-paint evidence or alter the performance budget.
+      const historyWaitStarted = Date.now();
+      try {
+        navigation.historyReads = await completedHistory(readsBefore);
+        navigation.historyCompleteMs = Math.max(...navigation.historyReads.map(read => read.finishedAt)) - startedAt;
+        navigation.historyVerificationWaitMs = Date.now() - historyWaitStarted;
+        await expect(surface).toHaveAttribute('data-type-state', /^(success|historical)$/);
+        expect(page.url(), '后台历史完成不能替换当前选中运行').toBe(navigation.url);
+        await expect(page.getByText('保存运行目录不可用', { exact: true })).toHaveCount(0);
+        check(target.label + ' · ' + label + '的页面完整历史响应链已读至末页且每页只读取一次', true,
+          { run: source.rid, historyReads: navigation.historyReads, subjectReadyMs, historyCompleteMs: navigation.historyCompleteMs });
+      } catch (error) {
+        navigation.historyError = error.message; navigation.historyReads = historyRequests.slice(readsBefore);
+        check(target.label + ' · ' + label + '的页面完整历史响应链完成', false,
+          { run: source.rid, error: error.message, historyReads: navigation.historyReads }, { fatal: false });
+        throw error;
+      }
+      if (!evidence.historyPicker && ['structure', 'standard-check'].includes(source.module)) {
+        const picker = page.getByRole('combobox', { name: '保存运行', exact: true });
+        const schema = source.module === 'structure' ? 'cablesim.cad-model/1' : 'cablesim.standard-check/1';
+        const selectable = navigation.historyReads.flatMap(read => read.runs)
+          .filter(run => run.integrity === 'verified' && run.artifactSchemas.includes(schema));
+        await expect(picker).toBeVisible();
+        await expect(page.getByRole('button', { name: '全部保存运行', exact: true })).toHaveCount(0);
+        await activate(picker, size.width === 1366);
+        const options = page.getByRole('option');
+        await expect(options).toHaveCount(selectable.length + 1);
+        for (const run of selectable) await expect(options.filter({ hasText: '运行 ' + run.sequence + ' ·' })).toHaveCount(1);
+        await expect(page.getByRole('option', { selected: true })).toContainText('运行 ' + archiveBefore.sequence + ' ·');
+        const historyShot = await capture('固定型号运行-' + target.label + '-完整历史目录可选');
+        evidence.historyPicker = { runs: selectable.map(run => run.id), selectedRun: source.rid, screenshot: historyShot.screenshot };
+        await page.keyboard.press('Escape');
+        await expect(options).toHaveCount(0);
+      }
       if (!evidence.readOnlyReason) {
         // CommandBar wraps a native disabled button in the real tooltip trigger.
         const trigger = calculate.locator('xpath=..');
@@ -465,8 +629,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         const parameters = new URL(page.url());
         parameters.pathname = `/types/${encodeURIComponent(source.wid)}/rating-table/parameters`;
         parameters.searchParams.set('revision', String(archiveBefore.snapshot.workspace_revision));
+        const readsBefore = historyRequests.length;
         await page.goto(parameters.href);
         await verifyRatingParameterControls({ wid: source.wid, sid: source.sid, definition: archiveBefore.snapshot.definition });
+        const parameterEvidence = report.ratingParameterNavigation.at(-1);
+        parameterEvidence.historyReads = await completedHistory(readsBefore);
+        check('固定载流量参数冷直达及只读往返后的页面完整历史已读至末页', true,
+          { run: source.rid, historyReads: parameterEvidence.historyReads });
       }
       const openCurrent = page.getByRole('button', { name: '打开当前型号', exact: true });
       if (source.module === 'structure' && await openCurrent.isVisible()) {
@@ -484,6 +653,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       }
     } finally {
       page.off('request', onHistoryRequest);
+      page.off('response', onHistoryResponse);
+      page.off('requestfailed', onHistoryFailed);
       const [afterWorkspace, afterStudy, afterArchive] = await Promise.all([workspace(source.wid), api(prefix), api(source.fullPath)]);
       check(target.label + '固定入口检查没有改动当前输入或原运行', report.writes.length === writesBefore
         && afterWorkspace.revision === current.revision && JSON.stringify(afterWorkspace.domain) === JSON.stringify(current.domain)
