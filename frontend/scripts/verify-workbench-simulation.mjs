@@ -16,6 +16,7 @@ await walkthrough('simulation', async ({
   };
   page.on('request', onRequest);
   const studyPath = row => `/api/workspaces/${row.workspace}/studies/${row.id}`;
+  const hpcStudyPath = row => `/api/hpc/workspaces/${row.workspace}/studies/${row.id}`;
   const configuration = row => row.definition.modules?.['thermal-field'] || row.definition;
   const form = page.getByLabel('有限元方法参数', { exact: true });
   const mesh = form.locator('input[data-field-path="/mesh/size_m"]');
@@ -53,6 +54,14 @@ await walkthrough('simulation', async ({
       await dialog.getByRole('textbox', { name: '研究名称', exact: true })
         .fill(`IEC 有限元对照 · ${tag}`);
       await dialog.getByRole('button', { name: 'IEC 与有限元对比', exact: true }).click();
+      const methods = await api('/api/methods');
+      const comparisonMethod = methods.find(row => row.method.plugin_id === 'cablesim.simulation');
+      const capability = comparisonMethod?.capabilities.find(row => row.id === 'iec-fem-comparison');
+      expect(capability, '必须用真实能力声明核对计算位置').toBeTruthy();
+      const methodLabel = await dialog.locator('.add-study-method').innerText();
+      evidence.comparison.solver = { declared: capability.solver, displayed: methodLabel };
+      await check('有限元对照创建入口显示真实计算位置', capability.solver !== 'slurm' || /超算/.test(methodLabel),
+        evidence.comparison.solver);
       const editors = await dialog.locator('[data-field-path] input, input[data-field-path], [data-field-path] [role="combobox"], textarea').count();
       evidence.comparison.editorCount = editors;
       await capture('02-comparison-parameters-before-submit');
@@ -73,6 +82,7 @@ await walkthrough('simulation', async ({
       } else {
         await expect(dialog.getByRole('alert')).toBeVisible();
         evidence.comparison.message = await dialog.getByRole('alert').innerText();
+        await capture('02-comparison-create-rejected');
       }
       await check('从 IEC 工程建立有限元对照成功', response.ok(), evidence.comparison);
       if (await dialog.isVisible()) await page.keyboard.press('Escape');
@@ -98,6 +108,10 @@ await walkthrough('simulation', async ({
       await mesh.fill('');
       await mesh.press('Tab');
       await page.keyboard.press('Control+s');
+      const missingNotice = page.getByRole('alert').filter({ hasText: /请填写.*(?:网格|尺寸)|(?:网格|尺寸).*必填/ }).first();
+      // Save commits the text asynchronously. A static aria description is
+      // ordinary field help, never evidence that the missing input was caught.
+      await missingNotice.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
       const feedback = await mesh.evaluate(input => ({
         value: input.value,
         invalid: input.getAttribute('aria-invalid'),
@@ -107,8 +121,11 @@ await walkthrough('simulation', async ({
       const alerts = await page.getByRole('alert').allTextContents();
       evidence.parameters.missing = { ...feedback, alerts };
       await check('缺少网格参数时保留输入并说明原因', feedback.value === ''
-        && Boolean(feedback.description || alerts.some(text => /必填|请填写|缺少|参数|网格/.test(text))),
+        && alerts.some(text => /请填写.*(?:网格|尺寸)|(?:网格|尺寸).*必填/.test(text)),
       evidence.parameters.missing);
+      await mesh.scrollIntoViewIfNeeded();
+      await capture('04-empty-required-mesh');
+      if (await missingNotice.isVisible()) await missingNotice.scrollIntoViewIfNeeded();
     });
 
     await step('05-save-fem-parameters', async () => {
@@ -139,7 +156,7 @@ await walkthrough('simulation', async ({
     await step('06-no-hpc-input-preflight', async () => {
       const saved = await api(studyPath(thermal));
       const query = saved.definition.modules?.['thermal-field'] ? '?module=thermal-field' : '';
-      const availability = await api(`${studyPath(thermal)}/availability${query}`);
+      const availability = await api(`${hpcStudyPath(thermal)}/availability${query}`);
       evidence.preflight.availability = availability;
       // An unexpectedly configured machine needs a different, authorized HPC
       // walkthrough. Even native preflight is not sent from this cloud test.
@@ -154,7 +171,7 @@ await walkthrough('simulation', async ({
         { observed: setupText, availability });
       await capture('06-no-hpc-setup');
       const inputResponse = page.waitForResponse(response =>
-        new URL(response.url()).pathname === `${studyPath(thermal)}/input-preflight`);
+        new URL(response.url()).pathname === `${hpcStudyPath(thermal)}/input-preflight`);
       const inputButton = page.getByRole('button', { name: '检查输入', exact: true });
       const trigger = await inputButton.isVisible() ? inputButton
         : page.getByRole('toolbar', { name: '工程命令', exact: true })

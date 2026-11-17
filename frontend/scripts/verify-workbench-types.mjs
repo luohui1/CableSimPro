@@ -12,6 +12,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   const visibleText = () => page.locator('body').innerText();
   const toolbar = () => page.getByRole('toolbar', { name: '型号命令', exact: true });
   const layers = () => page.getByRole('table', { name: '型号分层', exact: true });
+  const dirty = async () => await toolbar().locator('.command-state').count() > 0
+    && (await toolbar().locator('.command-state').innerText()).includes('未保存');
 
   async function dismissDialog() {
     for (let count = 0; count < 3 && await page.getByRole('dialog').count(); count++) {
@@ -26,7 +28,35 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       check(label, false, { error: error.message, state: await visibleText() });
       await dismissDialog();
       return undefined;
+    } finally { await recoverSavedDraft(label); }
+  }
+  async function recoverSavedDraft(label) {
+    await dismissDialog();
+    if (!await dirty()) return;
+    const id = new URL(page.url()).pathname.split('/')[2];
+    const saved = await workspace(id);
+    // Structure's existing Undo discards all unsaved input; analysis Undo only
+    // discards that method. Recovery must not carry a failed draft to a new step.
+    await module('结构 ·');
+    const undo = await command('撤销');
+    let restored = false;
+    if (undo && await undo.isEnabled()) {
+      await undo.click();
+      try { await expect.poll(dirty, { timeout: 10000 }).toBe(false); restored = true; }
+      catch { /* Keep the failed UI recovery in the report before reloading. */ }
     }
+    check(label + '之后可用撤销恢复已保存输入', restored, await visibleText());
+    if (!restored) {
+      const leave = dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss();
+      page.on('dialog', leave);
+      try { await page.reload(); } finally { page.off('dialog', leave); }
+      await expect(layers()).toBeVisible();
+      await expect.poll(dirty).toBe(false);
+    }
+    const current = await workspace(id);
+    check(label + '恢复未改动保存版本', current.revision === saved.revision
+      && JSON.stringify(current.domain) === JSON.stringify(saved.domain), { workspace: id, revision: current.revision });
+    await capture(label + (restored ? '-撤销草稿恢复已保存输入' : '-明确重载恢复已保存输入'));
   }
   async function responseFor(method, endpoint, action, timeout = 90000) {
     const [response] = await Promise.all([
@@ -70,14 +100,26 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await page.getByRole('navigation', { name: '型号浏览器', exact: true }).getByRole('button', {
       name: new RegExp('^' + label),
     }).click();
+    const result = {
+      '结构 ·': 'structure', '标准核对': 'standard-check-results',
+      '电气参数': 'electrical-results', '短路容量': 'short-circuit-results',
+      '载流量表': 'rating-table-results', '方案对比': 'comparison-results',
+      '规格书': 'specification-results',
+    }[label];
+    const content = page.locator(`[data-type-page="${result}"]`).last();
+    await expect(content).toBeVisible();
+    await expect(content).not.toHaveAttribute('data-type-state', 'loading');
   }
   async function save(id) {
+    if (!await dirty()) return workspace(id);
     await page.keyboard.press('Control+s');
     await expect(toolbar().locator('.command-state')).not.toContainText('未保存');
     await expect(page.getByText('结构修改待保存。', { exact: true })).toHaveCount(0);
     return workspace(id);
   }
-  async function command(label) {
+  async function command(label, required = false) {
+    if (required) await expect.poll(async () => await toolbar().getByRole('button', { name: label, exact: true }).count()
+      + await toolbar().getByRole('button', { name: '更多操作', exact: true }).count()).toBeGreaterThan(0);
     let button = toolbar().getByRole('button', { name: label, exact: true });
     if (await button.isVisible()) return button;
     const more = toolbar().getByRole('button', { name: '更多操作', exact: true });
@@ -90,7 +132,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     return null;
   }
   async function run(label, resultPage) {
-    const button = await command(label);
+    await expect(page.locator(`[data-type-page="${resultPage}"]`)).not.toHaveAttribute('data-type-state', 'loading');
+    const button = await command(label, true);
     if (!check(label + '可从当前页面启动', button && await button.isEnabled(), await visibleText())) return false;
     await button.click();
     const dialog = page.getByRole('dialog', { name: label + ' · 预检', exact: true });
@@ -112,9 +155,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   const options = await api('/api/types/creation-options');
   await attempt('01-型号列表与批量操作入口', async () => {
     await page.goto(base + '/types?theme=light');
+    await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
     await expect(page.getByRole('button', { name: '新建型号', exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: '查找型号', exact: true })).toBeVisible();
     await field('查找型号', 'YJV22');
+    await expect(page.getByRole('table', { name: '型号', exact: true })).toContainText('YJV22');
     await capture('型号列表-真实筛选');
     await field('查找型号', '');
     const table = page.getByRole('table', { name: '型号', exact: true });
@@ -170,7 +215,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   await page.goto(base + `/types/${main.id}/structure/section?theme=light`);
   await expect(layers()).toBeVisible();
 
-  await attempt('05-尺寸编辑撤销重做与保存', async () => {
+  await attempt('05-尺寸编辑撤销重做与前端校核', async () => {
     const before = await workspace(main.id);
     const inputs = layers().getByRole('textbox', { name: '绝缘厚度', exact: true });
     const input = inputs.first();
@@ -193,17 +238,41 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await redo.click();
       await expect.poll(async () => Number(await input.inputValue())).toBe(Number(changed));
       await capture('结构编辑-撤销后重做');
-    } else {
-      // Continue the baseline through the same visible editor; do not forge history.
-      await input.fill(changed);
-      await input.press('Tab');
     }
-    await save(main.id);
-    await expect.poll(async () => (await workspace(main.id)).revision).toBeGreaterThan(before.revision);
-    await input.fill(original);
+    // The three-core reference has fixed source positions: increasing one
+    // insulation thickness can overlap another core. Retain the real preview
+    // error, but do not PUT an intentionally invalid document. The first before
+    // artifact preserves the rejected save; following steps need clean input.
+    if (await dirty()) {
+      const undo = await command('撤销');
+      await expect(undo).toBeEnabled();
+      await undo.click();
+    }
+    await expect(input).toHaveValue(original);
+    await expect.poll(dirty).toBe(false);
+    check('撤销恢复原保存尺寸且未写入非法几何', (await workspace(main.id)).revision === before.revision);
+    await capture('结构编辑-撤销恢复合法保存输入');
+  });
+
+  await attempt('05b-合法尺寸编辑保存并撤销保存版本', async () => {
+    await module('结构 ·');
+    const before = await workspace(main.id);
+    const input = layers().getByRole('textbox', { name: '绝缘厚度', exact: true }).first();
+    const original = await input.inputValue();
+    // A small reduction leaves the source's fixed core centres unchanged and
+    // avoids the overlap seen in the first walk. This is an isolated edit only.
+    const changed = Math.max(Number(original) - 0.1, Number(original) * 0.9).toFixed(3);
+    await input.fill(changed);
     await input.press('Tab');
     await save(main.id);
-    check('尺寸可保存且还原原工程输入', true);
+    await expect.poll(async () => (await workspace(main.id)).revision).toBeGreaterThan(before.revision);
+    await capture('结构编辑-合法尺寸已保存');
+    const undo = await command('撤销');
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect(input).toHaveValue(original);
+    await expect.poll(async () => (await workspace(main.id)).domain).toEqual(before.domain);
+    check('尺寸可保存且撤销保留原工程输入与来源', true);
   });
 
   await attempt('06-添加结构层并查找删除入口', async () => {
@@ -268,7 +337,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
 
   for (const analysis of [
     { module: '电气参数', result: 'electrical-results', inputs: [['工作温度', '90'], ['频率', '50']] },
-    { module: '短路容量', result: 'short-circuit-results', inputs: [['持续时间', '1'], ['导体初始温度', '90'], ['导体最终温度', '250']] },
+    { module: '短路容量', result: 'short-circuit-results', inputs: [['持续时间', '1'], ['初始绝对温度', '90'], ['导体最终温度', '250']] },
   ]) {
     await attempt(`08-${analysis.module}-填写方法条件并运行`, async () => {
       await module(analysis.module);
@@ -317,7 +386,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading');
     await expect(page.getByTitle('正式规格书预览')).toBeVisible();
     await capture('规格书-生成前缺项与章节');
-    const generate = await command('生成规格书');
+    const generate = await command('生成规格书', true);
     if (!check('规格书有可启动的生成操作', generate && await generate.isEnabled(), await visibleText())) return;
     let download;
     const listener = item => { download = item; };

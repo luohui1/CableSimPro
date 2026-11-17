@@ -11,6 +11,28 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
   const knownKindLabels = { material: '材料', component: '部件', assembly: '结构', installation: '敷设模板', study_template: '计算方案', rule: '规则' };
   const knownStatuses = { draft: '草稿', reviewed: '已审核', published: '已发布', deprecated: '已停用' };
 
+  async function branch(label, action) {
+    try { return await step(label, action); }
+    catch (error) {
+      if (process.env.WORKBENCH_PHASE !== 'before') throw error;
+      // step already saved the blocked screen and error. Continue an independent
+      // catalog journey, but keep this failure for product/script triage.
+      check(`${label}执行受阻`, false, { classification: '需根据截图区分产品卡点与脚本定位错误', error: error.message });
+      await page.keyboard.press('Escape');
+      const leave = dialog => dialog.type() === 'beforeunload' ? dialog.accept() : dialog.dismiss();
+      page.on('dialog', leave);
+      try { await page.goto(base + '/'); }
+      finally { page.off('dialog', leave); }
+      return undefined;
+    }
+  }
+
+  async function openCableVersions() {
+    await sidebar.getByRole('link', { name: '电缆型号版本', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '电缆型号版本', exact: true })).toBeVisible();
+    await expect(page.getByText('正在读取电缆型号版本', { exact: true })).toHaveCount(0);
+  }
+
   async function openGroup(group) {
     await sidebar.getByRole('link', { name: groupTitles[group], exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/resources/${group}(?:\\?|$)`));
@@ -46,7 +68,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await expect(search).toBeVisible();
     await search.fill(name);
     const table = main.getByRole('table', { name: groupTitles[group], exact: true });
-    const row = table.getByRole('row', { name, exact: true });
+    const row = table.getByRole('row', { name, exact: true }).first();
     await expect(row).toBeVisible();
     await row.focus();
     await row.press('Enter');
@@ -106,11 +128,9 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     return saved;
   }
 
-  await step('从首页打开电缆型号版本', async () => {
+  await branch('从首页打开电缆型号版本', async () => {
     await page.goto(base + '/');
-    await sidebar.getByRole('link', { name: '电缆型号版本', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: '电缆型号版本', exact: true })).toBeVisible();
-    await expect(page.getByText('正在读取电缆型号版本', { exact: true })).toHaveCount(0);
+    await openCableVersions();
     const table = main.getByRole('table', { name: '电缆型号版本', exact: true });
     const rows = table.locator('tbody tr.data-row');
     const models = await api('/api/domain-cable-models');
@@ -123,21 +143,32 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     }
     const search = main.getByRole('textbox', { name: /检索|查找型号|搜索/ }).or(main.getByRole('searchbox')).first();
     await check('电缆型号版本提供名称检索', await search.isVisible(), '目录目前只有来源筛选；型号数量多时不能按名称直接定位。');
+    const selected = properties.getByRole('button', { name: /用于研究|用于载流量研究|基于此版本新建|建立型号草稿/ }).first();
+    await check('型号资源详情给出工程或型号引用入口', await selected.isVisible(), '查看版本后应能带着准确版本进入研究或型号设计。');
     await capture('cable-versions');
+  });
+
+  await branch('按来源筛选型号版本', async () => {
+    await openCableVersions();
     const origin = main.getByRole('combobox', { name: '来源', exact: true });
     if (await origin.isVisible()) {
       await origin.click();
-      const options = page.getByRole('option');
-      const names = await options.allTextContents();
-      await page.keyboard.press('Escape');
-      const name = names.find(value => value !== '全部');
-      if (name) { await choose('来源', name); await capture('cable-source-filter'); await choose('来源', '全部'); }
+      await expect(page.getByRole('listbox')).toBeVisible();
+      // Radix's selected indicator is aria-hidden. Do not turn its textContent
+      // ("全部✓") into a different accessible name and reopen a stale selection.
+      const candidate = page.getByRole('option', { selected: false, disabled: false }).first();
+      if (await candidate.count()) {
+        await candidate.click();
+        await expect(origin).not.toHaveText('全部');
+        await expect(main.getByRole('table', { name: '电缆型号版本', exact: true })).toBeVisible();
+        await capture('cable-source-filter');
+        await choose('来源', '全部');
+      } else await page.keyboard.press('Escape');
     }
-    const selected = properties.getByRole('button', { name: /用于研究|用于载流量研究|基于此版本新建|建立型号草稿/ }).first();
-    await check('型号资源详情给出工程或型号引用入口', await selected.isVisible(), '查看版本后应能带着准确版本进入研究或型号设计。');
   });
 
-  await step('核对厂家资料导入入口', async () => {
+  await branch('核对厂家资料导入入口', async () => {
+    await openCableVersions();
     await page.locator('.topbar-actions').getByRole('button', { name: '从厂家资料导入', exact: true }).click();
     await expect(page).toHaveURL(/\/resources\/cables\/imports(?:\?|$)/);
     await expect(page.getByRole('button', { name: '上传 PDF', exact: true })).toBeVisible();
@@ -153,7 +184,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     ['templates', 'installation', [{ name: 'burial_depth', quantity: { value: 0.8, unit: 'm', dimension: 'length' } }]],
     ['standards', 'rule', [{ name: 'conductor_limit', quantity: { value: 90, unit: 'degC', dimension: 'absolute_temperature' } }]],
   ]) {
-    await step(`${groupTitles[group]}浏览与键盘选择`, async () => {
+    await branch(`${groupTitles[group]}浏览与键盘选择`, async () => {
       await openGroup(group);
       const rows = main.getByRole('table', { name: groupTitles[group], exact: true }).locator('tbody tr.data-row');
       const create = page.locator('.topbar-actions').getByRole('button', { name: /新建资源|新建材料|新建模板|新建规则/ }).first();
@@ -164,9 +195,11 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
         await rows.first().press('Enter');
         await inspectSelectedResource(name);
         if (await rows.count() > 1) {
+          const nextName = await rows.nth(1).getAttribute('aria-label');
           await rows.first().focus();
           await rows.first().press('ArrowDown');
           await expect(rows.nth(1)).toBeFocused();
+          await inspectSelectedResource(nextName);
         }
         await capture(`${group}-selected`);
       } else {
@@ -181,7 +214,8 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       }
     });
 
-    await step(`${groupTitles[group]}导入和草稿闭环`, async () => {
+    await branch(`${groupTitles[group]}导入和草稿闭环`, async () => {
+      await openGroup(group);
       const imported = await importResource(group, kind, parameters);
       if (!imported) return;
       await expect(main.getByRole('textbox', { name: '检索', exact: true })).toBeVisible();
@@ -196,7 +230,9 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       const published = await api(`/api/foundation/assets?kind=${kind}&status=published&limit=50&offset=0`);
       if (published.items.length) {
         const current = published.items[0];
-        await searchResource(group, current.name);
+        await choose('状态', '已发布');
+        const selected = await searchResource(group, current.name);
+        await check(`${groupTitles[group]}已发布筛选对应真实版本`, selected?.status === 'published', { name: selected?.name, version: selected?.version, status: selected?.status });
         const derive = properties.getByRole('button', { name: /新建版本|派生新版本|建立新版本/ }).first();
         await check(`${groupTitles[group]}已发布版本可以改版`, await derive.isVisible(), { name: current.name, version: current.version });
         await capture(`${group}-published-version`);
@@ -206,14 +242,19 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     });
   }
 
-  await step('浏览标准依据并检查搜索空态', async () => {
+  await branch('浏览标准依据并检查搜索空态', async () => {
+    await openGroup('standards');
     await page.getByRole('tab', { name: '依据浏览', exact: true }).click();
     const browser = page.locator('[data-page=standards-basis]');
     await expect(browser).toHaveAttribute('data-state', /success|error|empty/);
     const state = await browser.getAttribute('data-state');
     await check('标准依据能读取已有来源', state === 'success', { state, text: await browser.innerText() });
     if (state !== 'success') return;
+    // The outer success state means the catalogue is loaded; the selected
+    // table has its own request and may still be loading at this point.
+    await expect(browser.getByRole('table', { name: '标准完整表格', exact: true })).toBeVisible();
     const cells = browser.getByRole('button', { name: /^查看依据：/ });
+    await check('标准表格提供可选择的真实依据格', await cells.count() > 0);
     if (await cells.count()) {
       await cells.first().focus();
       await cells.first().press('Space');
