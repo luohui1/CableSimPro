@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useStudy } from "./study-provider";
 import {
   moduleConfiguration,
@@ -14,11 +14,11 @@ import type { DomainDocument } from "@/lib/domain-fields";
 import { domainInputChoices } from "@/lib/domain-input-choices";
 import { sweepView } from "@/lib/sweep-view";
 import { DataTable } from "./data-table";
-import { deferredView } from './deferred-view';
-const SeriesChart = deferredView(() => import('./series-chart').then(m => ({ default: m.SeriesChart })));
+import { seriesChart } from '@/lib/heavy-components';
+const SeriesChart = seriesChart.Component;
 import { EngineeringValue } from "./engineering-value";
 import { Toolbar } from "./toolbar";
-import { EmptyState } from "./states";
+import { EmptyState, LoadingState } from "./states";
 import { StudyErrorState as ErrorState } from './study-error-state';
 import { StatusMark } from "./status-mark";
 import { Button } from "./ui/button";
@@ -418,7 +418,7 @@ export function StudySweep({
         ],'参数扫描完整精度与追溯.csv')}>完整精度与追溯</Button>
       </Toolbar>
       {tab === "curve" && (
-        <SeriesChart
+        <Suspense fallback={<LoadingState title="正在加载视图" />}><SeriesChart
           xLabel={
             variableLabel + " / " + displayUnit(variable?.unit || variableUnit)
           }
@@ -436,7 +436,7 @@ export function StudySweep({
               })),
             },
           ]}
-        />
+        /></Suspense>
       )}
       {tab !== 'curve' && <DataTable
         label="扫描点结果"
