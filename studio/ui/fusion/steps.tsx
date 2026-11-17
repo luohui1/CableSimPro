@@ -4,6 +4,7 @@ import { useAuiState } from '@assistant-ui/react';
 import type { ChatStep, StepStatus } from '@shared/types';
 import { StepTrace, type Step, type StepState } from '@/kit/chat/steps';
 import { StepCards } from './cards';
+import { repeatedOpens } from './repeated-opens';
 
 const STATE: Record<StepStatus, StepState> = { running: 'running', waiting_review: 'waiting', done: 'done', failed: 'failed', rejected: 'rejected', interrupted: 'interrupted' };
 
@@ -11,27 +12,6 @@ const toStep = (step: ChatStep): Step => ({
   id: step.id, label: step.label, target: step.target, state: STATE[step.status], notes: step.notes, reason: step.reason,
   seconds: step.duration_ms === undefined ? undefined : step.duration_ms / 1000,
 });
-
-/** The steps whose way to the workbench only repeats one the answer already gives: the same address twice, or a plain link to a study
- *  whose own run card (with its own button) is there. */
-function repeatedOpens(parts: readonly unknown[]): Set<string> {
-  const object = (href: string) => href.split('?')[0];
-  const cards = parts.flatMap(part => {
-    const step = (part as { result?: ChatStep }).result;
-    const card = step?.type === 'step' && step.status === 'done' ? step.card : undefined;
-    const href = card && 'href' in card ? card.href : undefined;
-    return step && card && href ? [{ id: step.id, kind: card.kind, href }] : [];
-  });
-  const withRunCard = new Set(cards.filter(item => item.kind === 'saved_run').map(item => object(item.href)));
-  const offered = new Set<string>();
-  const repeated = new Set<string>();
-  for (const item of cards) {
-    if (item.kind === 'open' && withRunCard.has(object(item.href))) repeated.add(item.id);
-    else if (offered.has(item.href)) repeated.add(item.id);
-    else offered.add(item.href);
-  }
-  return repeated;
-}
 
 export function StepGroup({ indices }: { indices: readonly number[] }) {
   const parts = useAuiState(state => state.message.parts);
