@@ -8,6 +8,6 @@ if not exist "%~dp0runtime\python\python.exe" (
 "%~dp0runtime\python\python.exe" -I -B "%~dp0scripts\install_release.py" --config "%~dp0release.toml" %*
 if errorlevel 1 (
   echo CableSimPro startup failed. See the messages above.
-  pause
+  if not defined CI pause
   exit /b 1
 )

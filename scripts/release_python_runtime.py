@@ -156,6 +156,35 @@ def _obtain(pin: dict, cache: Path) -> Path:
     return path
 
 
+def prune_bytecode(prefix: Path) -> None:
+    """Distribute sources, not path/mtime-dependent caches rebuilt on first use.
+
+    Isolated plugin Python ignores PYTHONDONTWRITEBYTECODE. Upstream or pip
+    bytecode can therefore change after relocation even if every source is
+    untouched. Remove only regenerable caches before computing the immutable
+    manifest; never weaken source, executable, DLL or license verification.
+    """
+    from importlib.util import source_from_cache
+
+    candidates = sorted(path for path in prefix.rglob('*')
+                        if path.is_file() and path.suffix in {'.pyc', '.pyo'})
+    for path in candidates:
+        if path.parent.name == '__pycache__':
+            try:
+                source = Path(source_from_cache(str(path)))
+            except ValueError as error:
+                raise RuntimeError('Unrecognized runtime bytecode cache: ' + str(path)) from error
+        else:
+            source = path.with_suffix('.py')
+        if not source.is_file() or source.is_symlink():
+            raise RuntimeError('Cannot remove a source-less Python module: ' + str(path))
+    for path in candidates:
+        path.unlink()
+    for directory in sorted(prefix.rglob('__pycache__'), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+
+
 def inspect_runtime(interpreter: Path) -> dict:
     """Run the real interpreter; verify stdlib, SQLite, TLS, pip and venv imports."""
     probe = (
@@ -184,6 +213,7 @@ def bundle_runtime(root: Path, *, cache: Path, archive: Path | None = None) -> d
         raise RuntimeError("Python runtime archive does not match the pinned SHA256")
     prefix = root / "runtime/python"
     extract_runtime(source, prefix)
+    prune_bytecode(prefix)
     executable = runtime_path(root)
     observed = inspect_runtime(executable)
     if (observed["version"] != [int(part) for part in lock["version"].split(".")]
@@ -202,6 +232,7 @@ def bundle_runtime(root: Path, *, cache: Path, archive: Path | None = None) -> d
                 "version": lock["version"], "build": lock["build"], "platform": sys.platform,
                 "architecture": pin["architecture"], "url": pin["url"], "sha256": pin["sha256"],
                 "metadata_source": lock["metadata_source"],
+                "bytecode_policy": "regenerable caches omitted; all source and native runtime files hash-checked",
                 "executable": executable.relative_to(root).as_posix(), "license_files": licenses,
                 "stdlib_checks": {key: observed[key] for key in ("ssl", "sqlite", "pip")}}
     (root / METADATA).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
