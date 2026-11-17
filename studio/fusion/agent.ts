@@ -210,19 +210,48 @@ export class FusionAgent {
     return this.#viewOf(id, manager.buildSessionContext().messages as PiMessage[], undefined, manager);
   }
 
+  /** Recover only the identities that a completed creation receipt from the platform confirms, preserving earlier adopted objects. */
+  #adoptRecovered(manager: SessionManager, recorded: RecordedProposal, receipt?: Record<string, any>): void {
+    if (!receipt || receipt.error || receipt.executed === false || (receipt.status !== undefined && receipt.status !== 'succeeded')) return;
+    let context: WorkbenchContext | undefined;
+    let adopted: AdoptedScopes = { types: new Set(), studies: new Map() };
+    for (const entry of manager.getEntries()) if (entry.type === 'custom') {
+      if (entry.customType === CONTEXT_ENTRY) context = entry.data as WorkbenchContext;
+      if (entry.customType === ADOPTED_ENTRY) {
+        const saved = entry.data as { types: string[]; studies: [string, string][] };
+        adopted = { types: new Set(saved.types), studies: new Map(saved.studies) };
+      }
+    }
+    if (recorded.proposal.operation === 'propose_type_create' && receipt.kind === 'type'
+      && typeof receipt.type_id === 'string' && receipt.type_id && receipt.workspace_id === receipt.type_id) {
+      if (adopted.types.has(receipt.type_id)) return;
+      adopted.types.add(receipt.type_id);
+    } else if (recorded.proposal.operation === 'propose_study' && receipt.kind === 'study'
+      && typeof receipt.study_id === 'string' && receipt.study_id && typeof receipt.workspace_id === 'string' && receipt.workspace_id === recorded.proposal.project_id
+      && (adopted.studies.has(receipt.workspace_id) || (context && context.workspace_id === receipt.workspace_id && context.study_id))) {
+      if (adopted.studies.get(receipt.workspace_id) === receipt.study_id) return;
+      adopted.studies.set(receipt.workspace_id, receipt.study_id);
+    } else return;
+    manager.appendCustomEntry(ADOPTED_ENTRY, { types: [...adopted.types], studies: [...adopted.studies] });
+  }
+
   /** Reconcile a crashed waiting step before it can be used again. A known receipt is never executed a second time. */
   async #recover(manager: SessionManager): Promise<void> {
     const messages = manager.buildSessionContext().messages as PiMessage[];
     for (const recorded of this.#recorded(manager).values()) {
-      if (recorded.proposal.status !== 'pending') continue;
+      const completed = messages.some(message => message.role === 'toolResult' && message.toolCallId === recorded.proposal.step_id);
+      // The process can also stop after persisting the human decision but before its tool resumes and records the created scope.
+      if (recorded.proposal.status !== 'pending' && !(recorded.proposal.status === 'accepted' && !completed)) continue;
       const state = await this.#backend.proposal(recorded.proposal.id, recorded.scope.session);
       const decision = state.status === 'pending' ? await this.#backend.decide(recorded.proposal.id, false) : state;
       const accepted = decision.status === 'approved';
-      const failed = decision.receipt?.status === 'failed' || Boolean(decision.receipt?.error);
+      const failed = decision.receipt?.status === 'failed' || decision.receipt?.executed === false || Boolean(decision.receipt?.error);
+      // Save adoption before marking the step recovered: another interruption must leave a retryable pending/incomplete record.
+      if (accepted && !failed) this.#adoptRecovered(manager, recorded, decision.receipt);
       const proposal: Proposal = { ...recorded.proposal, status: accepted ? 'accepted' : 'rejected',
         note: accepted ? '服务重启后已核对平台回执；没有重复执行。' : '对话服务重启，未接受的改动已终止；请重新提出。' };
       manager.appendCustomEntry(PROPOSAL_ENTRY, { ...recorded, proposal });
-      if (!messages.some(message => message.role === 'toolResult' && message.toolCallId === proposal.step_id)) {
+      if (!completed) {
         manager.appendMessage({ role: 'toolResult', toolCallId: proposal.step_id, toolName: proposal.operation,
           content: [{ type: 'text', text: JSON.stringify({ status: accepted && !failed ? 'ok' : 'error', summary: failed ? '已接受，但平台未完成执行；请按保存诊断继续。' : proposal.note, data: { receipt: decision.receipt ?? {} } }) }],
           isError: !accepted || failed, timestamp: Date.now() });
