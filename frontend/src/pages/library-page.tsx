@@ -228,7 +228,12 @@ export function AssetsPage() {
       if (importVisible.current && currentGroup.current === origin.group && importGeneration.current === origin.generation) {
         changeImportOpen(false);
         setRaw("");
+        setSavedElsewhere(null);
         setQ(text(value.name)); setKind('all'); setStatus('all'); setOffset(0); setSelected(text(value.id));
+      } else {
+        // A closed import still owes a visible receipt. Keep the user's current
+        // category and filters until they explicitly open the saved resource.
+        setSavedElsewhere(value);
       }
       await queries.invalidateQueries({ queryKey: ["asset-catalog"] });
     },
