@@ -140,8 +140,13 @@ class ExchangeEvidence:
                 invalid('每个规格值须保留原值、单位、来源、方法版本和可信分档。')
             key, source = fact['key'], fact['source']
             label, unit, scale, _ = tables.FIELDS[key]
+            # Existing 1.0.0/1.1.0 facts used an approximate-weight display
+            # label. Keep those saved facts intact; the original header and
+            # catalogue still define whether this is approximate or maximum.
+            labels = {label, '电缆近似重量'} if key == 'weight' else {label}
             scale = .001 if unit == 'kg/km' else scale
-            if (fact['label'] != label or fact['display_unit'] != unit or fact['unit'] != tables.SI_UNITS[unit]
+            if (not isinstance(fact['label'], str) or fact['label'] not in labels
+                    or fact['display_unit'] != unit or fact['unit'] != tables.SI_UNITS[unit]
                     or not positive(fact['display_value']) or not positive(fact['value'])
                     or not same_number(fact['value'], fact['display_value'] * scale)
                     or key.endswith('_count') and not float(fact['display_value']).is_integer()

@@ -160,7 +160,7 @@ def _incomplete_payload(series, parts, name, facts, missing):
         return None
     return {'name': name, 'version': '1', 'confirmed': False, 'materials': [],
             'specification': {'manufacturer': series['manufacturer'], 'designation': series['designation'],
-                'u0_v': series['u0_v'], 'voltage_v': series['u_v'], 'cores': series['cores'],
+                'u0_v': series['u0_v'], 'voltage_v': series['u_v'], 'um_v': series.get('um_v'), 'cores': series['cores'],
                 'area_m2': next(item['value'] for item in facts if item['key'] == 'area'),
                 'conductor': 'copper_bare' if parts['conductor'] == 'copper' else 'aluminium',
                 'values': values, 'missing': missing or ['尚未形成完整工程结构，请补齐层结构与材料物性。']}, 'sources': sources}

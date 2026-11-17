@@ -354,7 +354,7 @@ def release_identity():
     hv,hv_digest = bundled_hv()
     evidence = evidence_availability(verify=True)
     chengnan = evidence_availability(verify=True,scope='chengnan')
-    return {'seed_revision':18, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':19, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'public_catalogues':{item['id']:{'workbook_sha256':item['sha256'], 'source_sha256':item['source']['sha256'],
                                            'declarations_sha256':fingerprint(item['declarations'])}
                                  for item in sample_manifest()},

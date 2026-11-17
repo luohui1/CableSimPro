@@ -1,0 +1,136 @@
+{
+  "schema": "cablesim.manufacturer-table-fixture/1",
+  "title": "江南 YJV22 26/35 kV 三芯公开尺寸表",
+  "manufacturer": "江南电缆",
+  "source": {
+    "url": "https://www.jiangnancable.com/project/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/",
+    "alternate_url": "https://www.wxjncable.com/project/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/",
+    "format": "official_html",
+    "page_sha256": "bcc5a82e8adee08740461f97b3132f76af3443e6ef74cc6d94e5bb79ca24f238",
+    "page_size_bytes": 74160,
+    "page_sha256_scope": "本次实际下载的完整网页字节；网页动态内容可能更新，不把后续页面哈希视为固定发行身份。",
+    "locator": "CABLE DIMENSIONS · table#tablepress-26yjv22 · tr.row-13 至 tr.row-21（仅三芯）",
+    "published_edition": null,
+    "original_table_file": "jiangnan_yjv22_source.html",
+    "original_table_sha256": "624829fa31c5dba79f34d8af09dbc585a066ea1ddb5a6d1c374e0c28fb2021bf",
+    "original_table_scope": "从完整网页逐字节截取的原始数据表；含表头及20个原规格，CSV只保留其中9个三芯规格。",
+    "csv_file": "jiangnan_yjv22.csv",
+    "csv_sha256": "02b8a2a1b31eef30e147cae3b4028e7a85f36a85d80e5e8b83f31b41ed1928b9",
+    "column_meanings": {
+      "area": {
+        "source_column": 1,
+        "quantity": "标称导体截面",
+        "unit": "mm²"
+      },
+      "cores": {
+        "source_column": 2,
+        "quantity": "芯数",
+        "unit": "1"
+      },
+      "insulation_thickness": {
+        "source_column": 3,
+        "quantity": "标称绝缘厚度；不代表最薄点实测",
+        "unit": "mm"
+      },
+      "outer_diameter": {
+        "source_column": 4,
+        "quantity": "近似成品外径；不是独立几何计算值",
+        "unit": "mm"
+      },
+      "weight": {
+        "source_column": 5,
+        "quantity": "电缆最大重量；不是实测质量或材料密度",
+        "unit": "kg/km"
+      }
+    },
+    "rows": [
+      {
+        "csv_row": 2,
+        "source_selector": "#tablepress-26yjv22 .row-13",
+        "area_mm2": 50,
+        "cores": 3
+      },
+      {
+        "csv_row": 3,
+        "source_selector": "#tablepress-26yjv22 .row-14",
+        "area_mm2": 70,
+        "cores": 3
+      },
+      {
+        "csv_row": 4,
+        "source_selector": "#tablepress-26yjv22 .row-15",
+        "area_mm2": 95,
+        "cores": 3
+      },
+      {
+        "csv_row": 5,
+        "source_selector": "#tablepress-26yjv22 .row-16",
+        "area_mm2": 120,
+        "cores": 3
+      },
+      {
+        "csv_row": 6,
+        "source_selector": "#tablepress-26yjv22 .row-17",
+        "area_mm2": 150,
+        "cores": 3
+      },
+      {
+        "csv_row": 7,
+        "source_selector": "#tablepress-26yjv22 .row-18",
+        "area_mm2": 185,
+        "cores": 3
+      },
+      {
+        "csv_row": 8,
+        "source_selector": "#tablepress-26yjv22 .row-19",
+        "area_mm2": 240,
+        "cores": 3
+      },
+      {
+        "csv_row": 9,
+        "source_selector": "#tablepress-26yjv22 .row-20",
+        "area_mm2": 300,
+        "cores": 3
+      },
+      {
+        "csv_row": 10,
+        "source_selector": "#tablepress-26yjv22 .row-21",
+        "area_mm2": 400,
+        "cores": 3
+      }
+    ]
+  },
+  "transcription_method": {
+    "name": "江南官网三芯尺寸表转录",
+    "version": "1.0.0",
+    "operations": [
+      "按网页固定table id读取原有五列。",
+      "仅选芯数为3的9行，保留原行序与数字字符；表头译为中文并保留单位。",
+      "逐行对照HTML数据与独立网页读取结果；原表异常不修正。"
+    ]
+  },
+  "confidence": "reference",
+  "reviewed": false,
+  "declaration": {
+    "designation": "YJV22",
+    "cores": 3,
+    "u0_v": 26000,
+    "u_v": 35000,
+    "um_v": null,
+    "conductor": "copper",
+    "insulation": "XLPE",
+    "oversheath": "PVC",
+    "armour_material": "steel_tape",
+    "origin": "public",
+    "resistance_basis": "stated",
+    "standards": []
+  },
+  "published_standards_text": "GB/T12706-2008,IEC,BS,ASTM and etc. upon request.",
+  "limitations": [
+    "仅保存厂家公布的标称/近似/最大值，不是工厂测量记录、产品符合性结论或独立计算结果。",
+    "网页只写GB/T12706-2008及其他可按需执行的标准；未明确分册，不替用户选择执行版本。",
+    "原表3×95 mm²近似外径为86.3 mm，小于相邻规格，按原值保留，须厂家复核。",
+    "原表未刊R20、载流量、导体外径、半导电/屏蔽/内衬/铠装/护套厚度、材料密度及物性，全部保持缺失。",
+    "不把原网页的运行温限、弯曲规则等未转入字段自动加到工程输入；这些草稿不能计算、审核或发布为完整工程型号。"
+  ]
+}

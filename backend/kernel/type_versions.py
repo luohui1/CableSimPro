@@ -277,7 +277,7 @@ def candidate_design_document(payload, name):
             template = cable['cores'][0]
             cable['cores'] = [{**deepcopy(template), 'id': f'core/{index + 1}'}
                               for index in range(spec['cores'])]
-        cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'])
+        cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'], um=spec.get('um_v'))
         document['materials'][0].update(label='铜' if spec['conductor'].startswith('copper') else '铝', standard_kind=spec['conductor'])
         for core in cable['cores']:
             core['conductor']['nominal_area'] = spec['area_m2']

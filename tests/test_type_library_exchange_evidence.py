@@ -82,6 +82,8 @@ def corrupt(bundle, kind):
         outer['method'] = {}
     elif kind == 'wrong_unit':
         outer['unit'] = 'mm'
+    elif kind == 'wrong_weight_label':
+        next(fact for fact in facts if fact['key'] == 'weight')['label'] = '厂家已验收实测重量'
     elif kind == 'formula_value':
         outer['value'] = '=1+1'
     elif kind == 'boolean_value':
@@ -133,7 +135,7 @@ def corrupt(bundle, kind):
 @pytest.mark.parametrize('format', ['json', 'xlsx'])
 def test_self_consistent_files_cannot_delete_or_change_catalogue_evidence(tmp_path, exported, format):
     corruptions = ('empty_values', 'blank_evidence', 'si_mismatch', 'missing_fact', 'duplicate_fact',
-                   'empty_method', 'wrong_unit', 'formula_value', 'boolean_value', 'trust_upgrade',
+                   'empty_method', 'wrong_unit', 'wrong_weight_label', 'formula_value', 'boolean_value', 'trust_upgrade',
                    'changed_cell', 'missing_sheet', 'missing_row', 'source_trust_upgrade',
                    'common_declaration_changed', 'standard_value_changed', 'standard_condition_changed',
                    'standard_release_changed', 'standard_version_older', 'standard_version_future')
@@ -171,6 +173,8 @@ def legacy_bundle(bundle):
             if 'display_value' in result or 'file_sha256' in result and 'field' in result:
                 result.pop('usage', None)
                 result.pop('conditions', None)
+            if result.get('key') == 'weight' and 'display_value' in result:
+                result['label'] = '电缆近似重量'
             return result
         if isinstance(value, list):
             return [migrate(item) for item in value]
@@ -185,6 +189,12 @@ def legacy_bundle(bundle):
 @pytest.mark.parametrize('state', ['original', 'revised'])
 def test_original_and_revised_facts_round_trip_without_rewriting_history(tmp_path, exported, format, version, state):
     bundle = legacy_bundle(exported[state]) if version == '1.0.0' else deepcopy(exported[state])
+    if version == '1.1.0' and state == 'revised':
+        # 1.1.0 also shipped the historical label. Verify both supported
+        # method versions without rewriting facts during transfer.
+        for spec in bundle['series'][0]['specs']:
+            next(fact for fact in spec['metadata']['values'] if fact['key'] == 'weight')['label'] = '电缆近似重量'
+        reseal(bundle)
     content = wire(bundle, format)
     with TestClient(create_app(tmp_path / 'target.sqlite')) as client:
         upload = {'file': ('types.' + format, content)}

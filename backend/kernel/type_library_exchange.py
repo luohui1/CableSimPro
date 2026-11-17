@@ -100,7 +100,12 @@ def validate_bundle(value):
             area = cable.cores[0].conductor.nominal_area if cable else payload.specification.area_m2
             u0 = cable.rating.u0 if cable else payload.specification.u0_v
             voltage = cable.rating.u if cable else payload.specification.voltage_v
+            um = cable.rating.um if cable else payload.specification.um_v
+            # Older imports lost Um even when the series declared it. Preserve
+            # their unknown value and digest; never fill it from the series.
+            # An explicit value must still agree with the series declaration.
             if (cores != declaration.cores or u0 != declaration.u0_v or voltage != declaration.u_v
+                    or um is not None and um != declaration.um_v
                     or abs(area - metadata['area_m2']) > 1e-12 or metadata['key'] != f'{cores}×{area * 1e6:g}'):
                 tables.fail('TYPE_EXCHANGE_SERIES', '型号电压、芯数或截面与系列不一致。')
             evidence.facts(item, declaration)

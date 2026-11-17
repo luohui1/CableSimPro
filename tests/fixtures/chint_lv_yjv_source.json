@@ -1,0 +1,52 @@
+{
+  "schema": "cablesim.manufacturer-table-excerpt/1",
+  "manufacturer": "正泰",
+  "designation": "YJV",
+  "cores": 1,
+  "u0_v": 600,
+  "u_v": 1000,
+  "source": {
+    "title": "正泰电线电缆选型手册",
+    "url": "https://cabling.chint.com/upload/data/202510-31/正泰电线电缆选型手册.pdf",
+    "sha256": "166c89615a4f1453659b6978a9d04c5312f0d710a3d1023c665c3be337179f80",
+    "size_bytes": 20096093,
+    "pdf_page": 21,
+    "printed_page": 14,
+    "table": "表9 0.6/1 kV 单芯",
+    "columns": {
+      "area": {"header": "芯数×截面 n×mm²", "column": 1, "unit": "mm²"},
+      "outer_diameter": {"header": "外径 mm / YJV", "column": 2, "unit": "mm"},
+      "weight": {"header": "重量 kg/km / YJV", "column": 8, "unit": "kg/km"}
+    },
+    "original_standards": [
+      {"declaration": "GB/T12706-2020", "pdf_page": 17, "printed_page": 10, "locator": "7.1", "note": "原手册没有写分册；不将其改成 GB/T 12706.1 或自动选择执行标准。"},
+      {"declaration": "GB/T3956-2008", "pdf_page": 17, "printed_page": 10, "locator": "7.1.1.3"}
+    ],
+    "usage": "published_reference_only",
+    "limitations": [
+      "正文13页（PDF20页）7.1.5说明表9至30的外径与重量供储运和安装参考，不作为验收参数。",
+      "本摘录只包含表9的YJV 1×10与1×16两行，不代表整本手册或多芯产品覆盖。",
+      "表9没有导体直径、绝缘/护套厚度、R20或载流量；未从其它表补入，也未从外径和重量反推。",
+      "各层材料物性、制造实测与计算工况仍缺，导入后保留未审核、不可计算的型号草稿。"
+    ],
+    "excerpts": [
+      {"specification": "1×10", "table_data_row": 5, "cells": {
+        "area": {"raw_text": "1×10", "value": 10, "rect_pt": [58, 182, 80, 195.7]},
+        "outer_diameter": {"raw_text": "8.7", "value": 8.7, "rect_pt": [106, 182, 120, 195.7]},
+        "weight": {"raw_text": "141", "value": 141, "rect_pt": [327, 182, 342, 195.7]}
+      }},
+      {"specification": "1×16", "table_data_row": 6, "cells": {
+        "area": {"raw_text": "1×16", "value": 16, "rect_pt": [58, 196, 80, 210]},
+        "outer_diameter": {"raw_text": "9.7", "value": 9.7, "rect_pt": [106, 196, 120, 210]},
+        "weight": {"raw_text": "199", "value": 199, "rect_pt": [327, 196, 342, 210]}
+      }}
+    ]
+  },
+  "transcription": {
+    "name": "厂家手册表格摘录",
+    "version": "1.0.0",
+    "confidence": "reference",
+    "reviewed": false,
+    "verification": "直接下载官方PDF核验SHA，逐页查看表头、型号列和用途说明，再用原PDF坐标文字独立核对六个单元格；不以导入后的数据生成参考值。"
+  }
+}

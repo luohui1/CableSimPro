@@ -1,0 +1,44 @@
+{
+  "schema": "cablesim.manufacturer-import-fixture/1",
+  "source": {
+    "publisher": "台一国际股份有限公司",
+    "title": "电力电缆型录",
+    "url": "https://www.tai-i-int.com.tw/media/product/733/file/________.pdf",
+    "sha256": "72b21e5d15f5d50a5b30a01c822ca3771bd0cc190cbfa4edd47bf23a948c9cdd",
+    "size_bytes": 6940265,
+    "pdf_page": 6,
+    "printed_pages": [8, 9],
+    "table": "印刷第9页右上 YJLW02(03)，127/220(252) kV，400至2500 mm²的12行",
+    "scope": "公开厂家目录中的近似结构和重量、标称绝缘厚度及最大20℃导体直流电阻；不是制造实测或签章规格书。",
+    "method": {"name": "厂家目录原表转录", "version": "1.0.0"},
+    "confidence": "reference",
+    "reviewed": false,
+    "original_standards": ["IEC 62067", "GB/Z 18890", "CSBTS.TC 213"],
+    "normalization": "原表合并电压单元格逐行保留同一声明；整数的千分位逗号转为数值单元格，未改变数值。绝缘外径保留为未映射原始列，不从外径差推算屏蔽厚度。",
+    "limitations": [
+      "原手册没有给标准年号，不自动绑定或替换为GB/T 18890.2—2015。",
+      "本表同时标YJLW02(03)；本导入明确选择原型号说明中的YJLW02/PVC变体，近似重量不作为某一配方的实测重量。",
+      "2500 mm²的R20原刊为0.0073 Ω/km，原样保留，不替换成其他标准的0.0072。",
+      "本表未刊载流量；半导电层、缓冲层、波纹深度和节距、材料物性及制造实测均未补造。"
+    ]
+  },
+  "declaration": {
+    "name": "台一 YJLW02 127/220 kV 原表",
+    "manufacturer": "台一国际股份有限公司",
+    "designation": "YJLW02",
+    "cores": 1,
+    "u0_v": 127000,
+    "u_v": 220000,
+    "um_v": 252000,
+    "origin": "public",
+    "conductor": "copper",
+    "insulation": "XLPE",
+    "metal_sheath": "corrugated_aluminium",
+    "oversheath": "PVC",
+    "resistance_basis": "stated",
+    "standards": ["IEC 62067", "GB/Z 18890", "CSBTS.TC 213"]
+  },
+  "headers": ["额定电压 / kV", "导体标称截面 / mm²", "导体近似外径 / mm", "绝缘标称厚度 / mm", "绝缘近似外径 / mm", "铝套厚度 / mm", "外护套厚度 / mm", "成品近似外径 / mm", "最大导体20℃直流电阻 / Ω/km", "近似总重 / kg/km"],
+  "mapping": {"area": 1, "conductor_diameter": 2, "insulation_thickness": 3, "metallic_sheath_thickness": 5, "oversheath_thickness": 6, "outer_diameter": 7, "r20": 8, "weight": 9},
+  "table_file": "tai_i_220kv.csv"
+}

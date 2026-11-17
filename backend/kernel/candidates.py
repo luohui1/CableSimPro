@@ -30,6 +30,7 @@ class PublishedSpecification(StrictModel):
     designation: str = Field(min_length=1, max_length=40)
     voltage_v: float = Field(gt=0, le=1000000)
     u0_v: float = Field(gt=0, le=1000000)
+    um_v: float | None = Field(default=None, gt=0, le=1000000, allow_inf_nan=False)
     cores: int = Field(ge=1, le=100)
     area_m2: float = Field(gt=0, le=.01)
     conductor: Literal['copper_bare', 'copper_coated', 'aluminium']

@@ -186,6 +186,12 @@ jobs:
         run: |
           mkdir -p .tmp/catalogue-source-audit
           python scripts/verify_catalogue_originals.py --output .tmp/catalogue-source-audit/report 2>&1 | tee .tmp/catalogue-source-audit/audit.log
+      - name: Verify LV, 35 kV and 220 kV imports against official originals
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          python scripts/verify_import_originals.py --output .tmp/catalogue-source-audit/imports 2>&1 | tee .tmp/catalogue-source-audit/imports.log
       - uses: actions/upload-artifact@v4
         if: ${{ always() && runner.os == 'Linux' }}
         with:
