@@ -30,6 +30,11 @@ from urllib.request import ProxyHandler, Request, build_opener
 from uuid import uuid4
 import zipfile
 
+if __package__:
+    from .verify_formal_delivery import verify_formal_exports
+else:
+    from verify_formal_delivery import verify_formal_exports
+
 
 PROBE_ADDRESSES = ("1.1.1.1", "8.8.8.8", "2606:4700:4700::1111")
 
@@ -397,7 +402,7 @@ class InstallationGate:
         self.result["artifacts"].append({"name": name, "sha256": sha256(data).hexdigest(), "bytes": len(data)})
         return path
 
-    def api(self, method: str, path: str, body=None, *, binary=False):
+    def api(self, method: str, path: str, body=None, *, binary=False, include_headers=False):
         with self.step(method + " " + path.split("?")[0]) as row:
             data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
             request = Request(self.base_url + path, data=data, method=method,
@@ -406,9 +411,11 @@ class InstallationGate:
                 with self.http.open(request, timeout=self.timeout) as response:
                     raw = response.read()
                     row["http_status"] = response.status
+                    headers = {key.lower(): value for key, value in response.headers.items()}
             except HTTPError as error:
                 raise RuntimeError(f"HTTP {error.code}: {error.read().decode('utf-8', errors='replace')[:6000]}") from error
-            return raw if binary else json.loads(raw)
+            content = raw if binary else json.loads(raw)
+            return (content, headers) if include_headers else content
 
     def pdf(self, name: str, raw: bytes, expected: tuple[str, ...]) -> None:
         import fitz
@@ -578,8 +585,8 @@ class InstallationGate:
             validate_rating_values(table)
             require(any(row["value_a"] is not None for row in table["rows"]), "载流量表没有任何已计算结果。")
         self.artifact("ampacity-table.json", table)
-        # Until the formal Excel API is added, retain an exact data comparison;
-        # this CSV is evidence and is not represented as a server Excel export.
+        # Retain this independent CSV data comparison alongside the formal API
+        # workbook; it remains evidence rather than a server Excel export.
         stream = io.StringIO(newline="")
         writer = csv.writer(stream)
         writer.writerow(["工况", "允许电流 / A", "埋深 / m", "土壤热阻率 / K·m/W", "环境温度 / °C", "状态", "运行记录"])
@@ -613,7 +620,7 @@ class InstallationGate:
                                                "specification_sha256": specification["digest"],
                                                "calculation_workspace": project["id"], "calculation_study": calculation_study["id"],
                                                "calculation_run": calculation["id"]}
-        self.result["formal_documents"] = "后续正式版式阶段待验收；当前验证发行包的既有 PDF 和载流量数据接口。"
+        verify_formal_exports(self, self.result["engineering_sources"])
 
 
 def stop_process(process: subprocess.Popen) -> None:
