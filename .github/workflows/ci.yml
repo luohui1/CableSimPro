@@ -36,7 +36,7 @@ jobs:
       - name: Generate the existing CAD gallery inputs required by TypeScript
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libxrender1
+          sudo apt-get install -y libgl1 libxrender1 fonts-arphic-uming
           python scripts/prepare_plugin_environment.py cablesim.cable-geometry
           .venv/bin/python frontend/src/features/cad/prepare-fixtures.py
       - name: Frontend style rules, types and unit tests
@@ -106,10 +106,9 @@ jobs:
           path: artifacts/
   verified-demo:
     name: Offline release installation / ${{ matrix.os }}
-    # Native solver acceptance remains a separate, self-hosted responsibility.
-    # Retain installation evidence even when a different required check fails;
-    # the pull request still cannot pass those checks or be called releasable.
-    needs: [hygiene, backend]
+    # These are verification artifacts, not published releases. Build beside
+    # every existing check so a slow or failed test cannot suppress diagnosis;
+    # the pull request still requires all non-native checks to pass.
     if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -148,7 +147,7 @@ jobs:
             frontend/src/features/cad/node_modules/.cache/cablesim-occt
           key: release-occt-${{ runner.os }}-${{ hashFiles('frontend/src/features/cad/native/**', 'frontend/src/features/cad/prepare-runtime.mjs', 'scripts/prepare_release_frontend.py', 'scripts/release_toolchains.json') }}
       - name: Prepare verified OCCT assets from pinned sources
-        run: python scripts/prepare_release_frontend.py --jobs 4
+        run: python scripts/prepare_release_frontend.py --jobs 4 --download-cache .data/occt-downloads
       - name: Build the shipped frontend
         working-directory: frontend
         run: |

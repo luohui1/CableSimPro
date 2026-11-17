@@ -1,5 +1,10 @@
 """The release gate rejects altered values from a real saved IEC calculation."""
 from copy import deepcopy
+from functools import partial
+from hashlib import sha256
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import json
+from threading import Thread
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -7,7 +12,54 @@ import pytest
 
 from backend.main import create_app
 from backend.kernel.scenarios import system_models
-from scripts.verify_installation import validate_rating_values
+from scripts.verify_installation import InstallationGate, validate_rating_values
+
+
+def test_frontend_http_evidence_rejects_wrong_bytes_and_mime_type(tmp_path):
+    frontend = tmp_path / "frontend"
+    assets = frontend / "assets"
+    assets.mkdir(parents=True)
+    (frontend / "index.html").write_text('<div id="root"></div><script type="module" src="/assets/app.js"></script>'
+                                       '<link rel="stylesheet" href="/assets/app.css">', encoding="utf-8")
+    (assets / "app.js").write_text("export const loaded = true;", encoding="utf-8")
+    (assets / "app.css").write_text("body { margin: 0; }", encoding="utf-8")
+    (assets / "geometry.wasm").write_bytes(b"\x00asm\x01\x00\x00\x00")
+    manifest = {"files": {"frontend/dist/" + path.relative_to(frontend).as_posix():
+                         {"sha256": sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size}
+                         for path in frontend.rglob("*") if path.is_file()}}
+
+    class Handler(SimpleHTTPRequestHandler):
+        extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".wasm": "application/wasm"}
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=str(frontend)))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    gate = InstallationGate(evidence, timeout=5)
+    gate.base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        gate.frontend_assets(manifest)
+        observed = json.loads((evidence / "frontend-assets.json").read_text("utf-8"))["assets"]
+        assert {item["path"] for item in observed} == {"/", "/assets/app.js", "/assets/app.css", "/assets/geometry.wasm"}
+        assert all(item["manifest_verified"] for item in observed)
+
+        # A 200 response alone must not conceal stale assets or SPA fallbacks.
+        original = (assets / "app.js").read_bytes()
+        (assets / "app.js").write_bytes(original + b"\n// stale server asset")
+        with pytest.raises(RuntimeError, match="摘要不一致"):
+            gate.frontend_assets(manifest)
+        (assets / "app.js").write_bytes(original)
+        Handler.extensions_map[".wasm"] = "text/html"
+        with pytest.raises(RuntimeError, match="类型不正确"):
+            gate.frontend_assets(manifest)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_installation_evidence_compares_real_table_with_frozen_run(tmp_path):

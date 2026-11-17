@@ -10,6 +10,8 @@ import argparse
 from contextlib import contextmanager, nullcontext
 import csv
 from hashlib import file_digest, sha256
+from html.parser import HTMLParser
+import importlib.util
 import io
 import json
 import os
@@ -23,7 +25,7 @@ import sys
 from tempfile import TemporaryDirectory
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 from uuid import uuid4
 import zipfile
@@ -85,6 +87,86 @@ print(json.dumps(observations))
     require(len(observations) == 2 and not any(item["connected"] for item in observations),
             "已安装 Python 仍可连接外网，离线验证失败。")
     return observations
+
+
+def linux_graphics_probe(interpreter: Path, configuration: Path, installed: Path, inherited: dict) -> dict:
+    """Observe the CAD loader under the installed launcher's exact environment."""
+    require(sys.platform == "linux", "Linux 图形运行库验收只能在 Linux 执行。")
+    metadata = json.loads((installed / "runtime/native-manifest.json").read_text("utf-8"))
+    require(metadata.get("format") == "cablesim.native-runtime/1" and metadata.get("libraries"),
+            "发行包缺少原生运行库清单。")
+    probe = """import ctypes, json, os, platform, sys
+from pathlib import Path
+import cadquery
+ctypes.CDLL('libGL.so.1')
+ctypes.CDLL('libXrender.so.1')
+libraries = set()
+for line in Path('/proc/self/maps').read_text().splitlines():
+    fields = line.split(None, 5)
+    if len(fields) == 6 and fields[5].startswith('/'):
+        path = Path(fields[5]).resolve()
+        if '.so' in path.name:
+            libraries.add(path)
+print(json.dumps({'cadquery_version': cadquery.__version__, 'python_executable': sys.executable,
+    'plugin_python': sys.argv[1], 'glibc': platform.libc_ver(),
+    'library_search_path': os.environ.get('LD_LIBRARY_PATH'),
+    'mapped_libraries': [str(path) for path in sorted(libraries)]}))
+"""
+    # LD_LIBRARY_PATH is interpreted by the loader when a process starts. Use
+    # the shipped environment builder and exec, rather than assigning it late
+    # inside an already running CAD process or relying on runner system libs.
+    bootstrap = """import os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from scripts.release_support import config, environment
+settings = environment(config(Path(sys.argv[2])), Path(sys.argv[1]))
+plugin_python = settings['CABLESIM_PLUGIN_PYTHON']
+os.environ.update(settings)
+from backend.plugin_host.executor import minimal_environment
+worker_environment = minimal_environment(Path(sys.argv[3]))
+os.execve(plugin_python, [plugin_python, '-I', '-c', """ + repr(probe) + """, plugin_python], worker_environment)
+"""
+    with TemporaryDirectory(prefix="cablesim-cad-probe-") as job:
+        response = subprocess.run([str(interpreter), "-c", bootstrap, str(installed), str(configuration), job],
+                                  cwd=job, env=inherited, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=90)
+    require(response.returncode == 0, "发行插件 Python 图形运行库探测失败：" + response.stderr[-6000:])
+    observation = json.loads(response.stdout)
+    private = (installed / "runtime/linux-libs").resolve()
+    require(bool(observation.get("cadquery_version")), "发行解释器未导入 CAD 库。")
+    require(Path(observation["python_executable"]).absolute() == interpreter.absolute(),
+            "图形运行库探测未使用本次安装的 Python。")
+    mapped = [Path(path) for path in observation.pop("mapped_libraries")]
+    observation["libraries"] = []
+    for record in metadata["libraries"]:
+        observed = [path for path in mapped if path.name == record["soname"]
+                    or path.name.startswith(record["soname"] + ".")]
+        for path in observed:
+            require(private in path.parents and path == (installed / record["path"]).resolve(),
+                    "CAD 加载了发行包以外的图形运行库：" + str(path))
+            with path.open("rb") as stream:
+                actual = file_digest(stream, "sha256").hexdigest()
+            require(actual == record["sha256"] and path.stat().st_size == record["size_bytes"],
+                    "已加载图形运行库与原生发行清单不一致：" + str(path))
+            observation["libraries"].append({"name": record["soname"], "path": str(path), "sha256": actual,
+                "size_bytes": path.stat().st_size, "package": record["package"], "package_version": record["package_version"],
+                "license_paths": record["license_paths"]})
+        require(all((installed / name).is_file() for name in record["license_paths"]),
+                "原生运行库缺少许可文件：" + record["soname"])
+    for family in ("libGL.so", "libGLX.so", "libXrender.so", "libX11.so"):
+        require(any(item["name"].startswith(family) for item in observation["libraries"]),
+                "未观察到所需图形运行库：" + family)
+    accounted = {item["path"] for item in observation["libraries"]}
+    require(not any(path.name.startswith(("libGL", "libXrender", "libX11", "libxcb", "libXau", "libXdmcp"))
+                    and str(path) not in accounted for path in mapped),
+            "存在未列入原生发行清单的已加载图形运行库。")
+    observation["system_runtime"] = [str(path) for path in mapped
+        if path.name.startswith(("libc.so", "ld-linux", "libm.so", "libpthread.so", "libdl.so", "librt.so"))]
+    observation["minimum_glibc"] = metadata["minimum_glibc"]
+    observation["build_distribution"] = metadata["build_distribution"]
+    observation["private_library_directory"] = str(private)
+    observation["source"] = "installed plugin Python, real minimal worker environment, /proc/self/maps after CAD and GL/Xrender loads"
+    return observation
 
 
 @contextmanager
@@ -274,24 +356,100 @@ class InstallationGate:
 
     def wait_ready(self, process: subprocess.Popen) -> None:
         deadline = time.monotonic() + self.timeout
-        with self.step("安装包启动与健康检查"):
+        with self.step("安装包启动、健康检查及升级写保护解除") as row:
+            pending_checks = 0
             while time.monotonic() < deadline:
                 require(process.poll() is None, "发行启动进程提前退出；查看 startup.log。")
                 try:
                     with self.http.open(self.base_url + "/api/health", timeout=1) as response:
                         if json.load(response).get("status") == "ok":
+                            # Health remains available while the launcher is
+                            # validating an upgrade. An engineering read must
+                            # succeed before this gate starts any calculation.
+                            with self.http.open(self.base_url + "/api/workspaces", timeout=5) as unlocked:
+                                require(unlocked.status == 200 and isinstance(json.load(unlocked), list),
+                                        "工程 API 未返回可用的工作区列表。")
                             break
+                except HTTPError as error:
+                    if error.code != 503:
+                        raise
+                    pending_checks += 1
                 except (URLError, TimeoutError, OSError, ValueError):
                     pass
                 time.sleep(.25)
             else:
                 raise RuntimeError("发行启动超过等待时限；查看 startup.log。")
-            with self.http.open(self.base_url + "/", timeout=5) as response:
-                require(response.status == 200 and b'id="root"' in response.read(), "已构建前端没有正常提供。")
+            row["engineering_api_status"] = 200
+            row["pending_503_retries"] = pending_checks
         self.artifact("health.json", self.api("GET", "/api/health"))
         release = self.api("GET", "/api/release-info")
         require(release["build_id"] == self.result["build_id"], "健康服务不是刚安装的发行版本。")
         self.artifact("running-release.json", release)
+
+    def frontend_assets(self, manifest: dict) -> None:
+        """Fetch production entry assets and every shipped WASM over real HTTP."""
+        observations = []
+
+        def fetch(path: str, expected_type: set[str], *, keep_body=False) -> bytes:
+            relative = unquote(urlsplit(path).path).lstrip("/") or "index.html"
+            expected = manifest["files"].get("frontend/dist/" + relative)
+            require(expected is not None, "前端引用的文件不在发行清单中：" + path)
+            with self.step("前端资源 HTTP GET " + path) as row:
+                with self.http.open(self.base_url + path, timeout=self.timeout) as response:
+                    media_type = response.headers.get_content_type().lower()
+                    require(response.status == 200 and media_type in expected_type,
+                            f"前端资源类型不正确：{path} ({media_type})")
+                    digest = sha256()
+                    size = 0
+                    body = bytearray()
+                    while chunk := response.read(1024 * 1024):
+                        digest.update(chunk)
+                        size += len(chunk)
+                        if keep_body:
+                            body.extend(chunk)
+                require(size == expected["size_bytes"] and digest.hexdigest() == expected["sha256"],
+                        "HTTP 前端资源与发行清单摘要不一致：" + path)
+                row.update(http_status=200, content_type=media_type, bytes=size, sha256=digest.hexdigest())
+                observations.append({"path": path, "content_type": media_type, "bytes": size,
+                                     "sha256": digest.hexdigest(), "manifest_verified": True})
+                return bytes(body)
+
+        raw = fetch("/", {"text/html"}, keep_body=True)
+        require(b'id="root"' in raw, "已构建前端没有应用挂载点。")
+
+        class EntryAssets(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.references = set()
+
+            def handle_starttag(self, tag, attributes):
+                values = dict(attributes)
+                if tag == "script" and values.get("src"):
+                    self.references.add(values["src"])
+                elif tag == "link" and values.get("rel") in {"stylesheet", "modulepreload"} and values.get("href"):
+                    self.references.add(values["href"])
+
+        parsed = EntryAssets()
+        parsed.feed(raw.decode("utf-8"))
+        types = {".js": {"text/javascript", "application/javascript"}, ".mjs": {"text/javascript", "application/javascript"},
+                 ".css": {"text/css"}, ".wasm": {"application/wasm"}}
+        assets = set()
+        for reference in parsed.references:
+            url = urlsplit(urljoin(self.base_url + "/", reference))
+            require((url.scheme, url.netloc) == ("http", urlsplit(self.base_url).netloc),
+                    "前端依赖外部资源，不能作为内网发行包：" + reference)
+            path = url.path + ("?" + url.query if url.query else "")
+            require(PurePosixPath(url.path).suffix in types, "无法核验前端入口资源类型：" + reference)
+            assets.add(path)
+        require(any(urlsplit(path).path.endswith((".js", ".mjs")) for path in assets), "前端入口没有实际脚本。")
+        require(any(urlsplit(path).path.endswith(".css") for path in assets), "前端入口没有实际样式。")
+        wasm = {"/" + quote(name.removeprefix("frontend/dist/"), safe="/")
+                for name in manifest["files"] if name.startswith("frontend/dist/") and name.endswith(".wasm")}
+        require(bool(wasm), "发行清单没有 WASM 资产。")
+        for path in sorted(assets | wasm):
+            fetch(path, types[PurePosixPath(urlsplit(path).path).suffix])
+        self.artifact("frontend-assets.json", {"assets": observations, "external_resources": [],
+                                               "scope": "index entry JS/CSS and every shipped WASM; HTTP bytes, type and SHA-256"})
 
     def exports(self) -> None:
         selected = []
@@ -437,7 +595,10 @@ def main() -> int:
                                      + "\n[storage]\ndata_dir = "
                                      + json.dumps(str(temporary / "data"))
                                      + "\n[initialization]\nseed_examples = true\n[model]\nbase_url = \"\"\nmodel = \"\"\napi_key_env = \"CABLESIM_LLM_API_KEY\"\n", encoding="utf-8")
-            installed = temporary / "data/programs" / manifest["build_id"]
+            release_spec = importlib.util.spec_from_file_location("cablesim_bundle_release_support", root / "scripts/release_support.py")
+            release_support = importlib.util.module_from_spec(release_spec)
+            release_spec.loader.exec_module(release_support)
+            installed = release_support.installation(temporary / "data", manifest["build_id"])
             interpreter = installed / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
             guard = windows_firewall(temporary, interpreter, gate) if args.require_offline == "windows-firewall" else nullcontext()
             with guard:
@@ -461,6 +622,13 @@ def main() -> int:
                                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
                     try:
                         gate.wait_ready(process)
+                        gate.frontend_assets(manifest)
+                        if sys.platform == "linux":
+                            with gate.step("实际 CAD 插件进程加载发行包私有图形运行库"):
+                                gate.artifact("native-runtime-manifest.json", json.loads(
+                                    (installed / "runtime/native-manifest.json").read_text("utf-8")))
+                                gate.artifact("linux-graphics-runtime.json", linux_graphics_probe(
+                                    interpreter, configuration, installed, environment))
                         gate.exports()
                         if args.require_offline:
                             gate.result["offline"]["after_export_probes"] = offline_probe()

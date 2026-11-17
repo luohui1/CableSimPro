@@ -11,7 +11,8 @@ import venv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.release_support import (InstallLock, MANIFEST, ROOT, atomic_json, config, digest,
-                                    environment, installation, manifest, python_path, run_installed, safe_relative, utf8_output)
+                                    environment, installation, manifest, native_runtime_policy, python_path,
+                                    run_installed, safe_relative, utf8_output, windows_long_paths_enabled, windows_path_policy)
 
 
 def install(source: Path, settings: dict) -> Path:
@@ -21,9 +22,16 @@ def install(source: Path, settings: dict) -> Path:
         raise RuntimeError("data_dir 必须位于解压目录之外，以便升级时保留工程和程序历史。")
     app = installation(directory, bundle["build_id"])
     receipt = directory / "installations" / (bundle["build_id"] + ".json")
+    native_policy = native_runtime_policy(source)
+    path_policy = (windows_path_policy(app, source / "wheelhouse", long_paths_enabled=windows_long_paths_enabled())
+                   if sys.platform == "win32" else None)
+    if path_policy is not None:
+        print(json.dumps({"windows_path_policy": path_policy}), flush=True)
     with InstallLock(directory / "release.lock"):
         if app.exists():
-            manifest(app)
+            installed = manifest(app)
+            if installed["build_id"] != bundle["build_id"]:
+                raise RuntimeError("发行安装目录身份冲突；短目录对应不同的完整 build_id，未覆盖已有版本。")
         else:
             app.mkdir(parents=True)
             try:
@@ -37,6 +45,9 @@ def install(source: Path, settings: dict) -> Path:
             except BaseException:
                 shutil.rmtree(app)
                 raise
+        shim = app / "scripts/release_python.sh"
+        if sys.platform == "linux" and shim.is_file():
+            shim.chmod(0o755)
         python = python_path(app)
         if receipt.is_file() and python.is_file():
             saved = json.loads(receipt.read_text("utf-8"))
@@ -54,7 +65,8 @@ def install(source: Path, settings: dict) -> Path:
         subprocess.run([str(python), "-c", "import fastapi, numpy, scipy, reportlab, openpyxl, cadquery"],
                        cwd=app, env=env, check=True)
         atomic_json(receipt, {"build_id": bundle["build_id"], "app_dir": str(app),
-                              "requirements_sha256": digest(app / "requirements.lock"), "offline": True})
+                              "requirements_sha256": digest(app / "requirements.lock"), "offline": True,
+                              "windows_path_policy": path_policy, "native_runtime_policy": native_policy})
         return app
 
 

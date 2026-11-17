@@ -20,14 +20,42 @@ import webbrowser
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.release_support import (InstallLock, ROOT, atomic_json, config, environment, installation,
-                                    manifest, python_path, run_installed, utf8_output)
+                                    manifest, native_runtime_policy, python_path, run_installed, utf8_output)
 
 
 def create_release_app():
     """Serve the built SPA; API paths and missing assets must retain their real 404."""
     from backend.main import create_app
     from starlette.exceptions import HTTPException
+    from starlette.responses import JSONResponse
     from starlette.staticfiles import StaticFiles
+
+    pending = Path(os.environ["CABLESIM_DB"]).resolve().parent / "release-pending.json"
+
+    class StartupGate:
+        """An uncommitted release cannot accept engineering writes before rollback ends."""
+
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            path = scope.get("path", "")
+            health = scope.get("method") in {"GET", "HEAD"} and path in {"/api/health", "/api/release-info"}
+            if scope["type"] == "http" and (path == "/api" or path.startswith("/api/")) and not health:
+                try:
+                    pending.stat()
+                    starting = True
+                except FileNotFoundError:
+                    starting = False
+                except OSError:
+                    starting = True  # Cannot authenticate release readiness: fail closed.
+                if starting:
+                    response = JSONResponse({"detail": {"code": "RELEASE_STARTING", "message":
+                        "发行版本正在启动并核验数据，请等待启动检查完成后重试。"}},
+                        status_code=503, headers={"Retry-After": "1"})
+                    await response(scope, receive, send)
+                    return
+            await self.app(scope, receive, send)
 
     class Frontend(StaticFiles):
         async def get_response(self, path, scope):
@@ -46,6 +74,7 @@ def create_release_app():
 
     value = manifest(ROOT, check_files=False)
     app = create_app(os.environ["CABLESIM_DB"])
+    app.add_middleware(StartupGate)
     app.router.routes = [route for route in app.routes if getattr(route, "path", None) != "/"]
 
     @app.get("/api/release-info", response_model=dict[str, str])
@@ -152,16 +181,28 @@ def activate(directory: Path, bundle: dict, pending: dict | None) -> None:
 
 def rollback(directory: Path) -> Path:
     """Explicitly restore both the previous immutable program and its database snapshot."""
-    from backend.kernel.database_ops import apply_restore
+    from backend.kernel.database_ops import apply_restore, pending_path
     state = read_state(directory)
     previous = state.get("previous")
     if not previous or not previous.get("backup"):
         raise RuntimeError("没有可回退的已运行版本和升级前快照。")
     app = installation(directory, previous["build_id"])
+    # Retain read/rollback compatibility with earlier 64-character directories;
+    # all newly installed releases use the shorter, fully authenticated identity.
+    if not app.exists():
+        older_layout = directory / "programs" / previous["build_id"]
+        if older_layout.is_dir():
+            app = older_layout
     bundle = manifest(app)
+    if bundle["build_id"] != previous["build_id"]:
+        raise RuntimeError("回退程序目录与记录的完整发行身份不一致；工程库未改动。")
     if not python_path(app).is_file():
         raise RuntimeError("上一发行环境缺失；工程库未改动。")
     with database_owner(directory / "engineering.sqlite"):
+        if (directory / "release-pending.json").exists():
+            raise RuntimeError("有尚未完成的发行升级；请先正常启动完成恢复，再执行版本回退。")
+        if pending_path(directory / "engineering.sqlite").exists():
+            raise RuntimeError("工程库有已排队的恢复请求；请先完成或取消该请求，再执行版本回退。")
         result = apply_restore(directory / "engineering.sqlite", previous["backup"], previous["sha256"])
     atomic_json(directory / "release-state.json", {
         "active": {"build_id": bundle["build_id"], "app_dir": str(app), "git_commit": bundle["git_commit"]},
@@ -344,10 +385,15 @@ def main() -> int:
     args = parser.parse_args()
     settings = config(args.config)
     bundle = manifest(ROOT)
+    native_runtime_policy(ROOT)
     app = installation(settings["data_dir"], bundle["build_id"])
+    if not app.exists() and ROOT == settings["data_dir"] / "programs" / bundle["build_id"]:
+        app = ROOT  # A retained older-layout program can still be restarted.
     python = python_path(app)
     if not python.is_file():
         raise RuntimeError("发行环境尚未安装；请先运行 scripts/install_release.py。")
+    if manifest(app, check_files=False)["build_id"] != bundle["build_id"]:
+        raise RuntimeError("安装目录与请求的完整发行身份不一致；已拒绝启动。")
     if app != ROOT or Path(sys.prefix).resolve() != (app / ".venv").resolve():
         command = [str(python), str(app / "scripts/run_release.py"), "--config", str(settings["path"])]
         command.extend(flag for flag, enabled in (("--no-browser", args.no_browser), ("--rollback", args.rollback)) if enabled)

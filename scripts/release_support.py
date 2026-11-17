@@ -15,6 +15,7 @@ import sys
 import tomllib
 from urllib.parse import urlsplit
 from uuid import uuid4
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = "release-manifest.json"
@@ -171,7 +172,72 @@ def python_path(app: Path) -> Path:
 def installation(directory: Path, build_id: str) -> Path:
     if not re.fullmatch(r"[0-9a-f]{64}", build_id):
         raise RuntimeError("无效发行编号。")
-    return directory / "programs" / build_id
+    return directory / "programs" / build_id[:16]
+
+
+def windows_long_paths_enabled() -> bool | None:
+    """Observe Windows policy; never require administrator access or change it."""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+            return value == 1
+    except OSError:
+        return None
+
+
+def windows_path_policy(app: Path, wheels: Path, *, long_paths_enabled: bool | None) -> dict:
+    """Check real wheel destinations before extracting into a default MAX_PATH system."""
+    prefix = app / ".venv"
+    site = prefix / "Lib/site-packages"
+    longest = str(prefix / "Scripts/python.exe")
+    for wheel in sorted(wheels.glob("*.whl")):
+        candidates = [app / "wheelhouse" / wheel.name]
+        with zipfile.ZipFile(wheel) as archive:
+            for name in archive.namelist():
+                if name.endswith("/"):
+                    continue
+                parts = safe_relative(name).parts
+                destination = site / Path(*parts)
+                if len(parts) >= 3 and parts[0].endswith(".data"):
+                    schemes = {"purelib": site, "platlib": site, "scripts": prefix / "Scripts", "data": prefix,
+                               "headers": prefix / "Include/site/python3.12" / parts[0]}
+                    destination = schemes.get(parts[1], site) / Path(*parts[2:])
+                candidates.append(destination)
+                if destination.suffix == ".py":
+                    from importlib.util import cache_from_source
+                    candidates.append(Path(cache_from_source(str(destination))))
+        for destination in candidates:
+            if len(str(destination)) > len(longest):
+                longest = str(destination)
+    # Leave room for pip's atomic replacement names as well as Windows' NUL.
+    result = {"long_paths_enabled": long_paths_enabled, "longest_destination_characters": len(longest),
+              "temporary_path_reserve_characters": 16, "legacy_path_limit_characters": 259}
+    if long_paths_enabled is not True and len(longest) + 16 > 259:
+        raise RuntimeError("安装路径预计超过 Windows 默认长度限制（目标最长 " + str(len(longest))
+                           + " 字符；LongPathsEnabled=" + str(long_paths_enabled)
+                           + "）。请把 storage.data_dir 改为 D:/CableSimPro-data 等较短路径后重试；无需修改系统策略。")
+    return result
+
+
+def native_runtime_policy(root: Path) -> dict | None:
+    path = root / "runtime/native-manifest.json"
+    if sys.platform != "linux" or not path.is_file():
+        return None
+    value = json.loads(path.read_text("utf-8"))
+    required = value.get("minimum_glibc", "")
+    if value.get("format") != "cablesim.native-runtime/1" or not re.fullmatch(r"\d+\.\d+", required):
+        raise RuntimeError("随包 Linux 原生运行库的版本清单不合法。")
+    try:
+        observed = os.confstr("CS_GNU_LIBC_VERSION") or ""
+    except (ValueError, OSError):
+        observed = ""
+    current = observed.split()[-1] if observed.startswith("glibc ") else ""
+    if not re.fullmatch(r"\d+\.\d+", current):
+        raise RuntimeError("此 Linux 发行包需要 glibc；当前系统无法核实兼容的 glibc 版本。")
+    if tuple(map(int, current.split("."))) < tuple(map(int, required.split("."))):
+        raise RuntimeError(f"此发行包需要 glibc >= {required}，当前为 {current}；请使用面向当前系统构建的发行包。")
+    return {"minimum_glibc": required, "current_glibc": current}
 
 
 def environment(value: dict, app: Path) -> dict[str, str]:
@@ -192,6 +258,13 @@ def environment(value: dict, app: Path) -> dict[str, str]:
            "CABLESIM_LLM_API_KEY": os.environ.get(value["model"]["api_key_env"], ""),
            "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
            "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "NODE_ENV": "production"}
+    libraries = app / "runtime/linux-libs"
+    if sys.platform == "linux" and libraries.is_dir():
+        previous = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = str(libraries) + (os.pathsep + previous if previous else "")
+        shim = app / "scripts/release_python.sh"
+        if shim.is_file():
+            env["CABLESIM_PLUGIN_PYTHON"] = str(shim)
     # Keep inherited proxy/CA/identity settings. The runtime never installs or
     # downloads anything; users may explicitly configure an intranet model.
     return env

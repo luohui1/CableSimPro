@@ -16,9 +16,10 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.release_support import FORMAT, MANIFEST, ROOT, digest, target, utf8_output
+from scripts import release_native
 
 SOURCE_ROOTS = {"backend", "cablesim_sdk", "plugin-spec", "plugins"}
-SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py")
+SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh")
 SEED_SCRIPTS = ("seed-engineering-demo.py", "engineering_resources.py")
 
 
@@ -95,15 +96,26 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
         copy_sources(root, staged)
         shutil.copytree(frontend, staged / "frontend/dist")
         shutil.copytree(wheels, staged / "wheelhouse")
+        native = release_native.bundle_native_runtime(staged)
         subprocess.run([sys.executable, str(root / "scripts/third_party_notices.py"),
                         "--wheelhouse", str(staged / "wheelhouse"),
                         "--output", str(staged / "THIRD_PARTY_NOTICES.txt"),
                         "--node-modules", str(root / "frontend/node_modules")], check=True)
+        if native:
+            with (staged / "THIRD_PARTY_NOTICES.txt").open("a", encoding="utf-8") as notices:
+                notices.write("\nLinux GLVND/X11 runtime libraries\n")
+                for library in native["libraries"]:
+                    notices.write(library["soname"] + " — " + library["package"] + " "
+                                  + library["package_version"] + "\n")
+                notices.write("Full package copyright and referenced licenses: runtime/licenses/\n"
+                              "Binary provenance, SHA256 and GLIBC requirement: " + release_native.METADATA + "\n")
         (staged / "requirements.lock").write_text(lock, encoding="utf-8", newline="\n")
         files = {path.relative_to(staged).as_posix(): {"size_bytes": path.stat().st_size, "sha256": digest(path)}
                  for path in sorted(staged.rglob("*")) if path.is_file() and path.name != "release.toml"}
         value = {"format": FORMAT, "target": target(), "git_commit": commit,
-                 "includes_prebuilt_frontend": True, "includes_geometry_dependencies": True, "files": files}
+                 "includes_prebuilt_frontend": True, "includes_geometry_dependencies": True,
+                 "native_runtime": {"manifest": release_native.METADATA, "minimum_glibc": native["minimum_glibc"]}
+                 if native else None, "files": files}
         value["build_id"] = sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         (staged / MANIFEST).write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
         partial = Path(scratch) / output.name

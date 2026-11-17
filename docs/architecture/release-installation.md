@@ -7,9 +7,11 @@
 
 为 Windows 10 / 11 x64 和 Linux x86_64 分别构建 ZIP。安装端预装 **64 位 CPython 3.12**，
 不需要 Node、npm、编译器、Git 或管理员权限；Python 安装须含标准库 `venv` / `ensurepip`。
-Linux 使用兼容 wheel 的 glibc 系统，CAD 依赖需要系统图形运行库（Ubuntu 的 `libgl1`、
-`libxrender1`）。CI 的干净 Ubuntu / Windows runner 会实际验证安装和 CAD 导出。
-Python 解释器及操作系统运行库不由此 ZIP 安装，不宣称适用于所有 Linux 发行版或 ARM。
+Linux 使用兼容 wheel 的 glibc 系统；发行包包含 CAD 需要的图形运行库和对应许可证，
+`runtime/native-manifest.json` 记录实际依赖的最低 glibc，安装前核对当前系统版本。
+发行包不替换系统 glibc、动态加载器或硬件驱动。CI 的干净 Ubuntu / Windows runner
+会实际验证安装和 CAD 导出。Python 解释器不由此 ZIP 安装，不宣称适用于所有 Linux
+发行版或 ARM。
 
 构建机器联网准备既有前端生产构建和平台 wheel；最终用户安装时全程离线：
 
@@ -85,9 +87,14 @@ sh start.sh
 python3.12 scripts/install_release.py --config /path/to/release.toml
 ```
 
-程序与依赖安装在 `data_dir/programs/<build_id>/`，运行解释器是其 `.venv`；旧程序与
+程序与依赖安装在 `data_dir/programs/<build_id前16位>/`，运行解释器是其 `.venv`；旧程序与
 环境被保留。工程库位于 `data_dir/engineering.sqlite`，数据集、复现资料和工程证据
 分别位于 `datasets/`、`library/`、`engineering-evidence/`。
+
+清单与安装记录始终使用完整 64 位 build_id；复用短目录前核对完整身份，身份冲突会拒绝，
+不会覆盖另一个版本。Windows 安装前读取并记录 `LongPathsEnabled`，按实际 wheel
+成员及字节码目标检查路径长度；超出默认限制时提示选择更短 `data_dir`，不要求修改系统
+策略。旧的完整摘要目录仍可读取和回退。
 
 启动程序使用独占运行锁，先调用既有 `database_ops.check_existing` 的只读版本门禁。
 新于程序支持版本的库在任何迁移前被拒绝。切换到新的发行版本前，在数据库所有权锁下
@@ -99,6 +106,10 @@ python3.12 scripts/install_release.py --config /path/to/release.toml
 恢复升级前工程库，旧 active 版本不变；进程被强制中断时，下次启动从
 `release-pending.json` 恢复未完成升级。健康检查后已经可以接受用户写入，之后的运行
 错误不会自动丢弃用户数据。
+
+启动提交完成前，发行入口仅允许 `/api/health`、`/api/release-info` 和静态页面访问；
+所有工程 API 读写均返回 `503 RELEASE_STARTING`。更新 active 并清除 pending 后才开放，
+因此不能在仍可能回退的健康检查窗口接受工程写入。
 
 若首次启动在没有旧快照时失败但已经产生数据库，会保留全部文件并写
 `release-initialization-failed.json`，后续启动明确拒绝把它当成完整初始化结果。
@@ -114,6 +125,8 @@ python3.12 scripts/run_release.py --config /path/to/release.toml --rollback --no
 安全副本。**升级后新增或修改的工程数据不会出现在升级前快照中**，因此只应在明确需要
 回退时使用；后续数据可从保留的安全副本核查。日常数据库恢复仍用
 `scripts/workspace_db.py` 和现有数据库 API，不手工复制运行中的 SQLite 主文件。
+存在未完成发行升级或已排队的数据库恢复请求时，版本回退明确拒绝；先完成或取消对应
+请求，避免两种恢复操作互相覆盖。
 
 ## 伴随进程扩展
 
@@ -122,6 +135,10 @@ python3.12 scripts/run_release.py --config /path/to/release.toml --rollback --no
 程序和数据目录。命令直接执行，不交给 shell；不自动下载进程依赖。
 必需进程退出会停止宿主，可选进程退出不阻断核心工作台。此接口为后续 Agent 边车保留，
 不修改开发启动器或添加前端页面。
+
+Linux 宿主把随包 `runtime/linux-libs` 加入其原生库搜索路径，保留原有路径。插件宿主会
+清理子进程继承的环境，因此发行专用 `scripts/release_python.sh` 在进入同一 `.venv`
+之前重新绑定这个固定目录；不向插件开放宿主密钥或代理环境，也不改插件执行器和封签。
 
 发行验收脚本 `scripts/verify_installation.py` 在解压目录外隔离数据并实际安装、启动、
 调用发布示例 API，输出包、PDF、载流量数值证据、接口快照和验证日志。产物只进入 CI artifact。
