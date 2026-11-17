@@ -23,6 +23,7 @@ jobs:
       run:
         shell: bash
     env:
+      PYTHONUTF8: '1'
       E2E_DEV: '0'
       E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
       WORKBENCH_PHASE: before
