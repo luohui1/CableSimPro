@@ -57,7 +57,7 @@ export function readinessSnapshot() {
 export async function installReadinessObserver(page) {
   await page.addInitScript(({ snapshot }) => {
     const inspect = (0, eval)('(' + snapshot + ')');
-    window.__loadAudit = { url: location.href, mainMs: null, frameMs: null, longTasks: [], workers: [], latest: null };
+    window.__loadAudit = { url: location.href, mainMs: null, frameMs: null, sampledAtMs: null, longTasks: [], workers: [], latest: null };
     const audit = window.__loadAudit;
     try { new PerformanceObserver(list => { for (const t of list.getEntries()) audit.longTasks.push({ startMs: t.startTime, durationMs: t.duration, name: t.name }); }).observe({ type: 'longtask', buffered: true }); } catch { /* Not supported by every engine. */ }
     // FieldView draws saved meshes with WebGL. An allocated blank canvas is not a frame.
@@ -80,7 +80,7 @@ export async function installReadinessObserver(page) {
           currentUrl = location.href; audit.url = currentUrl; audit.mainMs = null; audit.frameMs = null;
           mainCandidate = false; frameCandidate = false;
         }
-        const state = inspect(); audit.latest = state;
+        const state = inspect(); audit.latest = state; audit.sampledAtMs = performance.now();
         if (!state.mainReady) audit.mainMs = null;
         if (state.mainReady && mainCandidate && audit.mainMs === null) audit.mainMs = performance.now();
         mainCandidate = state.mainReady;
@@ -91,7 +91,9 @@ export async function installReadinessObserver(page) {
       else queued = false;
     }
     const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(sample); } };
-    new MutationObserver(schedule).observe(document, { childList: true, subtree: true, attributes: true,
+    // Readiness depends on status text as well as element insertion. React may
+    // update an existing Text node without changing its parent's children.
+    new MutationObserver(schedule).observe(document, { childList: true, characterData: true, subtree: true, attributes: true,
       attributeFilter: ['aria-busy', 'data-active', 'data-type-state', 'data-cad-ready', 'data-cad-state', 'data-audit-first-draw', 'class', 'hidden'] });
     addEventListener('DOMContentLoaded', schedule);
     // Image completion changes a DOM property, not an observed attribute.
@@ -122,7 +124,13 @@ export async function waitForPageReady(page, { includeCanvas = true, timeout = 3
     }
     return state;
   } catch (error) {
-    const state = await page.evaluate(readinessSnapshot).catch(() => null);
+    const state = await page.evaluate(({ snapshot }) => {
+      const audit = window.__loadAudit;
+      return { actualUrl: location.href, now: performance.now(),
+        fresh: (0, eval)('(' + snapshot + ')')(),
+        observed: audit ? { url: audit.url, sampledAtMs: audit.sampledAtMs, mainMs: audit.mainMs,
+          frameMs: audit.frameMs, latest: audit.latest } : null };
+    }, { snapshot: readinessSnapshot.toString() }).catch(() => null);
     throw Error('页面未就绪：' + JSON.stringify(state) + '\n' + error.message);
   }
 }
