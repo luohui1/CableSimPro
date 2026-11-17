@@ -161,12 +161,8 @@ export const studyRootRoute = createRoute({
   // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。
   loader: ({ context, params, deps, location }) => {
     const module = location.pathname.split('/')[3] || '';
-    const definition = moduleDefinitions[module];
-    let tab = location.pathname.split('/')[4] || definition?.tabs[0]?.id || '';
-    // Match the legacy method-tab redirect below before requesting saved data.
-    // Its destination displays results; prefetching evidence here fetched both views.
-    const methodTab = definition?.tabs.find(item => item.id === 'parameters' || item.id === 'settings');
-    if (methodTab?.id === tab) tab = definition?.tabs.find(item => item.id !== methodTab.id)?.id || tab;
+    const tab = location.pathname.split('/')[4] || '';
+    // Prefetch and provider resolve the same existing input/method aliases.
     prefetchStudy(context.queryClient, deps.workspace, params.sid, deps.run, module, tab);
   },
   component: StudyProvider,
