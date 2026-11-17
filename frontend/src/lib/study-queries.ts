@@ -23,6 +23,14 @@ export function studyRunDestination(module: string, tab: string, definition?: St
   return { module, tab };
 }
 
+/** Prepare only the requested scan surface while its saved data is loading. */
+function prefetchStudyView(module: string, tab: string, hasSavedRun: boolean) {
+  if (module !== 'sweep' || !['curve', 'points'].includes(tab)) return;
+  void import('@/components/study-sweep').catch(() => { /* The visible module retains its loading/error boundary. */ });
+  if (tab === 'curve' && hasSavedRun)
+    void import('@/components/series-chart').catch(() => { /* The chart keeps its own loading/error boundary. */ });
+}
+
 /** Selection cards share one cache; the selected capability owns its full schema. */
 export function methodCardsQuery() {
   return queryOptions({queryKey:['method-catalog','summary'], staleTime:30000,
@@ -80,6 +88,7 @@ export function studyContextQuery(client: QueryClient, workspace: string | undef
           void import('@/features/field/field-view').catch(()=>{});
         // 归属已核验即可读选中运行，不等工程模型的大响应完成。
         const destination = studyRunDestination(module, tab, optionalRecord(study.definition) as StudyDefinition);
+        prefetchStudyView(destination.module, destination.tab, !!run || !!study.latest_run);
         void client.prefetchQuery(studyRunsQuery(client, wid, sid, run, destination.module, destination.tab));
         const state = await client.fetchQuery(workspaceQuery(wid));
         const projected=[projectStudy(study,state,optionalRecord(study.model_reference))];
@@ -218,6 +227,7 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
   // a new Suspense wait after the saved evidence and exact contract arrive.
   if (methodVisible) void contractFields.preload().catch(() => {});
   ({module, tab} = studyRunDestination(module, tab));
+  prefetchStudyView(module, tab, !!run);
   // The ordinary entry first discovers ownership and then redirects to a tab.
   // Download its existing workbench in parallel, rather than start that second
   // chunk chain only after the provider has committed the verified context.
@@ -229,6 +239,7 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
   if (!run) void client.fetchQuery(savedStudyQuery(workspace || undefined, sid)).then(study => {
     const definition = optionalRecord(study.definition) as StudyDefinition;
     const destination = studyRunDestination(module, tab, definition);
+    prefetchStudyView(destination.module, destination.tab, !!study.latest_run);
     prefetchCurrentInputs(client, definition, destination.module, methodVisible, inspector);
   }).catch(() => { /* The provider owns failed saved-study reads. */ });
   // The explicit route selects this saved field. Both entry and hover prefetch
@@ -256,6 +267,7 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
       // is known. The run query already waited for this same metadata; resolve
       // it here so the alias and mounted destination share one projection/key.
       const destination = studyRunDestination(module, tab, optionalRecord(study.definition) as StudyDefinition);
+      prefetchStudyView(destination.module, destination.tab, !!run || !!study.latest_run);
       void client.prefetchQuery(studyRunsQuery(client, workspace, sid, run, destination.module, destination.tab));
       // Start the saved FEM conclusion once study ownership/type is known,
       // so it does not become a second request chain after the display finishes.
