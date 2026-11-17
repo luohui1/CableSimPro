@@ -607,7 +607,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     const source = { workspace: scan.workspace, workspaceRevision: baseline.workspace.revision,
       study: scan.id, studyRevision: baseline.study.revision, run: baseline.run.id,
       inputDigest: baseline.run.input_digest, outputDigest: baseline.run.output_digest };
-    await page.goto(`${base}/studies/${scan.id}/sweep/curve?workspace=${scan.workspace}&theme=light&view=section&inspector=input`);
+    await page.goto(`${base}/studies/${scan.id}/sweep/curve?workspace=${scan.workspace}&theme=light&inspector=input`);
     const workbench = page.locator('.study-workbench[data-analysis="sweep"]');
     const canvas = workbench.locator('.workbench-canvas');
     await expect(page.locator('.study-sweep-results .series-chart')).toBeVisible();
@@ -735,5 +735,128 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     check('画布恢复回归全过程不写保存库，也不启动试算或新运行',
       isDeepStrictEqual(await savedInputs(), baseline) && report.writes.length === writesStart,
       { ...source, writes: report.writes.slice(writesStart) });
+  });
+  if (report.phase === 'after') await step('11-section-inputs-and-model-navigation', async () => {
+    const projects = await api('/api/workspaces');
+    const studies = (await Promise.all(projects.map(project => api(`/api/workspaces/${project.id}/studies`)))).flat();
+    const selection = studies.find(row => row.definition.driver?.kind === 'selection'
+      && row.definition.input_source === 'domain' && row.latest_run?.status === 'succeeded');
+    expect(selection, '发布库必须有真实保存的选型研究；不为导航回归制造运行').toBeTruthy();
+    const sourcePrefix = `/api/workspaces/${selection.workspace}/studies/${selection.id}`;
+    async function readSource() {
+      const [workspace, study, runs, run] = await Promise.all([
+        api(`/api/workspaces/${selection.workspace}`), api(sourcePrefix),
+        api(sourcePrefix + '/runs?view=summary&limit=100'), api(sourcePrefix + '/runs/' + selection.latest_run.id + '?view=full'),
+      ]);
+      return { workspace: { id: workspace.id, revision: workspace.revision, domain: workspace.domain },
+        study: { id: study.id, revision: study.revision, definition: study.definition },
+        runs: runs.items.map(item => ({ id: item.id, sequence: item.sequence, status: item.status })),
+        run: { id: run.id, workspace: run.workspace, study: run.study, status: run.status, integrity: run.integrity,
+          input_digest: run.input_digest, output_digest: run.output_digest, snapshot: run.snapshot, output: run.output } };
+    }
+    const before = await readSource(), writesStart = report.writes.length;
+    expect(before.run.integrity).toBe('verified');
+    expect(before.run.workspace).toBe(selection.workspace);
+    expect(before.run.study).toBe(selection.id);
+    expect(before.run.snapshot.definition.driver.kind).toBe('selection');
+    const savedDocument = before.run.snapshot.definition.input_source === 'study'
+      ? before.run.snapshot.definition.method_input : before.run.snapshot.workspace_state.domain;
+    expect(savedDocument.schema_version).toBe('cablesim.domain/1');
+    const source = { workspace: selection.workspace, study: selection.id, run: before.run.id,
+      workspaceRevision: before.workspace.revision, studyRevision: before.study.revision,
+      inputDigest: before.run.input_digest, outputDigest: before.run.output_digest };
+    const target = (module, tab, fixed = false) => `${base}/studies/${selection.id}/${module}/${tab}?`
+      + new URLSearchParams({ workspace: selection.workspace, theme: 'light', inspector: 'input', ...(fixed ? { run: before.run.id } : {}) });
+    const workbench = page.locator('.study-workbench');
+    const canvas = workbench.locator('.workbench-canvas');
+
+    await page.goto(target('selection', 'results'));
+    await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+    await expect(workbench).toHaveAttribute('data-analysis', 'selection');
+    await expect(canvas).toHaveCount(0);
+    await capture('11-selection-default-canvas-collapsed');
+    for (const keyboard of [false, true]) {
+      const modelLink = page.locator('.project-explorer a.explorer-item[href*="view=section"]').first();
+      await expect(modelLink).toBeVisible();
+      const destination = new URL(await modelLink.getAttribute('href'), base);
+      expect(destination.pathname).toBe(`/studies/${selection.id}/selection/results`);
+      expect(destination.searchParams.get('workspace')).toBe(selection.workspace);
+      if (keyboard) { await modelLink.focus(); await page.keyboard.press('Enter'); }
+      else await modelLink.click();
+      await page.waitForURL(next => next.pathname === destination.pathname && next.searchParams.get('view') === 'section');
+      await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+      await expect(workbench).not.toHaveAttribute('data-dock', 'max');
+      await expect(page.getByRole('group', { name: '模型视图', exact: true }).getByRole('button', { name: '敷设截面', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await capture(keyboard ? '11-model-link-keyboard-reopens-canvas' : '11-model-link-mouse-opens-canvas');
+      await clickCommand('收起布置图');
+      await page.waitForURL(next => !next.searchParams.get('view'));
+      await expect(canvas).toHaveCount(0);
+    }
+    check('选型默认收图，真实模型链接经鼠标和Enter可再次展开', true, source);
+
+    function sourceValue(document, pointer) {
+      return pointer.split('/').slice(1).map(part => part.replace(/~1/g, '/').replace(/~0/g, '~')).reduce((owner, part) => {
+        expect(owner !== null && typeof owner === 'object', `来源路径 ${pointer} 的父对象必须存在`).toBe(true);
+        return Array.isArray(owner) ? owner.find(item => item.id === part || item.cable === part) : owner[part];
+      }, document);
+    }
+    const tableEvidence = [];
+    for (const fixed of [false, true]) {
+      for (const [tab, label] of [['coordinates', '敷设坐标与尺寸'], ['media', '介质参数']]) {
+        await page.goto(target('section', tab, fixed));
+        await page.waitForURL(next => next.pathname === `/studies/${selection.id}/section/${tab}`
+          && next.searchParams.get('workspace') === selection.workspace && (next.searchParams.get('run') || '') === (fixed ? before.run.id : ''));
+        const table = page.getByRole('table', { name: label, exact: true });
+        await expect(table).toBeVisible();
+        const fields = await table.locator('.number-field').evaluateAll(nodes => nodes.map(node => {
+          const input = node.querySelector('input');
+          return { path: node.dataset.fieldPath, value: input?.value, full: input?.title, readOnly: input?.readOnly };
+        }));
+        expect(fields.length).toBeGreaterThan(0);
+        const document = fixed ? savedDocument : before.workspace.domain;
+        for (const field of fields) {
+          const raw = sourceValue(document, field.path);
+          expect(raw == null || typeof raw === 'number', `表格字段 ${field.path} 必须来自所选实际输入`).toBe(true);
+          if (raw == null) { expect(field.value).toBe(''); expect(field.full).toBe('未提供'); }
+          else {
+            const expectedValue = /\/(inner_diameter|outer_diameter)$/.test(field.path) ? raw * 1000 : raw;
+            expect(Number(field.full.match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i)?.[0])).toBe(expectedValue);
+            expect(Number.isFinite(Number(field.value))).toBe(true);
+          }
+          if (fixed) expect(field.readOnly).toBe(true);
+        }
+        if (fixed) await expect(page.getByText('固定运行敷设输入 · 只读', { exact: true })).toBeVisible();
+        const returnToResult = command().getByRole('button', { name: '返回问询选型', exact: true });
+        // The return action is navigation only, even on an immutable saved run.
+        await expect(returnToResult).toHaveClass(/button-primary/);
+        await expect(returnToResult).toBeEnabled();
+        await expect(page.locator('.button-primary:visible,.button-run:visible')).toHaveCount(1);
+        await capture(`11-${fixed ? 'saved' : 'current'}-section-${tab}`);
+        tableEvidence.push({ tab, fixed, fields });
+        if (tab === 'coordinates') { await returnToResult.focus(); await page.keyboard.press('Enter'); }
+        else await returnToResult.click();
+        await page.waitForURL(next => next.pathname === `/studies/${selection.id}/selection/results`
+          && next.searchParams.get('workspace') === selection.workspace && next.searchParams.get('theme') === 'light'
+          && (next.searchParams.get('run') || '') === (fixed ? before.run.id : ''));
+      }
+    }
+    for (const [tab, view, drawing] of [['section', 'section', 'laying-section'], ['three-dimensional', 'three', 'laying-cad']]) {
+      await page.goto(target('section', tab, true));
+      await page.waitForURL(next => next.pathname === `/studies/${selection.id}/selection/results`
+        && next.searchParams.get('view') === view && next.searchParams.get('run') === before.run.id
+        && next.searchParams.get('workspace') === selection.workspace && next.searchParams.get('theme') === 'light');
+      await expect(canvas.locator(`[data-drawing-mount="${drawing}"]`)).toBeVisible();
+      await expect(workbench).not.toHaveAttribute('data-dock', 'max');
+      if (view === 'three') await expect(canvas.locator('.cad-viewport')).toHaveAttribute('data-cad-ready', 'true', { timeout: 60000 });
+      else await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+      await expect(page.getByRole('group', { name: '模型视图', exact: true })
+        .getByRole('button', { name: view === 'three' ? '三维' : '敷设截面', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await capture(`11-saved-section-alias-${view}`);
+    }
+    check('坐标和介质表分别读取当前输入与固定运行输入，固定输入只读且可键鼠返回', true, { ...source, tables: tableEvidence });
+    check('旧截面与三维入口保留固定运行并打开正确模型视图', true, source);
+    check('模型入口与坐标介质回归不写工程、研究、运行或启动计算', isDeepStrictEqual(await readSource(), before)
+      && report.writes.length === writesStart, { ...source, writes: report.writes.slice(writesStart) });
+    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence });
   });
 });

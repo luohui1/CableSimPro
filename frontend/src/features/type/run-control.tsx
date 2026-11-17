@@ -100,7 +100,8 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
       if (mounted.current) { setPrepared({ study, preflight, revision: state.workspace.revision }); setOpen(true); }
     } catch (error) { if (mounted.current) setError(methodDiagnostic(error)); } finally { pending.current = false; running(false); }
   }
-  const reason = unavailable || (state.document && missingTypeInputs(state.document).length ? '结构缺项 · 先补齐型号名片中的字段' : state.dirty ? state.inputDirty?'请先保存结构修改':'请先保存方法条件；临时结果可在方法页试算' : state.readOnly ? state.workspace?.raw.fixed_run ? '运行快照保持只读' : '历史或已发布型号保持只读' : '');
+  const reason = state.readOnly ? state.workspace?.raw.fixed_run ? '运行快照保持只读' : '历史或已发布型号保持只读'
+    : unavailable || (state.document && missingTypeInputs(state.document).length ? '结构缺项 · 先补齐型号名片中的字段' : state.dirty ? state.inputDirty?'请先保存结构修改':'请先保存方法条件；临时结果可在方法页试算' : '');
   const inCommand = useTypeCommand({ id: 'run-'+channel, label: attempt.current ? '查询同一运行' : label, role: 'primary', loading: busy, disabledReason: reason || (!state.workspace ? '型号尚未读取' : undefined), onSelect: () => void prepare() });
   return <div className="type-run-control">{!inCommand && <Button variant={primary ? 'primary' : 'default'} size="compact" loading={busy} disabled={!!reason || !state.workspace} onClick={() => void prepare()}>{attempt.current ? '查询同一运行' : label}</Button>}
     {!inCommand && reason && <span className="muted">{reason}</span>}{error && <><p className="field-error" role="alert">{methodErrorText(error)}</p><MethodErrorDetail value={error} /></>}

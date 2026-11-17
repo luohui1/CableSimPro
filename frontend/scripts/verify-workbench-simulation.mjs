@@ -244,6 +244,157 @@ await walkthrough('simulation', async ({
       evidence.projectSolverLocations = shown;
     });
 
+    if (report.phase === 'after') await step('00b-unconfigured-native-empty-starts', async () => {
+      const endpoint = studyPath(iec), workspaceEndpoint = `/api/workspaces/${iec.workspace}`;
+      const [beforeStudy, beforeWorkspace, beforeRuns] = await Promise.all([
+        api(endpoint), api(workspaceEndpoint), api(endpoint + '/runs?view=summary&limit=100'),
+      ]);
+      expect(beforeStudy.definition.method.plugin_id).toBe('cablesim.iec60287');
+      expect(beforeStudy.definition.driver.kind).toBe('single');
+      const runPins = rows => rows.map(row => ({ id: row.id, sequence: row.sequence, status: row.status,
+        inputDigest: row.input_digest, outputDigest: row.output_digest, module: row.snapshot?.module || '' }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+      const writesBefore = report.writes.length;
+      evidence.nativeEmptyStarts = [];
+      for (const [module, tab, keyboard] of [['transient', 'history', true], ['sheath-losses', 'results', false], ['sheath-losses', 'losses', true]]) {
+        expect(beforeStudy.definition.modules?.[module], '仅走查实际尚未配置的模块，不删除已有配置').toBeFalsy();
+        expect(beforeRuns.items.some(run => run.snapshot?.module === module), '空态不能借已有模块运行代替').toBe(false);
+        await page.goto(`${base}/studies/${iec.id}/${module}/${tab}?workspace=${iec.workspace}&theme=light&inspector=input`);
+        const setup = page.getByRole('region', { name: '模块配置', exact: true });
+        await expect(setup).toContainText('尚未配置该模块');
+        const start = setup.getByRole('link', { name: '配置方法与参数', exact: true });
+        await expect(start).toBeVisible();
+        await capture(`00b-${module}-${tab}-empty-start`);
+        if (keyboard) { await start.focus(); await start.press('Enter'); }
+        else await start.click();
+        await page.waitForURL(next => next.pathname === `/studies/${iec.id}/${module}/results`
+          && next.searchParams.get('workspace') === iec.workspace && next.searchParams.get('theme') === 'light'
+          && next.searchParams.get('inspector') === 'method' && !next.searchParams.get('run') && !next.searchParams.get('delivery'));
+        await expect(form.getByRole('combobox', { name: '模块方法', exact: true })).toBeVisible();
+        await expect(form.getByRole('button', { name: '为该模块建立方法配置', exact: true })).toBeEnabled();
+        await expect(page.getByRole('toolbar', { name: '工程命令', exact: true }).getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+        await capture(`00b-${module}-${tab}-real-method-form-without-creating`);
+        await page.goBack();
+        await page.waitForURL(next => next.pathname === `/studies/${iec.id}/${module}/${tab}`
+          && next.searchParams.get('workspace') === iec.workspace && next.searchParams.get('inspector') === 'input');
+        await expect(setup).toContainText('尚未配置该模块');
+        const [afterStudy, afterWorkspace, afterRuns] = await Promise.all([
+          api(endpoint), api(workspaceEndpoint), api(endpoint + '/runs?view=summary&limit=100'),
+        ]);
+        const unchanged = afterStudy.revision === beforeStudy.revision && afterWorkspace.revision === beforeWorkspace.revision
+          && JSON.stringify(afterStudy.definition) === JSON.stringify(beforeStudy.definition)
+          && JSON.stringify(afterWorkspace.domain) === JSON.stringify(beforeWorkspace.domain)
+          && JSON.stringify(runPins(afterRuns.items)) === JSON.stringify(runPins(beforeRuns.items))
+          && report.writes.length === writesBefore;
+        check(`${module === 'transient' ? '暂态时间序列' : tab === 'losses' ? '护套损耗系数' : '护套损耗结果'}空态可${keyboard ? '用Enter' : '用鼠标'}打开真实方法配置且不建立配置或运行`, unchanged,
+          { workspace: iec.workspace, study: iec.id, module, tab, studyRevision: afterStudy.revision,
+            workspaceRevision: afterWorkspace.revision, writes: report.writes.slice(writesBefore) });
+        evidence.nativeEmptyStarts.push({ module, tab, keyboard, unchanged, study: iec.id, workspace: iec.workspace });
+        await capture(`00b-${module}-${tab}-returned-unchanged`);
+      }
+    });
+
+    if (report.phase === 'after') await step('00c-batch-empty-starts-and-complete-controls', async () => {
+      const endpoint = studyPath(iec), workspaceEndpoint = `/api/workspaces/${iec.workspace}`;
+      const [beforeStudy, beforeWorkspace, beforeDatasets, beforeConfiguration] = await Promise.all([
+        api(endpoint), api(workspaceEndpoint), api(endpoint + '/datasets'), api(endpoint + '/batch-configuration'),
+      ]);
+      expect(beforeDatasets, '只使用真实没有批量数据集的研究，不删除数据制造空态').toEqual([]);
+      expect(beforeConfiguration.workspace_revision).toBe(beforeWorkspace.revision);
+      expect(beforeConfiguration.study_revision).toBe(beforeStudy.revision);
+      const writesBefore = report.writes.length;
+      evidence.batchEmptyStarts = [];
+      for (const [tab, keyboard] of [['results', false], ['execution', true]]) {
+        await page.goto(`${base}/studies/${iec.id}/batch/${tab}?workspace=${iec.workspace}&theme=light`);
+        const batch = page.locator('.study-batch');
+        await expect(batch).toHaveAttribute('data-module-state', 'empty');
+        await expect(batch.getByRole('heading', { name: '尚无批量数据集', exact: true })).toBeVisible();
+        const start = batch.getByRole('link', { name: '设置批量参数', exact: true });
+        await expect(page.locator('.button-primary:visible,.button-run:visible')).toHaveCount(1);
+        await capture('00c-batch-' + tab + '-empty-start');
+        if (keyboard) { await start.focus(); await start.press('Enter'); }
+        else await start.click();
+        await page.waitForURL(next => next.pathname === `/studies/${iec.id}/batch/space`
+          && next.searchParams.get('workspace') === iec.workspace && next.searchParams.get('theme') === 'light'
+          && !next.searchParams.get('run') && !next.searchParams.get('dataset'));
+        await expect(batch).toHaveAttribute('data-module-state', /^(?:empty|success)$/);
+        await expect(batch.getByRole('heading', { name: '参数空间', exact: true })).toBeVisible();
+        evidence.batchEmptyStarts.push({ tab, keyboard, study: iec.id, workspace: iec.workspace });
+        await capture('00c-batch-' + tab + '-same-study-parameter-space');
+      }
+      const batch = page.locator('.study-batch'), dock = page.locator('.workbench-dock-body');
+      const selectedModule = beforeConfiguration.configuration?.definition?.source_module || '';
+      const sourceModule = beforeConfiguration.source_modules.find(item => (item.id || '') === selectedModule);
+      expect(sourceModule, '基准模块名称必须来自本研究真实批量配置接口').toBeTruthy();
+      const sourceControl = batch.getByRole('combobox', { name: '基准模块', exact: true });
+      const sourceLabel = displayText(sourceModule.title);
+      await expect(sourceControl.locator(':scope > span').first()).toHaveText(sourceLabel);
+      async function inspectControl(control, label, expectedHeight) {
+        await control.scrollIntoViewIfNeeded();
+        const layout = await control.evaluate(node => {
+          const boxOf = element => { const b = element.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, height: b.height }; };
+          const host = node.closest('.number-input') || node, box = boxOf(host), inputBox = boxOf(node);
+          const dock = node.closest('.workbench-dock-body'), boundary = boxOf(dock), style = getComputedStyle(node);
+          const text = node instanceof HTMLInputElement ? node.value : node.querySelector(':scope > span:first-child')?.textContent || '';
+          let complete;
+          if (node instanceof HTMLInputElement) {
+            const context = document.createElement('canvas').getContext('2d'); context.font = style.font;
+            const width = context.measureText(text).width;
+            complete = node.scrollWidth <= node.clientWidth + 1 && node.scrollLeft === 0
+              && width <= node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) + 1;
+          } else {
+            const value = node.querySelector(':scope > span:first-child'), range = document.createRange();
+            range.selectNodeContents(value);
+            const valueBox = boxOf(value), arrow = node.querySelector('[data-select-arrow]');
+            const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+            complete = rects.length > 0 && rects.every(rect => rect.left >= valueBox.left - 1
+              && rect.right <= valueBox.right + 1 && rect.top >= valueBox.top - 1 && rect.bottom <= valueBox.bottom + 1
+              && (!arrow || rect.right <= arrow.getBoundingClientRect().left + 1));
+          }
+          return { label: node.getAttribute('aria-label'), text, box, inputBox, boundary, font: parseFloat(style.fontSize), complete,
+            contained: box.left >= boundary.left - 1 && box.right <= boundary.right + 1 && box.left >= 0 && box.right <= innerWidth
+              && box.top >= 0 && box.bottom <= innerHeight && inputBox.left >= box.left - 1 && inputBox.right <= box.right + 1 };
+        });
+        check(`批量${label}完整可见且控件高${expectedHeight}px`, layout.complete && layout.contained
+          && layout.font >= 13 && Math.abs(layout.box.height - expectedHeight) <= 1, { label, ...layout });
+        return { label, ...layout };
+      }
+      const measured = [];
+      for (const label of ['基准模块', '采样方式', '计算资源']) measured.push(await inspectControl(batch.getByRole('combobox', { name: label, exact: true }), label, 36));
+      measured.push(await inspectControl(batch.getByRole('combobox', { name: '基准参数', exact: true }), '基准参数', 32));
+      const numbers = batch.locator('.number-field');
+      expect(await numbers.count()).toBeGreaterThanOrEqual(7);
+      for (const field of await numbers.all()) measured.push(await inspectControl(field.locator('input'), await field.locator(':scope > label').innerText(), 36));
+      const firstGrid = batch.locator(':scope > .input-form-grid').first();
+      await firstGrid.scrollIntoViewIfNeeded(); await expect(firstGrid).toBeInViewport({ ratio: 1 });
+      await capture('00c-batch-space-complete-base-and-sampling');
+      await sourceControl.focus(); await sourceControl.press('Enter');
+      const listbox = page.getByRole('listbox');
+      const selected = listbox.locator('[role="option"][data-state="checked"]');
+      await expect(selected).toHaveAccessibleName(sourceLabel);
+      await capture('00c-batch-real-source-options-keyboard');
+      await page.keyboard.press('Escape'); await expect(listbox).toBeHidden(); await expect(sourceControl).toBeFocused();
+      await expect(sourceControl.locator(':scope > span').first()).toHaveText(sourceLabel);
+      const execution = batch.locator('section.input-section').filter({ has: page.getByRole('heading', { name: '超算执行', exact: true }) });
+      await execution.scrollIntoViewIfNeeded(); await expect(execution).toBeInViewport({ ratio: 1 });
+      await capture('00c-batch-space-complete-execution-values');
+      const horizontal = await dock.evaluate(node => ({ dock: { width: node.clientWidth, scroll: node.scrollWidth },
+        root: { width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth } }));
+      check('批量参数空间不依赖横向滚动才能阅读控件', horizontal.dock.scroll <= horizontal.dock.width + 1
+        && horizontal.root.scroll <= horizontal.root.width + 1, horizontal);
+      const [afterStudy, afterWorkspace, afterDatasets, afterConfiguration] = await Promise.all([
+        api(endpoint), api(workspaceEndpoint), api(endpoint + '/datasets'), api(endpoint + '/batch-configuration'),
+      ]);
+      check('批量空态键鼠往返和布局检查未保存配置或提交任务', report.writes.length === writesBefore
+        && afterStudy.revision === beforeStudy.revision && afterWorkspace.revision === beforeWorkspace.revision
+        && JSON.stringify(afterStudy.definition) === JSON.stringify(beforeStudy.definition)
+        && JSON.stringify(afterWorkspace.domain) === JSON.stringify(beforeWorkspace.domain) && afterDatasets.length === 0
+        && JSON.stringify(afterConfiguration.configuration) === JSON.stringify(beforeConfiguration.configuration)
+        && afterConfiguration.lock_digest === beforeConfiguration.lock_digest,
+      { study: iec.id, workspace: iec.workspace, method: afterConfiguration.method, lockDigest: afterConfiguration.lock_digest,
+        writes: report.writes.slice(writesBefore), controls: measured, horizontal });
+    });
+
     await step('01-saved-iec-study', async () => {
       await page.goto(`${base}/studies/${iec.id}/ampacity/results?workspace=${iec.workspace}&theme=light`);
       await expect(page.getByRole('navigation', { name: '工程浏览器', exact: true })).toBeVisible();

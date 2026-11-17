@@ -8,9 +8,15 @@ import { femConclusionQuery } from '@/components/study-fem-conclusion';
 import { inputContractQuery } from '@/api/input-contracts';
 import { contractFields, seriesChart, studySweep } from '@/lib/heavy-components';
 
+/** These existing input tables stay inside the workbench instead of a canvas alias. */
+export function isSectionInputTable(module: string, tab: string) {
+  return module === 'section' && ['coordinates', 'media'].includes(tab);
+}
+
 /** Match the workbench's existing redirects before choosing a saved-run view. */
 export function studyRunDestination(module: string, tab: string, definition?: StudyDefinition) {
   const inputAlias = moduleBehavior.input.has(module)
+    && !isSectionInputTable(module, tab)
     && (!tab || moduleDefinitions[module]?.tabs.some(item => item.id === tab));
   if (definition && (!module || inputAlias)) {
     module = rootModule(definition);

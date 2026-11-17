@@ -3,6 +3,31 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { walkthrough } from './verify-workbench-support.mjs';
 
+const fixedTypeRoutes = {
+  structure: { module: 'structure', tab: 'quantities', page: 'quantities', label: '结构推导', table: '外径与用料', action: '更新结构推导' },
+  'standard-check': { module: 'standard-check', tab: 'results', page: 'standard-check-results', label: '标准核对', table: '标准核对', action: '执行标准核对' },
+  electrical: { module: 'electrical', tab: 'results', page: 'electrical-results', label: '电气参数', table: '电气参数', action: '计算电气参数' },
+  'short-circuit': { module: 'short-circuit', tab: 'results', page: 'short-circuit-results', label: '短路容量', table: '短路容量', action: '计算短路容量' },
+  'rating-table': { module: 'rating-table', tab: 'results', page: 'rating-table-results', label: '载流量表', table: '载流量表', action: '计算所选工况' },
+};
+let fixedTypeArchiveSources;
+function archivedTypeModule(run) {
+  const definition = run?.snapshot?.definition, method = definition?.method, driver = definition?.driver;
+  if (run?.integrity !== 'verified' || !['succeeded', 'partial'].includes(run.status) || !method?.release_digest) return null;
+  const artifacts = (run.output?.cases || []).filter(item => item.status === 'succeeded')
+    .flatMap(item => Object.values(item.artifacts || {}));
+  if (method.plugin_id === 'cablesim.iec60287' && method.capability === 'steady-rating'
+    && driver?.kind === 'batch' && Array.isArray(driver.cases) && driver.cases.length
+    && driver.cases.every(item => item.metadata?.kind === 'type-rating-table')) return 'rating-table';
+  if (method.plugin_id === 'cablesim.cable-geometry' && method.capability === 'concentric-model'
+    && artifacts.some(item => item?.schema === 'cablesim.cad-model/1')) return 'structure';
+  if (method.plugin_id === 'cablesim.standard-check' && method.capability === 'dimensions'
+    && artifacts.some(item => item?.schema === 'cablesim.standard-check/1')) return 'standard-check';
+  if (method.plugin_id === 'cablesim.type-electrical' && ['electrical', 'short-circuit'].includes(method.capability)
+    && artifacts.some(item => item?.schema === 'cablesim.type-analysis/1' && item.capability === method.capability)) return method.capability;
+  return null;
+}
+
 // Run with isolated-e2e.mjs and the engineering demo database. All writes below
 // are mouse/keyboard actions; GETs only verify the state returned by this host.
 // Deliberately incomplete engineering inputs remain visible in the evidence.
@@ -36,6 +61,199 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       teachingSource = { seed, original, studies }; return teachingSource;
     }
     return null;
+  }
+
+  async function fixedTypeSources() {
+    if (fixedTypeArchiveSources) return fixedTypeArchiveSources;
+    const found = new Map(), owners = await api('/api/design/type-workspaces');
+    for (const owner of owners) {
+      let cursor = 0;
+      for (let index = 0; index < 400; index++) {
+        const saved = await api('/api/types/' + encodeURIComponent(owner.id) + '/display-runs?limit=5&after=' + cursor);
+        expect(Array.isArray(saved.items), '型号保存运行必须是实际分页响应').toBeTruthy();
+        for (const candidate of saved.items) {
+          const module = archivedTypeModule(candidate);
+          if (!module || found.has(module)) continue;
+          const fullPath = '/api/workspaces/' + encodeURIComponent(owner.id) + '/studies/'
+            + encodeURIComponent(candidate.study) + '/runs/' + encodeURIComponent(candidate.id) + '?view=full';
+          try {
+            const run = await api(fullPath);
+            expect(run.id).toBe(candidate.id);
+            expect(run.workspace).toBe(owner.id);
+            expect(run.study).toBe(candidate.study);
+            expect(run.snapshot.study_id).toBe(candidate.study);
+            expect(run.snapshot.workspace_id || run.snapshot.workspace).toBe(owner.id);
+            expect(run.input_digest).toBe(candidate.input_digest);
+            expect(run.output_digest).toBe(candidate.output_digest);
+            expect(archivedTypeModule(run), '分类来自完整原运行，不能借当前研究定义').toBe(module);
+            expect(run.snapshot.workspace_state?.domain, '固定运行必须有原型号领域快照').toBeTruthy();
+            found.set(module, { module, wid: owner.id, sid: run.study, rid: run.id, fullPath, run });
+          } catch (error) {
+            check('固定型号运行完整档案可核实', false,
+              { module, workspace: owner.id, run: candidate.id, error: error.message }, { fatal: false });
+          }
+        }
+        if (found.size === Object.keys(fixedTypeRoutes).length || saved.next_cursor === null || saved.next_cursor === undefined) break;
+        expect(saved.next_cursor, '型号保存运行游标必须前进').toBeGreaterThan(cursor);
+        cursor = saved.next_cursor;
+        expect(index, '未遍历完历史时不能宣称没有种子').toBeLessThan(399);
+      }
+      if (found.size === Object.keys(fixedTypeRoutes).length) break;
+    }
+    // The second viewport rereads these same original identities. The first
+    // viewport's UI-created designs cannot become replacement seed evidence.
+    fixedTypeArchiveSources = [...found.values()];
+    return fixedTypeArchiveSources;
+  }
+  async function verifyFixedTypeNavigation(source) {
+    const target = fixedTypeRoutes[source.module], current = await workspace(source.wid);
+    const prefix = '/api/workspaces/' + encodeURIComponent(source.wid) + '/studies/' + encodeURIComponent(source.sid);
+    const studyBefore = await api(prefix), archiveBefore = await api(source.fullPath);
+    expect(archiveBefore.integrity).toBe('verified');
+    expect(archiveBefore.snapshot).toEqual(source.run.snapshot);
+    expect(archiveBefore.input_digest).toBe(source.run.input_digest);
+    expect(archiveBefore.output_digest).toBe(source.run.output_digest);
+    const fullEndpoint = new URL(base + source.fullPath).pathname;
+    const rowsEndpoint = '/api/design/workspaces/' + encodeURIComponent(source.wid) + '/rating-table-runs/' + encodeURIComponent(source.rid);
+    const ratingBefore = source.module === 'rating-table' ? await api(rowsEndpoint + '?view=rows') : null;
+    const writesBefore = report.writes.length;
+    const evidence = { ...size, module: source.module, workspace: source.wid, study: source.sid, run: source.rid,
+      inputDigest: archiveBefore.input_digest, outputDigest: archiveBefore.output_digest,
+      workspaceRevision: archiveBefore.snapshot.workspace_revision, studyRevision: archiveBefore.snapshot.study_revision,
+      currentWorkspaceRevision: current.revision, method: archiveBefore.snapshot.definition.method,
+      applicable: true, navigations: [] };
+    (report.fixedTypeRunNavigation ||= []).push(evidence);
+    async function openRunRecord() {
+      await page.goto(base + '/runs?theme=light');
+      const table = page.getByRole('table', { name: '运行', exact: true });
+      await expect(table).toBeVisible();
+      const query = studyBefore.definition?.title || studyBefore.title;
+      expect(typeof query === 'string' && query.length > 0, '检索使用当前真实研究名，运行身份仍按保存ID核对').toBeTruthy();
+      const responsePromise = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return response.request().method() === 'GET' && url.pathname === '/api/index/objects'
+          && url.searchParams.get('kind') === 'run' && url.searchParams.get('q') === query;
+      });
+      await page.getByRole('group', { name: '运行筛选', exact: true }).getByRole('textbox').fill(query);
+      const response = await responsePromise;
+      expect(response.ok(), '实际运行检索返回成功').toBeTruthy();
+      const filtered = await response.json();
+      expect(filtered.total, '真实运行必须能按所属研究检索').toBeGreaterThan(0);
+      await expect.poll(() => table.locator('tbody tr.data-row').evaluateAll(rows => rows.map(row => row.id)))
+        .toEqual(filtered.items.map(item => 'row-运行-' + item.id));
+      const row = table.locator('[id="row-运行-' + source.rid + '"]');
+      let shown = 0;
+      for (let index = 0; !await row.count() && index < Math.ceil(filtered.total / 10); index++) {
+        const more = page.getByRole('button', { name: /^加载更多（已显示 / });
+        if (!await more.isVisible()) break;
+        shown = await table.locator('tbody tr.data-row').count();
+        await more.click();
+        await expect.poll(() => table.locator('tbody tr.data-row').count()).toBeGreaterThan(shown);
+      }
+      await expect(row, '实际运行目录必须包含所选原运行').toBeVisible();
+      await row.scrollIntoViewIfNeeded();
+      await expect(row).toBeInViewport({ ratio: 1 });
+      const link = row.getByRole('cell').first().getByRole('link').first();
+      await expect(link).toBeVisible();
+      const href = await link.getAttribute('href'), url = new URL(href, base);
+      expect(url.pathname).toBe('/studies/' + encodeURIComponent(source.sid));
+      expect(url.searchParams.get('run')).toBe(source.rid);
+      return { link, href: url.pathname + url.search };
+    }
+    async function openFixed(label, action) {
+      const [archiveResponse, ratingResponse] = await Promise.all([
+        page.waitForResponse(response => {
+          const url = new URL(response.url());
+          return response.request().method() === 'GET' && url.pathname === fullEndpoint && url.searchParams.get('view') === 'full';
+        }, { timeout: 90000 }),
+        source.module === 'rating-table' ? page.waitForResponse(response =>
+          response.request().method() === 'GET' && new URL(response.url()).pathname === rowsEndpoint
+            && new URL(response.url()).searchParams.get('view') === 'rows', { timeout: 90000 }) : Promise.resolve(null),
+        action(),
+      ]);
+      expect(archiveResponse.status(), '界面读取原运行完整输入').toBe(200);
+      const observed = await archiveResponse.json();
+      expect(observed.id).toBe(source.rid);
+      expect(observed.workspace).toBe(source.wid);
+      expect(observed.study).toBe(source.sid);
+      expect(observed.integrity).toBe('verified');
+      expect(observed.input_digest).toBe(archiveBefore.input_digest);
+      expect(observed.output_digest).toBe(archiveBefore.output_digest);
+      expect(observed.snapshot, '界面读取确切原版本，不能替换当前型号输入').toEqual(archiveBefore.snapshot);
+      if (ratingResponse) {
+        expect(ratingResponse.status(), '界面读取原载流量表结果行').toBe(200);
+        const rating = await ratingResponse.json();
+        expect(rating.run.id).toBe(source.rid);
+        expect(rating.run.integrity).toBe('verified');
+        expect(rating.run.input_digest).toBe(archiveBefore.input_digest);
+        expect(rating.run.output_digest).toBe(archiveBefore.output_digest);
+        expect(rating.rows).toEqual(ratingBefore.rows);
+      }
+      await page.waitForURL(url => url.pathname === '/types/' + encodeURIComponent(source.wid) + '/' + target.module + '/' + target.tab
+        && url.searchParams.get('run') === source.rid && url.searchParams.get('theme') === 'light');
+      const surface = page.locator('[data-type-page="' + target.page + '"]');
+      await expect(surface).toHaveAttribute('data-type-state', /^(success|historical)$/);
+      await expect(surface.getByRole('table', { name: target.table, exact: true })).toBeVisible();
+      await expect(page.locator('.type-root .topbar')).toContainText('保存运行');
+      await expect(page.locator('.type-root .topbar')).toContainText('只读');
+      await expect(toolbar().getByRole('button', { name: '保存', exact: true })).toBeDisabled();
+      await expect(page.getByRole('button', { name: '修改型号名称', exact: true })).toBeDisabled();
+      const calculate = toolbar().getByRole('button', { name: target.action, exact: true });
+      await expect(calculate).toBeDisabled();
+      if (ratingBefore) {
+        expect(await surface.getByRole('table', { name: target.table, exact: true }).locator('tbody tr.data-row')
+          .evaluateAll(rows => rows.map(row => row.getAttribute('aria-label')))).toEqual(ratingBefore.rows.map(row => row.name));
+        await expect(surface.getByRole('button', { name: '添加工况', exact: true })).toBeDisabled();
+        await expect(surface.getByRole('checkbox', { name: '选择全部工况', exact: true })).toBeDisabled();
+      }
+      const shot = await capture('固定型号运行-' + target.label + '-' + label);
+      evidence.navigations.push({ label, url: page.url(), screenshot: shot.screenshot, archiveHttp: archiveResponse.status(),
+        ratingHttp: ratingResponse?.status(), run: observed.id, inputDigest: observed.input_digest,
+        outputDigest: observed.output_digest, workspaceRevision: observed.snapshot.workspace_revision,
+        studyRevision: observed.snapshot.study_revision });
+      if (!evidence.readOnlyReason) {
+        // CommandBar wraps a native disabled button in the real tooltip trigger.
+        const trigger = calculate.locator('xpath=..');
+        await expect(trigger).toHaveClass(/command-disabled/);
+        await trigger.hover();
+        await expect(page.getByRole('tooltip')).toHaveText('运行快照保持只读');
+        await expect(page.locator('.tooltip-content:visible')).toBeVisible();
+        const reasonShot = await capture('固定型号运行-' + target.label + '-计算禁用说明');
+        evidence.readOnlyReason = { text: '运行快照保持只读', screenshot: reasonShot.screenshot };
+        await page.locator('.type-root .topbar h1').hover();
+        await expect(page.locator('.tooltip-content:visible')).toBeHidden();
+      }
+      check(target.label + ' · ' + label + '保留确切运行与只读状态且未写入', report.writes.length === writesBefore,
+        { run: source.rid, url: page.url(), writes: report.writes.slice(writesBefore) });
+    }
+    try {
+      let record = await openRunRecord();
+      await capture('固定型号运行-' + target.label + '-运行目录鼠标入口');
+      await openFixed('运行目录鼠标打开', () => record.link.click());
+      record = await openRunRecord();
+      await record.link.focus();
+      await expect(record.link).toBeFocused();
+      await capture('固定型号运行-' + target.label + '-运行目录键盘焦点');
+      await openFixed('运行目录键盘打开', () => record.link.press('Enter'));
+      await openFixed('研究根链接冷打开', () => page.goto(base + record.href));
+      await openFixed('刷新保留原运行', () => page.reload());
+      const legacy = new URL(record.href, base);
+      legacy.pathname += source.module === 'rating-table' ? '/batch/space' : '/ampacity/results';
+      legacy.searchParams.set('workspace', source.wid);
+      evidence.legacyUrl = legacy.pathname + legacy.search;
+      await openFixed(source.module === 'rating-table' ? '旧批量空间链接打开' : '旧载流量结果链接打开',
+        () => page.goto(legacy.href));
+      await openFixed('旧入口转到型号后刷新', () => page.reload());
+    } finally {
+      const [afterWorkspace, afterStudy, afterArchive] = await Promise.all([workspace(source.wid), api(prefix), api(source.fullPath)]);
+      check(target.label + '固定入口检查没有改动当前输入或原运行', report.writes.length === writesBefore
+        && afterWorkspace.revision === current.revision && JSON.stringify(afterWorkspace.domain) === JSON.stringify(current.domain)
+        && afterStudy.revision === studyBefore.revision && JSON.stringify(afterStudy.definition) === JSON.stringify(studyBefore.definition)
+        && afterArchive.input_digest === archiveBefore.input_digest && afterArchive.output_digest === archiveBefore.output_digest
+        && JSON.stringify(afterArchive.snapshot) === JSON.stringify(archiveBefore.snapshot),
+      { run: source.rid, currentRevision: afterWorkspace.revision, snapshotRevision: afterArchive.snapshot.workspace_revision,
+        writes: report.writes.slice(writesBefore) }, { fatal: false });
+    }
   }
 
   async function dismissDialog() {
@@ -787,6 +1005,21 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       check('全局空交付可用鼠标进入真实型号目录且没有生成交付', report.writes.length === writesBefore
         && afterArchives.every(items => items.length === 0), { writes: report.writes.slice(writesBefore), owners: owners.length });
     });
+    const sources = await attempt('00a-读取已有型号运行并辨识保存类型', async () => {
+      await page.goto(base + '/runs?theme=light');
+      await expect(page.getByRole('table', { name: '运行', exact: true })).toBeVisible();
+      return fixedTypeSources();
+    });
+    for (const [module, target] of Object.entries(fixedTypeRoutes)) {
+      const source = sources?.find(item => item.module === module);
+      if (!source) {
+        (report.fixedTypeRunNavigation ||= []).push({ ...size, module, applicable: false, status: 'cloud-unverified',
+          reason: '当前隔离库没有完整性通过且包含对应保存工件的原型号运行；未创建或替换种子。' });
+        check(target.label + '固定运行入口云端有可验证原种子', false, { status: 'cloud-unverified', module }, { fatal: false });
+        continue;
+      }
+      await attempt('00b-' + target.label + '从真实运行目录与旧链接回到固定只读结果', () => verifyFixedTypeNavigation(source));
+    }
   }
   const options = await api('/api/types/creation-options');
   await attempt('01-型号列表与批量操作入口', async () => {
