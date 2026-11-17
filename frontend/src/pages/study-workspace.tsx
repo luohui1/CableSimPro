@@ -116,6 +116,7 @@ export function StudyWorkspace() {
   // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
   const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
   const [dockMax, setDockMax] = useState(plotFirst(module));
+  const [canvasMounted, setCanvasMounted] = useState(!plotFirst(module));
   const [canvasExpanded,setCanvasExpanded]=useState(module!=='selection');
   useEffect(()=>setCanvasExpanded(module!=='selection'),[sid,module]);
   const [creating, setCreating] = useState(false);
@@ -255,6 +256,11 @@ export function StudyWorkspace() {
   // editing its method, rather than inside the narrow properties column.
   const workspaceMethod = search.inspector === 'method' && ['thermal-field','transient','sheath-losses','electrothermal'].includes(module);
   const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded;
+  // A maximized result starts without a hidden lazy canvas. Once the engineer
+  // opens it, keep the existing canvas mounted across maximize/restore so its
+  // local drawing state and the provider's unsaved inputs remain intact.
+  const mountCanvas=showCanvas && (!dockMax || canvasMounted);
+  useEffect(()=>{if(showCanvas && !dockMax)setCanvasMounted(true);},[showCanvas,dockMax]);
   const independentInput = study.definition.input_source === 'study';
   const canvasReadOnly = viewingOldInput;
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
@@ -266,7 +272,7 @@ export function StudyWorkspace() {
   const canvasView = requestedCanvasView === 'field' && missingTemperatureField ? 'section' : requestedCanvasView;
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
-    enabled:showCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
+    enabled:mountCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
     queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
   const drawingRun = preview.result?.view || drawingInput.data || run;
   const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
@@ -482,7 +488,7 @@ export function StudyWorkspace() {
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
           <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
-          {showCanvas && (
+          {mountCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views study-canvas-toolbar" role="toolbar" aria-label="视图与绘图工具">
                 <div className="study-view-switch" role="group" aria-label="模型视图">
