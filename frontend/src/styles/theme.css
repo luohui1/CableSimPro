@@ -228,7 +228,8 @@ input { caret-color: var(--text); }
 .symbol-running { border: 0; }
 .status-running { color: var(--text-secondary); }
 .status-error, .status-conflict, .status-invalid, .status-unsatisfied { color: var(--error); }
-.status-draft, .status-partial { color: var(--attention); }
+.status-draft, .status-partial { color: var(--text); }
+.status-draft .status-symbol, .status-partial .status-symbol { color: var(--attention); }
 .status-proposal { color: var(--agent); }
 .status-satisfied { color: var(--success); }
 .is-verdict .status-symbol { width: calc(var(--space-1) + var(--space-1) / 2); height: calc(var(--space-1) + var(--space-1) / 2); background: currentColor; border: 0; }

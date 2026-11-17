@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
@@ -22,7 +23,7 @@ jobs:
       run:
         shell: bash
     env:
-      E2E_DEV: '1'
+      E2E_DEV: '0'
       E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
       WORKBENCH_PHASE: before
     steps:
@@ -89,20 +90,45 @@ jobs:
             .data/occt-toolchain/viewer/occt-viewer.wasm
             .data/occt-toolchain/viewer/LICENSE_LGPL_21.txt
             .data/occt-toolchain/viewer/OCCT_LGPL_EXCEPTION.txt
-      - name: Prepare production browser verification from the OCCT cache
-        if: ${{ matrix.os == 'ubuntu-latest' && steps.occt-cache.outputs.cache-hit == 'true' }}
+      - name: Wait for the verified runtime from this workflow when the cache is empty
+        if: ${{ matrix.os == 'ubuntu-latest' && steps.occt-cache.outputs.cache-hit != 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const name = `occt-runtime-${context.sha}`;
+            const until = Date.now() + 40 * 60 * 1000;
+            while (Date.now() < until) {
+              const {data} = await github.rest.actions.listWorkflowRunArtifacts({
+                ...context.repo, run_id: context.runId, per_page: 100
+              });
+              if (data.artifacts.some(artifact => artifact.name === name && !artifact.expired)) {
+                core.info(`Verified runtime is available from this same workflow: ${name}`);
+                return;
+              }
+              const jobs = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: context.runId, per_page: 100
+              });
+              const build = jobs.data.jobs.find(job => job.name === 'Hygiene and plugin catalog checks (windows-latest)');
+              if (build?.status === 'completed') {
+                throw new Error(`Windows runtime build ended with ${build.conclusion} without the verified artifact.`);
+              }
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            throw new Error('Timed out waiting for the same-workflow verified OCCT runtime.');
+      - name: Download the same-workflow OCCT runtime
+        if: ${{ matrix.os == 'ubuntu-latest' && steps.occt-cache.outputs.cache-hit != 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: occt-runtime-${{ github.sha }}
+          path: .data/occt-toolchain/viewer/
+      - name: Prepare the production frontend for browser verification
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           node frontend/src/features/cad/prepare-runtime.mjs --check-only
           node frontend/src/features/cad/prepare-runtime.mjs
           npm --prefix frontend run build
           echo "E2E_DEV=0" >> "$GITHUB_ENV"
           echo "Ubuntu browser walkthroughs use the production build with verified OCCT assets." >> "$GITHUB_STEP_SUMMARY"
-      - name: Record development browser verification without a cached runtime
-        if: ${{ matrix.os == 'ubuntu-latest' && steps.occt-cache.outputs.cache-hit != 'true' }}
-        run: |
-          echo "::notice::No verified OCCT runtime cache is available; this run records development-server evidence, not production-build acceptance."
-          echo "E2E_DEV=1" >> "$GITHUB_ENV"
-          echo "Ubuntu browser walkthroughs use the Vite development server because no OCCT runtime cache is available. Production-build acceptance remains outstanding." >> "$GITHUB_STEP_SUMMARY"
       - name: Prepare real isolated workbench data and Chromium
         if: ${{ matrix.os == 'ubuntu-latest' }}
         id: workbench-environment
@@ -117,6 +143,8 @@ jobs:
       - name: Walk ampacity research at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
+        env:
+          WORKBENCH_PHASE: after
         run: npm run test:workbench-research 2>&1 | tee ../.data/workbench-walk/logs/research.log
       - name: Walk type design at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
@@ -134,7 +162,7 @@ jobs:
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: workbench-walk-${{ env.WORKBENCH_PHASE }}
+          name: workbench-walk
           retention-days: 14
           include-hidden-files: true
           path: .data/workbench-walk/
@@ -142,13 +170,13 @@ jobs:
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
         env:
-          PERFORMANCE_PASS: before
+          PERFORMANCE_PASS: after
         run: npm run test:performance 2>&1 | tee ../.data/workbench-walk/logs/performance.log
       - name: Upload the completed performance audit before the full text traversal
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: workbench-performance-${{ env.WORKBENCH_PHASE }}
+          name: workbench-performance
           retention-days: 14
           include-hidden-files: true
           path: |
@@ -159,8 +187,8 @@ jobs:
         working-directory: frontend
         env:
           REGULARITY_WITH_VISIBLE: '1'
-          VISIBLE_TEXT_PASS: before
-          REGULARITY_PASS: before
+          VISIBLE_TEXT_PASS: after
+          REGULARITY_PASS: after
         run: npm run test:regularity 2>&1 | tee ../.data/workbench-walk/logs/visible-text-and-regularity.log
       - name: Upload workbench screenshots, real request records and audits
         if: ${{ always() && matrix.os == 'ubuntu-latest' }}

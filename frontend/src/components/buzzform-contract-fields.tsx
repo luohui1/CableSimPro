@@ -5,7 +5,7 @@ import { registry } from './buzzform/registry';
 import { ContractFields } from './contract-fields';
 import { optionalRecord, numeric, text } from '@/api/client';
 import { displayName } from '@/lib/display-names';
-import { engineeringQuantity, parameterUnit } from '@/lib/format';
+import { engineeringQuantity, parameterUnit, significantNumber } from '@/lib/format';
 import { parseInput, type NumericInput } from '@/lib/domain-fields';
 import { EmptyState } from './states';
 import { expand } from '@/lib/contract-schema';
@@ -71,7 +71,13 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
         minExclusive: numeric(source.exclusiveMinimum) !== null,
         max: shown(numeric(source.maximum) ?? numeric(source.exclusiveMaximum)) };
       // 取值范围作为输入框内的占位提示，超出时由校验给出错误，不在每个框下挂小字
-      const range = [spec.min === undefined ? '' : `${spec.minExclusive ? '>' : '≥'} ${spec.min}`, spec.max === undefined ? '' : `${source.exclusiveMaximum !== undefined ? '<' : '≤'} ${spec.max}`].filter(Boolean).join('，');
+      // SI offsets can introduce binary tails; format the hint without rounding stored limits.
+      const rangeValue = (value: number) => {
+        const rounded = Number(value.toPrecision(12));
+        return rounded !== 0 && (Math.abs(rounded) < 0.0001 || Math.abs(rounded) >= 10000000)
+          ? significantNumber(rounded, 4) : String(rounded).replace('-', '−');
+      };
+      const range = [spec.min === undefined ? '' : `${spec.minExclusive ? '>' : '≥'} ${rangeValue(spec.min)}`, spec.max === undefined ? '' : `${source.exclusiveMaximum !== undefined ? '<' : '≤'} ${rangeValue(spec.max)}`].filter(Boolean).join('，');
       field = { ...base, type: 'number', min: spec.min, max: spec.max, placeholder: range || undefined, ui: {suffix: display.unit, hideSteppers: true} };
     } else if (source.type === 'boolean') field = {...base, type: 'switch'};
     else { json = source.type !== 'string'; field = {...base, type: 'text', ...(json ? { placeholder: 'JSON（按方法契约）' } : { minLength: numeric(source.minLength) ?? undefined, maxLength: numeric(source.maxLength) ?? undefined, pattern: text(source.pattern) || undefined })}; }
