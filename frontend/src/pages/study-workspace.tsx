@@ -688,6 +688,11 @@ export function StudyWorkspace() {
               did={search.delivery}
               tab={tab}
               dirty={context.dirty}
+              calculationLabel={moduleDefinitions[calculatedModule].label}
+              onReturnToCalculation={() => void navigate({
+                params: { sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) },
+                search: { ...currentSearch(), run: '', delivery: '', generate: false, preflight: false },
+              })}
               cadImage={reportImage && reportImage.runId === run?.id ? reportImage.image : undefined}
               runs={runs}
               autoGenerate={search.generate}

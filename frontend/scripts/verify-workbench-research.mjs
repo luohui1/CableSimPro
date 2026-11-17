@@ -24,7 +24,7 @@ function csvRows(text) {
 }
 
 // Engineering changes go through the real interface. GETs verify saved identities.
-await walkthrough('research', async ({ page, expect, base, api, choose, step, check, capture, out, tag, report }) => {
+await walkthrough('research', async ({ page, expect, base, api, choose, step, check, capture, out, size, tag, report }) => {
   const command = () => page.getByRole('toolbar', { name: '工程命令', exact: true });
   const field = label => page.getByLabel(label, { exact: true });
   async function clickCommand(label) {
@@ -43,6 +43,32 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       if (report.phase !== 'before') throw error;
       check(label + '可完成', false, error.message);
     }
+  }
+  if (report.phase === 'after') {
+    const owners = await api('/api/workspaces');
+    const archives = await Promise.all(owners.map(owner => api(`/api/workspaces/${owner.id}/deliveries`)));
+    const count = archives.reduce((sum, items) => sum + items.length, 0);
+    (report.deliveryEmptyStarts ||= []).push({ ...size, scope: 'global', applicable: count === 0, archivedCount: count,
+      reason: count ? '保留已有真实交付，不清库制造全局空态；本尺寸仍验证新工程的自然空态。' : '本次隔离库尚无交付。' });
+    if (count === 0) await step('00-empty-deliveries-start-research', async () => {
+      const writesBefore = report.writes.length;
+      await page.goto(base + '/deliveries?theme=light');
+      await expect(page.getByRole('heading', { name: '还没有交付', exact: true })).toBeVisible();
+      const start = page.getByRole('button', { name: '选择研究', exact: true });
+      await expect(page.locator('.button-primary:visible')).toHaveCount(1);
+      await expect(start).toHaveClass(/button-primary/);
+      await expect(page.getByRole('button', { name: '选择型号', exact: true })).toBeVisible();
+      await capture('00-global-deliveries-empty-starts');
+      await start.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForURL(next => next.pathname === '/studies' && next.searchParams.get('theme') === 'light'
+        && !next.searchParams.get('workspace'));
+      await expect(page.locator('.topbar h1')).toHaveText('工程与研究');
+      await expect(page.getByRole('table', { name: '研究列表', exact: true })).toBeVisible();
+      const afterArchives = await Promise.all(owners.map(owner => api(`/api/workspaces/${owner.id}/deliveries`)));
+      check('全局空交付可用Enter进入真实研究目录且没有生成交付', report.writes.length === writesBefore
+        && afterArchives.every(items => items.length === 0), { writes: report.writes.slice(writesBefore), owners: owners.length });
+    });
   }
   await step('01-create-project-and-research', async () => {
     await page.goto(base + '/?theme=light');
@@ -129,6 +155,72 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     expect((await api(`/api/workspaces/${wid}`)).domain.name).toBe('直埋线路 · ' + tag);
   }
   const prefix = `/api/workspaces/${wid}/studies/${sid}`;
+  if (report.phase === 'after') await step('01b-empty-project-deliveries-return-to-same-study', async () => {
+    const before = await api(`/api/workspaces/${wid}`), beforeArchives = await api(`/api/workspaces/${wid}/deliveries`);
+    expect(beforeArchives).toEqual([]);
+    const writesBefore = report.writes.length;
+    await page.locator('.workbench-sidebar').getByRole('link', { name: '交付', exact: true }).click();
+    await page.waitForURL(next => next.pathname === '/deliveries');
+    await choose('所属', before.domain.name);
+    await expect(page.getByRole('heading', { name: '这个工程还没有交付', exact: true })).toBeVisible();
+    const start = page.getByRole('button', { name: '打开工程研究', exact: true });
+    await expect(page.locator('.button-primary:visible')).toHaveCount(1);
+    await expect(start).toHaveClass(/button-primary/);
+    await expect(page.getByRole('button', { name: '打开型号规格书', exact: true })).toHaveCount(0);
+    await capture('01b-new-project-deliveries-empty');
+    await start.focus();
+    await page.keyboard.press('Enter');
+    await page.waitForURL(next => next.pathname === '/studies' && next.searchParams.get('workspace') === wid
+      && next.searchParams.get('theme') === 'light');
+    const studyLink = page.getByRole('table', { name: '本工程研究', exact: true })
+      .getByRole('link', { name: '直埋载流量 · ' + tag, exact: true });
+    await expect(studyLink).toBeVisible();
+    await capture('01b-delivery-start-preserves-project');
+    await studyLink.click();
+    await page.waitForURL(next => next.pathname === `/studies/${sid}/ampacity/results` && next.searchParams.get('workspace') === wid
+      && next.searchParams.get('theme') === 'light');
+    await expect(page.getByRole('button', { name: '预检并运行', exact: true })).toBeVisible();
+    const after = await api(`/api/workspaces/${wid}`), afterArchives = await api(`/api/workspaces/${wid}/deliveries`);
+    check('新工程空交付可用键盘打开本工程并用鼠标返回同一研究且零写入', after.revision === before.revision
+      && isDeepStrictEqual(after.domain, before.domain) && afterArchives.length === 0 && report.writes.length === writesBefore,
+    { workspace: wid, study: sid, revision: after.revision, writes: report.writes.slice(writesBefore) });
+    (report.deliveryEmptyStarts ||= []).push({ ...size, scope: 'project', applicable: true, workspace: wid, study: sid, archivedCount: 0 });
+  });
+  if (report.phase === 'after') await step('01c-empty-report-tabs-return-to-current-calculation', async () => {
+    const before = await api(`/api/workspaces/${wid}`), beforeStudy = await api(prefix);
+    expect((await api(prefix + '/runs?view=summary&limit=100')).items).toEqual([]);
+    expect(await api(`/api/workspaces/${wid}/deliveries`)).toEqual([]);
+    const writesBefore = report.writes.length;
+    for (const [tab, label, keyboard] of [['content', '内容', false], ['sources', '来源', true], ['preview', '预览', false]]) {
+      await page.locator('.project-explorer').getByRole('link', { name: '计算书内容', exact: true }).click();
+      await page.waitForURL(next => next.pathname === `/studies/${sid}/report/content` && next.searchParams.get('workspace') === wid);
+      if (tab !== 'content') await page.getByRole('tablist', { name: '计算书页签', exact: true }).getByRole('tab', { name: label, exact: true }).click();
+      await page.waitForURL(next => next.pathname === `/studies/${sid}/report/${tab}`);
+      await expect(page.getByRole('heading', { name: '尚无可交付运行', exact: true })).toBeVisible();
+      const start = page.getByRole('button', { name: '返回载流量', exact: true });
+      await expect(page.locator('.button-primary:visible')).toHaveCount(1);
+      await expect(start).toHaveClass(/button-primary/);
+      await capture('01c-empty-report-' + tab + '-start');
+      if (keyboard) { await start.focus(); await page.keyboard.press('Enter'); }
+      else await start.click();
+      await page.waitForURL(next => next.pathname === `/studies/${sid}/ampacity/results`
+        && next.searchParams.get('workspace') === wid && next.searchParams.get('theme') === 'light'
+        && !next.searchParams.get('run') && !next.searchParams.get('delivery')
+        && next.searchParams.get('generate') !== 'true' && next.searchParams.get('preflight') !== 'true');
+      await expect(page.getByRole('button', { name: '预检并运行', exact: true })).toBeVisible();
+      const [after, afterStudy, runs, archives] = await Promise.all([
+        api(`/api/workspaces/${wid}`), api(prefix), api(prefix + '/runs?view=summary&limit=100'), api(`/api/workspaces/${wid}/deliveries`),
+      ]);
+      check(`未运行计算书${label}页可${keyboard ? '用Enter' : '用鼠标'}返回同一研究计算入口且零写入`, after.revision === before.revision
+        && isDeepStrictEqual(after.domain, before.domain) && afterStudy.revision === beforeStudy.revision
+        && isDeepStrictEqual(afterStudy.definition, beforeStudy.definition) && runs.items.length === 0
+        && archives.length === 0 && report.writes.length === writesBefore,
+      { workspace: wid, study: sid, tab, revision: after.revision, studyRevision: afterStudy.revision, writes: report.writes.slice(writesBefore) });
+      (report.deliveryEmptyStarts ||= []).push({ ...size, scope: 'study-report', tab, applicable: true, workspace: wid, study: sid,
+        runCount: runs.items.length, archivedCount: archives.length });
+      await capture('01c-report-' + tab + '-returned-to-same-calculation');
+    }
+  });
   await step('02-installation-load-and-environment', async () => {
     await page.getByRole('button', { name: '更多绘图工具', exact: true }).click();
     await page.getByRole('button', { name: '敷设模板', exact: true }).click();
@@ -531,8 +623,10 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await inspectorTabs.getByRole('tab', { name: '方法', exact: true }).click();
     const scanVariable = page.getByRole('combobox', { name: '扫描变量', exact: true });
     await expect(scanVariable).toBeVisible();
-    await scanVariable.scrollIntoViewIfNeeded();
-    const variableLayout = await scanVariable.locator(':scope > span').first().evaluate(node => {
+    const variableName = page.locator('.study-sweep-variable-name');
+    await expect(variableName).toBeVisible();
+    await variableName.scrollIntoViewIfNeeded();
+    const variableLayout = await variableName.evaluate(node => {
       const box = node.getBoundingClientRect(), range = document.createRange();
       range.selectNodeContents(node);
       const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
@@ -541,7 +635,26 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
           && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1),
         inView: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth };
     });
+    const variableControl = await scanVariable.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      return { height: box.height, text: node.textContent.trim(), description: node.getAttribute('aria-describedby'),
+        inView: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth };
+    });
+    expect(variableControl.description).toBe(await variableName.getAttribute('id'));
+    expect(variableLayout.text).toContain(variableControl.text);
+    expect(variableLayout.text).toMatch(/\/\s*\S/);
+    check('扫描变量使用32px控件并关联完整可见说明', Math.abs(variableControl.height - 32) <= 1 && variableControl.inView, variableControl);
     check('已保存扫描变量在方法栏完整显示名称与单位', variableLayout.complete && variableLayout.inView && variableLayout.font >= 13, variableLayout);
+    await scanVariable.focus();
+    await page.keyboard.press('Space');
+    const variableOptions = page.locator('.study-sweep-variable-options');
+    const selectedVariable = variableOptions.getByRole('option', { selected: true });
+    await expect(selectedVariable).toHaveText(variableLayout.text);
+    await capture('10-saved-sweep-variable-keyboard-options');
+    await page.keyboard.press('Escape');
+    await expect(variableOptions).toBeHidden();
+    await expect(scanVariable).toBeFocused();
+    await expect(variableName).toHaveText(variableLayout.text);
     await capture('10-saved-sweep-variable-name-and-unit');
     await inspectorTabs.getByRole('tab', { name: '输入', exact: true }).click();
     check('属性分页往返保留已加载曲线实例与结果量', await mountedChart.evaluate(node => node.isConnected)

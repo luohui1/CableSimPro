@@ -143,6 +143,16 @@ export function AssetsPage() {
     [fileError, setFileError] = useState(""),
     [fileName, setFileName] = useState("");
   const [standardsTab, setStandardsTab] = useState('basis');
+  const activeStandardsTab = groupId === 'standards' && selected ? 'resources' : standardsTab;
+  useEffect(() => {
+    // A fixed-version link opens its resource immediately and keeps the list
+    // visible when that selection is subsequently closed.
+    if (groupId === 'standards' && selected) setStandardsTab('resources');
+  }, [groupId, selected]);
+  const changeStandardsTab = (value: string) => {
+    setStandardsTab(value);
+    if (value === 'basis' && selected) setSelected('');
+  };
   const [offset, setOffset] = useState(0), [chosen, setChosen] = useState<Record<string, string>>({}), [batchAction, setBatchAction] = useState<ResourceOperation>('export');
   const [editor, setEditor] = useState<(DialogOrigin & { open: boolean; asset?: Asset; resume?: ReturnType<typeof pendingAssetEdit> }) | null>(null);
   const [operation, setOperation] = useState<(DialogOrigin & { open: boolean; action: ResourceOperation; ids: { id: string; name: string }[]; resume?: ReturnType<typeof pendingResourceOperation> }) | null>(null);
@@ -150,7 +160,7 @@ export function AssetsPage() {
   const [savedElsewhere, setSavedElsewhere] = useState<Asset | null>(null);
   const dialogKeys = useRef({ editor: editor?.key, operation: operation?.key, derivation: derivation?.key });
   dialogKeys.current = { editor: editor?.key, operation: operation?.key, derivation: derivation?.key };
-  const browsingBasis = groupId === 'standards' && standardsTab === 'basis';
+  const browsingBasis = groupId === 'standards' && activeStandardsTab === 'basis';
   const filePicker = useRef<HTMLInputElement>(null);
   const importVisible = useRef(open); importVisible.current = open;
   const importGeneration = useRef(0), currentGroup = useRef(groupId); currentGroup.current = groupId;
@@ -302,7 +312,7 @@ export function AssetsPage() {
       title={group.title}
       status={<span className="muted">{browsingBasis ? '只读依据 · 按版本引用' : `${total} 项 · 固定资源版本`}</span>}
       actions={browsingBasis ? undefined : <><Button variant={modalOpen || selectedCount || unresolved ? 'outline' : 'primary'} size="compact" disabled={unresolved} onClick={() => openEditor()}>新建资源</Button><Button size="compact" disabled={unresolved} onClick={openImport}>导入资源草稿</Button></>}
-      tabs={groupId === 'standards' ? <Tabs value={standardsTab} onValueChange={setStandardsTab}><TabsList aria-label="标准与规则视图"><TabsTrigger value="basis">依据浏览</TabsTrigger><TabsTrigger value="resources">资源版本</TabsTrigger></TabsList></Tabs> : undefined}
+      tabs={groupId === 'standards' ? <Tabs value={activeStandardsTab} onValueChange={changeStandardsTab}><TabsList aria-label="标准与规则视图"><TabsTrigger value="basis">依据浏览</TabsTrigger><TabsTrigger value="resources">资源版本</TabsTrigger></TabsList></Tabs> : undefined}
       property={
         showing && !browsingBasis ? (
           <PropertyPanel

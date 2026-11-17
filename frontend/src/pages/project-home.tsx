@@ -29,6 +29,7 @@ import { WorkbenchSplitter } from '@/components/workbench-splitter';
 import { CommandBar, type CommandAction } from '@/components/command-bar';
 import { formatDateTime } from '@/lib/format';
 import { STATUS_WORDS } from '@/lib/status-vocabulary';
+import { SolverLocation } from '@/components/solver-location';
 
 type Theme = "light" | "dark";
 
@@ -81,7 +82,11 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
       </Link>;
     } },
     { id: "kind", label: "任务", wrap: true, render: (row) => calculationKind(row, catalog.data || []).label },
-    { id: "method", label: "插件", wrap: true, render: (row) => `${calculationKind(row, catalog.data || []).methodName} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
+    { id: "method", label: "插件", wrap: true, render: (row) => {
+      const kind = calculationKind(row, catalog.data || []);
+      return <span>{kind.methodName} {text(row.definition.method?.version)} · <SolverLocation
+        pluginId={text(row.definition.method?.plugin_id)} capability={kind.capability} prefix={false} /></span>;
+    } },
     { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return <span>{headlineText(run?.headlines, 1) || '—'}{states.get(row.id)?.historical && <small> · {STATUS_WORDS.historical}</small>}</span>; } },
     { id: "state", label: "状态", wrap: true, render: (row) => { const state=states.get(row.id)!; return <span title={state.reason}><StatusMark kind={state.mark} label={state.label} /></span>; } },
   ];

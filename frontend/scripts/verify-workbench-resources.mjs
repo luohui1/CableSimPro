@@ -313,7 +313,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await link.focus(); await link.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/resources/${group}\\?`));
     check(`${knownKindLabels[published.kind]}固定引用可用键盘返回确切资源版本`, new URL(page.url()).searchParams.get('item') === current.id);
-    if (group === 'standards') await page.getByRole('tab', { name: '资源版本', exact: true }).click();
+    if (group === 'standards') await expect(page.getByRole('tab', { name: '资源版本', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect(properties.getByRole('heading', { name: current.name, exact: true })).toBeVisible();
     await capture(`${group}-fixed-reference-reopened-keyboard`);
     await page.goBack();
@@ -322,9 +322,80 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await link.click();
     await expect(page).toHaveURL(new RegExp(`/resources/${group}\\?`));
     check(`${knownKindLabels[published.kind]}固定引用可用鼠标返回同一资源版本`, new URL(page.url()).searchParams.get('item') === current.id);
-    if (group === 'standards') await page.getByRole('tab', { name: '资源版本', exact: true }).click();
+    if (group === 'standards') await expect(page.getByRole('tab', { name: '资源版本', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect(properties.getByRole('heading', { name: current.name, exact: true })).toBeVisible();
     await capture(`${group}-fixed-reference-reopened`);
+  }
+
+  async function verifyStandardDeepLink(published) {
+    const binding = fixedBindings.get('standard');
+    if (!check('标准深链接使用实际已固定的发布版本', binding?.resource.id === published.id,
+      { expected: published.id, bound: binding?.resource.id }, { fatal: false })) return;
+    const before = await api(`/api/foundation/assets/${published.id}`);
+    const workspaceBefore = await api(`/api/workspaces/${referenceWorkspace.id}`);
+    const writesBefore = report.writes.length;
+    await openGroup('standards');
+    await searchResource('standards', before.name, before.version);
+    const resourceUrl = page.url();
+    check('标准深链接来自界面所选确切资源', new URL(resourceUrl).searchParams.get('item') === before.id, { url: resourceUrl });
+    const resourcesTab = page.getByRole('tab', { name: '资源版本', exact: true });
+    const basisTab = page.getByRole('tab', { name: '依据浏览', exact: true });
+    const browser = page.locator('[data-page="standards-basis"]');
+    const table = main.getByRole('table', { name: groupTitles.standards, exact: true });
+    const versionRow = table.getByRole('row', { name: before.name, exact: true }).filter({
+      has: page.getByRole('cell', { name: before.version, exact: true }),
+    });
+    const expectVersion = async () => {
+      await expect(resourcesTab).toHaveAttribute('aria-selected', 'true');
+      await expect(browser).toBeHidden();
+      await expect(properties.getByRole('heading', { name: before.name, exact: true })).toBeVisible();
+      await expect(properties).toContainText(knownStatuses[before.status]);
+      await expect(versionRow).toHaveCount(1);
+      await expect(versionRow.getByRole('cell', { name: before.version, exact: true })).toHaveText(before.version);
+      check('标准资源页完整显示所指名称和版次', new URL(page.url()).searchParams.get('item') === before.id,
+        { id: before.id, name: before.name, version: before.version, url: page.url() });
+    };
+    const expectBasis = async () => {
+      await expect(basisTab).toHaveAttribute('aria-selected', 'true');
+      await expect(browser).toBeVisible();
+      await expect(properties).toBeHidden();
+      check('主动返回依据浏览会清除固定资源选择', !new URL(page.url()).searchParams.has('item'), { url: page.url() });
+    };
+    // Reopen the observed UI URL in a fresh document; no API-created identity,
+    // retained component state or extra resource-tab click may repair the route.
+    await page.goto(base + '/');
+    await page.goto(resourceUrl);
+    await expectVersion();
+    await capture('standard-fixed-link-cold-open');
+    await page.reload();
+    await expectVersion();
+    await capture('standard-fixed-link-reloaded');
+    await basisTab.click();
+    await expectBasis();
+    await capture('standard-fixed-link-basis-mouse');
+    await resourcesTab.focus(); await resourcesTab.press('Enter');
+    await expect(resourcesTab).toHaveAttribute('aria-selected', 'true');
+    await versionRow.focus(); await versionRow.press('Enter');
+    await expectVersion();
+    await capture('standard-fixed-link-resource-keyboard');
+    await basisTab.focus(); await basisTab.press('Enter');
+    await expectBasis();
+    await capture('standard-fixed-link-basis-keyboard');
+    await resourcesTab.click();
+    await versionRow.click();
+    await expectVersion();
+    await capture('standard-fixed-link-resource-mouse');
+    const saved = await api(`/api/foundation/assets/${before.id}`);
+    const workspaceAfter = await api(`/api/workspaces/${referenceWorkspace.id}`);
+    check('标准深链接刷新与键鼠页签往返不写入或漂移固定引用', report.writes.length === writesBefore
+      && saved.id === before.id && saved.version === before.version && saved.revision === before.revision
+      && saved.status === before.status && saved.content_sha256 === before.content_sha256
+      && JSON.stringify(saved.release) === JSON.stringify(before.release) && JSON.stringify(saved.events) === JSON.stringify(before.events)
+      && workspaceAfter.revision === workspaceBefore.revision
+      && JSON.stringify(workspaceAfter.domain) === JSON.stringify(workspaceBefore.domain)
+      && JSON.stringify(workspaceAfter.type_resource_bindings) === JSON.stringify(workspaceBefore.type_resource_bindings),
+    { writes: report.writes.slice(writesBefore), resource: before.id, version: before.version, digest: saved.content_sha256,
+      beforeRevision: workspaceBefore.revision, afterRevision: workspaceAfter.revision });
   }
 
   async function verifyPinnedHistory(group, versions) {
@@ -905,6 +976,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       if (versions) {
         await branch('真实标准固定引用到型号且下一草稿不能新选', () =>
           bindPublishedResource('standards', versions.original, versions.derived, standard.target));
+        await branch('固定标准资源深链接冷打开刷新与键鼠页签往返', () => verifyStandardDeepLink(versions.original));
         const changed = await branch('仅停用隔离旧版本并发布保留出处的新版本', async () => {
           await openGroup('standards');
           const original = await transition('standards', versions.original, 'deprecate', '停用', standard.declaration);

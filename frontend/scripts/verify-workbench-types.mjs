@@ -764,6 +764,30 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     }
   }
 
+  if (report.phase === 'after') {
+    const owners = await api('/api/workspaces');
+    const archives = await Promise.all(owners.map(owner => api(`/api/workspaces/${owner.id}/deliveries`)));
+    const count = archives.reduce((sum, items) => sum + items.length, 0);
+    (report.deliveryEmptyStarts ||= []).push({ ...size, scope: 'global', applicable: count === 0, archivedCount: count,
+      reason: count ? '保留已有真实交付，不清库制造全局空态；本尺寸仍验证新型号的自然空态。' : '本次隔离库尚无交付。' });
+    if (count === 0) await attempt('00-空交付可从真实型号目录开始', async () => {
+      const writesBefore = report.writes.length;
+      await page.goto(base + '/deliveries?theme=light');
+      await expect(page.getByRole('heading', { name: '还没有交付', exact: true })).toBeVisible();
+      await expect(page.locator('.button-primary:visible')).toHaveCount(1);
+      await expect(page.getByRole('button', { name: '选择研究', exact: true })).toHaveClass(/button-primary/);
+      const start = page.getByRole('button', { name: '选择型号', exact: true });
+      await expect(start).toBeVisible();
+      await expect(start).not.toHaveClass(/button-primary/);
+      await capture('交付-全局自然空态与两条起步入口');
+      await start.click();
+      await page.waitForURL(next => next.pathname === '/types' && next.searchParams.get('theme') === 'light');
+      await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
+      const afterArchives = await Promise.all(owners.map(owner => api(`/api/workspaces/${owner.id}/deliveries`)));
+      check('全局空交付可用鼠标进入真实型号目录且没有生成交付', report.writes.length === writesBefore
+        && afterArchives.every(items => items.length === 0), { writes: report.writes.slice(writesBefore), owners: owners.length });
+    });
+  }
   const options = await api('/api/types/creation-options');
   await attempt('01-型号列表与批量操作入口', async () => {
     await page.goto(base + '/types?theme=light');
@@ -799,6 +823,40 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await module('结构 ·');
     await primary('标准核对', '返回已保存结构页');
     return created;
+  });
+
+  if (report.phase === 'after' && library) await attempt('02a-新型号空交付打开同一规格书', async () => {
+    const before = await workspace(library.id), beforeArchives = await api(`/api/workspaces/${library.id}/deliveries`);
+    expect(beforeArchives).toEqual([]);
+    const typeIndex = await api('/api/design/type-workspaces');
+    expect(typeIndex.some(item => item.id === library.id)).toBe(true);
+    const writesBefore = report.writes.length;
+    await page.locator('.workbench-sidebar').getByRole('link', { name: '交付', exact: true }).click();
+    await page.waitForURL(next => next.pathname === '/deliveries');
+    await choose('所属', before.domain.name);
+    await expect(page.getByRole('heading', { name: '这个型号还没有交付', exact: true })).toBeVisible();
+    const start = page.getByRole('button', { name: '打开型号规格书', exact: true });
+    await expect(page.locator('.button-primary:visible')).toHaveCount(1);
+    await expect(start).toHaveClass(/button-primary/);
+    await expect(page.getByRole('button', { name: '打开工程研究', exact: true })).toHaveCount(0);
+    await capture('交付-新型号自然空态和真实规格书入口');
+    await start.click();
+    await page.waitForURL(next => next.pathname === `/types/${library.id}/specification/content`
+      && next.searchParams.get('theme') === 'light');
+    await expect(page.locator('[data-type-page="specification-results"]')).toHaveAttribute('data-type-state', /^(?:empty|historical|success)$/);
+    const specification = await api(`/api/types/${library.id}/specification?audience=customer&view=detail`);
+    expect(specification.payload.workspace_id).toBe(library.id);
+    expect(specification.payload.revision).toBe(before.revision);
+    await expectIdentity(before);
+    await expect(page.getByRole('button', { name: '生成规格书', exact: true })).toBeVisible();
+    await capture('交付-入口只打开同一型号规格书且未生成');
+    const after = await workspace(library.id), afterArchives = await api(`/api/workspaces/${library.id}/deliveries`);
+    check('新型号空交付明确打开本型号规格书且零保存零计算零交付', after.revision === before.revision
+      && JSON.stringify(after.domain) === JSON.stringify(before.domain) && afterArchives.length === 0 && report.writes.length === writesBefore,
+    { workspace: library.id, revision: after.revision, specificationDigest: specification.digest, writes: report.writes.slice(writesBefore) });
+    (report.deliveryEmptyStarts ||= []).push({ ...size, scope: 'type', applicable: true, workspace: library.id, archivedCount: 0 });
+    await module('结构 ·');
+    await primary('标准核对', '交付入口返回已保存结构页');
   });
 
   let editFixture;

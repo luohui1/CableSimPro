@@ -205,6 +205,45 @@ await walkthrough('simulation', async ({
       downstreamScope: '新建对照若受阻，后续参数与预检独立使用发布库既有有限元输入；不算新建链路通过。',
     };
 
+    if (report.phase === 'after') await step('00-project-solver-locations', async () => {
+      const writesBefore = report.writes.length;
+      const cards = await api('/api/methods?view=summary');
+      const declared = study => {
+        const pin = study.definition.method;
+        return cards.find(card => ['plugin_id', 'version', 'release_digest'].every(key => card.method[key] === pin[key]))
+          ?.capabilities.find(capability => capability.id === pin.capability);
+      };
+      const femCapability = declared(referenceThermal), iecCapability = declared(iec);
+      expect(femCapability, '工程概览必须使用同一固定发行的有限元能力').toBeTruthy();
+      expect(iecCapability, '工程概览必须使用同一固定发行的 IEC 能力').toBeTruthy();
+      expect(femCapability.solver).toBe('slurm');
+      expect(iecCapability.solver || 'local').toBe('local');
+      await page.goto(`${base}/studies?workspace=${iec.workspace}&theme=light`);
+      const table = page.getByRole('table', { name: '本工程研究', exact: true });
+      const rowFor = study => table.getByRole('row').filter({ has: page.locator(`a[href^=${JSON.stringify('/studies/' + study.id + '/')}]`) });
+      const femRow = rowFor(referenceThermal), iecRow = rowFor(iec);
+      await expect(femRow).toHaveCount(1); await expect(iecRow).toHaveCount(1);
+      const femLocation = femRow.locator('.solver-location'), iecLocation = iecRow.locator('.solver-location');
+      await expect(femLocation).toContainText('超算');
+      await expect(femLocation).not.toContainText('本机');
+      await expect(iecLocation).toContainText('本机');
+      const shown = { fem: await femLocation.innerText(), iec: await iecLocation.innerText() };
+      await femLocation.scrollIntoViewIfNeeded(); await expect(femLocation).toBeInViewport({ ratio: 1 });
+      await capture('00-project-fem-location');
+      await iecLocation.scrollIntoViewIfNeeded(); await expect(iecLocation).toBeInViewport({ ratio: 1 });
+      await capture('00-project-iec-location');
+      check('工程概览按固定能力显示有限元超算、IEC本机，不用进程隔离策略替代求解位置',
+        /超算/.test(shown.fem) && !/本机/.test(shown.fem) && /本机/.test(shown.iec),
+        { shown, fem: { method: referenceThermal.definition.method, capability: femCapability }, iec: { method: iec.definition.method, capability: iecCapability } });
+      const setup = femLocation.getByRole('link', { name: '去设置', exact: true });
+      await expect(setup).toBeVisible(); await setup.focus(); await page.keyboard.press('Enter');
+      await expect(page).toHaveURL(/\/settings\/compute/);
+      await expect(page.getByRole('region', { name: '超算连接', exact: true })).toBeVisible();
+      check('工程概览的超算设置入口可用键盘打开，且不提交配置或运行', report.writes.length === writesBefore,
+        { writesBefore, writesAfter: report.writes.length, url: page.url() });
+      evidence.projectSolverLocations = shown;
+    });
+
     await step('01-saved-iec-study', async () => {
       await page.goto(`${base}/studies/${iec.id}/ampacity/results?workspace=${iec.workspace}&theme=light`);
       await expect(page.getByRole('navigation', { name: '工程浏览器', exact: true })).toBeVisible();
@@ -650,6 +689,27 @@ await walkthrough('simulation', async ({
           { reason: await reason.innerText(), ...evidence.hybridEmpty });
         evidence.hybridEmpty.coverage.initialEmpty = true;
         await capture('09-hybrid-model-empty');
+        const tabs = page.getByRole('tablist', { name: '混合载流量页签', exact: true });
+        evidence.hybridEmpty.primaryActions = [];
+        for (const [tab, label, interaction] of [
+          ['results', '预测结果', 'keyboard'], ['validation', '模型验证', 'mouse'], ['sources', '来源', 'keyboard'],
+        ]) {
+          const target = tabs.getByRole('tab', { name: label, exact: true });
+          if (interaction === 'keyboard') { await target.focus(); await target.press('Enter'); }
+          else await target.click();
+          await expect(target).toHaveAttribute('aria-selected', 'true');
+          await expect(page).toHaveURL(new RegExp(`/hybrid/${tab}\\?`));
+          await expect(predict).toBeDisabled();
+          await expect(predict).toHaveAccessibleDescription(await reason.innerText());
+          // Disabled controls retain their visual weight: count them as well.
+          const primary = page.locator('.button-primary:visible,.button-run:visible');
+          await expect(primary).toHaveCount(1);
+          await expect(primary).toHaveAccessibleName('查看混合方法与训练要求');
+          const state = { tab, interaction, primary: await primary.innerText(), predictionDisabled: await predict.isDisabled() };
+          evidence.hybridEmpty.primaryActions.push(state);
+          check(`混合研究${label}仅保留训练要求一个主操作且说明预测禁用原因`, true, state);
+          await capture(`09-hybrid-${tab}-single-primary`);
+        }
         const refreshed = page.waitForResponse(reply => reply.request().method() === 'GET'
           && new URL(reply.url()).pathname === '/api/model-artifacts');
         await hybrid.getByRole('button', { name: '重新读取模型目录', exact: true }).click();

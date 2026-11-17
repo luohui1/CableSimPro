@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useId, useMemo, useState } from "react";
 import { useStudy } from "./study-provider";
 import {
   moduleConfiguration,
@@ -7,7 +7,7 @@ import {
 } from "@/lib/study-config";
 import { optionalRecord, numeric, text, message } from "@/api/client";
 import { engineeringQuantity } from "@/lib/format";
-import { displayName, displayUnit } from "@/lib/display-names";
+import { displayName, displayText, displayUnit } from "@/lib/display-names";
 import { sweepSummary } from "@/lib/sweep-summary";
 import { savedDomain, entityLabel } from "@/lib/domain-fields";
 import type { DomainDocument } from "@/lib/domain-fields";
@@ -22,7 +22,7 @@ import { EmptyState, LoadingState } from "./states";
 import { StudyErrorState as ErrorState } from './study-error-state';
 import { StatusMark } from "./status-mark";
 import { Button } from "./ui/button";
-import { Select } from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { NumberField } from "./ui/number-field";
 import { StudyMethodForm } from "./study-method-form";
 import { downloadCsv } from "@/lib/download";
@@ -95,6 +95,10 @@ export function StudySweep({
     source: metadata.source || "",
   }) as ScanForm;
   const chosen = candidates.find((value) => value.value === form.path);
+  const variableId = useId();
+  const scanVariableLabel = (candidate: (typeof candidates)[number]) => displayText(
+    candidate.label + " / " + engineeringQuantity("parameter", 0, candidate.unit).unit,
+  );
   function edit(key: keyof ScanForm, value: string) {
     context.editModuleInput("sweep", { ...form, [key]: value });
     setError("");
@@ -232,18 +236,24 @@ export function StudySweep({
               />
             ) : (
               <>
-                <Select
-                  label="扫描变量"
-                  value={form.path}
-                  options={candidates.map(({ value, label, unit }) => ({
-                    value,
-                    label:
-                      label +
-                      " / " +
-                      engineeringQuantity("parameter", 0, unit).unit,
-                  }))}
-                  onChange={(value) => edit("path", value)}
-                />
+                <div className="select-field study-sweep-variable">
+                  <label htmlFor={variableId}>扫描变量</label>
+                  <Select value={form.path} onValueChange={(value) => {
+                    if (candidates.some(candidate => candidate.value === value)) edit("path", value);
+                  }}>
+                    <SelectTrigger id={variableId} aria-describedby={`${variableId}-name`} aria-invalid={!!form.path && !chosen}>
+                      <SelectValue placeholder="请选择">
+                        {chosen ? displayText(chosen.label.split(" · ").at(-1) || chosen.label) : form.path ? "需重新选择" : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="study-sweep-variable-options">
+                      {candidates.map(candidate => <SelectItem key={candidate.value} value={candidate.value}>{scanVariableLabel(candidate)}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p id={`${variableId}-name`} className={`study-sweep-variable-name${form.path && !chosen ? " field-error" : ""}`} role={form.path && !chosen ? "alert" : undefined}>
+                    {chosen ? scanVariableLabel(chosen) : form.path ? "已保存的扫描变量不在当前输入中，请核对后重新选择。" : "请选择当前输入中真实存在的扫描变量。"}
+                  </p>
+                </div>
                 <div className="input-form-grid">
                   {(["minimum", "maximum", "step"] as const).map((key) => (
                     <NumberField
