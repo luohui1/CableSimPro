@@ -848,6 +848,9 @@ def build_model(research, types, request: dict) -> dict:
         with research.store.read_snapshot() as final_db:
             if research.store.load(final_db, wid)[0]['revision'] != revision:
                 fail('FORMAL_REVISION_CHANGED', '生成期间工程修订已变化。', 409)
+    from .formal_presentation import prepare_engineering_body, apply_presentation
+    prepare_engineering_body(model.value)
+    apply_presentation(model.value)
     validate_model_refs(model.value)
     model.value['source_digest'] = jsonsha(model.value['sources'])
     model.value['model_digest'] = jsonsha(model.value)

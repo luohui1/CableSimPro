@@ -2,7 +2,7 @@
 
 The source builder owns engineering interpretation. Renderers consume one table
 map, ordered body/trace sections and literal cells. Numeric cells always carry a
-JSON Pointer into a frozen source payload; presentation never rounds a value.
+JSON Pointer into a frozen source payload; declared display transforms are separate.
 """
 from __future__ import annotations
 
@@ -224,6 +224,7 @@ def iter_cells(model: dict):
 
 def validate_model_refs(model: dict) -> None:
     """Reject silent rounding, guessed numbers, source drift and wrong units."""
+    from .formal_presentation import cell_text, cell_unit, validate_presentation
     try:
         if model.get('schema') != SCHEMA or model.get('kind') not in KINDS:
             raise ValueError('交付模型版本或类型无效。')
@@ -265,8 +266,8 @@ def validate_model_refs(model: dict) -> None:
                     table = model['tables'][table_id]
                     body_text.append(table.get('title', ''))
                     body_text.extend(column['label'] for column in table['columns'])
-                    body_text.extend(cell['raw_text'] for row in table['rows'] for cell in row['cells'].values())
-                    body_text.extend(str(cell.get('unit') or '') for row in table['rows'] for cell in row['cells'].values())
+                    body_text.extend(cell_text(cell) for row in table['rows'] for cell in row['cells'].values())
+                    body_text.extend(str(cell_unit(cell) or '') for row in table['rows'] for cell in row['cells'].values())
         if not saw_trace or set(used) != set(model['tables']) or len(used) != len(set(used)):
             raise ValueError('交付表格或追溯章节缺失、重复。')
         if sum(len(table['rows']) for table in model['tables'].values()) > MAX_ROWS:
@@ -305,6 +306,8 @@ def validate_model_refs(model: dict) -> None:
         identifiers = frozen_plugin_identifiers(model)
         if any(contains_plugin_identifier(text, identifiers) for text in body_text):
             raise ValueError('正文含有原始方法标识，须使用保存的方法名称或放入追溯章节。')
+        if 'presentation' in model:
+            validate_presentation(model)
         if 'source_digest' in model and model['source_digest'] != jsonsha(model['sources']):
             raise ValueError('来源集合摘要不一致。')
         if 'model_digest' in model and model['model_digest'] != jsonsha({key: value for key, value in model.items() if key != 'model_digest'}):
