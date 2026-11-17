@@ -5,14 +5,17 @@
 
 ## 构建与发行范围
 
-为 Windows 10 / 11 x64 和 Linux x86_64 分别构建 ZIP。安装端预装 **64 位 CPython 3.12**，
-不需要 Node、npm、编译器、Git 或管理员权限；Python 安装须含标准库 `venv` / `ensurepip`。
-Windows 的命令和双击入口使用 Python Launcher（`py`）；安装 CPython 时保留该组件。
+为 Windows 10 / 11 x64 和 Linux x86_64 分别构建 ZIP。**安装端不需要预装 Python、Python Launcher、Node、npm、编译器或 Git**，也不需要管理员权限。
+包内 `runtime/python` 是固定的 64 位 CPython 3.12.15（python-build-standalone，20261003）；
+`start.cmd` / `start.sh` 直接运行这个解释器，不寻找系统的 `py`、`python` 或 `python3.12`。
+系统只有 Python 3.11 或完全未装 Python，不改变发行入口选择。
 Linux 使用兼容 wheel 的 glibc 系统；发行包包含 CAD 需要的图形运行库和对应许可证，
 `runtime/native-manifest.json` 记录实际依赖的最低 glibc，安装前核对当前系统版本。
 发行包不替换系统 glibc、动态加载器或硬件驱动。CI 的干净 Ubuntu / Windows runner
-会实际验证安装和 CAD 导出。Python 解释器不由此 ZIP 安装，不宣称适用于所有 Linux
-发行版或 ARM。
+会实际验证安装和 CAD 导出。包内运行时、标准库、venv、ensurepip、pip、SQLite/TLS 依赖和上游许可一并保留；不宣称适用于所有 Linux 发行版或 ARM。
+运行时 URL、版本及 SHA256 固定在 `scripts/python_runtime.lock.json`；下载仅发生在构建机，
+校验摘要后安全解包，把包内符号链接物化为普通文件，拒绝越界、循环链接和特殊文件。
+`runtime/python-runtime.json` 记录来源与许可路径，所有运行时文件纳入发行摘要。
 
 构建机器联网准备既有前端生产构建和平台 wheel；最终用户安装时全程离线：
 
@@ -33,10 +36,12 @@ Linux 可使用同一套经核验的跨平台前端构建。发行构建不运�
 `build_release.py` 将宿主依赖和 `cablesim.cable-geometry` 声明的精确依赖解析为当前
 平台 wheel，生成包含所有传递依赖 SHA256 的 `requirements.lock`。可用
 `--wheelhouse <目录>` 重用已经解析的完整 wheel 集；多版本重复包或非 wheel 文件会拒绝。
-ZIP 内含后端、SDK、封签插件、种子入口、规格书样式、预构建前端和离线依赖。
+ZIP 内含后端、SDK、封签插件、种子入口、规格书样式、预构建前端、Python 运行时和离线依赖。
+构建时还用实际随包解释器离线解析完整哈希锁，确认 wheel 与其 ABI 相容；不只依据构建机版本判断。
 源码来自 Git 跟踪文件，开发库、密钥、测试输出和本地环境不会进入发行包。
 
-每个 ZIP 旁生成 `.zip.json`，记录归档 SHA256、源码提交、平台/Python 目标和 build_id。
+每个 ZIP 旁生成 `.zip.json`，记录归档 SHA256、源码提交、平台/Python 目标和 build_id；
+同提交的 `.source.zip` 保存 Git 跟踪的构建与测试源码，摘要写入回执，用于独立复现，不包含工作区生成物。
 包内 `release-manifest.json` 记录每个不可变文件的大小与 SHA256；文件损坏会阻止安装
 或启动。它提供完整性核验，不冒充发行方数字签名。`release.toml` 为可编辑配置，不纳入
 不可变文件摘要；安装后的每个程序版本都有独立的不可变目录。
@@ -52,7 +57,7 @@ ZIP 内含后端、SDK、封签插件、种子入口、规格书样式、预构�
 Windows：
 
 ```powershell
-py -3.12 scripts/install_release.py --config release.toml
+.\start.cmd
 ```
 
 也可以双击 `start.cmd`（源文件 `scripts/start_release.cmd`）。Linux：
@@ -61,8 +66,10 @@ py -3.12 scripts/install_release.py --config release.toml
 sh start.sh
 ```
 
-`start.sh` 源文件为 `scripts/start_release.sh`，等价于
-`python3.12 scripts/install_release.py --config release.toml`。
+`start.sh` 源文件为 `scripts/start_release.sh`。两个入口都直接使用当前解压包内的解释器，
+安装时先把运行时复制到 `data_dir/programs/<build_id前16位>/runtime/python`，再由该副本创建 `.venv`。
+因此 `pyvenv.cfg` 不引用系统 Python 或原下载目录；清理原解压目录不会破坏已安装解释器。
+后续可运行安装目录内的同名入口，并通过 `--config` 指向保留在程序目录外的配置。
 可追加 `--no-browser` 在无桌面系统使用；`--no-start` 只完成安装校验。
 安装命令使用 `--no-index --require-hashes --no-cache-dir`，只从随包 wheelhouse 安装，
 再执行依赖完整性检查和真实宿主/CAD 导入检查。依赖缺失会明确失败，不临时联网补装。
@@ -87,10 +94,11 @@ sh start.sh
 停止当前服务，把新发行包解压到另一个目录，使用原配置执行同一安装命令：
 
 ```sh
-python3.12 scripts/install_release.py --config /path/to/release.toml
+sh start.sh --config /path/to/release.toml
 ```
 
-程序与依赖安装在 `data_dir/programs/<build_id前16位>/`，运行解释器是其 `.venv`；旧程序与
+Windows 使用 `start.cmd --config D:\config\release.toml`，同样无需系统 Python。
+程序、运行时与依赖安装在 `data_dir/programs/<build_id前16位>/`，运行解释器是其 `.venv`；旧程序与
 环境被保留。工程库位于 `data_dir/engineering.sqlite`，数据集、复现资料和工程证据
 分别位于 `datasets/`、`library/`、`engineering-evidence/`。
 
@@ -121,9 +129,10 @@ python3.12 scripts/install_release.py --config /path/to/release.toml
 需要主动回退到上一版本时，停止服务后执行：
 
 ```sh
-python3.12 scripts/run_release.py --config /path/to/release.toml --rollback --no-browser
+/path/to/data_dir/programs/<当前build_id前16位>/.venv/bin/python /path/to/data_dir/programs/<当前build_id前16位>/scripts/run_release.py --config /path/to/release.toml --rollback --no-browser
 ```
 
+Windows 对应使用安装目录的 `.venv\Scripts\python.exe`，不是系统 `py`。
 此命令恢复上一份已运行程序及其升级前数据库；回退前仍按既有恢复契约保留当前数据库
 安全副本。**升级后新增或修改的工程数据不会出现在升级前快照中**，因此只应在明确需要
 回退时使用；后续数据可从保留的安全副本核查。日常数据库恢复仍用
@@ -143,7 +152,13 @@ Linux 宿主把随包 `runtime/linux-libs` 加入其原生库搜索路径，保�
 清理子进程继承的环境，因此发行专用 `scripts/release_python.sh` 在进入同一 `.venv`
 之前重新绑定这个固定目录；不向插件开放宿主密钥或代理环境，也不改插件执行器和封签。
 
-发行验收脚本 `scripts/verify_installation.py` 在解压目录外隔离数据并实际安装、启动、
-调用发布示例 API，输出包、PDF、载流量数值证据、接口快照和验证日志。产物只进入 CI artifact。
+发行验收脚本 `scripts/verify_installation.py` 在解压目录外隔离数据，实际调用 `start.cmd` / `start.sh` 安装、启动并经发布示例 API 导出。
+安装子进程的 PATH 中没有 Python、py、pip、Node 或 npm；记录实际解释器、基础运行时、标准库路径与版本。
+`prepare_release_verifier.py` 用发行 ZIP 自带运行时和随包哈希锁 wheel 创建独立的证据工具环境；
+进入操作系统网络隔离后的验证驱动也使用该环境，而非 `actions/setup-python` 的解释器。
+Windows 防火墙覆盖驱动、安装器、已安装基础解释器及 venv，避免重定向器绕过禁网。
+验收末尾删除原始解压目录后再次运行已安装的公开入口，并验证健康、运行时来源和外网阻断。
+`release_runtime_verification.py` 保存这些独立观察，不把单元测试替代实际安装证据。
+包、PDF、Excel、逐页图片、接口快照与验证日志只进入 CI artifact。
 Windows 10/11 真实桌面双击、机构内网策略和特定 Linux 系统运行库仍需在对应机器核验，
 不以 Windows Server runner 替代这些桌面环境结论。
