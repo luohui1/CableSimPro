@@ -200,6 +200,20 @@ async function approveAll(frame: Frame, state: FlowState): Promise<number> {
   await waitFlow(state, '多步任务完成');
   return count;
 }
+async function savedDrawing(page: Page, backendUrl: string, workspace: string, study: string, run: string, result: Record<string, any>): Promise<void> {
+  const caseId = result.cases?.[0]?.case_id;
+  assert.ok(caseId, '保存运行必须给出可追溯的工况');
+  const saved = await json(backendUrl, `/api/workspaces/${workspace}/studies/${study}/runs/${run}/cases/${caseId}/input`);
+  assert.equal(saved.integrity, 'verified');
+  const cableIds = saved.input.sections[0].placements.map((item: any) => 'cable/' + item.cable).sort();
+  assert.ok(cableIds.length > 0, '真实保存工况必须包含待显示的电缆位置');
+  const drawing = page.locator('.workbench-canvas [data-laying-section-state="success"][aria-busy="false"], .workbench-canvas [data-laying-section-state="historical"][aria-busy="false"]');
+  await until(async () => await drawing.count() === 1 && await drawing.isVisible()
+    && await drawing.locator('svg[data-drawing-canvas="laying"]').isVisible()
+    && JSON.stringify(await drawing.locator('[data-section-object^="cable/"]').evaluateAll(items => items.map(item => item.getAttribute('data-section-object')).sort())) === JSON.stringify(cableIds),
+  '保存工况的敷设截面和全部电缆绘制完成');
+  record(`${page.viewportSize()!.width}/drawing-${run}`, true, { run, caseId, cableIds, state: await drawing.getAttribute('data-laying-section-state') });
+}
 async function shot(page: Page, frame: Frame | undefined, name: string, detail: Record<string, unknown> = {}): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
   if (frame) await frame.evaluate(() => document.fonts.ready);
@@ -299,6 +313,7 @@ try {
       await page.waitForURL(/\/studies\//);
       await until(() => page.locator('body').innerText().then(text => text.includes(current)), '工作台显示同一保存数值', 90_000);
       record(`${viewport.width}/same-workbench-result`, page.url().includes(source.run), { run: source.run, ampacityA: current, workbenchUrl: page.url() });
+      await savedDrawing(page, backendUrl, source.workspace, source.study, source.run, read.result!);
       await shot(page, undefined, 'workbench-saved-result', { run: source.run, ampacityA: current });
       await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
       frame = await agentFrame(page);
@@ -428,6 +443,7 @@ try {
       await until(async () => (await page.locator('body').innerText()).includes(changedAmpacity)
         && Math.abs(Number(await soilInput.inputValue()) - nextSoil) < 1e-9, '批准后工作台显示同一运行和更新的条件');
       record(`${viewport.width}/changed-workbench-current`, true, { run: condition.run, ampacityA: changedAmpacity, soilResistivity: await soilInput.inputValue() });
+      await savedDrawing(page, backendUrl, source.workspace, source.study, condition.run!, condition.result!);
       await shot(page, undefined, 'workbench-updated-conditions', { run: condition.run, ampacityA: changedAmpacity, soilResistivity: nextSoil });
       await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
       frame = await agentFrame(page);

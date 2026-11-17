@@ -173,8 +173,8 @@ def host_tools():
                 'requires':{'type':'array','minItems':1,'maxItems':8,'items':object_schema({
                     'tool':TEXT,'arguments':{'type':'object'}},['tool','arguments'])}},['id','description','requires'])}},['goals'])),
         ('inbox_read','读取统一待办','read','跨工程只读首页同一待办索引：完整对象名片、类别、原因原文及人工下一步；不代办。默认10项、上限20项、6KiB，按next_page继续；不能把未展开条目称为已处理。',object_schema(deepcopy(INBOX))),
-        ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书；数值带单位来源，按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
-            'type_id':TEXT,'view':{'enum':['summary','structure','requirements','plans','runs','specification','review']},
+        ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书。修改字段前用input视图完整分页读取保存输入、单位、来源、锁和草稿缺项；input不读取运行或核对结论。structure仍含已有几何证据，requirements/review读取核对。按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
+            'type_id':TEXT,'view':{'enum':['summary','input','structure','requirements','plans','runs','specification','review']},
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},
             'expected_revision':{'type':'integer','minimum':1}},['type_id'])),
         ('propose_type_changes','提出型号修改方案','propose','仅本会话型号工作区：使用type_read返回稳定字段path，长度值用mm；材料仅引用已导入文档的材料ID。等待人工保存，不发布、不批准。',object_schema({

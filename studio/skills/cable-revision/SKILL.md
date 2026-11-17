@@ -5,10 +5,10 @@ description: 修改型号结构：在老平台读取型号设计的保存版本�
 
 # 修改型号结构
 
-1. 用 `object_find` 找型号设计，用 `type_read` 的结构视图读取修订、稳定字段路径、显示单位、来源和锁。库里的电缆型号版本先由人选定设计起点，不直接覆盖已发布资源。
+1. 用 `object_find` 找型号设计，用 `type_read(type_id, view: input)` 读取修订、稳定字段路径、显示单位、来源、锁和草稿缺项；按返回的 `next_page` 原参数完整读取所需保存输入，不跳页、不把未读字段称为已核对。`input` 只读保存输入，不读取运行或标准结论；输入页读完不代表结构推导、标准核对或符合性已经通过。库里的电缆型号版本先由人选定设计起点，不直接覆盖已发布资源。
 2. 只有指定字段的原值和新值明确时，才调用 `propose_type_changes(type_id, changes, reason)`。路径和单位原样使用读取结果；长度按工具规定用 mm。说明直接变化及需要重算的影响，不把厚度差推算成外径或载流量。
-3. 等人接受；拒绝就停止。修订冲突或锁校验失败时读新版本并重新提案，不自动批准。接受后再次 `type_read`，确认保存值与审阅内容一致。
-4. 使用 `study_list`/`type_read` 查可复用核对研究，或用 `method_list` 和 `plugin_inspect` 查方法。标准依据必须匹配修改后的型号修订；经 `propose_type_basis` 提出重新查询、等待接受，将其 `basis_request_id` 交给 `propose_study`。每项保存都等待接受。
+3. 等人接受；拒绝就停止。修订冲突或锁校验失败时读新版本并重新提案，不自动批准。接受后按成功回执的新修订继续，用 `workspace_read(workspace_id: type_id, paths: 刚改字段的稳定路径)` 复核保存值、单位和修订，避免为几个改值重复读取整份输入或运行历史。接受保存不等于标准符合性审核。
+4. 使用 `study_list` 或 `type_read` 的 `runs`/`requirements`/`review` 视图查可复用核对研究和真实保存证据，或用 `method_list` 和 `plugin_inspect` 查方法。标准依据必须匹配修改后的型号修订；经 `propose_type_basis` 提出重新查询、等待接受，将其 `basis_request_id` 交给 `propose_study`。每项保存都等待接受；只有已有证据时才解释其实际覆盖范围，不能把输入页当作核对结果。
 5. 经 `propose_study_run` 提出重新核对，等待人接受后用 `run_read` 读保存结果。旧运行保留，不能冒充修改后的结果；可用 `study_compare` 比较有可比口径的运行。
 6. 经 `propose_type_specification` 提出规格书导出。内部草稿与客户交付的用途必须明确；缺项、未覆盖项、审核状态都如实说明。
 

@@ -8,7 +8,7 @@ description: 新建型号设计：在老平台从有来源的型号库条目或�
 1. 用 `object_find` 检查同名型号设计和电缆型号版本，区分设计工作区与资源库版本；不要新建重复对象。
 2. 用 `type_creation_options` 读取老平台真实可用的创建起点、字段契约与来源要求。已有资源用 `cable_model_read` 核对版本、摘要、来源及缺项。
 3. 请求明确型号名称和起点。来源为库条目时，`resource_id`、`content_sha256` 必须来自读回执；标准起点先按 `standard-structure` 取得已接受的真实结构提案。空白起点的 `construction` 只能选工具声明的结构类别，空白草稿仍有缺项；不能宣称材料、尺寸或标准已经齐全。
-4. 调用 `propose_type_create`，待审卡列出名称、来源和结构变化。只有人接受后的成功回执才表示已建立型号工作区；随后用 `type_read` 核对保存结构。
+4. 调用 `propose_type_create`，待审卡列出名称、来源和结构变化。只有人接受后的成功回执才表示已建立型号工作区；随后用 `type_read(view: input)` 按 `next_page` 核对保存输入、来源和缺项。输入页不包含运行或标准核对结论，需要计算或符合性证据时另读相应视图，并按 `cable-revision` 的提案流程在新修订上核对。
 5. 要做标准核对，用 `method_list`、`plugin_inspect` 发现老平台核对方法及要求；先用 `propose_type_basis` 提出查询并保存该型号的标准依据，等待接受。将真实 `basis_request_id` 交给该型号作用域的 `propose_study`，接受后调用 `propose_study_run` 并再次等待接受。用 `run_read` 解释实际核对结果、未覆盖项和缺项。
 6. 需要规格书时使用 `spec-and-report`；导出也需要批准。回答说明保存的型号、草稿/审核状态及尚缺的证据。
 
