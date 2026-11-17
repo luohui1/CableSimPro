@@ -51,7 +51,7 @@ export async function createPerformanceAudit({ page, context, root, base }) {
   const report = { generated: new Date().toISOString(), complete: false, pages: [], uncovered: [], budgets: { coldMs: 3000, hotMs: 1000, frameMs: 5000 },
     sourceDatabase: process.env.E2E_DATABASE_SOURCE || path.join(root, '.data/release/engineering.sqlite'), frontendSnapshot: process.env.E2E_FRONTEND_DIST || '当前前端构建',
     definition: '1366×768 浅色，真实发布库只读副本、真实宿主/插件；无节流。冷=每页清空浏览器 HTTP 缓存后完整导航；热=同页完整刷新，保留 HTTP 缓存。两次都重新建立页面及查询缓存。服务端先启动，跨页缓存/常驻几何进程不重启，故不是服务端冷启动。插件内部页签另测首次切换/再次切换。内容以工作面板实际文字/控件、可见加载态结束及连续两帧提交为准；画布单独以 CAD 实际 ready/首帧回执或场图真实 WebGL 绘制后的帧为准。',
-    instrumentation: '只观察 DOM、Resource Timing、Long Tasks、CAD 已有初始化/显示回执和 Worker 创建；不把未归因的主线程长任务猜成 WASM 初始化。请求按开始时间与响应完成时间记录；最慢并行请求不自动等同于阻塞原因。所有 API 写请求由隔离后端拒绝；不使用 Playwright route，以保留真实浏览器缓存。' };
+    instrumentation: '只观察 DOM、Resource Timing、Long Tasks、CAD 已有初始化/显示回执和 Worker 创建；不把未归因的主线程长任务猜成 WASM 初始化。请求保留 fetch、DNS、连接、发送、首字节和响应完成的原始时点，零值按浏览器原样保留；最慢并行请求不自动等同于阻塞原因。所有 API 写请求由隔离后端拒绝；不使用 Playwright route，以保留真实浏览器缓存。' };
   await installReadinessObserver(page);
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -92,6 +92,9 @@ export async function createPerformanceAudit({ page, context, root, base }) {
     const metrics = await page.evaluate(() => {
       const audit = window.__loadAudit;
       return { ...audit, now: performance.now(), resources: performance.getEntriesByType('resource').map(r => ({ url: r.name, startMs: r.startTime, endMs: r.responseEnd,
+        fetchStartMs: r.fetchStart, domainLookupStartMs: r.domainLookupStart, domainLookupEndMs: r.domainLookupEnd,
+        connectStartMs: r.connectStart, secureConnectionStartMs: r.secureConnectionStart, connectEndMs: r.connectEnd,
+        requestStartMs: r.requestStart, responseStartMs: r.responseStart, nextHopProtocol: r.nextHopProtocol,
         durationMs: r.duration, ttfbMs: r.responseStart - r.requestStart, serverTiming: (r.serverTiming || []).map(t => ({ name: t.name, durationMs: t.duration, description: t.description })), transferBytes: r.transferSize, encodedBytes: r.encodedBodySize, decodedBytes: r.decodedBodySize, initiator: r.initiatorType })),
         navigation: performance.getEntriesByType('navigation').map(n => ({ ttfbMs: n.responseStart - n.requestStart, domContentLoadedMs: n.domContentLoadedEventEnd, transferBytes: n.transferSize })) };
     }).catch(() => null);

@@ -112,7 +112,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       await expect(stateCell).toHaveText('未运行');
       const stateText = (await stateCell.innerText()).trim();
       await capture('01-project-directory-keyboard-navigation');
-      check('尚无运行的新研究在工程目录显示未运行', createdStudy?.latest_run == null
+      check('尚无运行的新研究在工程目录显示未运行', !!createdStudy && createdStudy.latest_run == null
         && savedRuns.items.length === 0 && stateText === '未运行',
       { workspace: createdWid, study: createdSid, latestRun: createdStudy?.latest_run ?? null,
         runCount: savedRuns.items.length, visibleStatus: stateText });
