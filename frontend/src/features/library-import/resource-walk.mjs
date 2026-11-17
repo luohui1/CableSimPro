@@ -28,7 +28,7 @@ const sha = value => assert.match(value, /^[a-f0-9]{64}$/);
 /** New resource actions use their real visible forms. Only explicit research
  * condition preparation and isolated history restoration use existing Types
  * APIs; neither replaces resource creation, publication, binding or adoption. */
-export async function walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report }) {
+export async function walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report, previousCalculation }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
   const audit = { selections: [], assets: [], material: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [] };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-resources-${name}.json`), JSON.stringify(value, null, 2));
@@ -159,6 +159,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
       await capture(`${kind === 'material' ? '材料' : '环境'}${action === 'review' ? '逐项来源人工核对' : '参考版本人工发布'}`);
       const result = await postUI(`/api/foundation/assets/${asset.id}/transition`, publication.getByRole('button', { name: confirmation, exact: true }), `${logName}-${action}`);
       assert.equal(result.request.expected_revision, asset.revision); assert.equal(result.request.content_sha256, asset.content_sha256);
+      assert.equal(result.request.human_confirmed, true);
       assert.equal(result.value.content_sha256, saved.value.content_sha256); assert.deepEqual(result.value.release, saved.value.release);
       assert.equal(result.value.revision, asset.revision + 1); asset = result.value;
     }
@@ -234,6 +235,8 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     audit.material.adoptions.push({ parameter: item.parameter, preview, adopted, readback: saved });
     current = saved;
     await expect(page.getByRole('status').filter({ hasText: `所选物性已写入型号输入修订 ${saved.revision}` })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: '目标型号', exact: true })).toContainText(`${qifan.name} · 输入修订 ${saved.revision}`);
+    await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeEnabled();
     await capture(`铜${item.label}人工采用并保存来源`);
   }
   await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeEnabled();
@@ -315,13 +318,47 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   const seriesList = await readApi('/api/type-library/series');
   const seriesSummary = seriesList.items.find(item => item.name.startsWith(`人民 YJV22 已核对 ${viewport.width} `) && item.cores === 3 && item.u_v === 15000);
   assert.ok(seriesSummary, '必须使用主走查已从真实人民结构表入库的对应窗口系列');
-  let series = await readApi(`/api/type-library/series/${seriesSummary.id}`), spec = series.specs[0];
+  let series = await readApi(`/api/type-library/series/${seriesSummary.id}`);
+  await write('environment-prior-calculation', { series, calculation: previousCalculation });
+  assert.equal(previousCalculation.response.series_id, series.series.id);
+  assert.equal(previousCalculation.request.operation, 'calculate');
+  // The earlier version walk forks the first spec into an independent workspace.
+  // Pin a real completed calculation whose version AND workspace are still current;
+  // a first-row assumption would incorrectly search the new, unrun version.
+  const previous = previousCalculation.response.items.find(item => {
+    const current = series.specs.find(candidate => candidate.id === item.spec_id);
+    return ['succeeded', 'partial'].includes(item.status) && item.run_id && item.study_id
+      && item.rows?.some(row => typeof row.value_a === 'number' && row.value_a > 0)
+      && current?.workspace_id === item.workspace_id
+      && current.version === previousCalculation.request.expected_versions[item.spec_id];
+  });
+  assert.ok(previous, '本轮真实批量回执必须有当前规格版本与工作区完全对应的已完成计算');
+  let spec = series.specs.find(item => item.id === previous.spec_id);
   const workspace = await readApi(`/api/types/${spec.workspace_id}/workspace`);
-  const runs = await readApi(`/api/types/${spec.workspace_id}/display-runs?after=0&limit=5`);
-  const old = runs.items.find(item => ['succeeded', 'partial'].includes(item.status));
+  const runIndex = { spec, calculation_item: previous, pages: [] };
+  let cursor = 0, old;
+  do {
+    const endpoint = `/api/types/${spec.workspace_id}/display-runs?after=${cursor}&limit=5`;
+    const runs = await readApi(endpoint);
+    runIndex.pages.push({ endpoint, response: runs });
+    await write('environment-run-index', runIndex);
+    assert.equal(runs.history_complete, true, '旧运行核对必须读取完整历史，不能使用最近结果投影');
+    assert.ok(runs.items.every(item => item.sequence > cursor));
+    old = runs.items.find(item => item.id === previous.run_id);
+    if (old || runs.next_cursor === null) break;
+    assert.ok(Number.isInteger(runs.next_cursor) && runs.next_cursor > cursor, '运行索引游标必须向后推进');
+    cursor = runs.next_cursor;
+  } while (!old);
   assert.ok(old, '已完成的真实批量运行必须可读取，才能验证旧快照不被覆盖');
+  assert.equal(old.study, previous.study_id); assert.equal(old.workspace, previous.workspace_id);
+  assert.equal(old.status, previous.status); assert.equal(old.integrity, 'verified');
+  for (const key of ['input_digest', 'output_digest']) assert.equal(old[key], previous[key]);
   const oldEndpoint = `/api/workspaces/${spec.workspace_id}/studies/${old.study}/runs/${old.id}?view=full`;
   const oldRun = await readApi(oldEndpoint);
+  await write('environment-previous-run', { endpoint: oldEndpoint, response: oldRun });
+  assert.equal(oldRun.id, previous.run_id); assert.equal(oldRun.workspace, spec.workspace_id);
+  assert.equal(oldRun.study, previous.study_id); assert.equal(oldRun.status, previous.status); assert.equal(oldRun.integrity, 'verified');
+  for (const key of ['input_digest', 'output_digest']) assert.equal(oldRun[key], previous[key]);
   const document = structuredClone(workspace.domain), circuit = document.circuits[0];
   assert.equal(document.cable_types[0].construction, 'three_core');
   const researchSource = { kind: 'user', reviewed: false, reference: '明确研究输入：系统线电压15 kV、三相50 Hz；不是厂家属性，也不表示现场勘测。' };
@@ -388,6 +425,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   assert.deepEqual(result.rows[0].environment_references, fixed);
   assert.ok(Object.values(savedCase.input.provenance).some(source => source.kind === 'asset' && source.reference.includes(soilCase.recordSha)));
   const after = await readApi(`/api/types/${spec.workspace_id}/workspace`), oldReadback = await readApi(oldEndpoint);
+  await write('environment-previous-run-readback', { endpoint: oldEndpoint, response: oldReadback });
   assert.deepEqual(after.domain, prepared.domain); assert.equal(after.revision, prepared.revision);
   for (const key of ['snapshot', 'output', 'input_digest', 'output_digest']) assert.deepEqual(oldReadback[key], oldRun[key], '新环境参考不污染旧运行的固定快照和结果');
   await expect(page.getByRole('heading', { name: '本次计算回执', exact: true })).toBeVisible();
@@ -397,7 +435,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await page.getByRole('table', { name: '保存运行的环境来源', exact: true }).scrollIntoViewIfNeeded();
   await capture('计算保存来源与参考分档可回读');
   audit.environment = { asset: environmentAsset, workspace_before: workspace, prepared, spec, preview: envPreview, batch: calculated,
-    saved_run: savedRun, workspace_after: after, previous_run: oldRun, previous_run_readback: oldReadback };
+    saved_run: savedRun, workspace_after: after, previous_calculation: previous, run_index: runIndex, previous_run: oldRun, previous_run_readback: oldReadback };
   await write('environment-audit', audit.environment); await write('summary', audit);
   report.checks.push(`${viewport.width}：标准/文献原表经真实 UI 逐条条件核对→SI 回执→只读草稿预览→人工入库→来源核对/发布；铜密度8889、体积热容3460000、20°C电阻率1.7241e-8逐项采用到真实起帆空缺，数值/页码/原件SHA/记录SHA/回执/修订均回读，旧修订未改，真实undo恢复原值且保留来源绑定。原表范围及空条件明确阻止选值，同值阻止重复采用。`);
   report.checks.push(`${viewport.width}：仅经既有Types文档接口明示研究15kV/50Hz与逐字段来源，原材料/结构不改；A.4原文埋深保留参考且因测量基准未知禁止采用到中心埋深。已证Table2湿土1 K·m/W经UI创建发布，明确研究语境与工况后仅预览热阻率1.2→1.0，人工确认沿用系列真实计算；回执进入同一运行，旧快照/输出摘要不变，工作区领域输入不被工况参考回写。`);
