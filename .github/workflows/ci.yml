@@ -161,6 +161,10 @@ jobs:
             .data/occt-downloads
             frontend/src/features/cad/node_modules/.cache/cablesim-occt
           key: ${{ steps.occt.outputs.cache-primary-key }}
+      - uses: actions/cache@v4
+        with:
+          path: .data/python-downloads
+          key: release-python-${{ runner.os }}-${{ hashFiles('scripts/python_runtime.lock.json') }}
       - name: Build the shipped frontend
         working-directory: frontend
         run: |
@@ -168,25 +172,28 @@ jobs:
           npm run build:release -- --outDir ../.data/release/frontend --emptyOutDir
       - name: Build a platform-specific offline release archive
         run: python scripts/build_release.py --frontend-dist .data/release/frontend --output artifacts/CableSimPro-${{ runner.os }}.zip
-      - name: Install, calculate and export with only loopback networking (Linux)
+      - name: Prepare evidence tools using the actual bundled Python and shipped wheels
+        run: python scripts/prepare_release_verifier.py --archive artifacts/CableSimPro-${{ runner.os }}.zip --directory .data/release-verifier
+      - name: Public shell launcher with no system Python or Node and only loopback (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          release_python="$(command -v python)"
+          # This is the bundled evidence interpreter, NOT actions/setup-python.
+          # The gate installs a separate fresh ZIP through its actual start.sh.
+          evidence_python="$PWD/.data/release-verifier/CableSimPro/.venv/bin/python"
           sudo unshare --net -- bash -c 'ip link set lo up; exec "$@"' bash \
-            "$release_python" scripts/verify_installation.py \
+            "$evidence_python" scripts/verify_installation.py \
             --archive artifacts/CableSimPro-Linux.zip \
             --output artifacts/installation-Linux \
             --require-offline linux-network-namespace
-      - name: Install, calculate and export with external traffic blocked (Windows)
+      - name: Public cmd launcher with no system Python or Node and blocked egress (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # The gate installs per-program firewall rules for its Python and the
-          # installed Python before pip/host/plugin execution, records the real
-          # application filters, and removes rules/restores profiles in finally.
-          # The runner agent retains its connection while application egress is blocked.
-          python scripts/verify_installation.py `
+          # Both the evidence driver and application use the shipped runtime.
+          # The gate calls start.cmd in a child with no Python/py/Node on PATH.
+          # Firewall rules include base executables as well as venv redirectors.
+          & ".data/release-verifier/CableSimPro/.venv/Scripts/python.exe" scripts/verify_installation.py `
             --archive artifacts/CableSimPro-Windows.zip `
             --output artifacts/installation-Windows `
             --require-offline windows-firewall
@@ -198,6 +205,7 @@ jobs:
           path: |
             artifacts/CableSimPro-${{ runner.os }}.zip
             artifacts/CableSimPro-${{ runner.os }}.zip.json
+            artifacts/CableSimPro-${{ runner.os }}.source.zip
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()

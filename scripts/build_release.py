@@ -17,9 +17,11 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.release_support import FORMAT, MANIFEST, ROOT, digest, target, utf8_output
 from scripts import release_native
+from scripts import release_python_runtime
 
 SOURCE_ROOTS = {"backend", "cablesim_sdk", "plugin-spec", "plugins"}
-SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh")
+SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh",
+           "release_python_runtime.py", "python_runtime.lock.json")
 SEED_SCRIPTS = ("seed-engineering-demo.py", "engineering_resources.py")
 
 
@@ -96,6 +98,7 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
         copy_sources(root, staged)
         shutil.copytree(frontend, staged / "frontend/dist")
         shutil.copytree(wheels, staged / "wheelhouse")
+        runtime = release_python_runtime.bundle_runtime(staged, cache=root / ".data/python-downloads")
         native = release_native.bundle_native_runtime(staged)
         subprocess.run([sys.executable, str(root / "scripts/third_party_notices.py"),
                         "--wheelhouse", str(staged / "wheelhouse"),
@@ -110,10 +113,22 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
                 notices.write("Full package copyright and referenced licenses: runtime/licenses/\n"
                               "Binary provenance, SHA256 and GLIBC requirement: " + release_native.METADATA + "\n")
         (staged / "requirements.lock").write_text(lock, encoding="utf-8", newline="\n")
+        # Resolve the complete lock using the shipped interpreter, not merely
+        # the builder's ABI tags. Do not install into the immutable base runtime.
+        subprocess.run([str(release_python_runtime.runtime_path(staged)), "-I", "-B", "-m", "pip", "install",
+                        "--dry-run", "--ignore-installed", "--no-index", "--no-cache-dir", "--require-hashes",
+                        "--find-links", str(staged / "wheelhouse"), "-r", str(staged / "requirements.lock")],
+                       env=release_python_runtime.clean_python_environment(), check=True)
+        with (staged / "THIRD_PARTY_NOTICES.txt").open("a", encoding="utf-8") as notices:
+            notices.write("\nCPython " + runtime["version"] + " / " + runtime["distribution"] + "\n")
+            notices.write(runtime["url"] + "\nSHA256 " + runtime["sha256"] + "\n")
+            notices.write("Original runtime and dependency notices (preserved verbatim):\n"
+                          + "\n".join(runtime["license_files"]) + "\n")
         files = {path.relative_to(staged).as_posix(): {"size_bytes": path.stat().st_size, "sha256": digest(path)}
                  for path in sorted(staged.rglob("*")) if path.is_file() and path.name != "release.toml"}
         value = {"format": FORMAT, "target": target(), "git_commit": commit,
                  "includes_prebuilt_frontend": True, "includes_geometry_dependencies": True,
+                 "python_runtime": runtime,
                  "native_runtime": {"manifest": release_native.METADATA, "minimum_glibc": native["minimum_glibc"]}
                  if native else None, "files": files}
         value["build_id"] = sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -124,7 +139,12 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
                 if path.is_file():
                     archive.write(path, "CableSimPro/" + path.relative_to(staged).as_posix())
         os.replace(partial, output)
-    receipt = {"archive": str(output), "sha256": digest(output), "size_bytes": output.stat().st_size,
+    source_archive = output.with_suffix(".source.zip")
+    subprocess.run(["git", "archive", "--format=zip", "--prefix=CableSimPro-source/",
+                    "--output=" + str(source_archive.resolve()), commit], cwd=root, check=True)
+    receipt = {"source_archive": {"name": source_archive.name, "sha256": digest(source_archive),
+                                  "size_bytes": source_archive.stat().st_size, "git_commit": commit},
+               "archive": str(output), "sha256": digest(output), "size_bytes": output.stat().st_size,
                "build_id": value["build_id"], "git_commit": commit, "target": target()}
     output.with_suffix(output.suffix + ".json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     return receipt
