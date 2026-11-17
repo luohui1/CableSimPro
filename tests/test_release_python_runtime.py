@@ -67,7 +67,7 @@ def test_rejects_noncanonical_archive_names_before_writing(tmp_path, name):
     [("python/a", "hardlink", "missing")],
     [("python/a", "symlink", "missing")],
     [("python/a", "fifo", b"")],
-    [("python/a", "file", b"1"), ("python/A", "file", b"2")],
+    [("python/a", "file", b"1"), ("python/a", "file", b"2")],
     [("python/a", "file", b"1"), ("python/a/b", "file", b"2")],
 ])
 def test_rejects_escaping_cyclic_duplicate_and_special_members(tmp_path, entries):
@@ -218,3 +218,28 @@ def test_runtime_identity_rejects_external_base_before_acceptance(tmp_path, monk
     monkeypatch.setattr(verification.subprocess, 'run', lambda *a, **k: type('Result', (), {'stdout': json.dumps(observed)})())
     with pytest.raises(RuntimeError, match='outside'):
         verification.runtime_identity(root, {'PATH': ''})
+
+
+def test_posix_case_distinct_files_are_not_duplicate_archive_members(tmp_path):
+    archive = archive_at(tmp_path / "upstream.tar.gz", [
+        ("python/share/terminfo/a", "directory", b""),
+        ("python/share/terminfo/A", "directory", b""),
+        ("python/share/terminfo/a/ansi", "file", b"ansi entry"),
+        ("python/share/terminfo/A/Apple_Terminal", "file", b"Apple entry"),
+    ])
+    target = tmp_path / "runtime"
+    runtime.extract_runtime(archive, target, case_sensitive=True)
+    assert (target / "share/terminfo/a/ansi").read_bytes() == b"ansi entry"
+    assert (target / "share/terminfo/A/Apple_Terminal").read_bytes() == b"Apple entry"
+
+
+@pytest.mark.parametrize("names", [
+    ("python/a", "python/A"),
+    ("python/Lib/a.py", "python/lib/b.py"),
+])
+def test_windows_rejects_case_aliases_in_files_and_implicit_parents(tmp_path, names):
+    archive = archive_at(tmp_path / "bad.tar.gz", [(name, "file", b"payload") for name in names])
+    target = tmp_path / "runtime"
+    with pytest.raises(RuntimeError, match="Case-alias"):
+        runtime.extract_runtime(archive, target, case_sensitive=False)
+    assert not target.exists()
