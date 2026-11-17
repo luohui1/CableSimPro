@@ -20,7 +20,21 @@ export async function walkthrough(name, scenario) {
     steps: [], checks: [], screenshots: [], errors: [], network: [], writes: [], failures: [],
   };
   const save = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
-  const session = await openHeadlessBrowser();
+  await save();
+  let session;
+  try { session = await openHeadlessBrowser(); }
+  catch (error) {
+    report.complete = false;
+    report.finished = new Date().toISOString();
+    report.failures.push({
+      stage: 'browser-startup', message: error.stack || error.message || String(error),
+      error: error.browserStartup?.originalError || { name: error.name, message: error.message, stack: error.stack },
+      diagnostic: error.browserStartup || null,
+    });
+    try { await save(); }
+    catch (writeError) { console.error('浏览器启动失败报告写入失败：' + (writeError.stack || writeError.message)); }
+    throw error;
+  }
   const { page, context } = session;
   const expect = playwrightExpect.configure({ timeout: 30000 });
   page.setDefaultTimeout(30000);
@@ -91,6 +105,7 @@ export async function walkthrough(name, scenario) {
     await scope.getByRole('combobox', { name: label, exact: true }).click();
     await page.getByRole('option', { name: option, exact: typeof option === 'string' }).click();
   }
+  let flowError;
   try {
     for (const size of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
       currentSize = size;
@@ -127,9 +142,22 @@ export async function walkthrough(name, scenario) {
       assert.equal(report.summary.consoleErrors, 0, name + ': 控制台报错');
       assert.equal(report.summary.networkFailures, 0, name + ': 请求失败');
     }
+  } catch (error) {
+    flowError = error;
+    throw error;
   } finally {
     report.finished = new Date().toISOString();
-    await save();
-    await session.close();
+    let finishingError;
+    try { await save(); } catch (error) { finishingError = error; }
+    try { await session.close(); }
+    catch (error) {
+      finishingError ||= error;
+      report.cleanupFailures = [{ message: error.message, stack: error.stack }];
+      try { await save(); } catch (writeError) { console.error('浏览器清理报告写入失败：' + (writeError.stack || writeError.message)); }
+    }
+    if (finishingError) {
+      if (flowError) console.error('走查失败后的附加收尾错误：' + (finishingError.stack || finishingError.message));
+      else throw finishingError;
+    }
   }
 }
