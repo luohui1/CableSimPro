@@ -1044,6 +1044,69 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       }
     });
 
+    await branch('导入关闭后的迟到成功保持当前类别并提供结果入口', async () => {
+      await openGroup('templates');
+      const templateUrl = page.url();
+      await openGroup('materials');
+      await page.locator('.topbar-actions').getByRole('button', { name: '导入资源草稿', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '导入资源草稿', exact: true });
+      const name = '隔离验收延迟导入-' + marker;
+      const definition = { schema_version: 'csp-asset/0.1', release: {
+        asset_id: 'local.walkthrough.import-late.' + marker, version: '1.0.0', kind: 'material', name,
+        parameters: [], dependencies: [], files: [], geometry_recipe: null,
+        sources: [{ kind: 'project_input', reviewed: false,
+          reference: '隔离浏览器验收：验证真实导入响应迟到时的结果通知，仅为资源元数据测试，不提供工程物性。' }],
+      } };
+      await dialog.locator('input[type=file]').setInputFiles({
+        name: 'material-import.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(definition)),
+      });
+      await expect(dialog.getByRole('textbox', { name: '定义内容', exact: true })).toHaveValue(JSON.stringify(definition));
+      let releaseRequest, finishRequest, held = false;
+      const release = new Promise(resolve => { releaseRequest = resolve; });
+      const finished = new Promise(resolve => { finishRequest = resolve; });
+      const endpoint = url => url.pathname === '/api/foundation/assets/import';
+      const holdRequest = async route => {
+        if (route.request().method() !== 'POST' || held) return route.continue();
+        held = true;
+        try { await release; await route.continue(); }
+        finally { finishRequest(); }
+      };
+      // Delay the actual UI import only; its body and host response stay intact.
+      await page.route(endpoint, holdRequest);
+      try {
+        await dialog.getByRole('button', { name: '校验并导入', exact: true }).click();
+        await expect.poll(() => held).toBe(true);
+        await page.goBack();
+        await expect(page).toHaveURL(templateUrl);
+        await expect(dialog).toBeHidden();
+        await expect(main.getByRole('textbox', { name: '检索', exact: true })).toHaveValue('');
+        const response = page.waitForResponse(value => new URL(value.url()).pathname === '/api/foundation/assets/import' && value.request().method() === 'POST');
+        releaseRequest();
+        const received = await response;
+        expect(received.ok(), '关闭导入后仍须由真实宿主返回保存结果').toBeTruthy();
+        const created = await received.json();
+        await received.finished();
+        await expect(main.getByText(`材料“${name}” · 1.0.0 已保存，当前资源类别与选择保持不变。`, { exact: true })).toBeVisible();
+        await expect(page).toHaveURL(templateUrl);
+        await expect(main.getByRole('textbox', { name: '检索', exact: true })).toHaveValue('');
+        await expect(main.getByRole('button', { name: '恢复未确认保存', exact: true })).toHaveCount(0);
+        await capture('resource-import-late-success-visible-without-navigation');
+        await main.getByRole('button', { name: '打开该资源', exact: true }).click();
+        await expect(page).toHaveURL(/\/resources\/materials\?/);
+        expect(new URL(page.url()).searchParams.get('item')).toBe(created.id);
+        const saved = await inspectSelectedResource(name);
+        const matches = await api(`/api/foundation/assets?kind=material&q=${encodeURIComponent(name)}&limit=50&offset=0`);
+        check('关闭导入后的实际成功有明确通知且只在点击后打开原版本', saved.id === created.id && saved.status === 'draft'
+          && saved.revision === 1 && matches.items.filter(item => item.name === name).length === 1,
+        { id: saved.id, revision: saved.revision, current: page.url() });
+        await capture('resource-import-late-success-explicit-open');
+      } finally {
+        releaseRequest();
+        if (held) await finished;
+        await page.unroute(endpoint, holdRequest);
+      }
+    });
+
     for (const kind of ['component', 'assembly']) await branch(`${knownKindLabels[kind]}发布后工程引用边界`, async () => {
       await openGroup('materials');
       // These are explicitly labelled metadata-only test definitions. They do
