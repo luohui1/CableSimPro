@@ -53,8 +53,9 @@ async function finished(job: LibraryJob): Promise<LibraryJob> {
   throw new Error('计算没有在预期时间内结束');
 }
 
+// Read the encoded text: PyMuPDF 1.24.14 can omit STSong-Light's middle dot on Linux.
 const pdfText = (id: string) => execFileSync(process.env.CABLE_STUDIO_PYTHON ?? 'python', ['-c',
-  'import fitz,sys; d=fitz.open(sys.argv[1]); print("\\n".join(p.get_text() for p in d))', join(home, 'specifications', id, 'specification.pdf')],
+  'import sys; from pypdf import PdfReader; print("\\n".join(p.extract_text() for p in PdfReader(sys.argv[1]).pages))', join(home, 'specifications', id, 'specification.pdf')],
 { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
 
 // The published table is imported once; every test below works from it.
