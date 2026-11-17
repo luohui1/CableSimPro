@@ -94,7 +94,18 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 两种预览都不入库、不修改工程，Agent 可以请求。修改选择后必须重新预览；人工创建草稿须提交已核对预览的同一组输入，确认时内容不再匹配返回 409。来源可信档保持 `reference`，草稿不构成厂家实测、材料合格或工程批准。
 
-草稿审核与发布复用 `POST /api/foundation/assets/{resource_id}/transition`，提交 `expected_revision/content_sha256/action/acknowledge_sources/note`，依现有状态机依次 `review`、`publish`。资源发布仅允许后续引用，不自动绑定或采用任何参数。
+T2 对含非空 `reference_evidence` 的资源只能查看和预览；以下四条既有 foundation 写接口均从实际请求头读取 `X-CableSim-Actor: human`，并要求请求体顶层的严格布尔值 `human_confirmed:true`。确认字段不属于 `AssetRelease`，不写入资源内容摘要；字符串 `"true"`、数字 `1` 均不能代替布尔值。
+
+| 接口 | 请求体 | 人工门禁检查的资源 |
+| --- | --- | --- |
+| `POST /api/foundation/assets/import`（仓库层 `create`） | `{schema_version:"csp-asset/0.1",release,human_confirmed:true}`；`schema_version` 可省略，使用该默认值。 | 待创建的 `release`。 |
+| `PUT /api/foundation/assets/{resource_id}` | `{expected_revision,release,human_confirmed:true}`。 | 同一修订锁内读取的原定义和提交的新定义，任一含回执即检查。 |
+| `POST /api/foundation/assets/{resource_id}/transition` | `{expected_revision,content_sha256,action,note,acknowledge_sources,human_confirmed:true}`。 | 当前保存的定义；`review`、`publish`、`return_to_draft`、`deprecate` 均受检查。 |
+| `POST /api/foundation/assets/{resource_id}/derive` | `{expected_revision,content_sha256,new_version,human_confirmed:true}`。 | 被派生的原定义；新版本保留原回执。 |
+
+门禁同时位于 `AssetRepository.create/update/transition/derive`；材料与环境的 `/draft` 将实际请求头与确认值传入同一仓库层，不代填人工身份。含回执的请求缺少人工头、头值不是 `human`，或确认值缺失/为 `false`，在门禁处返回 403 `HUMAN_REFERENCE_ASSET_REQUIRED`；非布尔确认值由请求模型返回 422。编辑时删去或清空回执也不能绕过，因为原定义仍在检查范围。原、新定义均无回执的旧资产继续兼容原调用方式，可省略人工头和确认字段；不因此扩大为所有旧资产的新门禁。
+
+这些确认不替代现有修订号比较、内容摘要和状态机约束。草稿仍依次 `review`、`publish`；`note` 须为 4–1000 字符，`review` 另须 `acknowledge_sources:true`，每一步使用返回的新修订号。资源发布仅允许后续引用，不自动绑定或采用任何参数。
 
 ### 材料逐属性采用与旧 Types 修订
 
