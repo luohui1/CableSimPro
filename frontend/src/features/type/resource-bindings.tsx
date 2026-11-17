@@ -76,6 +76,11 @@ export function ResourceBindings({ materialId, role = 'material' }: { materialId
   const [open, setOpen] = useState(false), [chosen, setChosen] = useState(''), [resourceId, setResourceId] = useState(''), [notice, setNotice] = useState('');
   const targets = query.data?.targets.filter(t => t.role === role && (!materialId || t.id === materialId)) || [];
   const target = targets.find(t => t.id === chosen) || targets[0];
+  const resources = (query.data?.resources || []).filter(resource => resource.kind === (role === 'material' ? 'material' : 'rule'));
+  const fixed = target?.binding, fixedId = fixed?.resource_id || fixed?.id || '';
+  const fixedUnavailable = !!fixedId && !resources.some(resource => resource.id === fixedId);
+  const selectionUnavailable = !!resourceId && !resources.some(resource => resource.id === resourceId);
+  const versionLabel = (resource: Resource) => resource.name + ' · ' + (role === 'standard' ? standardVersionLabel(resource.version) : resource.version);
   const mutation = useMutation({ mutationFn: async (migrate: boolean) => {
     if (pending.current) return pending.current;
     if (!state.workspace || state.readOnly || state.dirty || !query.data || query.data.revision !== state.workspace.revision) throw new Error('请先保存或撤销输入修改，再核对资源版本');
@@ -105,11 +110,18 @@ export function ResourceBindings({ materialId, role = 'material' }: { materialId
     {!open && mutation.error && <span role="alert" className="field-error">{message(mutation.error)}</span>}
     {notice && <span role="status">{notice}</span>}
     <Dialog open={open} onOpenChange={value => { if (!mutation.isPending) setOpen(value); }} title={role === 'material' ? '绑定材料资源版本' : '绑定执行标准版本'}
-      actions={<Button variant="primary" disabled={disabled || !target} loading={mutation.isPending} onClick={() => mutation.mutate(false)}>确认绑定</Button>}>
+      actions={<Button variant="primary" disabled={disabled || !target || selectionUnavailable} loading={mutation.isPending} title={selectionUnavailable ? '当前固定版本已不可新选；请明确选择已发布版本，或关闭以保留原引用。' : undefined} onClick={() => mutation.mutate(false)}>确认绑定</Button>}>
       {query.isPending ? <LoadingState title="正在读取资源版本" /> : query.error ? <ErrorState title="资源不可用" description={message(query.error)} /> : !targets.length ? <InlineEmpty title="尚无已核对的执行版本或已批准要求；在要求清单里核对来源。" /> : <div className="type-create-fields">
         <Select label={role === 'material' ? '设计材料' : '执行标准'} value={target?.id || ''} options={targets.map(t => ({ value: t.id, label: t.name }))} onChange={id => { setChosen(id); setResourceId(targets.find(t => t.id === id)?.binding?.resource_id || ''); }} />
-        <Select label="资源版本" value={resourceId} options={[{ value: '', label: '未绑定资源' }, ...(query.data?.resources || []).filter(r => r.kind === (role === 'material' ? 'material' : 'rule')).map(r => ({ value: r.id, label: r.name + ' · ' + (role==='standard'?standardVersionLabel(r.version):r.version) }))]} onChange={setResourceId} />
-        {!query.data?.resources.some(r => r.kind === (role === 'material' ? 'material' : 'rule')) && <InlineEmpty title="资源库尚无对应类别的已发布版本" />}
+        {fixed && <div aria-label="当前固定版本">
+          <p>当前固定版本：{versionLabel(fixed)}</p>
+          {fixedUnavailable && <p className="muted">{target?.reason} 当前版本已不可新选，原引用仍保留。重新绑定请选择已发布版本；关闭弹窗会保留原引用。</p>}
+        </div>}
+        <Select label="资源版本" value={resourceId} options={[{ value: '', label: '未绑定资源' },
+          ...(fixed && fixedUnavailable ? [{ value: fixedId, label: versionLabel(fixed) + '（当前固定，不能新选）', disabled: true }] : []),
+          ...resources.map(resource => ({ value: resource.id, label: versionLabel(resource) }))]} onChange={setResourceId} />
+        {fixed && !resourceId && <p className="muted">确认后将解除当前固定引用；设计材料参数保持当前保存值。</p>}
+        {!resources.length && <InlineEmpty title="资源库尚无对应类别的已发布版本" />}
         <span className="muted">{target?.match_reason}</span>
         <span className="muted">固定来源引用；设计材料参数保持当前保存值。</span>
         {mutation.error && <p role="alert" className="field-error">{message(mutation.error)}</p>}
