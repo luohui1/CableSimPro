@@ -5,15 +5,17 @@ existing structural demonstration; this suite tests transport, not its physics.
 """
 from copy import deepcopy
 from hashlib import sha256
+import importlib.util
 from io import BytesIO
 import json
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
-from backend.kernel.resource_exchange import PROJECT_KEYS, PROJECT_LIMIT, TRANSFER_SHEET, encoded, parse_file, workbook_bytes
+from backend.kernel.resource_exchange import PROJECT_KEYS, PROJECT_LIMIT, PROJECT_MAX_LOCKS, TRANSFER_SHEET, encoded, parse_file, workbook_bytes
 from backend.kernel.project_exchange import LEGACY_SOURCE_SCHEMA, SOURCE_SCHEMA
 from backend.kernel.workspace import fingerprint
 from backend.main import create_app
@@ -186,13 +188,7 @@ def test_current_system_snapshots_roundtrip_without_rewriting_fixed_versions(cli
         assert response.status_code == 201, response.text
         project = response.json()
         inputs = {key: value for key, value in project.items() if key in PROJECT_KEYS}
-        if len(encoded(inputs)) > PROJECT_LIMIT:
-            # The existing 120 KB contract also applies to large system studies.
-            response = source.post('/api/library/exchange/export', json={
-                'workspace_ids': [project['id']], 'format': format})
-            assert response.status_code == 413, (model['id'], response.text)
-            assert response.json()['detail']['code'] == 'EXCHANGE_PROJECT_TOO_LARGE'
-            continue
+        assert len(encoded(inputs)) <= PROJECT_LIMIT, model['id']
         data, original = export(source, project=project, format=format)
         _, imported = upload(target, 'data.' + format, data)
         assert imported.status_code == 201, (model['id'], imported.text)
@@ -209,7 +205,58 @@ def test_current_system_snapshots_roundtrip_without_rewriting_fixed_versions(cli
             'expected_revision': copied['revision']})
         assert rebound.status_code == 200, (model['id'], rebound.text)
         transferred.add(model['id'])
-    assert {'system.cu-xlpe-al-240', 'system.specification-cu-xlpe-al-400'} <= transferred
+    assert transferred == {model['id'] for model in models}
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
+def test_release_projects_keep_complete_provenance_across_databases(tmp_path, release_seed_copy, format):
+    path = Path(__file__).resolve().parents[1] / 'frontend/scripts/seed-engineering-demo.py'
+    spec = importlib.util.spec_from_file_location('exchange_release_seed', path)
+    seed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seed)
+    source_path = release_seed_copy(seed, tmp_path / 'source' / 'engineering.sqlite')
+    with TestClient(create_app(source_path)) as source, TestClient(create_app(tmp_path / 'target.sqlite')) as target:
+        index = source.get('/api/index/objects', params={'kind': 'project', 'limit': 100})
+        assert index.status_code == 200, index.text
+        projects = {item['name']: item for item in index.json()['items']}
+        names = ('城北变电站 · 10 kV 三回排管', '城南线路 · 110 kV 直埋单回')
+        originals = {name: source.get('/api/workspaces/' + projects[name]['id']).json() for name in names}
+        response = source.post('/api/library/exchange/export', json={
+            'workspace_ids': [project['id'] for project in originals.values()], 'format': format})
+        assert response.status_code == 200, response.text
+        data = response.content
+        original = parse_file('data.' + format, data)
+        assert len(original['projects']) == 2
+        before = target.get('/api/workspaces').json()
+        preview, imported = upload(target, 'data.' + format, data)
+        assert imported.status_code == 201, imported.text
+        assert len(preview['projects']) == 2
+        assert {item['action'] for item in preview['projects']} == {'create_independent_input_copy'}
+        receipts = {item['origin_id']: item for item in imported.json()['projects']}
+        assert set(receipts) == {project['id'] for project in originals.values()}
+        assert len({item['id'] for item in receipts.values()}) == 2
+        for name, project in originals.items():
+            inputs = next(item['inputs'] for item in original['projects'] if item['origin_id'] == project['id'])
+            assert len(encoded(inputs)) <= PROJECT_LIMIT, name
+            if name == '城北变电站 · 10 kV 三回排管':
+                assert len(encoded(inputs)) > 120 * 1024
+                assert 500 < len(inputs['locks']) <= PROJECT_MAX_LOCKS
+            assert inputs['domain']['provenance'] == project['domain']['provenance']
+            assert inputs['locks'] == project['locks']
+            assert inputs['study_cable_reference']['source_snapshot']['payload']
+            identifier = receipts[project['id']]['id']
+            copied = target.get('/api/workspaces/' + identifier).json()
+            assert encoded({key: copied[key] for key in inputs}) == encoded(inputs)
+            assert copied['id'] != project['id'] and copied['revision'] == 1
+            assert copied['exchange_origin']['approval_inherited'] is False
+            assert copied['runs'] == []
+            assert target.get('/api/workspaces/' + identifier + '/studies').json() == []
+            target_index = target.get('/api/index/objects', params={'kind': 'project', 'limit': 100}).json()
+            assert any(item['id'] == identifier for item in target_index['items'])
+            _, restored = export(target, project=copied, format=format)
+            assert encoded(restored['projects'][0]['inputs']) == encoded(inputs)
+            assert source.get('/api/workspaces/' + project['id']).json() == project
+        assert len(target.get('/api/workspaces').json()) == len(before) + 2
 
 
 def test_system_identity_approval_and_binding_metadata_cannot_be_self_certified(clients):
@@ -589,8 +636,17 @@ def test_candidate_source_must_match_pinned_version_and_project_limit_stays_in_f
     source, target = clients
     candidate, project = candidate_study(source)
     _, bundle = export(source, project=project)
+    over_locked = deepcopy(bundle)
+    locked_item = over_locked['projects'][0]
+    locked_item['inputs']['locks'] = ['/excess/' + str(index) for index in range(PROJECT_MAX_LOCKS + 1)]
+    locked_item['input_sha256'] = fingerprint(locked_item['inputs'])
+    over_locked['sha256'] = fingerprint({key: value for key, value in over_locked.items() if key != 'sha256'})
+    response = target.post('/api/library/exchange/preview', files={'file': ('data.json', encoded(over_locked))})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'EXCHANGE_PROJECT_LOCKS'
+    assert target.get('/api/workspaces').json() == []
     item = bundle['projects'][0]
-    item['inputs']['sources'].append({'reference': '输入交换大小边界' * PROJECT_LIMIT})
+    item['inputs']['sources'].append({'reference': '输入交换大小边界：' + 'x' * PROJECT_LIMIT})
     item['input_sha256'] = fingerprint(item['inputs'])
     bundle['sha256'] = fingerprint({key: value for key, value in bundle.items() if key != 'sha256'})
     response = target.post('/api/library/exchange/preview', files={'file': ('data.json', encoded(bundle))})

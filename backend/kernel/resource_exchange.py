@@ -33,7 +33,10 @@ from .workspace import fingerprint, stamp
 
 SCHEMA = 'cablesim.library-exchange/1'
 MAX_BYTES = 8 * 1024 * 1024
-PROJECT_LIMIT = 120 * 1024
+# Complete release examples carry per-field provenance and pinned model proofs.
+# Keep these inputs intact while bounding each project and the whole bundle.
+PROJECT_LIMIT = 1024 * 1024
+PROJECT_MAX_LOCKS = 4096
 TRANSFER_SHEET = '传输内容（勿修改）'
 PROJECT_KEYS = {'scenario', 'domain', 'locks', 'sources', 'domain_conversion',
                 'study_cable_reference', 'engineering_model_reference'}
@@ -67,7 +70,7 @@ def _project_inputs(value):
     if not isinstance(value, dict) or set(value) - PROJECT_KEYS or not {'scenario', 'locks', 'sources'} <= set(value):
         fail('EXCHANGE_PROJECT_FIELDS', '工程输入字段不完整或包含运行、审批等不允许导入的字段。')
     if len(encoded(value)) > PROJECT_LIMIT:
-        fail('EXCHANGE_PROJECT_TOO_LARGE', '单个工程输入超过 120 KB；完整工程请使用数据库备份恢复。', 413)
+        fail('EXCHANGE_PROJECT_TOO_LARGE', '单个工程输入超过 1 MiB；请使用数据库备份恢复，不能删减来源或锁记录。', 413)
     scenario = Scenario.model_validate(value['scenario']).model_dump(mode='json')
     if scenario != value['scenario']:
         fail('EXCHANGE_INCOMPLETE_INPUT', '工程输入缺少明确字段；导入不采用演示默认值。')
@@ -75,7 +78,8 @@ def _project_inputs(value):
         document = DomainDocument.model_validate(value['domain']).model_dump(mode='json')
         if document != value['domain']:
             fail('EXCHANGE_INCOMPLETE_INPUT', '领域文档缺少明确字段；请从已保存工程重新导出。')
-    if not isinstance(value['locks'], list) or len(value['locks']) > 500 or any(not isinstance(v, str) for v in value['locks']):
+    if (not isinstance(value['locks'], list) or len(value['locks']) > PROJECT_MAX_LOCKS
+            or any(not isinstance(v, str) for v in value['locks'])):
         fail('EXCHANGE_PROJECT_LOCKS', '工程锁记录格式无效。')
     if not isinstance(value['sources'], list):
         fail('EXCHANGE_PROJECT_SOURCES', '工程来源必须为列表。')
