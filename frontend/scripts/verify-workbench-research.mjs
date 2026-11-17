@@ -105,7 +105,17 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       const studyLink = projectTable.getByRole('link', { name: '直埋载流量 · ' + tag, exact: true });
       await expect(studyLink).toBeVisible();
       await expect(projectTable.locator('tbody tr')).toHaveCount(projectStudies.length);
+      const createdStudy = projectStudies.find(item => item.id === createdSid);
+      const savedRuns = await api(`/api/workspaces/${createdWid}/studies/${createdSid}/runs?view=summary&limit=100`);
+      const studyRow = projectTable.getByRole('row').filter({ has: studyLink });
+      const stateCell = studyRow.getByRole('cell').last();
+      await expect(stateCell).toBeVisible();
+      const stateText = (await stateCell.innerText()).trim();
       await capture('01-project-directory-keyboard-navigation');
+      check('尚无运行的新研究在工程目录显示未运行', createdStudy?.latest_run == null
+        && savedRuns.items.length === 0 && stateText === '未运行',
+      { workspace: createdWid, study: createdSid, latestRun: createdStudy?.latest_run ?? null,
+        runCount: savedRuns.items.length, visibleStatus: stateText });
       await studyLink.click();
       await page.waitForURL(next => next.pathname === `/studies/${createdSid}/ampacity/results` && next.searchParams.get('workspace') === createdWid);
       await expect(page.getByRole('button', { name: '预检并运行', exact: true })).toBeVisible();
