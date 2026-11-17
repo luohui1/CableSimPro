@@ -26,7 +26,7 @@
   },
   "not_in_the_catalogue": [
     "thickness of the conductor screen and of the insulation screen",
-    "relative permittivity and loss factor of the insulation",
+    "insulation loss factor and the temperature/frequency basis of permittivity for ampacity dielectric losses; the capacitance guide publishes XLPE relative permittivity 2.3",
     "sheath bonding assumed for the ratings",
     "initial and final temperature of the lead sheath for its short-circuit rating",
     "spacing of the flat formation"
@@ -59,5 +59,6060 @@
     "remainder": {"reference": "the difference between the catalogue's overall diameter and the listed layers (screens and tapes) is lumped into the insulation screen"},
     "insulation": {"relative_permittivity": 2.5, "loss_tangent": 0.004, "reference": "IEC 60287-1-1:2023 Table 3, unfilled XLPE up to 18 kV; standard reference values, not the manufacturer's"},
     "lead_sheath": {"electrical_resistivity_20": 2.14e-7, "temperature_coefficient_20": 0.004, "thermal_resistivity": 0.03, "reference": "IEC 60287-1-1:2023 Table 1"}
+  },
+  "published_guidance": {
+    "schema": "cablesim.catalogue-published-guidance/1",
+    "id": "bahra.mv-lead-sheathed.guidance",
+    "source": {
+      "title": "Bahra Cables Company, Medium Voltage Lead Sheathed Power Cables (catalogue)",
+      "url": "https://www.bahra-electric.com/Downloads/MV_Lead_Sheathed.pdf",
+      "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+      "edition": null,
+      "nature": "厂家公开手册中的计算指南与修正参考表；不是制造实测报告，也不是 GB 50217 表。"
+    },
+    "method": {
+      "id": "cablesim.catalogue-guidance-transcription",
+      "name": "Bahra 公开手册逐值转录",
+      "version": "1.0.0"
+    },
+    "confidence": "reference",
+    "reviewed": false,
+    "usage": "published_reference_only",
+    "limitations": [
+      "仅作为系列级厂家参考资料展示和交换，不自动代入结构、材料或载流量计算。",
+      "电容量指南的 εr 不能直接作为载流量介质损耗输入；旧参考情景 εr=2.5、tanδ=0.004 保持独立。",
+      "只保留原表离散工况，不插值、不外推；缺少适用条件时不得选取因子。",
+      "厂家未给出的屏蔽层实际厚度、接地方式与绝缘损耗因数仍然缺失；这些资料不代表产品合格。"
+    ],
+    "baseline": {
+      "conditions": {
+        "air_temperature_c": 40,
+        "ground_temperature_c": 35,
+        "depth_m": 0.8,
+        "soil_thermal_resistivity": 1.2,
+        "circuit_count": 1,
+        "load_factor": 1,
+        "thermally_isolated": true
+      },
+      "source": {
+        "reference": "Bahra 中压铅护套电缆手册，PDF 第 12 页／印刷第 11 页，Current rating assumptions",
+        "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+        "pdf_page": 12,
+        "printed_page": 11,
+        "section": "CURRENT RATING ASSUMPTIONS",
+        "bbox_pdf_points": [
+          40,
+          130,
+          530,
+          450
+        ]
+      },
+      "original_values": {
+        "air_temperature_c": {
+          "value": 40,
+          "unit": "°C"
+        },
+        "ground_temperature_c": {
+          "value": 35,
+          "unit": "°C"
+        },
+        "depth_m": {
+          "value": 0.8,
+          "unit": "m",
+          "original_text": "0.80 m"
+        },
+        "soil_thermal_resistivity": {
+          "value": 1.2,
+          "unit": "°K.m/W"
+        },
+        "circuit_count": {
+          "value": 1,
+          "unit": "1",
+          "original_text": "one circuit"
+        },
+        "load_factor": {
+          "value": 100,
+          "unit": "%",
+          "original_text": "100% load factor",
+          "conversion": "100% / 100 = 1（无量纲）"
+        }
+      },
+      "limitations": [
+        "采用 IEC 60287 系列和 IEC 60502-2 标准尺寸，原文说明可能与实际制造尺寸不同。",
+        "只适用于单回路且与其他回路及热源热隔离的厂家基准；不补猜接地方式或屏蔽层厚度。"
+      ]
+    },
+    "material_facts": [
+      {
+        "id": "copper-alpha20",
+        "label": "铜导体电阻温度系数（20℃）",
+        "quantity": "conductor_resistance_temperature_coefficient_20",
+        "value": 0.00393,
+        "unit": "1/K",
+        "usage": "resistance_temperature_conversion",
+        "conditions": {
+          "material": "copper",
+          "reference_temperature_c": 20
+        },
+        "source": {
+          "reference": "Bahra 中压铅护套电缆手册，PDF 第 7 页／印刷第 6 页，2. RESISTANCE",
+          "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+          "pdf_page": 7,
+          "printed_page": 6,
+          "section": "2. RESISTANCE",
+          "bbox_pdf_points": [
+            110.6956,
+            263.4673,
+            152.3555,
+            275.4546
+          ],
+          "original_text": "0.00393",
+          "row": "copper",
+          "column": "alpha20",
+          "unit_basis": "温度换算公式使用摄氏温差；每摄氏度与每开尔文的系数相同，原文未独立印系数单位。"
+        },
+        "method": {
+          "id": "cablesim.catalogue-guidance-transcription",
+          "name": "Bahra 公开手册逐值转录",
+          "version": "1.0.0"
+        },
+        "confidence": "reference"
+      },
+      {
+        "id": "aluminium-alpha20",
+        "label": "铝导体电阻温度系数（20℃）",
+        "quantity": "conductor_resistance_temperature_coefficient_20",
+        "value": 0.00403,
+        "unit": "1/K",
+        "usage": "resistance_temperature_conversion",
+        "conditions": {
+          "material": "aluminium",
+          "reference_temperature_c": 20
+        },
+        "source": {
+          "reference": "Bahra 中压铅护套电缆手册，PDF 第 7 页／印刷第 6 页，2. RESISTANCE",
+          "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+          "pdf_page": 7,
+          "printed_page": 6,
+          "section": "2. RESISTANCE",
+          "bbox_pdf_points": [
+            110.6956,
+            274.9673,
+            152.3555,
+            286.9546
+          ],
+          "original_text": "0.00403",
+          "row": "aluminium",
+          "column": "alpha20",
+          "unit_basis": "温度换算公式使用摄氏温差；每摄氏度与每开尔文的系数相同，原文未独立印系数单位。"
+        },
+        "method": {
+          "id": "cablesim.catalogue-guidance-transcription",
+          "name": "Bahra 公开手册逐值转录",
+          "version": "1.0.0"
+        },
+        "confidence": "reference"
+      },
+      {
+        "id": "pvc-permittivity",
+        "label": "PVC 电容量指南相对介电常数",
+        "quantity": "insulation_relative_permittivity",
+        "value": 4.8,
+        "unit": "1",
+        "usage": "capacitance_calculation",
+        "conditions": {
+          "material": "PVC",
+          "temperature_c": null,
+          "frequency_hz": null
+        },
+        "source": {
+          "reference": "Bahra 中压铅护套电缆手册，PDF 第 7 页／印刷第 6 页，3. CAPACITANCE",
+          "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+          "pdf_page": 7,
+          "printed_page": 6,
+          "section": "3. CAPACITANCE",
+          "bbox_pdf_points": [
+            135.4402,
+            447.4673,
+            151.3402,
+            459.4546
+          ],
+          "original_text": "4.8",
+          "row": "PVC",
+          "column": "relative_permittivity",
+          "unit_basis": "相对介电常数为无量纲；原文位于电容量计算指南。"
+        },
+        "method": {
+          "id": "cablesim.catalogue-guidance-transcription",
+          "name": "Bahra 公开手册逐值转录",
+          "version": "1.0.0"
+        },
+        "confidence": "reference"
+      },
+      {
+        "id": "xlpe-permittivity",
+        "label": "XLPE 电容量指南相对介电常数",
+        "quantity": "insulation_relative_permittivity",
+        "value": 2.3,
+        "unit": "1",
+        "usage": "capacitance_calculation",
+        "conditions": {
+          "material": "XLPE",
+          "temperature_c": null,
+          "frequency_hz": null
+        },
+        "source": {
+          "reference": "Bahra 中压铅护套电缆手册，PDF 第 7 页／印刷第 6 页，3. CAPACITANCE",
+          "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+          "pdf_page": 7,
+          "printed_page": 6,
+          "section": "3. CAPACITANCE",
+          "bbox_pdf_points": [
+            135.4402,
+            458.9673,
+            151.3402,
+            470.9546
+          ],
+          "original_text": "2.3",
+          "row": "XLPE",
+          "column": "relative_permittivity",
+          "unit_basis": "相对介电常数为无量纲；原文位于电容量计算指南。"
+        },
+        "method": {
+          "id": "cablesim.catalogue-guidance-transcription",
+          "name": "Bahra 公开手册逐值转录",
+          "version": "1.0.0"
+        },
+        "confidence": "reference"
+      }
+    ],
+    "correction_tables": [
+      {
+        "id": "table-3",
+        "title": "直埋地温修正参考因子",
+        "original_title": "Rating factors for ground temperature variation",
+        "installation": "direct_buried",
+        "limitations": [
+          "仅覆盖原表 15–55℃ 的 9 个离散地温；基准为 35℃，不插值或外推。",
+          "须同时保留本手册基准敷设条件；不是 GB 50217 标准校正因子。"
+        ],
+        "factors": [
+          {
+            "id": "table-3.ground-15",
+            "value": 1.17,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 15
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                201.4328,
+                241.0237,
+                223.7728,
+                253.011
+              ],
+              "original_text": "1.17",
+              "table": "Table 3",
+              "row": 1,
+              "column": 1,
+              "row_label": "修正因子",
+              "column_label": "15°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    200.7273,
+                    213.5547,
+                    224.475,
+                    225.5421
+                  ],
+                  "original_text": "15°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-20",
+            "value": 1.12,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 20
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                237.9152,
+                241.0237,
+                260.2552,
+                253.011
+              ],
+              "original_text": "1.12",
+              "table": "Table 3",
+              "row": 1,
+              "column": 2,
+              "row_label": "修正因子",
+              "column_label": "20°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    237.2096,
+                    213.5547,
+                    260.9573,
+                    225.5421
+                  ],
+                  "original_text": "20°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-25",
+            "value": 1.08,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 25
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                274.3975,
+                241.0237,
+                296.7375,
+                253.011
+              ],
+              "original_text": "1.08",
+              "table": "Table 3",
+              "row": 1,
+              "column": 3,
+              "row_label": "修正因子",
+              "column_label": "25°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    273.692,
+                    213.5547,
+                    297.4397,
+                    225.5421
+                  ],
+                  "original_text": "25°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-30",
+            "value": 1.04,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 30
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                310.8799,
+                241.0237,
+                333.2199,
+                253.011
+              ],
+              "original_text": "1.04",
+              "table": "Table 3",
+              "row": 1,
+              "column": 4,
+              "row_label": "修正因子",
+              "column_label": "30°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    310.1743,
+                    213.5547,
+                    333.922,
+                    225.5421
+                  ],
+                  "original_text": "30°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-35",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 35
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                347.3622,
+                241.0237,
+                369.7022,
+                253.011
+              ],
+              "original_text": "1.00",
+              "table": "Table 3",
+              "row": 1,
+              "column": 5,
+              "row_label": "修正因子",
+              "column_label": "35°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    346.6566,
+                    213.5547,
+                    370.4043,
+                    225.5421
+                  ],
+                  "original_text": "35°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-40",
+            "value": 0.96,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 40
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                383.8445,
+                241.0237,
+                406.1845,
+                253.011
+              ],
+              "original_text": "0.96",
+              "table": "Table 3",
+              "row": 1,
+              "column": 6,
+              "row_label": "修正因子",
+              "column_label": "40°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    383.139,
+                    213.5547,
+                    406.8867,
+                    225.5421
+                  ],
+                  "original_text": "40°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-45",
+            "value": 0.9,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 45
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                420.3269,
+                241.0237,
+                442.667,
+                253.011
+              ],
+              "original_text": "0.90",
+              "table": "Table 3",
+              "row": 1,
+              "column": 7,
+              "row_label": "修正因子",
+              "column_label": "45°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    419.6213,
+                    213.5547,
+                    443.369,
+                    225.5421
+                  ],
+                  "original_text": "45°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-50",
+            "value": 0.85,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 50
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                456.8092,
+                241.0237,
+                479.1493,
+                253.011
+              ],
+              "original_text": "0.85",
+              "table": "Table 3",
+              "row": 1,
+              "column": 8,
+              "row_label": "修正因子",
+              "column_label": "50°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    456.1036,
+                    213.5547,
+                    479.8513,
+                    225.5421
+                  ],
+                  "original_text": "50°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-3.ground-55",
+            "value": 0.8,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "ground_temperature_c": 55
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 3",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 3",
+              "bbox_pdf_points": [
+                493.2915,
+                241.0237,
+                515.6315,
+                253.011
+              ],
+              "original_text": "0.80",
+              "table": "Table 3",
+              "row": 1,
+              "column": 9,
+              "row_label": "修正因子",
+              "column_label": "55°C",
+              "condition_evidence": [
+                {
+                  "field": "ground_temperature_c",
+                  "unit": "°C",
+                  "bbox_pdf_points": [
+                    492.586,
+                    213.5547,
+                    516.3337,
+                    225.5421
+                  ],
+                  "original_text": "55°C"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          }
+        ]
+      },
+      {
+        "id": "table-4",
+        "title": "直埋深度修正参考因子",
+        "original_title": "Rating factors for depth of laying",
+        "installation": "direct_buried",
+        "limitations": [
+          "埋深单位 m 来自同手册 PDF 第 12 页基准；表 4 未额外声明至中心或至表面的测量口径，不补猜。",
+          "只覆盖原表 0.50–3.0 m 的 9 个离散深度；按芯数及单芯 185 mm² 边界分别选取，不插值或外推。"
+        ],
+        "factors": [
+          {
+            "id": "table-4.depth-0.5.single-le185",
+            "value": 1.04,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.5,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                355.374,
+                258.0987,
+                367.3613
+              ],
+              "original_text": "1.04",
+              "table": "Table 4",
+              "row": 1,
+              "column": 1,
+              "row_label": "0.50 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2332,
+                    355.374,
+                    149.3732,
+                    367.3613
+                  ],
+                  "original_text": "0.50"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.5.single-gt185",
+            "value": 1.06,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.5,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                355.374,
+                366.8241,
+                367.3613
+              ],
+              "original_text": "1.06",
+              "table": "Table 4",
+              "row": 1,
+              "column": 2,
+              "row_label": "0.50 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2332,
+                    355.374,
+                    149.3732,
+                    367.3613
+                  ],
+                  "original_text": "0.50"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.5.three-core",
+            "value": 1.04,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.5,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                355.374,
+                475.5495,
+                367.3613
+              ],
+              "original_text": "1.04",
+              "table": "Table 4",
+              "row": 1,
+              "column": 3,
+              "row_label": "0.50 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2332,
+                    355.374,
+                    149.3732,
+                    367.3613
+                  ],
+                  "original_text": "0.50"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.6.single-le185",
+            "value": 1.02,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.6,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                369.6347,
+                258.0987,
+                381.622
+              ],
+              "original_text": "1.02",
+              "table": "Table 4",
+              "row": 2,
+              "column": 1,
+              "row_label": "0.60 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    369.6347,
+                    149.3733,
+                    381.622
+                  ],
+                  "original_text": "0.60"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.6.single-gt185",
+            "value": 1.04,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.6,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                369.6347,
+                366.8241,
+                381.622
+              ],
+              "original_text": "1.04",
+              "table": "Table 4",
+              "row": 2,
+              "column": 2,
+              "row_label": "0.60 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    369.6347,
+                    149.3733,
+                    381.622
+                  ],
+                  "original_text": "0.60"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.6.three-core",
+            "value": 1.03,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.6,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                369.6347,
+                475.5495,
+                381.622
+              ],
+              "original_text": "1.03",
+              "table": "Table 4",
+              "row": 2,
+              "column": 3,
+              "row_label": "0.60 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    369.6347,
+                    149.3733,
+                    381.622
+                  ],
+                  "original_text": "0.60"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.8.single-le185",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.8,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                383.8954,
+                258.0987,
+                395.8827
+              ],
+              "original_text": "1.00",
+              "table": "Table 4",
+              "row": 3,
+              "column": 1,
+              "row_label": "0.80 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    383.8954,
+                    149.3733,
+                    395.8827
+                  ],
+                  "original_text": "0.80"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.8.single-gt185",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.8,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                383.8954,
+                366.8241,
+                395.8827
+              ],
+              "original_text": "1.00",
+              "table": "Table 4",
+              "row": 3,
+              "column": 2,
+              "row_label": "0.80 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    383.8954,
+                    149.3733,
+                    395.8827
+                  ],
+                  "original_text": "0.80"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-0.8.three-core",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 0.8,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                383.8954,
+                475.5495,
+                395.8827
+              ],
+              "original_text": "1.00",
+              "table": "Table 4",
+              "row": 3,
+              "column": 3,
+              "row_label": "0.80 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    383.8954,
+                    149.3733,
+                    395.8827
+                  ],
+                  "original_text": "0.80"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.single-le185",
+            "value": 0.98,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.0,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                398.1562,
+                258.0987,
+                410.1435
+              ],
+              "original_text": "0.98",
+              "table": "Table 4",
+              "row": 4,
+              "column": 1,
+              "row_label": "1.00 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    398.1562,
+                    149.3733,
+                    410.1435
+                  ],
+                  "original_text": "1.00"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.single-gt185",
+            "value": 0.97,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.0,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                398.1562,
+                366.8241,
+                410.1435
+              ],
+              "original_text": "0.97",
+              "table": "Table 4",
+              "row": 4,
+              "column": 2,
+              "row_label": "1.00 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    398.1562,
+                    149.3733,
+                    410.1435
+                  ],
+                  "original_text": "1.00"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.three-core",
+            "value": 0.98,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.0,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                398.1562,
+                475.5495,
+                410.1435
+              ],
+              "original_text": "0.98",
+              "table": "Table 4",
+              "row": 4,
+              "column": 3,
+              "row_label": "1.00 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    398.1562,
+                    149.3733,
+                    410.1435
+                  ],
+                  "original_text": "1.00"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.25.single-le185",
+            "value": 0.96,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.25,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                412.4169,
+                258.0987,
+                424.4042
+              ],
+              "original_text": "0.96",
+              "table": "Table 4",
+              "row": 5,
+              "column": 1,
+              "row_label": "1.25 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    412.4169,
+                    149.3733,
+                    424.4042
+                  ],
+                  "original_text": "1.25"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.25.single-gt185",
+            "value": 0.95,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.25,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                412.4169,
+                366.8241,
+                424.4042
+              ],
+              "original_text": "0.95",
+              "table": "Table 4",
+              "row": 5,
+              "column": 2,
+              "row_label": "1.25 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    412.4169,
+                    149.3733,
+                    424.4042
+                  ],
+                  "original_text": "1.25"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.25.three-core",
+            "value": 0.96,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.25,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                412.4169,
+                475.5495,
+                424.4042
+              ],
+              "original_text": "0.96",
+              "table": "Table 4",
+              "row": 5,
+              "column": 3,
+              "row_label": "1.25 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    412.4169,
+                    149.3733,
+                    424.4042
+                  ],
+                  "original_text": "1.25"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.5.single-le185",
+            "value": 0.95,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.5,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                426.6776,
+                258.0987,
+                438.6649
+              ],
+              "original_text": "0.95",
+              "table": "Table 4",
+              "row": 6,
+              "column": 1,
+              "row_label": "1.50 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    426.6776,
+                    149.3733,
+                    438.6649
+                  ],
+                  "original_text": "1.50"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.5.single-gt185",
+            "value": 0.93,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.5,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                426.6776,
+                366.8241,
+                438.6649
+              ],
+              "original_text": "0.93",
+              "table": "Table 4",
+              "row": 6,
+              "column": 2,
+              "row_label": "1.50 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    426.6776,
+                    149.3733,
+                    438.6649
+                  ],
+                  "original_text": "1.50"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-1.5.three-core",
+            "value": 0.95,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 1.5,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                426.6776,
+                475.5495,
+                438.6649
+              ],
+              "original_text": "0.95",
+              "table": "Table 4",
+              "row": 6,
+              "column": 3,
+              "row_label": "1.50 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    128.2333,
+                    426.6776,
+                    149.3733,
+                    438.6649
+                  ],
+                  "original_text": "1.50"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-2.single-le185",
+            "value": 0.93,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 2.0,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                440.9383,
+                258.0987,
+                452.9256
+              ],
+              "original_text": "0.93",
+              "table": "Table 4",
+              "row": 7,
+              "column": 1,
+              "row_label": "2.0 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    440.9383,
+                    146.3533,
+                    452.9256
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-2.single-gt185",
+            "value": 0.9,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 2.0,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                440.9383,
+                366.8241,
+                452.9256
+              ],
+              "original_text": "0.90",
+              "table": "Table 4",
+              "row": 7,
+              "column": 2,
+              "row_label": "2.0 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    440.9383,
+                    146.3533,
+                    452.9256
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-2.three-core",
+            "value": 0.93,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 2.0,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                440.9383,
+                475.5495,
+                452.9256
+              ],
+              "original_text": "0.93",
+              "table": "Table 4",
+              "row": 7,
+              "column": 3,
+              "row_label": "2.0 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    440.9383,
+                    146.3533,
+                    452.9256
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-2.5.single-le185",
+            "value": 0.91,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 2.5,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                455.199,
+                258.0987,
+                467.1863
+              ],
+              "original_text": "0.91",
+              "table": "Table 4",
+              "row": 8,
+              "column": 1,
+              "row_label": "2.5 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    455.199,
+                    146.3533,
+                    467.1863
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-2.5.single-gt185",
+            "value": 0.88,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 2.5,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                455.199,
+                366.8241,
+                467.1863
+              ],
+              "original_text": "0.88",
+              "table": "Table 4",
+              "row": 8,
+              "column": 2,
+              "row_label": "2.5 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    455.199,
+                    146.3533,
+                    467.1863
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-2.5.three-core",
+            "value": 0.91,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 2.5,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                455.199,
+                475.5495,
+                467.1863
+              ],
+              "original_text": "0.91",
+              "table": "Table 4",
+              "row": 8,
+              "column": 3,
+              "row_label": "2.5 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    455.199,
+                    146.3533,
+                    467.1863
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-3.single-le185",
+            "value": 0.9,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 3.0,
+              "cores": 1,
+              "area_mm2": {
+                "lte": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                236.9587,
+                469.4597,
+                258.0987,
+                481.447
+              ],
+              "original_text": "0.90",
+              "table": "Table 4",
+              "row": 9,
+              "column": 1,
+              "row_label": "3.0 m",
+              "column_label": "单芯，≤185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    469.4597,
+                    146.3533,
+                    481.447
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    215,
+                    338,
+                    279,
+                    353
+                  ],
+                  "original_text": "≤ 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-3.single-gt185",
+            "value": 0.86,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 3.0,
+              "cores": 1,
+              "area_mm2": {
+                "gt": 185
+              }
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                345.6841,
+                469.4597,
+                366.8241,
+                481.447
+              ],
+              "original_text": "0.86",
+              "table": "Table 4",
+              "row": 9,
+              "column": 2,
+              "row_label": "3.0 m",
+              "column_label": "单芯，>185 mm²",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    469.4597,
+                    146.3533,
+                    481.447
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    250,
+                    295,
+                    350,
+                    311
+                  ],
+                  "original_text": "Single Core Cables"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    325,
+                    338,
+                    386,
+                    353
+                  ],
+                  "original_text": "> 185 mm2"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-4.depth-3.three-core",
+            "value": 0.9,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "depth_m": 3.0,
+              "cores": 3
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 4",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 4",
+              "bbox_pdf_points": [
+                454.4095,
+                469.4597,
+                475.5495,
+                481.447
+              ],
+              "original_text": "0.90",
+              "table": "Table 4",
+              "row": 9,
+              "column": 3,
+              "row_label": "3.0 m",
+              "column_label": "三芯",
+              "condition_evidence": [
+                {
+                  "field": "depth_m",
+                  "unit": "m",
+                  "bbox_pdf_points": [
+                    131.2533,
+                    469.4597,
+                    146.3533,
+                    481.447
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    420,
+                    320,
+                    510,
+                    338
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          }
+        ]
+      },
+      {
+        "id": "table-5",
+        "title": "直埋土壤热阻率修正参考因子",
+        "original_title": "Rating factors for variation in thermal resistivity of soil (average values)",
+        "installation": "direct_buried",
+        "limitations": [
+          "原表说明这些因子为平均参考值；土壤热阻率原单位 °C·m/W 与温差单位 K·m/W 数值相同。",
+          "只覆盖原表 0.8–3.0 K·m/W 的 8 个离散档；分别保留单芯/三芯及截面档。",
+          "截面档为 ≤50、>50 且 ≤185、≥240 mm²；185–240 mm² 之间未给出适用档，不插值、不外推。"
+        ],
+        "factors": [
+          {
+            "id": "table-5.single-le50.soil-0.8",
+            "value": 1.19,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 0.8
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                215.7084,
+                578.0153,
+                236.8484,
+                590.0026
+              ],
+              "original_text": "1.19",
+              "table": "Table 5",
+              "row": 1,
+              "column": 1,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "0.8 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    218.7284,
+                    543.1473,
+                    233.8284,
+                    555.1346
+                  ],
+                  "original_text": "0.8"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-0.9",
+            "value": 1.16,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 0.9
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                256.7463,
+                578.0153,
+                277.8864,
+                590.0026
+              ],
+              "original_text": "1.16",
+              "table": "Table 5",
+              "row": 1,
+              "column": 2,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "0.9 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    259.7663,
+                    543.1473,
+                    274.8663,
+                    555.1346
+                  ],
+                  "original_text": "0.9"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-1",
+            "value": 1.11,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 1.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                297.7842,
+                578.0153,
+                318.9242,
+                590.0026
+              ],
+              "original_text": "1.11",
+              "table": "Table 5",
+              "row": 1,
+              "column": 3,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "1.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    300.8042,
+                    543.1473,
+                    315.9042,
+                    555.1346
+                  ],
+                  "original_text": "1.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-1.2",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 1.2
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                346.3709,
+                578.0153,
+                352.4109,
+                590.0026
+              ],
+              "original_text": "1",
+              "table": "Table 5",
+              "row": 1,
+              "column": 4,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "1.2 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    341.8421,
+                    543.1473,
+                    356.9421,
+                    555.1346
+                  ],
+                  "original_text": "1.2"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-1.5",
+            "value": 0.91,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 1.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                379.86,
+                578.0153,
+                401.0,
+                590.0026
+              ],
+              "original_text": "0.91",
+              "table": "Table 5",
+              "row": 1,
+              "column": 5,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "1.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    382.88,
+                    543.1473,
+                    397.98,
+                    555.1346
+                  ],
+                  "original_text": "1.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-2",
+            "value": 0.83,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 2.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                420.8979,
+                578.0153,
+                442.0379,
+                590.0026
+              ],
+              "original_text": "0.83",
+              "table": "Table 5",
+              "row": 1,
+              "column": 6,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "2.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    423.9179,
+                    543.1473,
+                    439.0179,
+                    555.1346
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-2.5",
+            "value": 0.77,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 2.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                461.9358,
+                578.0153,
+                483.0758,
+                590.0026
+              ],
+              "original_text": "0.77",
+              "table": "Table 5",
+              "row": 1,
+              "column": 7,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "2.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    464.9558,
+                    543.1473,
+                    480.0558,
+                    555.1346
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-le50.soil-3",
+            "value": 0.69,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 3.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                498.4742,
+                578.0153,
+                519.6143,
+                590.0026
+              ],
+              "original_text": "0.69",
+              "table": "Table 5",
+              "row": 1,
+              "column": 8,
+              "row_label": "单芯，≤50 mm²",
+              "column_label": "3.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    501.4942,
+                    543.1473,
+                    516.5942,
+                    555.1346
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    577.8153,
+                    205,
+                    591.0153
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-0.8",
+            "value": 1.21,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 0.8
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                215.7084,
+                595.6301,
+                236.8484,
+                607.6174
+              ],
+              "original_text": "1.21",
+              "table": "Table 5",
+              "row": 2,
+              "column": 1,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "0.8 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    218.7284,
+                    543.1473,
+                    233.8284,
+                    555.1346
+                  ],
+                  "original_text": "0.8"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-0.9",
+            "value": 1.16,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 0.9
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                256.7463,
+                595.6301,
+                277.8864,
+                607.6174
+              ],
+              "original_text": "1.16",
+              "table": "Table 5",
+              "row": 2,
+              "column": 2,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "0.9 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    259.7663,
+                    543.1473,
+                    274.8663,
+                    555.1346
+                  ],
+                  "original_text": "0.9"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-1",
+            "value": 1.13,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 1.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                297.7842,
+                595.6301,
+                318.9242,
+                607.6174
+              ],
+              "original_text": "1.13",
+              "table": "Table 5",
+              "row": 2,
+              "column": 3,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "1.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    300.8042,
+                    543.1473,
+                    315.9042,
+                    555.1346
+                  ],
+                  "original_text": "1.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-1.2",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 1.2
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                346.371,
+                595.6301,
+                352.411,
+                607.6174
+              ],
+              "original_text": "1",
+              "table": "Table 5",
+              "row": 2,
+              "column": 4,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "1.2 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    341.8421,
+                    543.1473,
+                    356.9421,
+                    555.1346
+                  ],
+                  "original_text": "1.2"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-1.5",
+            "value": 0.92,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 1.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                379.86,
+                595.6301,
+                401.0,
+                607.6174
+              ],
+              "original_text": "0.92",
+              "table": "Table 5",
+              "row": 2,
+              "column": 5,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "1.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    382.88,
+                    543.1473,
+                    397.98,
+                    555.1346
+                  ],
+                  "original_text": "1.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-2",
+            "value": 0.82,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 2.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                420.8979,
+                595.6301,
+                442.0379,
+                607.6174
+              ],
+              "original_text": "0.82",
+              "table": "Table 5",
+              "row": 2,
+              "column": 6,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "2.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    423.9179,
+                    543.1473,
+                    439.0179,
+                    555.1346
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-2.5",
+            "value": 0.76,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 2.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                461.9358,
+                595.6301,
+                483.0758,
+                607.6174
+              ],
+              "original_text": "0.76",
+              "table": "Table 5",
+              "row": 2,
+              "column": 7,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "2.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    464.9558,
+                    543.1473,
+                    480.0558,
+                    555.1346
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-gt50-le185.soil-3",
+            "value": 0.69,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 3.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                498.4742,
+                595.6301,
+                519.6143,
+                607.6174
+              ],
+              "original_text": "0.69",
+              "table": "Table 5",
+              "row": 2,
+              "column": 8,
+              "row_label": "单芯，>50 且 ≤185 mm²",
+              "column_label": "3.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    501.4942,
+                    543.1473,
+                    516.5942,
+                    555.1346
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    595.4300999999999,
+                    205,
+                    608.6301
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-0.8",
+            "value": 1.23,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 0.8
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                215.7084,
+                613.2448,
+                236.8484,
+                625.2321
+              ],
+              "original_text": "1.23",
+              "table": "Table 5",
+              "row": 3,
+              "column": 1,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "0.8 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    218.7284,
+                    543.1473,
+                    233.8284,
+                    555.1346
+                  ],
+                  "original_text": "0.8"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-0.9",
+            "value": 1.17,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 0.9
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                256.7463,
+                613.2448,
+                277.8864,
+                625.2321
+              ],
+              "original_text": "1.17",
+              "table": "Table 5",
+              "row": 3,
+              "column": 2,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "0.9 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    259.7663,
+                    543.1473,
+                    274.8663,
+                    555.1346
+                  ],
+                  "original_text": "0.9"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-1",
+            "value": 1.17,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 1.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                297.7842,
+                613.2448,
+                318.9242,
+                625.2321
+              ],
+              "original_text": "1.17",
+              "table": "Table 5",
+              "row": 3,
+              "column": 3,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "1.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    300.8042,
+                    543.1473,
+                    315.9042,
+                    555.1346
+                  ],
+                  "original_text": "1.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-1.2",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 1.2
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                346.3709,
+                613.2448,
+                352.4109,
+                625.2321
+              ],
+              "original_text": "1",
+              "table": "Table 5",
+              "row": 3,
+              "column": 4,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "1.2 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    341.8421,
+                    543.1473,
+                    356.9421,
+                    555.1346
+                  ],
+                  "original_text": "1.2"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-1.5",
+            "value": 0.92,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 1.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                379.86,
+                613.2448,
+                401.0,
+                625.2321
+              ],
+              "original_text": "0.92",
+              "table": "Table 5",
+              "row": 3,
+              "column": 5,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "1.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    382.88,
+                    543.1473,
+                    397.98,
+                    555.1346
+                  ],
+                  "original_text": "1.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-2",
+            "value": 0.82,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 2.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                420.8979,
+                613.2448,
+                442.0379,
+                625.2321
+              ],
+              "original_text": "0.82",
+              "table": "Table 5",
+              "row": 3,
+              "column": 6,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "2.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    423.9179,
+                    543.1473,
+                    439.0179,
+                    555.1346
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-2.5",
+            "value": 0.76,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 2.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                461.9358,
+                613.2448,
+                483.0758,
+                625.2321
+              ],
+              "original_text": "0.76",
+              "table": "Table 5",
+              "row": 3,
+              "column": 7,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "2.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    464.9558,
+                    543.1473,
+                    480.0558,
+                    555.1346
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.single-ge240.soil-3",
+            "value": 0.68,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 1,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 3.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                498.4742,
+                613.2448,
+                519.6143,
+                625.2321
+              ],
+              "original_text": "0.68",
+              "table": "Table 5",
+              "row": 3,
+              "column": 8,
+              "row_label": "单芯，≥240 mm²",
+              "column_label": "3.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    501.4942,
+                    543.1473,
+                    516.5942,
+                    555.1346
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    613.0448,
+                    205,
+                    626.2448
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    559,
+                    351,
+                    574
+                  ],
+                  "original_text": "Single Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-0.8",
+            "value": 1.15,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 0.8
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                215.7084,
+                648.4742,
+                236.8484,
+                660.4615
+              ],
+              "original_text": "1.15",
+              "table": "Table 5",
+              "row": 4,
+              "column": 1,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "0.8 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    218.7284,
+                    543.1473,
+                    233.8284,
+                    555.1346
+                  ],
+                  "original_text": "0.8"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-0.9",
+            "value": 1.12,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 0.9
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                256.7463,
+                648.4742,
+                277.8864,
+                660.4615
+              ],
+              "original_text": "1.12",
+              "table": "Table 5",
+              "row": 4,
+              "column": 2,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "0.9 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    259.7663,
+                    543.1473,
+                    274.8663,
+                    555.1346
+                  ],
+                  "original_text": "0.9"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-1",
+            "value": 1.09,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 1.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                297.7842,
+                648.4742,
+                318.9242,
+                660.4615
+              ],
+              "original_text": "1.09",
+              "table": "Table 5",
+              "row": 4,
+              "column": 3,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "1.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    300.8042,
+                    543.1473,
+                    315.9042,
+                    555.1346
+                  ],
+                  "original_text": "1.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-1.2",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 1.2
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                346.3709,
+                648.4742,
+                352.4109,
+                660.4615
+              ],
+              "original_text": "1",
+              "table": "Table 5",
+              "row": 4,
+              "column": 4,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "1.2 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    341.8421,
+                    543.1473,
+                    356.9421,
+                    555.1346
+                  ],
+                  "original_text": "1.2"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-1.5",
+            "value": 0.89,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 1.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                379.86,
+                648.4742,
+                401.0,
+                660.4615
+              ],
+              "original_text": "0.89",
+              "table": "Table 5",
+              "row": 4,
+              "column": 5,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "1.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    382.88,
+                    543.1473,
+                    397.98,
+                    555.1346
+                  ],
+                  "original_text": "1.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-2",
+            "value": 0.85,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 2.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                420.8979,
+                648.4742,
+                442.0379,
+                660.4615
+              ],
+              "original_text": "0.85",
+              "table": "Table 5",
+              "row": 4,
+              "column": 6,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "2.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    423.9179,
+                    543.1473,
+                    439.0179,
+                    555.1346
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-2.5",
+            "value": 0.8,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 2.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                461.9358,
+                648.4742,
+                483.0758,
+                660.4615
+              ],
+              "original_text": "0.80",
+              "table": "Table 5",
+              "row": 4,
+              "column": 7,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "2.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    464.9558,
+                    543.1473,
+                    480.0558,
+                    555.1346
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-le50.soil-3",
+            "value": 0.72,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "lte": 50
+              },
+              "soil_thermal_resistivity": 3.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                498.4742,
+                648.4742,
+                519.6143,
+                660.4615
+              ],
+              "original_text": "0.72",
+              "table": "Table 5",
+              "row": 4,
+              "column": 8,
+              "row_label": "三芯，≤50 mm²",
+              "column_label": "3.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    501.4942,
+                    543.1473,
+                    516.5942,
+                    555.1346
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    648.2742,
+                    205,
+                    661.4742
+                  ],
+                  "original_text": "≤ 50 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-0.8",
+            "value": 1.16,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 0.8
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                215.7084,
+                666.089,
+                236.8484,
+                678.0763
+              ],
+              "original_text": "1.16",
+              "table": "Table 5",
+              "row": 5,
+              "column": 1,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "0.8 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    218.7284,
+                    543.1473,
+                    233.8284,
+                    555.1346
+                  ],
+                  "original_text": "0.8"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-0.9",
+            "value": 1.13,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 0.9
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                256.7463,
+                666.089,
+                277.8864,
+                678.0763
+              ],
+              "original_text": "1.13",
+              "table": "Table 5",
+              "row": 5,
+              "column": 2,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "0.9 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    259.7663,
+                    543.1473,
+                    274.8663,
+                    555.1346
+                  ],
+                  "original_text": "0.9"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-1",
+            "value": 1.09,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 1.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                297.7842,
+                666.089,
+                318.9242,
+                678.0763
+              ],
+              "original_text": "1.09",
+              "table": "Table 5",
+              "row": 5,
+              "column": 3,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "1.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    300.8042,
+                    543.1473,
+                    315.9042,
+                    555.1346
+                  ],
+                  "original_text": "1.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-1.2",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 1.2
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                346.371,
+                666.089,
+                352.411,
+                678.0763
+              ],
+              "original_text": "1",
+              "table": "Table 5",
+              "row": 5,
+              "column": 4,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "1.2 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    341.8421,
+                    543.1473,
+                    356.9421,
+                    555.1346
+                  ],
+                  "original_text": "1.2"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-1.5",
+            "value": 0.89,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 1.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                379.86,
+                666.089,
+                401.0,
+                678.0763
+              ],
+              "original_text": "0.89",
+              "table": "Table 5",
+              "row": 5,
+              "column": 5,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "1.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    382.88,
+                    543.1473,
+                    397.98,
+                    555.1346
+                  ],
+                  "original_text": "1.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-2",
+            "value": 0.85,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 2.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                420.8979,
+                666.089,
+                442.0379,
+                678.0763
+              ],
+              "original_text": "0.85",
+              "table": "Table 5",
+              "row": 5,
+              "column": 6,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "2.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    423.9179,
+                    543.1473,
+                    439.0179,
+                    555.1346
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-2.5",
+            "value": 0.8,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 2.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                461.9358,
+                666.089,
+                483.0758,
+                678.0763
+              ],
+              "original_text": "0.80",
+              "table": "Table 5",
+              "row": 5,
+              "column": 7,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "2.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    464.9558,
+                    543.1473,
+                    480.0558,
+                    555.1346
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-gt50-le185.soil-3",
+            "value": 0.72,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gt": 50,
+                "lte": 185
+              },
+              "soil_thermal_resistivity": 3.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                498.4742,
+                666.089,
+                519.6143,
+                678.0763
+              ],
+              "original_text": "0.72",
+              "table": "Table 5",
+              "row": 5,
+              "column": 8,
+              "row_label": "三芯，>50 且 ≤185 mm²",
+              "column_label": "3.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    501.4942,
+                    543.1473,
+                    516.5942,
+                    555.1346
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    665.889,
+                    205,
+                    679.089
+                  ],
+                  "original_text": "> 50 mm2 & ≤ 185 mm2"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-0.8",
+            "value": 1.17,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 0.8
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                215.7084,
+                683.7037,
+                236.8484,
+                695.691
+              ],
+              "original_text": "1.17",
+              "table": "Table 5",
+              "row": 6,
+              "column": 1,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "0.8 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    218.7284,
+                    543.1473,
+                    233.8284,
+                    555.1346
+                  ],
+                  "original_text": "0.8"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-0.9",
+            "value": 1.14,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 0.9
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                256.7463,
+                683.7037,
+                277.8864,
+                695.691
+              ],
+              "original_text": "1.14",
+              "table": "Table 5",
+              "row": 6,
+              "column": 2,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "0.9 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    259.7663,
+                    543.1473,
+                    274.8663,
+                    555.1346
+                  ],
+                  "original_text": "0.9"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-1",
+            "value": 1.1,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 1.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                297.7842,
+                683.7037,
+                318.9242,
+                695.691
+              ],
+              "original_text": "1.10",
+              "table": "Table 5",
+              "row": 6,
+              "column": 3,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "1.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    300.8042,
+                    543.1473,
+                    315.9042,
+                    555.1346
+                  ],
+                  "original_text": "1.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-1.2",
+            "value": 1.0,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 1.2
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                346.3709,
+                683.7037,
+                352.4109,
+                695.691
+              ],
+              "original_text": "1",
+              "table": "Table 5",
+              "row": 6,
+              "column": 4,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "1.2 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    341.8421,
+                    543.1473,
+                    356.9421,
+                    555.1346
+                  ],
+                  "original_text": "1.2"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-1.5",
+            "value": 0.9,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 1.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                379.86,
+                683.7037,
+                401.0,
+                695.691
+              ],
+              "original_text": "0.90",
+              "table": "Table 5",
+              "row": 6,
+              "column": 5,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "1.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    382.88,
+                    543.1473,
+                    397.98,
+                    555.1346
+                  ],
+                  "original_text": "1.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-2",
+            "value": 0.85,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 2.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                420.8979,
+                683.7037,
+                442.0379,
+                695.691
+              ],
+              "original_text": "0.85",
+              "table": "Table 5",
+              "row": 6,
+              "column": 6,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "2.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    423.9179,
+                    543.1473,
+                    439.0179,
+                    555.1346
+                  ],
+                  "original_text": "2.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-2.5",
+            "value": 0.79,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 2.5
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                461.9358,
+                683.7037,
+                483.0758,
+                695.691
+              ],
+              "original_text": "0.79",
+              "table": "Table 5",
+              "row": 6,
+              "column": 7,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "2.5 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    464.9558,
+                    543.1473,
+                    480.0558,
+                    555.1346
+                  ],
+                  "original_text": "2.5"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          },
+          {
+            "id": "table-5.three-ge240.soil-3",
+            "value": 0.72,
+            "unit": "1",
+            "conditions": {
+              "installation": "direct_buried",
+              "cores": 3,
+              "area_mm2": {
+                "gte": 240
+              },
+              "soil_thermal_resistivity": 3.0
+            },
+            "source": {
+              "reference": "Bahra 中压铅护套电缆手册，PDF 第 13 页／印刷第 12 页，Table 5",
+              "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+              "pdf_page": 13,
+              "printed_page": 12,
+              "section": "Table 5",
+              "bbox_pdf_points": [
+                498.4742,
+                683.7037,
+                519.6143,
+                695.691
+              ],
+              "original_text": "0.72",
+              "table": "Table 5",
+              "row": 6,
+              "column": 8,
+              "row_label": "三芯，≥240 mm²",
+              "column_label": "3.0 °C·m/W",
+              "condition_evidence": [
+                {
+                  "field": "soil_thermal_resistivity",
+                  "unit": "°C m / W",
+                  "bbox_pdf_points": [
+                    501.4942,
+                    543.1473,
+                    516.5942,
+                    555.1346
+                  ],
+                  "original_text": "3.0"
+                },
+                {
+                  "field": "area_mm2",
+                  "unit": "mm2",
+                  "bbox_pdf_points": [
+                    85,
+                    683.5037,
+                    205,
+                    696.7037
+                  ],
+                  "original_text": "240 mm2 and above"
+                },
+                {
+                  "field": "cores",
+                  "unit": "1",
+                  "bbox_pdf_points": [
+                    258,
+                    630,
+                    351,
+                    645
+                  ],
+                  "original_text": "Three Core Cables"
+                }
+              ]
+            },
+            "method": {
+              "id": "cablesim.catalogue-guidance-transcription",
+              "name": "Bahra 公开手册逐值转录",
+              "version": "1.0.0"
+            },
+            "confidence": "reference"
+          }
+        ]
+      }
+    ],
+    "content_sha256": "57e5c7e9cf93c1b7dd7b35f3804fc6a5fc686ea9a0818c4a5ce6b43dd4200e19"
   }
 }

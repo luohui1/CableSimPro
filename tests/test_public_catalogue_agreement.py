@@ -66,6 +66,7 @@ def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tm
     monkeypatch.setenv('CABLESIM_DATASETS_DIR', str(tmp_path / 'datasets'))
     monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'library'))
     data = _data('bahra-mv')
+    guidance = data['published_guidance']
     assert data['source']['sha256'] == '6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a'
     with TestClient(create_app(tmp_path / 'first.sqlite')) as first, TestClient(create_app(tmp_path / 'second.sqlite')) as second:
         original = first.get('/api/type-library/samples/bahra-mv.xlsx')
@@ -80,6 +81,7 @@ def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tm
         assert uploaded.status_code == 201, uploaded.text
         upload = uploaded.json()
         declaration = upload['declarations'][0]
+        assert declaration['series']['reference']['published_guidance'] == guidance
         assert declaration['mapping'] == {key: index for index, (key, *_) in enumerate(BAHRA_FACT_COLUMNS)}
         assert {column['suggested'] for column in upload['sheets'][0]['columns']} >= {key for key, *_ in BAHRA_FACT_COLUMNS}
         response = first.post('/api/type-library/imports/preview', json={'upload_id': upload['upload_id'],
@@ -101,6 +103,8 @@ def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tm
         assert saved.status_code == 201, saved.text
         committed = saved.json()
         assert len(committed['specs']) == 13
+        source_series = first.get('/api/type-library/series/' + committed['series_id']).json()
+        assert source_series['declaration']['reference']['published_guidance'] == guidance
         for row_number, (spec, row) in enumerate(zip(committed['specs'], data['rows']), 5):
             detail = first.get('/api/type-library/specs/' + spec['id']).json()
             assert_bahra_facts(detail['values'], row, row_number, workbook_digest, data)
@@ -116,6 +120,7 @@ def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tm
         from base64 import b64decode
         assert b64decode(bundle['files'][0]['content_base64']) == original.content
         assert bundle['series'][0]['declaration']['reference']['conditions'] == data['conditions']
+        assert bundle['series'][0]['declaration']['reference']['published_guidance'] == guidance
         transfer = {'file': ('types.' + exchange_format, exported.content)}
         checked = second.post('/api/type-library/exchange/preview', files=transfer)
         assert checked.status_code == 200, checked.text
@@ -127,6 +132,7 @@ def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tm
         assert imported.json()['created'] == 13 and imported.json()['state'] == 'draft'
         series = second.get('/api/type-library/series/' + imported.json()['series'][0]['series_id']).json()
         assert series['declaration']['reference'] == declaration['series']['reference']
+        assert series['declaration']['reference']['published_guidance'] == guidance
         models = {model['id']: model['payload'] for model in second.get('/api/domain-cable-models').json()}
         for row_number, (spec, row) in enumerate(zip(series['specs'], data['rows']), 5):
             detail = second.get('/api/type-library/specs/' + spec['id']).json()
@@ -135,6 +141,7 @@ def test_bahra_all_published_columns_survive_import_and_two_database_exchange(tm
             assert set(models[spec['model_id']]['specification']['values']) == BAHRA_STRUCTURE_KEYS
             assert detail['spec']['state'] == 'draft' and detail['results'] == []
         report = second.post('/api/type-library/catalogue-comparison/bahra-mv', json={}).json()
+        assert report['published_guidance'] == guidance
         assert len(report['rows']) == 13 and all(len(row['metrics']) == 4 for row in report['rows'])
         assert report['summary']['ampacity_refused'] == 13
         assert report['summary']['ampacity_compared'] == report['summary']['four_metric_passed'] == 0
@@ -240,6 +247,30 @@ def test_default_manufacturer_comparison_preserves_all_originals_without_running
         assert assumptions['modelling.core_lay_length']['value'] == 2.152
     else:
         assert assumptions['conductor_screen_thickness_mm']['value'] == .6
+        assert assumptions['insulation.relative_permittivity']['value'] == 2.5
+        assert assumptions['insulation.loss_tangent']['value'] == .004
+        guidance = report['published_guidance']
+        assert guidance == _data(name)['published_guidance']
+        assert guidance['usage'] == 'published_reference_only' and guidance['reviewed'] is False
+        assert guidance['method']['version'] == '1.0.0' and guidance['confidence'] == 'reference'
+        facts = {item['id']: item for item in guidance['material_facts']}
+        assert {key: (item['value'], item['unit']) for key, item in facts.items()} == {
+            'copper-alpha20': (.00393, '1/K'), 'aluminium-alpha20': (.00403, '1/K'),
+            'pvc-permittivity': (4.8, '1'), 'xlpe-permittivity': (2.3, '1')}
+        assert facts['xlpe-permittivity']['usage'] == 'capacitance_calculation'
+        assert facts['xlpe-permittivity']['conditions']['temperature_c'] is None
+        assert facts['xlpe-permittivity']['conditions']['frequency_hz'] is None
+        assert [len(table['factors']) for table in guidance['correction_tables']] == [9, 27, 48]
+        assert all(item['conditions']['installation'] == 'direct_buried'
+                   for table in guidance['correction_tables'] for item in table['factors'])
+        assert guidance['baseline']['original_values']['load_factor']['value'] == 100
+        assert guidance['baseline']['conditions']['load_factor'] == 1
+        assert not set(facts) & set(assumptions)
+        assert 'published_guidance' not in report['reference_scenario']['raw_assumptions']
+        for row in report['rows']:
+            missing = {item['field']: item['reason'] for item in row['metrics']['ampacity']['missing_fields']}
+            assert '2.3' in missing['materials.insulation_relative_permittivity']
+            assert '没有公布 tanδ 数值' in missing['materials.insulation_loss_tangent']
 
 
 def test_reference_calculations_never_count_as_manufacturer_acceptance(agreement):
@@ -247,6 +278,7 @@ def test_reference_calculations_never_count_as_manufacturer_acceptance(agreement
         ordinary = reference_report(name)
         assert confirmed['rows'] == ordinary['rows']
         assert confirmed['summary'] == ordinary['summary']
+        assert confirmed['published_guidance'] == ordinary['published_guidance']
         assert confirmed['reference_scenario']['confirmed'] is True
         assert confirmed['reference_scenario']['executed'] is True
         assert confirmed['reference_calculation']['manufacturer_comparison'] is False

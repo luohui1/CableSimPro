@@ -156,8 +156,10 @@ def _missing_ampacity_fields(people, table):
             missing.append(('structure.armour_gap_ratio', '钢带间隙率', '原表未列实际间隙，标准最大允许值不是实际结构。'))
     else:
         missing += [
-            ('materials.insulation_relative_permittivity', '绝缘相对介电常数', '目录未列产品参数；旧版参考回归使用标准参考值。'),
-            ('materials.insulation_loss_tangent', '绝缘介质损耗因数', '目录未列产品参数；旧版参考回归使用标准参考值。'),
+            ('materials.insulation_relative_permittivity', '载流量介质损耗计算的绝缘相对介电常数',
+             '手册电容量指南公布 XLPE εr=2.3，但未说明载流量介质损耗计算所用的温频条件；不能据此替换旧版独立参考情景的 IEC εr=2.5。'),
+            ('materials.insulation_loss_tangent', '绝缘介质损耗因数',
+             '手册仅给出含 tanδ 的介质损耗公式，没有公布 tanδ 数值；旧版独立参考情景使用 IEC 参考值 0.004。'),
         ]
     return [{'field': field, 'label': label, 'reason': reason} for field, label, reason in missing]
 
@@ -299,6 +301,7 @@ def reference_report(sample_id, *, reference_scenario_confirmed=False):
     scenario['executed'] = calculated is not None
     return {'schema': 'cablesim.catalogue-comparison/2', 'sample_id': sample_id, 'source': data['source'],
             'rows': rows, 'method': COMPARISON_METHOD,
+            'published_guidance': deepcopy(data.get('published_guidance')),
             'scope': '厂家埋设条件或结构参数缺失时拒绝计算；输入回读和另行确认的参考情景均不计入四项真实核对。',
             'assumptions': scenario['assumptions'], 'reference_scenario': scenario, 'reference_calculation': calculated,
             'summary': {'specifications': len(rows), 'ampacity_compared': 0, 'ampacity_refused': len(rows),

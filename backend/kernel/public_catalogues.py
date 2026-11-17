@@ -108,6 +108,7 @@ def _declarations(name):
                         'oversheath': 'PVC', 'source': source,
                         'common': {}, 'common_basis': {},
                         'reference': {'conditions': data['conditions'],
+                                      'published_guidance': deepcopy(data['published_guidance']),
                                       'missing': data['not_in_the_catalogue'],
                                       'note': '原始导入未采用目录对照中的屏蔽层厚度假设；缺项保留。'}}}]
 

@@ -1,10 +1,12 @@
-"""Verify the 877 transcribed catalogue cells against the original manufacturer PDFs.
+"""Verify product tables and separate published guidance against original PDFs.
 
 Usage: python scripts/verify_catalogue_originals.py --output <new-directory>
 Optional --people-pdf and --bahra-pdf use local originals instead of downloading
 the fixed official URLs. --catalogue-root selects a copy of the two JSON files.
 No application, importer or calculation plugin is used. All output is evidence,
 not product approval; the 46 unpublished People R20 entries remain absent.
+The 877 product-table cells remain separate from four material-guide values and
+84 logical direct-burial factors; published guidance is not a calculation input.
 """
 from __future__ import annotations
 
@@ -27,7 +29,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 import fitz
 
 ROOT = Path(__file__).resolve().parents[1]
-METHOD_VERSION = '1.0.0'
+METHOD_VERSION = '1.1.0'
 MAX_PDF_BYTES = 32 * 1024 * 1024
 NETWORK_TIMEOUT = 30
 DOWNLOAD_SECONDS = 120
@@ -44,7 +46,7 @@ SOURCES = {
         'url': 'https://www.bahra-electric.com/Downloads/MV_Lead_Sheathed.pdf',
         'sha256': '6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a',
         'hosts': {'www.bahra-electric.com', 'bahra-electric.com'},
-        'render_pages': (12, 18, 19),
+        'render_pages': (7, 8, 12, 13, 18, 19),
     },
 }
 AREAS = (25, 35, 50, 70, 95, 120, 150, 185, 240, 300, 400, 500, 630)
@@ -201,6 +203,19 @@ def area_key(value, where):
     require(number > 0 and number == number.to_integral_value(), 'CATALOGUE_SCHEMA',
             f'{where}: area must be an exact positive integer in mm2')
     return int(number)
+
+
+def same_declared_value(value, expected):
+    """JSON may normalize 1.0 to 1; it must not turn a condition into True."""
+    if type(value) in (int, float) and type(expected) in (int, float):
+        return math.isfinite(value) and value == expected
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return value.keys() == expected.keys() and all(same_declared_value(value[key], item) for key, item in expected.items())
+    if isinstance(expected, list):
+        return len(value) == len(expected) and all(same_declared_value(a, b) for a, b in zip(value, expected))
+    return value == expected
 
 
 def extract_rows(doc, name, page, box, allow_overlay=False):
@@ -381,6 +396,216 @@ def compare_catalogues(data, originals):
     return checks, metrics, summary
 
 
+def audit_published_guidance(doc, data):
+    """Read guide values and all factor cells from fixed independent PDF grids.
+
+    Neither the values nor the selection of original cells comes from the JSON.
+    Conditions and units are checked against original headers before the values
+    are compared. The product-table coverage above is deliberately unchanged.
+    """
+    guidance = data.get('published_guidance')
+    require(isinstance(guidance, dict), 'GUIDANCE_SCHEMA', 'Bahra published guidance is missing')
+    require(guidance.get('schema') == 'cablesim.catalogue-published-guidance/1'
+            and guidance.get('id') == 'bahra.mv-lead-sheathed.guidance'
+            and guidance.get('usage') == 'published_reference_only'
+            and guidance.get('confidence') == 'reference' and guidance.get('reviewed') is False,
+            'GUIDANCE_SCHEMA', 'Bahra guidance identity or reference-only status changed')
+    method = {'id': 'cablesim.catalogue-guidance-transcription', 'name': 'Bahra 公开手册逐值转录', 'version': '1.0.0'}
+    require(guidance.get('method') == method, 'GUIDANCE_SCHEMA', 'Guidance transcription method differs')
+    source = guidance.get('source', {})
+    require(source.get('sha256') == SOURCES['bahra']['sha256']
+            and source.get('url') == SOURCES['bahra']['url'] and source.get('edition') is None,
+            'GUIDANCE_SOURCE', 'Guidance source must be the fixed, undated manufacturer PDF')
+    unsigned = {key: value for key, value in guidance.items() if key != 'content_sha256'}
+    require(guidance.get('content_sha256') == hashlib.sha256(json.dumps(unsigned, ensure_ascii=False,
+            sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+            'GUIDANCE_DIGEST', 'Published guidance content digest differs')
+    headers = {
+        'resistance': header_evidence(doc, 7, (84, 182, 557, 357),
+            ('2. RESISTANCE', 'R20', 'temperature coefficient', 'copper', 'aluminum')),
+        'capacitance': header_evidence(doc, 7, (84, 366, 315, 472),
+            ('3. CAPACITANCE', 'Relative permittivity', 'PVC', 'XLPE', 'μF/km')),
+        'dielectric_loss': header_evidence(doc, 8, (40, 290, 457, 363),
+            ('9. DIELECTRIC LOSSES', 'tan δ : Dielectric power factor')),
+        'baseline': header_evidence(doc, 12, (40, 130, 530, 450),
+            ('100% load factor', 'one circuit installed thermally isolated', 'IEC 60287', 'IEC 60502-2')),
+        'table-3': header_evidence(doc, 13, (84, 125, 527, 239),
+            ('DIRECT BURIAL', 'Table 3', '15°C', '55°C')),
+        'table-4': header_evidence(doc, 13, (84, 273, 523, 353),
+            ('Table 4', 'Single Core Cables', 'Three Core Cables', '≤ 185 mm2', '> 185 mm2')),
+        'table-5': header_evidence(doc, 13, (84, 502, 527, 704),
+            ('Table 5', 'average values', 'Soil Thermal Resistivity ( °C m / W )',
+             'Single Core Cables', 'Three Core Cables', '≤ 50 mm2', '> 50 mm2 & ≤ 185 mm2', '240 mm2 and above')),
+    }
+    # Page 8 defines the symbol, but supplies no numerical loss tangent.
+    require(not re.search(r'tan\s*δ\s*[=:]\s*\d', headers['dielectric_loss']['text']),
+            'PDF_LAYOUT_MISMATCH', 'The fixed guide unexpectedly contains a numerical loss tangent')
+    baseline = guidance.get('baseline', {})
+    require(baseline.get('source', {}).get('sha256') == SOURCES['bahra']['sha256']
+            and baseline.get('source', {}).get('pdf_page') == 12
+            and baseline.get('source', {}).get('printed_page') == 11
+            and baseline.get('source', {}).get('bbox_pdf_points') == [40, 130, 530, 450],
+            'GUIDANCE_SOURCE', 'Baseline source location differs')
+    baseline_checks, expected_baseline = [], {}
+    for key, rect, pattern, unit in (
+        ('air_temperature_c', (292, 307, 324, 322), r'(\d+(?:\.\d+)?)\s*°C', '°C'),
+        ('ground_temperature_c', (292, 323, 324, 338), r'(\d+(?:\.\d+)?)\s*°C', '°C'),
+        ('depth_m', (292, 339, 332, 354), r'(\d+(?:\.\d+)?)\s*m', 'm'),
+        ('soil_thermal_resistivity', (292, 355, 353, 370), r'(\d+(?:\.\d+)?)\s*°K\.m/W', '°K.m/W'),
+    ):
+        text = doc[11].get_text(clip=fitz.Rect(rect)).strip()
+        match = re.fullmatch(pattern, re.sub(r'\s+', '', text))
+        require(match is not None, 'PDF_LAYOUT_MISMATCH', f'Bahra baseline {key}: original value/unit is missing')
+        value = float(match.group(1))
+        expected_baseline[key] = value
+        original = baseline.get('original_values', {}).get(key, {})
+        require(same_declared_value(original.get('value'), value) and original.get('unit') == unit,
+                'GUIDANCE_CONDITION', f'Bahra baseline original {key} differs')
+        baseline_checks.append({'field': key, 'original_text': text, 'original_value': value,
+                                'original_unit': unit, 'value': value, 'pdf_page': 12, 'bbox_pdf_points': list(rect)})
+    load = re.search(r'(\d+(?:\.\d+)?)%\s*load factor', headers['baseline']['text'])
+    require(load is not None, 'PDF_LAYOUT_MISMATCH', 'Original percentage load factor is missing')
+    load_value = Decimal(load.group(1))
+    expected_baseline.update(circuit_count=1, load_factor=float(load_value / 100), thermally_isolated=True)
+    require(same_declared_value(baseline.get('conditions'), expected_baseline)
+            and baseline['conditions']['thermally_isolated'] is True,
+            'GUIDANCE_CONDITION', 'Published baseline conditions differ from the original guide')
+    originals = baseline.get('original_values', {})
+    require(same_declared_value(originals.get('load_factor'), {'value': float(load_value), 'unit': '%',
+                'original_text': '100% load factor', 'conversion': '100% / 100 = 1（无量纲）'})
+            and same_declared_value(originals.get('circuit_count'), {'value': 1, 'unit': '1', 'original_text': 'one circuit'}),
+            'GUIDANCE_CONDITION', 'The original percentage or single-circuit wording was lost')
+    baseline_checks.extend([
+        {'field': 'load_factor', 'original_value': float(load_value), 'original_unit': '%',
+         'value': float(load_value / 100), 'unit': '1', 'conversion': 'original percentage / 100', 'pdf_page': 12},
+        {'field': 'circuit_count', 'original_text': 'one circuit', 'value': 1, 'unit': '1', 'pdf_page': 12},
+        {'field': 'thermally_isolated', 'original_text': 'thermally isolated from other circuits or any other heat source',
+         'value': True, 'pdf_page': 12},
+    ])
+    checks = []
+
+    def compare(item, original, *, identity, category, unit, conditions, section, row, column, table=None):
+        where = 'Bahra guidance ' + identity
+        require(isinstance(item, dict) and item.get('id') == identity and item.get('unit') == unit
+                and same_declared_value(item.get('conditions'), conditions) and item.get('method') == method
+                and item.get('confidence') == 'reference', 'GUIDANCE_CONDITION', where + ': identity, unit or conditions differ')
+        citation = item.get('source', {})
+        require(citation.get('sha256') == SOURCES['bahra']['sha256']
+                and citation.get('pdf_page') == original['pdf_page']
+                and citation.get('printed_page') == original['printed_page']
+                and citation.get('bbox_pdf_points') == original['bbox_pdf_points']
+                and citation.get('original_text') == original['text'] and citation.get('section') == section
+                and same_declared_value(citation.get('row'), row) and same_declared_value(citation.get('column'), column)
+                and (table is None or citation.get('table') == table),
+                'GUIDANCE_SOURCE', where + ': original cell location or printed text differs')
+        difference = numeric(item.get('value'), where) - Decimal(original['text'])
+        checks.append({'id': identity, 'category': category, 'table': table, 'unit': unit,
+                       'conditions': conditions, 'dataset_value': item['value'], 'pdf_value': original['value'],
+                       'difference': float(difference), 'status': 'exact_match' if difference == 0 else 'MISMATCH',
+                       **{key: value for key, value in original.items() if key != 'value'}})
+
+    material_specs = [
+        ('copper-alpha20', 'copper', (110, 263, 153, 265)),
+        ('aluminium-alpha20', 'aluminium', (110, 274, 153, 276)),
+        ('pvc-permittivity', 'PVC', (135, 447, 152, 449)),
+        ('xlpe-permittivity', 'XLPE', (135, 458, 152, 460)),
+    ]
+    materials = guidance.get('material_facts')
+    require(isinstance(materials, list) and len(materials) == 4, 'GUIDANCE_COVERAGE', 'Exactly four material-guide values are required')
+    for item, (identity, material, rect) in zip(materials, material_specs):
+        rows, _ = extract_rows(doc, 'bahra', 7, rect)
+        require(len(rows) == 1 and len(rows[0]) == 1, 'PDF_LAYOUT_MISMATCH', identity + ': original cell is ambiguous')
+        alpha = identity.endswith('alpha20')
+        require(item.get('quantity') == ('conductor_resistance_temperature_coefficient_20' if alpha else 'insulation_relative_permittivity')
+                and item.get('usage') == ('resistance_temperature_conversion' if alpha else 'capacitance_calculation'),
+                'GUIDANCE_CONDITION', identity + ': published purpose changed')
+        compare(item, rows[0][0], identity=identity, category='material_guide', unit='1/K' if alpha else '1',
+                conditions={'material': material, **({'reference_temperature_c': 20} if alpha else {'temperature_c': None, 'frequency_hz': None})},
+                section='2. RESISTANCE' if alpha else '3. CAPACITANCE', row=material,
+                column='alpha20' if alpha else 'relative_permittivity')
+    tables = guidance.get('correction_tables')
+    require(isinstance(tables, list) and [t.get('id') for t in tables] == ['table-3', 'table-4', 'table-5'],
+            'GUIDANCE_COVERAGE', 'Exactly Tables 3, 4 and 5 are covered')
+    expected = []
+
+    def axis(field, unit, rect, text=None):
+        return {'field': field, 'unit': unit, 'bbox_pdf_points': list(rect),
+                'original_text': doc[12].get_text(clip=fitz.Rect(rect)).strip() if text is None else text}
+
+    temperature_headers = sorted([word for word in doc[12].get_text('words')
+        if 195 <= word[0] <= 520 and 213 <= word[1] <= 215 and re.fullmatch(r'\d+°C', word[4])], key=lambda word: word[0])
+    temperatures = [int(word[4].removesuffix('°C')) for word in temperature_headers]
+    require(temperatures == list(range(15, 56, 5)), 'PDF_LAYOUT_MISMATCH', 'Table 3 temperature axis differs')
+    rows, _ = extract_rows(doc, 'bahra', 13, (195, 240, 520, 242))
+    require(len(rows) == 1 and len(rows[0]) == 9, 'PDF_LAYOUT_MISMATCH', 'Table 3 factor grid differs')
+    for col, (temperature, header, cell) in enumerate(zip(temperatures, temperature_headers, rows[0]), 1):
+        axes = [axis('ground_temperature_c', '°C', [round(v, 4) for v in header[:4]], header[4])]
+        expected.append((0, f'table-3.ground-{temperature}', {'ground_temperature_c': temperature}, cell, 1, col, axes))
+    rows, _ = extract_rows(doc, 'bahra', 13, (125, 354, 480, 471))
+    require(len(rows) == 9 and all(len(row) == 4 for row in rows)
+            and [row[0]['value'] for row in rows] == [.5, .6, .8, 1., 1.25, 1.5, 2., 2.5, 3.],
+            'PDF_LAYOUT_MISMATCH', 'Table 4 depth axis or factor grid differs')
+    for row_number, row in enumerate(rows, 1):
+        depth = row[0]['value']
+        for col, ((key, cores, area), cell) in enumerate(zip(
+                [('single-le185', 1, {'lte': 185}), ('single-gt185', 1, {'gt': 185}), ('three-core', 3, None)], row[1:]), 1):
+            axes = [axis('depth_m', 'm', row[0]['bbox_pdf_points'], row[0]['text']),
+                    axis('cores', '1', (250, 295, 350, 311) if cores == 1 else (420, 320, 510, 338))]
+            if area is not None:
+                axes.append(axis('area_mm2', 'mm2', (215, 338, 279, 353) if col == 1 else (325, 338, 386, 353)))
+            expected.append((1, f'table-4.depth-{depth:g}.{key}',
+                             {'depth_m': depth, 'cores': cores, **({'area_mm2': area} if area is not None else {})}, cell, row_number, col, axes))
+    soil, _ = extract_rows(doc, 'bahra', 13, (215, 543, 520, 545))
+    require(len(soil) == 1 and [x['value'] for x in soil[0]] == [.8, .9, 1., 1.2, 1.5, 2., 2.5, 3.],
+            'PDF_LAYOUT_MISMATCH', 'Table 5 soil-resistivity axis differs')
+    rows, _ = extract_rows(doc, 'bahra', 13, (210, 577, 523, 685))
+    require(len(rows) == 6 and all(len(row) == 8 for row in rows), 'PDF_LAYOUT_MISMATCH', 'Table 5 factor grid differs')
+    # The six 1.2-column entries are six separately printed "1" cells. They have
+    # independent coordinates; no merged-cell propagation or inferred 1 is used.
+    require(len({tuple(row[3]['bbox_pdf_points']) for row in rows}) == 6,
+            'PDF_LAYOUT_MISMATCH', 'Table 5 baseline cells must have six distinct original locations')
+    profiles = [('single-le50', 1, {'lte': 50}), ('single-gt50-le185', 1, {'gt': 50, 'lte': 185}),
+                ('single-ge240', 1, {'gte': 240}), ('three-le50', 3, {'lte': 50}),
+                ('three-gt50-le185', 3, {'gt': 50, 'lte': 185}), ('three-ge240', 3, {'gte': 240})]
+    for row_number, ((key, cores, area), row) in enumerate(zip(profiles, rows), 1):
+        y = row[0]['bbox_pdf_points'][1]
+        for col, (soil_axis, cell) in enumerate(zip(soil[0], row), 1):
+            rho = soil_axis['value']
+            axes = [axis('soil_thermal_resistivity', '°C m / W', soil_axis['bbox_pdf_points'], soil_axis['text']),
+                    axis('area_mm2', 'mm2', (85, y - .2, 205, y + 13)),
+                    axis('cores', '1', (258, 559 if cores == 1 else 630, 351, 574 if cores == 1 else 645))]
+            expected.append((2, f'table-5.{key}.soil-{rho:g}',
+                             {'cores': cores, 'area_mm2': area, 'soil_thermal_resistivity': rho}, cell, row_number, col, axes))
+    require([len(table.get('factors', [])) for table in tables] == [9, 27, 48]
+            and all(table.get('installation') == 'direct_buried' for table in tables),
+            'GUIDANCE_COVERAGE', 'Direct-burial factor tables are missing, duplicated or expanded')
+    offsets = [0, 0, 0]
+    for table_index, identity, conditions, cell, row, column, expected_axes in expected:
+        item = tables[table_index]['factors'][offsets[table_index]]
+        offsets[table_index] += 1
+        table = 'Table ' + str(table_index + 3)
+        compare(item, cell, identity=identity, category='direct_burial_factor', unit='1',
+                conditions={'installation': 'direct_buried', **conditions}, section=table, row=row, column=column, table=table)
+        axes = item.get('source', {}).get('condition_evidence')
+        # A real header from a different row must not be accepted as provenance
+        # for these conditions. These original locations were selected above
+        # independently of every coordinate supplied by the dataset under audit.
+        require(same_declared_value(axes, expected_axes), 'GUIDANCE_SOURCE',
+                identity + ': condition provenance differs from its independently located original headers')
+    counts = Counter(item['category'] for item in checks)
+    require(len(checks) == len({item['id'] for item in checks}) == 88
+            and counts == {'material_guide': 4, 'direct_burial_factor': 84},
+            'GUIDANCE_COVERAGE', 'Published guidance coverage differs')
+    summary = {'material_facts_checked': 4, 'logical_factors_checked': 84,
+               'logical_factors_by_table': {'table-3': 9, 'table-4': 27, 'table-5': 48},
+               'numeric_status_counts': dict(Counter(item['status'] for item in checks)),
+               'baseline_conditions_checked': len(baseline_checks),
+               'mismatches': [item for item in checks if item['status'] == 'MISMATCH']}
+    return {'summary': summary, 'source_headers_and_units': headers, 'baseline_checks': baseline_checks,
+            'numeric_checks': checks, 'content_sha256': guidance['content_sha256'],
+            'scope': 'Manufacturer reference guidance only; not manufacturing measurements, GB 50217 factors, or actual calculation inputs.'}
+
+
 def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
 
@@ -400,7 +625,10 @@ def run(args):
             source_files[name]['pdf_pages'] = len(docs[name])
         originals = original_cells(docs)
         checks, metrics, summary = compare_catalogues(data, originals)
-        summary['status'] = 'failed' if summary['mismatches'] else 'passed'
+        guidance = audit_published_guidance(docs['bahra'], data['bahra'])
+        summary['published_guidance'] = guidance['summary']
+        mismatches = summary['mismatches'] + guidance['summary']['mismatches']
+        summary['status'] = 'failed' if mismatches else 'passed'
         report = {'created_utc': datetime.now(timezone.utc).isoformat(),
             'method': {'id': 'cablesim.catalogue-original-audit', 'version': METHOD_VERSION,
                        'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -409,15 +637,18 @@ def run(args):
             'source_files': source_files, 'catalogue_files': catalogue_files,
             'original_headers_and_units': originals[3], 'overlaid_pdf_tokens_suppressed': originals[4],
             'summary': summary, 'four_metric_checks': metrics, 'all_numeric_cell_checks': checks,
+            'published_guidance_audit': guidance,
             'rendered_pages': {},
             'visual_review': 'PNG pages are evidence for review; this automated run does not assert human visual inspection.',
             'limits': [
                 'Checks faithful transcription of published approximate values, not measured manufacturing data or product compliance.',
-                'Coverage is the 877 numeric cells transcribed in the two datasets, not every table in the complete handbooks.',
+                'The original product-table coverage is 877 numeric cells; four material-guide values and 84 logical factors are reported separately. This is not coverage of the complete handbooks.',
                 'People R20 is unpublished: 46 absent slots do not count as numeric matches.',
                 'Missing manufacturer construction and installation conditions remain missing; no reference assumptions are used here.',
                 'Bahra reactance, cable codes and drum lengths are outside the transcribed columns; their neighbouring grid positions are not silently substituted.',
                 'Short-circuit rows retain 1 second, resistance rows retain 20/90 degrees C, inductance/capacitance retain 60 Hz, and voltage drop retains its per-phase basis in the original headers.',
+                'Bahra capacitance-guide permittivity is not substituted for IEC ampacity dielectric-loss inputs. The printed 100 percent load factor is explicitly converted to the dimensionless baseline 1.',
+                'Tables 3–5 contain discrete manufacturer direct-burial factors only. Their conditions, area bounds and original units are retained; no interpolation, extrapolation or GB 50217 attribution is performed.',
             ],
             'source_anomalies_preserved': [
                 'People PDF 2 / printed 044 / Table 1: 185 and 240 mm2 both publish OD 36 mm.',
@@ -440,10 +671,18 @@ def run(args):
             writer = csv.DictWriter(stream, fieldnames=fields)
             writer.writeheader()
             writer.writerows(metrics)
-        require(not summary['mismatches'], 'CATALOGUE_VALUE_MISMATCH',
-                f'{len(summary["mismatches"])} catalogue cells differ from the original PDFs; see original-pdf-cell-audit.json')
+        with (args.output / 'original-pdf-guidance.csv').open('w', newline='', encoding='utf-8') as stream:
+            fields = ['id', 'category', 'table', 'unit', 'conditions', 'dataset_value', 'pdf_value', 'difference',
+                      'status', 'text', 'pdf_page', 'printed_page', 'bbox_pdf_points']
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows({**item, 'conditions': json.dumps(item['conditions'], ensure_ascii=False, sort_keys=True),
+                              'bbox_pdf_points': json.dumps(item['bbox_pdf_points'])} for item in guidance['numeric_checks'])
+        require(not mismatches, 'CATALOGUE_VALUE_MISMATCH',
+                f'{len(mismatches)} published values differ from the original PDFs; see original-pdf-cell-audit.json')
         require(summary['four_metric_status_counts'] == {'exact_match': 190, 'not_published': 46}
-                and summary['all_transcribed_numeric_cell_status_counts'] == {'exact_match': 877},
+                and summary['all_transcribed_numeric_cell_status_counts'] == {'exact_match': 877}
+                and guidance['summary']['numeric_status_counts'] == {'exact_match': 88},
                 'AUDIT_COVERAGE', 'Unexpected exact-match or unpublished-metric coverage')
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
