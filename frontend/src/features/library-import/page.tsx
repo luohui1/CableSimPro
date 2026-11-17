@@ -17,7 +17,7 @@ import { ValueTable } from './value-table';
 import { ExchangeImport } from './exchange';
 import { LibraryDialog } from './dialog';
 import { displayUnit } from '@/lib/display-names';
-import { issueText, libraryPost, libraryRequest, methodText, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
+import { issueText, libraryPost, libraryRequest, methodText, normalizeSeriesDeclaration, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
 import './library-import.css';
 
 const STEPS = ['选择文件', '选择工作表', '列映射', '系列声明', '预览入库'];
@@ -101,14 +101,15 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       const sheet = result.sheets.find(item => item.table) || result.sheets[0];
       if (!sheet) throw new Error('文件中没有可以读取的工作表。');
       setSheetName(sheet.name); setFirst(sheet.first_data_row || 1);
-      setSeries(result.declarations?.find(item => item.sheet === sheet.name)?.series || { ...emptyDeclaration(), name: file.name.replace(/\.[^.]+$/, ''), source: { title: file.name } });
+      const declaration = result.declarations?.find(item => item.sheet === sheet.name)?.series;
+      setSeries(declaration ? normalizeSeriesDeclaration(declaration) : { ...emptyDeclaration(), name: file.name.replace(/\.[^.]+$/, ''), source: { title: file.name } });
       setReceipt(null); setMapping({}); setMappingNotice(''); setActiveMapping(''); invalidatePreview(); setStep(1);
     });
   }
   function chooseSheet() {
     if (!selectedSheet) return;
     const declaration = upload?.declarations?.find(item => item.sheet === selectedSheet.name);
-    if (declaration) setSeries(structuredClone(declaration.series));
+    if (declaration) setSeries(normalizeSeriesDeclaration(structuredClone(declaration.series)));
     setFirst(declaration?.first_data_row || selectedSheet.first_data_row || 1);
     setMapping(declaration?.mapping || Object.fromEntries(columns.filter(column => column.suggested).map(column => [column.suggested!, column.index])));
     setActiveMapping('');

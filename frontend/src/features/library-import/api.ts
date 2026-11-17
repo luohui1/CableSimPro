@@ -14,6 +14,12 @@ export interface SeriesDeclaration {
   metal_sheath?: 'lead' | 'corrugated_aluminium' | 'smooth_aluminium'; oversheath?: 'PVC' | 'PE';
   resistance_basis?: 'stated' | 'standard_limit'; reference?: Record<string, unknown>;
 }
+export type UploadedSeriesDeclaration = Omit<SeriesDeclaration, 'common' | 'common_basis' | 'modelling'>
+  & Partial<Pick<SeriesDeclaration, 'common' | 'common_basis' | 'modelling'>>;
+export function normalizeSeriesDeclaration(value: UploadedSeriesDeclaration): SeriesDeclaration {
+  // Omitted parameter maps represent no supplied values.
+  return { ...value, common: value.common ?? {}, common_basis: value.common_basis ?? {}, modelling: value.modelling ?? {} };
+}
 export interface Mapping { name: string; mapping: Record<string, number>; headers: Record<string, string> }
 export interface Vocabulary {
   fields: Field[]; modelling: Field[]; reference_modelling: Record<string, GivenParameter>;
@@ -26,7 +32,7 @@ export interface TableSheet {
 }
 export interface Upload {
   upload_id: string; file: string; sha256: string; size: number; sheets: TableSheet[]; fields: Field[];
-  declarations?: { sheet: string; series: SeriesDeclaration; mapping?: Record<string, number>; first_data_row?: number }[];
+  declarations?: { sheet: string; series: UploadedSeriesDeclaration; mapping?: Record<string, number>; first_data_row?: number }[];
 }
 export interface ValueSource {
   key: string; label: string; value: number | string | null; unit: string;
