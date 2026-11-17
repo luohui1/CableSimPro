@@ -1,6 +1,7 @@
 """Formal workbooks from the same exact model as PDF, without recalculation.
 
-The printable tables keep JSON numeric text as literal strings. A provenance
+The printable body uses declared engineering displays as literal strings;
+trace tables retain exact JSON numeric text. A provenance
 index supplies separately typed numeric cells for analysis; their OOXML numeric
 lexemes are written explicitly because openpyxl's %.16g formatter loses some
 saved IEEE-754 values. The original text remains authoritative after Excel edits.
@@ -24,6 +25,7 @@ from PIL import Image, ImageDraw
 from .formal_contracts import (canonical_bytes, decode_logo, fail, is_number,
                                referenced_value, validate_model_refs)
 from .type_specification_drawing import section_layout
+from .formal_presentation import cell_text, cell_unit
 
 
 _FONT = 'Noto Sans CJK SC'
@@ -189,7 +191,7 @@ def _cover(workbook, model, streams):
     row += 2
     for paragraph in (
         '签栏来自与本文件范围一致的已有签核记录；没有记录的角色留空。',
-        '工程表保留完整原始数值文本及原记录单位，不作舍入或单位换算。',
+        ('正文工程值按“文件范围与保存状态”声明的 GB/T 8170 规则换算并修约一次；保存原值、原单位及换算关系在追溯工作表。' if model.get('presentation') else '工程表保留完整原始数值文本及原记录单位，不作舍入或单位换算。'),
         '“追溯数值”提供可用于分析的数值副本与来源索引；Excel 的显示精度和另存行为可能改变该副本，核对请用原文列。',
         '“追溯原文”分片保存完整来源模型；拼接 json_chunk 即可还原全部输入快照、输出、方法清单及来源摘要。'):
         row = _merged(sheet, row, paragraph)
@@ -238,7 +240,7 @@ def _section(workbook, model, section, numeric_index, streams):
         has_unit = any(column.get('role') == 'unit' for column in table['columns'])
         for column in table['columns']:
             result.append(column)
-            if not has_unit and any(row['cells'][column['key']].get('unit') for row in table['rows']):
+            if not has_unit and not column.get('unit_in_header') and any(row['cells'][column['key']].get('unit') for row in table['rows']):
                 result.append({'key': '__unit__' + column['key'], 'label': column['label'] + ' · 单位',
                                'role': 'unit', 'unit_of': column['key']})
         return result
@@ -265,32 +267,39 @@ def _section(workbook, model, section, numeric_index, streams):
         table = model['tables'][table_id]
         display = columns(table)
         if table.get('title'):
-            row = _merged(sheet, row, table['title'], count, shade=True)
+            row = _merged(sheet, row, ('T' + str(table['display_number']) + '  ' if table.get('display_number') else '') + table['title'], count, shade=True)
         for column, definition in enumerate(display, 1):
             _text(sheet.cell(row, column), definition['label'], bold=True, fill=_SHADE)
-        _row_height(sheet, row, [item['label'] for item in display], widths)
+        header_height = _height([item['label'] for item in display], widths)
+        header_span = math.ceil(header_height / 350)
+        for column in range(1, len(display) + 1):
+            if header_span > 1:
+                sheet.merge_cells(start_row=row, start_column=column,
+                                  end_row=row + header_span - 1, end_column=column)
+        for current in range(row, row + header_span):
+            sheet.row_dimensions[current].height = header_height / header_span
         first_header = first_header or row
-        row += 1
+        row += header_span
         for entry in table['rows']:
             texts = []
             for column, definition in enumerate(display, 1):
                 if 'unit_of' in definition:
-                    unit = entry['cells'][definition['unit_of']].get('unit') or ''
+                    unit = cell_unit(entry['cells'][definition['unit_of']]) or ''
                     _text(sheet.cell(row, column), unit)
                     texts.append(unit)
                     continue
                 cell = entry['cells'][definition['key']]
-                target = _text(sheet.cell(row, column), cell['raw_text'],
+                target = _text(sheet.cell(row, column), cell_text(cell),
                                fill='F7FAFC' if row % 2 == 0 else None)
                 target.border = Border(bottom=Side(style='hair', color=_RULE))
                 if is_number(cell['value']):
-                    if len(cell['raw_text']) > 80:
+                    if len(cell_text(cell)) > 80:
                         fail('FORMAL_XLSX_LAYOUT', '完整数值超过可读列宽，不会截断或舍入。')
                     target.alignment = Alignment(horizontal='right', vertical='top', wrap_text=False)
                     # Auto width preserves the full JSON lexeme on screen.
-                    widths[column - 1] = max(widths[column - 1], len(cell['raw_text']) + 2)
+                    widths[column - 1] = max(widths[column - 1], len(cell_text(cell)) + 2)
                     numeric_index.append((table_id, entry['id'], definition['key'], sheet.title, target.coordinate, cell))
-                texts.append(cell['raw_text'])
+                texts.append(cell_text(cell))
             height = _height(texts, widths)
             span = math.ceil(height / 350)
             if span > 1:
@@ -311,8 +320,12 @@ def _archive(workbook, model, index):
     sheet = workbook.create_sheet(_INDEX_SHEET)
     sheet.sheet_properties.tabColor = _MUTED
     widths = [28, 32, 20, 32, 12, 30, 30, 18, 42, 64, 40, 64, 16]
+    headers = _INDEX_HEADERS
+    if model.get('presentation'):
+        headers += ('rendered_text', 'display_text', 'display_unit', 'scale', 'offset', 'quantum', 'rounding', 'display_policy')
+        widths += [30, 30, 20, 18, 18, 18, 24, 40]
     _setup(sheet, model, widths)
-    for column, header in enumerate(_INDEX_HEADERS, 1):
+    for column, header in enumerate(headers, 1):
         _text(sheet.cell(1, column), header, bold=True, fill=_SHADE)
     lexemes = {}
     for row, (table_id, row_id, key, name, address, cell) in enumerate(index, 2):
@@ -322,6 +335,10 @@ def _archive(workbook, model, index):
             kind = 'int-text'
         values = (table_id, row_id, key, name, address, cell['raw_text'], cell['raw_text'], cell.get('unit'),
                   reference['source_id'], reference['pointer'], unit_ref.get('source_id'), unit_ref.get('pointer'), kind)
+        if model.get('presentation'):
+            display = cell.get('display') or cell.get('display_origin') or {}
+            values += (cell_text(cell), display.get('text', cell_text(cell)), display.get('unit', cell_unit(cell)), display.get('scale'), display.get('offset'),
+                       display.get('quantum'), display.get('rounding'), display.get('policy'))
         for column, value in enumerate(values, 1):
             _text(sheet.cell(row, column), value)
         if kind != 'int-text':
