@@ -17,7 +17,7 @@ import { ValueTable } from './value-table';
 import { ExchangeImport } from './exchange';
 import { LibraryDialog } from './dialog';
 import { displayUnit } from '@/lib/display-names';
-import { issueText, libraryPost, libraryRequest, methodText, normalizeSeriesDeclaration, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
+import { displayLibraryText, issueText, libraryPost, libraryRequest, methodText, normalizeSeriesDeclaration, tableHeaderText, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
 import './library-import.css';
 
 const STEPS = ['选择文件', '选择工作表', '列映射', '系列声明', '预览入库'];
@@ -161,9 +161,9 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       <h2 ref={heading} tabIndex={-1}>选择工作表</h2>
       <Select label="工作表" value={sheetName} disabled={!!busy} onChange={name => { setSheetName(name); invalidatePreview(); }} options={(upload?.sheets || []).map(sheet => ({ value: sheet.name, label: `${sheet.name} · ${sheet.data_rows ?? sheet.rows} 行` }))} />
       {selectedSheet?.title && <p>{selectedSheet.title}</p>}
-      {!columns.length ? <p role="status">没有识别到表头，请检查原文件是否以列名和数值行组织。</p> : <DataTable label="工作表原始列" showGroups={false} groups={[{ id: 'columns', label: '原始列', rows: columns.map(column => ({ ...column, id: String(column.index) })) }]} rowLabel={row => `${row.letter} 列 ${row.header}`} columns={[
+      {!columns.length ? <p role="status">没有识别到表头，请检查原文件是否以列名和数值行组织。</p> : <DataTable label="工作表原始列" showGroups={false} groups={[{ id: 'columns', label: '原始列', rows: columns.map(column => ({ ...column, id: String(column.index) })) }]} rowLabel={row => `${row.letter} 列 ${tableHeaderText(row.header)}`} columns={[
         { id: 'letter', label: '原表列', render: row => row.letter },
-        { id: 'header', label: '列名', wrap: true, render: row => row.header || '无列名' },
+        { id: 'header', label: '列名', wrap: true, render: row => tableHeaderText(row.header) || '无列名' },
         { id: 'sample', label: '示例值（原表单位）', wrap: true, render: row => row.sample.filter(value => value !== null).join(' / ') || '空值' },
       ]} />}
       <div className="library-import-actions"><Button onClick={() => changeStep(0)}>上一步</Button><Button variant="primary" disabled={!columns.length || !!busy} onClick={chooseSheet}>确认工作表，设置列映射</Button></div>
@@ -177,7 +177,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
         <Select label="复用已保存映射" value={activeMapping} onChange={applyMapping} options={[{ value: '', label: '选择列映射模板' }, ...vocabulary.mappings.map(item => ({ value: item.name, label: item.name }))]} />
       </div>
       <DataTable label="列映射" showGroups={false} groups={[{ id: 'columns', label: '列映射', rows: columns.map(column => ({ ...column, id: String(column.index) })) }]} rowLabel={row => `${row.letter} 列映射`} columns={[
-        { id: 'column', label: '原表列名', wrap: true, render: row => `${row.letter} · ${row.header || '无列名'}` },
+        { id: 'column', label: '原表列名', wrap: true, render: row => `${row.letter} · ${tableHeaderText(row.header) || '无列名'}` },
         { id: 'sample', label: '示例值', wrap: true, render: row => row.sample.filter(value => value !== null).join(' / ') || '空值' },
         { id: 'field', label: '目标字段与单位', render: row => <Select label={`${row.letter} 列对应`} value={Object.entries(mapping).find(([, index]) => index === row.index)?.[0] || ''} options={[{ value: '', label: '不导入此列' }, ...fields.map(field => ({ value: field.key, label: `${field.label} / ${displayUnit(field.unit)}` }))]} onChange={field => {
           const next = Object.fromEntries(Object.entries(mapping).filter(([key, index]) => key !== field && index !== row.index));
@@ -222,7 +222,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
         { id: 'row', label: '原表行', numeric: true, render: row => row.row_number },
         { id: 'name', label: '规格与数值', wrap: true, render: row => <Button variant="link" onClick={() => setPreviewRow(row)}>{row.name || row.key || '查看原始数值'}</Button> },
         { id: 'state', label: '状态', render: row => ({ ready: '可入库', incomplete: '资料缺项', error: '不可入库' })[row.status] },
-        { id: 'issues', label: '问题列与原因', wrap: true, render: row => <div className="library-import-issues">{row.issues.map((issue, index) => <span key={index}>{issue.column ? `${issue.column} 列 · ` : ''}{issue.field ? `${fields.find(field => field.key === issue.field)?.label || issue.field}：` : ''}{issue.message}</span>)}{row.missing.map((missing, index) => <span key={`missing-${index}`}>{issueText(missing)}</span>)}{!row.issues.length && !row.missing.length ? '—' : null}</div> },
+        { id: 'issues', label: '问题列与原因', wrap: true, render: row => <div className="library-import-issues">{row.issues.map((issue, index) => <span key={index}>{issue.column ? `${issue.column} 列 · ` : ''}{issue.field ? `${fields.find(field => field.key === issue.field)?.label || displayLibraryText(issue.field)}：` : ''}{displayLibraryText(issue.message)}</span>)}{row.missing.map((missing, index) => <span key={`missing-${index}`}>{issueText(missing)}</span>)}{!row.issues.length && !row.missing.length ? '—' : null}</div> },
       ]} />
       <p className="library-import-source">来源：{preview.file} · {preview.sheet}。每个数保留原表行列、来源、方法版本与可信分档。</p>
       <section className="library-import-stack" aria-label="执行标准来源确认">

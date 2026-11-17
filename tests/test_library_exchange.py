@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
-from backend.kernel.resource_exchange import PROJECT_LIMIT, TRANSFER_SHEET, encoded, parse_file
+from backend.kernel.resource_exchange import PROJECT_KEYS, PROJECT_LIMIT, TRANSFER_SHEET, encoded, parse_file
 from backend.kernel.workspace import fingerprint
 from backend.main import create_app
 
@@ -72,7 +72,9 @@ def candidate_study(client):
                                  'id': 'material/unbound', 'label': '未引用的演示材料'})
     response = client.post('/api/domain-cable-models', json={
         'name': '传输演示', 'version': '1.0.0', **payload,
-        'sources': {'/': {'kind': 'demo', 'reviewed': False,
+        # Deliberately retain an order different from canonical exchange JSON.
+        'sources': {'/materials/material~1cu': {'kind': 'demo', 'reviewed': False,
+            'reference': model['source']}, '/': {'kind': 'demo', 'reviewed': False,
             'reference': f"系统演示 {model['id']} @{model['version']} sha256:{model['content_sha256']}；仅验证输入搬运。"}},
         'confirmed': False})
     assert response.status_code == 201, response.text
@@ -140,6 +142,87 @@ def test_real_material_and_project_roundtrip_do_not_copy_approval(clients, forma
     assert restored['assets'][0]['release'] == original['assets'][0]['release']
     assert restored['projects'][0]['inputs'] == original['projects'][0]['inputs']
     assert source.get('/api/foundation/assets/' + material['id']).json()['status'] == 'published'
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
+def test_current_system_snapshots_roundtrip_without_rewriting_fixed_versions(clients, format):
+    source, target = clients
+    models = source.get('/api/design/cable-models').json()
+    transferred = set()
+    for model in models:
+        assert model['id'].startswith('system.')
+        response = source.post('/api/design/study-workspaces', json={
+            'model_id': model['id'], 'content_sha256': model['content_sha256'],
+            'project_name': '固定系统输入搬运 · ' + model['name']})
+        assert response.status_code == 201, response.text
+        project = response.json()
+        inputs = {key: value for key, value in project.items() if key in PROJECT_KEYS}
+        if len(encoded(inputs)) > PROJECT_LIMIT:
+            # The existing 120 KB contract also applies to large system studies.
+            response = source.post('/api/library/exchange/export', json={
+                'workspace_ids': [project['id']], 'format': format})
+            assert response.status_code == 413, (model['id'], response.text)
+            assert response.json()['detail']['code'] == 'EXCHANGE_PROJECT_TOO_LARGE'
+            continue
+        data, original = export(source, project=project, format=format)
+        _, imported = upload(target, 'data.' + format, data)
+        assert imported.status_code == 201, (model['id'], imported.text)
+        copied = target.get('/api/workspaces/' + imported.json()['projects'][0]['id']).json()
+        assert copied['study_cable_reference'] == project['study_cable_reference']
+        assert copied['study_cable_reference']['payload'] == model['payload']
+        assert copied['study_cable_reference']['state'] == 'demo'
+        assert copied['exchange_origin']['approval_inherited'] is False
+        _, restored = export(target, project=copied, format=format)
+        assert restored['projects'][0]['inputs'] == original['projects'][0]['inputs']
+        # Imported binding metadata remains usable by the actual model API.
+        rebound = target.post('/api/design/workspaces/' + copied['id'] + '/cable-reference', json={
+            'model_id': model['id'], 'content_sha256': model['content_sha256'],
+            'expected_revision': copied['revision']})
+        assert rebound.status_code == 200, (model['id'], rebound.text)
+        transferred.add(model['id'])
+    assert {'system.cu-xlpe-al-240', 'system.specification-cu-xlpe-al-400'} <= transferred
+
+
+def test_system_identity_approval_and_binding_metadata_cannot_be_self_certified(clients):
+    source, target = clients
+    _, original = export(source, project=study(source))
+    for change in ('unknown_id', 'old_version', 'name', 'source', 'approval', 'payload', 'defaults', 'defaults_bool', 'locks'):
+        bundle = deepcopy(original)
+        item = bundle['projects'][0]
+        binding = item['inputs']['study_cable_reference']
+        if change == 'unknown_id':
+            binding['id'] = 'system.unregistered-model'
+        elif change == 'old_version':
+            binding['version'] = '1.0.0'
+        elif change == 'name':
+            binding['name'] += ' 外部改版'
+        elif change == 'source':
+            binding['source'] = '已核对的厂家产品数据'
+        elif change == 'approval':
+            binding['state'] = 'reviewed'
+        elif change == 'payload':
+            binding['payload']['cable_type']['label'] += ' 外部改版'
+            item['inputs']['domain']['cable_types'][0]['label'] = binding['payload']['cable_type']['label']
+        elif change == 'defaults':
+            binding['method_defaults']['cablesim.iec60287']['ks'] = 2
+        elif change == 'defaults_bool':
+            binding['method_defaults']['cablesim.iec60287']['ks'] = True
+        else:
+            binding['locks'] = None
+        # All attacker-controlled digests are recomputed; catalogue identity is
+        # checked independently of these internally consistent transport hashes.
+        binding['content_sha256'] = fingerprint(binding['payload'])
+        item['input_sha256'] = fingerprint(item['inputs'])
+        bundle['sha256'] = fingerprint({key: value for key, value in bundle.items() if key != 'sha256'})
+        code = 'EXCHANGE_CABLE_REFERENCE' if change == 'locks' else 'EXCHANGE_SYSTEM_MODEL_PROOF'
+        for route in ('preview', 'import'):
+            response = target.post('/api/library/exchange/' + route,
+                files={'file': ('data.json', encoded(bundle))},
+                data={'request_id': str(uuid4()), 'reviewed_sha256': bundle['sha256'], 'confirmed': 'true'},
+                headers={'X-CableSim-Actor': 'human'})
+            assert response.status_code == 422, (change, route, response.text)
+            assert response.json()['detail']['code'] == code, (change, route, response.text)
+        assert target.get('/api/workspaces').json() == []
 
 
 def test_missing_preview_acknowledgement_and_payload_tampering_cannot_write(clients):
@@ -230,6 +313,7 @@ def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_
         assert binding['content_sha256'] == candidate['digest']
         assert binding['payload'] == project['study_cable_reference']['payload']
         assert binding['source_snapshot']['payload'] == candidate['payload']
+        assert list(binding['source_snapshot']['payload']['sources']) != list(candidate['payload']['sources'])
         assert binding['source_snapshot']['origin_id'] == 'candidate:' + candidate['id']
         assert binding['source_snapshot']['origin_state'] == candidate['state']
         assert binding['id'].startswith('exchange-model:') and binding['state'] == 'draft'
@@ -268,13 +352,19 @@ def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_c
     _, original = export(source, project=project)
     cases = [
         ('source', 'EXCHANGE_CABLE_SOURCE_DIGEST'),
+        ('missing_projection_field', 'EXCHANGE_CABLE_SOURCE'),
         ('digest', 'EXCHANGE_CABLE_SOURCE_DIGEST'),
         ('projection', 'EXCHANGE_CABLE_PROJECTION'),
+        ('projection_bool', 'EXCHANGE_CABLE_PROJECTION'),
         ('origin_id', 'EXCHANGE_CABLE_IDENTITY'),
         ('local_id', 'EXCHANGE_CABLE_IDENTITY'),
         ('approval', 'EXCHANGE_CABLE_IDENTITY'),
         ('missing', 'EXCHANGE_CABLE_SOURCE'),
         ('published_without_proof', 'EXCHANGE_PUBLISHED_MODEL_PROOF'),
+        ('system_without_proof', 'EXCHANGE_SYSTEM_MODEL_PROOF'),
+        ('system_published_without_proof', 'EXCHANGE_PUBLISHED_MODEL_PROOF'),
+        ('system_source_with_proof', 'EXCHANGE_CABLE_SOURCE'),
+        ('published_with_proof', 'EXCHANGE_PUBLISHED_MODEL_PROOF'),
     ]
     for change, code in cases:
         bundle = deepcopy(original)
@@ -282,10 +372,15 @@ def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_c
         binding = item['inputs']['study_cable_reference']
         if change == 'source':
             binding['source_snapshot']['payload']['materials'][0]['density'] = 8800
+        elif change == 'missing_projection_field':
+            binding['source_snapshot']['payload']['cable_type'].pop('common_layers')
         elif change == 'digest':
             binding['content_sha256'] = fingerprint(binding['payload'])
         elif change == 'projection':
             binding['payload']['cable_type']['cores'][0]['conductor']['r20'] *= 2
+        elif change == 'projection_bool':
+            assert binding['payload']['cable_type']['cores'][0]['x'] == 0.0
+            binding['payload']['cable_type']['cores'][0]['x'] = False
         elif change == 'origin_id':
             binding['source_snapshot']['origin_id'] = 'candidate:' + str(uuid4())
         elif change == 'local_id':
@@ -296,6 +391,17 @@ def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_c
             binding.pop('source_snapshot')
             binding.update(id='type/unproven-local-family', source='published_type',
                            content_sha256=fingerprint(binding['payload']))
+        elif change in ('system_without_proof', 'system_published_without_proof'):
+            binding.pop('source_snapshot')
+            binding.update(id='system.cu-xlpe-al-240', name='冒用系统身份的外部型号', version='999.0.0',
+                           state='reviewed', content_sha256=fingerprint(binding['payload']))
+            if change == 'system_published_without_proof':
+                binding['source'] = 'published_type'
+        elif change == 'system_source_with_proof':
+            binding['source'] = next(model['source'] for model in source.get('/api/design/cable-models').json()
+                                     if model['id'] == 'system.cu-xlpe-al-240')
+        elif change == 'published_with_proof':
+            binding['source'] = 'published_type'
         else:
             binding.pop('source_snapshot')
         item['input_sha256'] = fingerprint(item['inputs'])
@@ -332,6 +438,15 @@ def test_candidate_source_must_match_pinned_version_and_project_limit_stays_in_f
     response = source.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
     assert response.status_code == 422
     assert response.json()['detail']['code'] == 'EXCHANGE_CABLE_SOURCE_DIGEST'
+    assert source.get('/api/workspaces/' + project['id']).json() == project
+    with store.db(True) as db:
+        changed = deepcopy(candidate['payload'])
+        changed['cable_type'].pop('common_layers')
+        db.execute('UPDATE domain_cable_models SET payload=?,digest=? WHERE id=?',
+                   (json.dumps(changed), fingerprint(changed), candidate['id']))
+    response = source.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'EXCHANGE_CABLE_SOURCE'
     assert source.get('/api/workspaces/' + project['id']).json() == project
     with store.db(True) as db:
         db.execute('DELETE FROM domain_cable_models WHERE id=?', (candidate['id'],))

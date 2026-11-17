@@ -4,7 +4,7 @@
 .library-import-dialog { width: min(calc(var(--space-12) * 21), calc(100vw - var(--space-8))); overflow: hidden; }
 .library-import-dialog:focus { outline: none; }
 .library-import-dialog > :first-child, .library-import-dialog > .dialog-actions { flex-shrink: 0; }
-.library-import-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.library-import-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: var(--space-2); }
 .library-import-dialog .dialog-title { font-size: var(--text-heading); }
 .library-import-page .tabs-content[hidden] { display: none; }
 .library-import-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }

@@ -159,9 +159,28 @@ export function methodText(method: unknown): string {
   const names: Record<string, string> = { 'cablesim.iec60287': 'IEC 60287 稳态载流量', 'cablesim.standard-check': '电缆标准核对', 'cablesim.standards-basis': '标准依据库' };
   return [text(value.name) || text(value.method_name) || names[text(value.plugin_id)], text(value.method_version) || text(value.version) || text(value.plugin_version)].filter(Boolean).join(' · ') || '方法版本未登记';
 }
-export function issueText(value: string | ImportIssue): string { return typeof value === 'string' ? value : value.message; }
+const IMPORT_PARAMETER_NAMES: Record<string, string> = {
+  conductor_form: '导体构造', normal_temperature_k: '正常运行温限（K）', short_circuit_temperature_k: '短路温限（K）',
+  conductor_class: '导体类别', core_lay_length: '成缆节距', screen_model: '铜带纵向电阻模型',
+  screen_radial_factor: '铜带径向包络与单带厚度之比', filler_rho: '填充与包带热阻率',
+  armour_gap_ratio: '钢带间隙与带宽之比', steel_relative_permeability: '钢带相对磁导率', diameter_rounding: '外径列示精度的半个单位',
+};
+const IMPORT_MATERIAL_ROLES: Record<string, string> = {
+  conductor: '导体', conductor_screen: '导体屏蔽', insulation: '绝缘', insulation_screen: '绝缘屏蔽',
+  buffer: '缓冲层', metallic_sheath: '金属套', separator: '隔离层', oversheath: '外护套',
+};
+const IMPORT_MATERIAL_PROPERTIES: Record<string, string> = {
+  thermal_resistivity: '热阻率', volumetric_heat_capacity: '体积热容', electrical_resistivity_20: '20 °C 电阻率',
+  temperature_coefficient_20: '20 °C 电阻温度系数', relative_permittivity: '相对介电常数', loss_tangent: '介质损耗角正切',
+  relative_permeability: '相对磁导率', emissivity: '发射率', solar_absorptivity: '太阳吸收率', density: '密度',
+};
+export function issueText(value: string | ImportIssue): string { return displayLibraryText(typeof value === 'string' ? value : value.message); }
+export function tableHeaderText(value: string): string { return value.replace(/\buF(?=\/)/g, 'μF'); }
 export function displayLibraryText(value: string): string {
-  return displayText(value.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻'));
+  const named = value.replace(/\b([a-z][a-z_]+)\.([a-z][a-z_0-9]+)\b/g, (original, role: string, property: string) =>
+    IMPORT_MATERIAL_ROLES[role] && IMPORT_MATERIAL_PROPERTIES[property] ? `${IMPORT_MATERIAL_ROLES[role]}${IMPORT_MATERIAL_PROPERTIES[property]}` : original)
+    .replace(/\b[a-z][a-z_0-9]+\b/g, key => IMPORT_PARAMETER_NAMES[key] || key);
+  return displayText(named.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻'));
 }
 export function confidenceText(value?: unknown): string {
   const key = typeof value === 'string' ? value : text(optionalRecord(value).tier);

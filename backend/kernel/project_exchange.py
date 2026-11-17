@@ -5,6 +5,7 @@ only its cable and used materials. Preserve both identities instead of replacing
 the original digest with the smaller projection's hash. Imported references use
 a detached identity and cannot resolve to a different machine's local model.
 """
+from collections import Counter
 from copy import deepcopy
 
 from fastapi import HTTPException
@@ -38,20 +39,31 @@ def projection(payload):
 def validate_reference(binding):
     if (not isinstance(binding, dict) or not isinstance(binding.get('payload'), dict)
             or not all(isinstance(binding.get(key), str) and binding[key]
-                       for key in ('id', 'version', 'name', 'content_sha256', 'bound_cable_type_id'))
+                       for key in ('id', 'version', 'name', 'source', 'content_sha256', 'bound_cable_type_id'))
             or not isinstance(binding['payload'].get('cable_type'), dict)
-            or not isinstance(binding['payload'].get('materials'), list)):
+            or not isinstance(binding['payload'].get('materials'), list)
+            or not isinstance(binding.get('locks'), list)
+            or any(not isinstance(path, str) for path in binding['locks'])
+            or not isinstance(binding.get('method_defaults'), dict)):
         fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照不完整。')
+    # A system-looking ID or a candidate proof cannot certify a published model.
+    if binding['source'] == 'published_type' or binding['id'].startswith('type/'):
+        fail('EXCHANGE_PUBLISHED_MODEL_PROOF',
+             '已发布型号引用需要完整发行与冻结规格书证明链；当前输入交换不覆盖，请使用数据库备份恢复。')
     proof = binding.get('source_snapshot')
     if proof is None:
-        # System references already carry their complete hashed payload and use
-        # globally stable catalogue identities rather than machine-local IDs.
-        if (binding['id'].startswith('system.')
-                and binding['content_sha256'] == fingerprint(binding['payload'])):
+        if binding['id'].startswith('system.'):
+            from .scenarios import system_models
+            original = next((item for item in system_models() if item['id'] == binding['id']), None)
+            # A self-hash proves no catalogue identity. Compare the original raw
+            # snapshot, including omitted optional fields, without upgrading it.
+            fields = ('id', 'version', 'name', 'state', 'source', 'content_sha256', 'payload', 'method_defaults')
+            if (original is None or binding['content_sha256'] != fingerprint(binding['payload'])
+                    or fingerprint({key: binding.get(key) for key in fields})
+                    != fingerprint({key: original[key] for key in fields})):
+                fail('EXCHANGE_SYSTEM_MODEL_PROOF',
+                     '系统型号身份、来源或内容与本机固定目录不一致；无法核验该版本，未替换为新版。')
             return
-        if binding.get('source') == 'published_type' or binding['id'].startswith('type/'):
-            fail('EXCHANGE_PUBLISHED_MODEL_PROOF',
-                 '已发布型号引用需要完整发行与冻结规格书证明链；当前输入交换不覆盖，请使用数据库备份恢复。')
         fail('EXCHANGE_CABLE_SOURCE', '工程引用缺少完整的原始型号来源快照，请从来源机器重新导出。')
     if (not isinstance(proof, dict)
             or set(proof) != {'schema', 'kind', 'origin_id', 'origin_state', 'payload'}
@@ -74,9 +86,16 @@ def validate_reference(binding):
     if (binding['id'] != detached_id(proof['origin_id'], binding['content_sha256'])
             or binding.get('state') != 'draft'):
         fail('EXCHANGE_CABLE_IDENTITY', '搬运型号须使用独立快照身份，不能绑定本机型号或继承来源方审批。')
+    # The UI summary joins references with Chinese semicolons. Canonical JSON
+    # sorts source keys, so compare all text segments with multiplicity while
+    # preserving both the original summary and the full source declarations.
+    references = Counter(part for item in model.sources.values() for part in item.reference.split('；'))
+    if Counter(binding['source'].split('；')) != references:
+        fail('EXCHANGE_CABLE_SOURCE', '工程绑定的来源说明与原始型号来源声明不一致。')
     # Model-preparation studies retain the complete payload; ordinary candidate
     # studies contain its exact used-material projection. Neither is guessed.
-    if binding['payload'] != source and binding['payload'] != projection(source):
+    bound_digest = fingerprint(binding['payload'])
+    if bound_digest not in (fingerprint(source), fingerprint(projection(source))):
         fail('EXCHANGE_CABLE_PROJECTION', '工程绑定结构与原始型号的电缆及材料投影不一致。')
 
 
@@ -100,7 +119,7 @@ def prepare_reference(db, inputs):
     else:
         try:
             item = read(db, original_id.removeprefix('candidate:'))
-        except HTTPException:
+        except (HTTPException, ValueError):
             fail('EXCHANGE_CABLE_SOURCE', '原始型号版本缺失或摘要损坏；不能导出缺少来源证明的工程。')
         if item['digest'] != binding.get('content_sha256'):
             fail('EXCHANGE_CABLE_SOURCE_DIGEST', '工程绑定的原始型号摘要与来源库不同；未改用其他版本。')

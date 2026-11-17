@@ -16,7 +16,7 @@ const out = path.resolve(process.env.LIBRARY_IMPORT_EVIDENCE || path.join(root, 
 await fs.mkdir(out, { recursive: true });
 const expect = baseExpect.configure({ timeout: 30000 });
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [] };
+const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [] };
 const saveReport = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
 await saveReport();
 let browser;
@@ -69,6 +69,25 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
   async function afterAction(waiter, action) {
     const [result] = await Promise.all([waiter, Promise.resolve().then(action)]);
     return result;
+  }
+  async function positionDialogContent(locator) {
+    const position = await locator.evaluate(element => {
+      const container = element.closest('.library-import-dialog-body');
+      if (!(container instanceof HTMLElement)) throw new Error('来源内容没有对应的对话框滚动区域');
+      const inset = Number.parseFloat(getComputedStyle(container).getPropertyValue('--space-2'));
+      if (!Number.isFinite(inset) || inset <= 0) throw new Error('缺少对话框内容的显示间距');
+      const before = element.getBoundingClientRect();
+      const bounds = container.getBoundingClientRect();
+      // Move only the real scroll region. Keep the whole row inside its top
+      // edge instead of asking every ancestor to align to a fractional pixel.
+      container.scrollTo({ top: Math.floor(container.scrollTop + before.top - bounds.top - inset), behavior: 'instant' });
+      const after = element.getBoundingClientRect();
+      return { label: element.getAttribute('aria-label') || element.textContent?.trim().slice(0, 120),
+        before: { top: before.top, bottom: before.bottom, height: before.height },
+        after: { top: after.top, bottom: after.bottom, height: after.height },
+        container: { top: bounds.top, bottom: bounds.bottom, height: bounds.height }, inset };
+    });
+    report.dialog_positions.push({ viewport: viewport.width, ...position });
   }
   async function select(label, option) {
     const field = page.getByRole('combobox', { name: label, exact: true });
@@ -594,6 +613,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const bahraMapping = Object.fromEntries(bahraColumns.map(([key], index) => [key, index]));
     assert.deepEqual(bahraDeclaration.mapping, bahraMapping, '19个原表列均须可导入，不能悄悄遗漏性能列');
     await select('工作表', `${bahraSheet.name} · ${bahraSheet.data_rows ?? bahraSheet.rows} 行`);
+    await expect(page.getByRole('table', { name: '工作表原始列', exact: true })).toContainText('电容 μF/km');
     await capture('Bahra上传后选择工作表');
     await advanceSheet();
     for (const [index, [key, unit]] of bahraColumns.entries()) {
@@ -643,6 +663,10 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       checkBahraFacts(row.values, index);
     }
     await expect(page.getByRole('heading', { name: '核对入库预览', exact: true })).toBeVisible();
+    const bahraPreviewTable = page.getByRole('table', { name: '逐行入库预览', exact: true });
+    for (const missing of ['结构尺寸：导体屏蔽厚度', '结构尺寸：绝缘屏蔽厚度', '计算用参数：导体构造', '计算用参数：正常运行温限（K）',
+      '材料物性：导体20 °C 电阻温度系数', '材料物性：绝缘热阻率', '材料物性：绝缘相对介电常数', '材料物性：绝缘介质损耗角正切',
+      '材料物性：金属套20 °C 电阻率', '材料物性：金属套20 °C 电阻温度系数', '材料物性：外护套热阻率']) await expect(bahraPreviewTable).toContainText(missing);
     await capture('Bahra十三规格预览');
     const bahraCommit = page.getByRole('button', { name: '确认入库 13 个规格', exact: true });
     await expect(bahraCommit).toBeDisabled();
@@ -708,7 +732,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       let start = 0;
       while (start < keys.length) {
         const first = bahraFirst.values.find(fact => fact.key === keys[start]);
-        await bahraValues.getByRole('row', { name: first.label, exact: true }).evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+        await positionDialogContent(bahraValues.getByRole('row', { name: first.label, exact: true }));
         const bounds = await bahraSources.locator('.library-import-dialog-body').boundingBox();
         assert.ok(bounds);
         let end = start;
@@ -756,7 +780,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const conditionScreenshots = [];
     let conditionStart = 0;
     while (conditionStart < conditionBlocks.length) {
-      await conditionBlocks[conditionStart].element.evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+      await positionDialogContent(conditionBlocks[conditionStart].element);
       const bounds = await bahraSources.locator('.library-import-dialog-body').boundingBox();
       assert.ok(bounds);
       let conditionEnd = conditionStart;
