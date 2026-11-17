@@ -754,18 +754,18 @@
     },
     {
       "path": "src/cablesim_standard_check/basis-records.json",
-      "sha256": "70349b5ffd8eca6dba37ee9b7448166691f6a56aeb11895b24813ac7afb60c4d",
-      "size_bytes": 439451
+      "sha256": "668e778ba0793836fcd16fc1b0787823a953d4003f70fdedfce0f254be8d057c",
+      "size_bytes": 502506
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "3118abc38e3d93a29362c1f370b491e08f8d1caf920a4b5c266978853383ae6a",
-      "size_bytes": 14741
+      "sha256": "ba4ba70184ed073e9966dd69b2f2803007f803b811a94bf7722a137c019e87ce",
+      "size_bytes": 15498
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
-      "sha256": "c4306fd7b667440049e5618a64a9c1467e60445d441109bed33837386d93c4d0",
-      "size_bytes": 2109
+      "sha256": "cc608c27557020d8a3cc8ef71fa12c94ae459363144aebe67a51f3e2a3484ee7",
+      "size_bytes": 3125
     },
     {
       "path": "src/cablesim_standard_check/coverings.py",

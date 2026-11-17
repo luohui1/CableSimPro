@@ -19,8 +19,24 @@ def rebuild():
     module_spec=importlib.util.spec_from_file_location('basis_catalog_reader',source.with_name('library.py'))
     module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
     data=module.BasisLibrary(source.parent).data
+    by_table={}
+    for row in data['records']:
+        by_table.setdefault(row['id'].split('/')[0],[]).append(row)
+    members={}
+    for table in data['tables']:
+        for locator in set((table['table'],table['clause']))-{''}:
+            key=json.dumps([table['standard'],table['edition'],locator],ensure_ascii=False,separators=(',',':'))
+            # Match the data reader's unfiltered list operation, including the
+            # union when several indexed tables share this exact locator.
+            members.setdefault(key,set()).update(row['id'] for row in by_table.get(table['id'],[])
+                if row['standard']==table['standard'] and row['edition']==table['edition']
+                and locator in (row['table'],row['clause']))
+    complete_lists={key:{'record_count':len(ids),'record_ids_sha256':sha256(
+        json.dumps(sorted(ids),ensure_ascii=False,separators=(',',':')).encode()).hexdigest()}
+        for key,ids in sorted(members.items()) if ids}
     return {'plugin_version':manifest['version'],'data_sha256':sha256(raw).hexdigest(),
-        'records':{row['id']:sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for row in data['records']}}
+        'records':{row['id']:sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for row in data['records']},
+        'complete_lists':complete_lists}
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--write',action='store_true');args=parser.parse_args()

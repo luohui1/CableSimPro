@@ -81,6 +81,35 @@ def test_fixed_basis_pages_and_pass_fail(tmp_path,hv,area,nominal,page,pdf,r20):
                 with pytest.raises(BasisIntegrityError,match='封签'):
                     plugin.check(document,tampered)
                 cases.append({'case_id':key,'input':document,'parameters':tampered})
+            # A complete list is more than individually authentic rows. The
+            # original bug could omit the chosen lower gauge, obtain an honest
+            # lookup for the next gauge, then complete an incorrect chain.
+            from backend.kernel.requirements import lookup_references
+            selected=refs['annex_screen_increment']['record']
+            listed=refs['annex_screen_table']['records']
+            larger=min((record for record in listed
+                if record['conditions']['screen_area_m2']>selected['conditions']['screen_area_m2']),
+                key=lambda record:record['conditions']['screen_area_m2'])
+            query=deepcopy(refs['annex_screen_increment']['query'])
+            query['conditions']={'screen_area_m2':larger['conditions']['screen_area_m2']}
+            next_gauge,missing=lookup_references(app.state.research,{'annex_screen_increment':query})
+            assert not missing and next_gauge['annex_screen_increment']['record_id']==larger['id']
+            for mutation in ('omitted_gauge','duplicate_gauge','foreign_table'):
+                tampered=deepcopy(params)
+                rows=tampered['basis_references']['annex_screen_table']['records']
+                rows[:]=[record for record in rows if record['id']!=selected['id']]
+                if mutation=='omitted_gauge':
+                    tampered['basis_references'].update(next_gauge)
+                elif mutation=='duplicate_gauge':
+                    rows.append(deepcopy(rows[0]))
+                else:
+                    rows.append(deepcopy(refs['annex_conductor']['record']))
+                with pytest.raises(BasisIntegrityError,match='成员集合'):
+                    plugin.check(document,tampered)
+                cases.append({'case_id':mutation,'input':document,'parameters':tampered})
+            reordered=deepcopy(params)
+            reordered['basis_references']['annex_screen_table']['records'].reverse()
+            assert plugin.check(document,reordered)['fictitious_diameter_trace']==trace
             # The real plugin process must reject the whole case without a
             # partial requirements artifact, not turn bad evidence into gaps.
             rejected=app.state.research.executor.run('cablesim.standard-check','dimensions',cases)
@@ -95,6 +124,22 @@ def test_fixed_basis_pages_and_pass_fail(tmp_path,hv,area,nominal,page,pdf,r20):
             next(m for m in unsupported['materials'] if m['id']==insulation_material)['standard_kind']='EPR'
             check=plugin.check(unsupported,{**params,'basis_cable_sha256':digest(unsupported['cable_types'][0])})
             assert item(check,'insulation-nominal')['verdict']=='uncovered'
+
+
+def test_complete_list_membership_matches_the_sealed_data_reader():
+    from cablesim_standard_check import basis_catalog
+    from cablesim_standard_check.basis import RECORDS, digest, validate_list
+    from test_standards_basis import library_module
+    assert basis_catalog.rebuild()==RECORDS
+    library=library_module.BasisLibrary()
+    for part,locator,count in [('1','表 A.3',16),('2','表 A.2',16),('3','表 A.2',16),('2','6.2',100)]:
+        query={'schema_version':'cablesim.standards-query/1','operation':'list',
+            'standard':'GB/T 12706.'+part,'edition':'2020','locator':locator}
+        answer=library.query(query)
+        assert answer['status']=='listed' and len(answer['records'])==count
+        reference={'schema':'cablesim.standard-basis-list-ref/1','query':query,
+            'query_sha256':digest(query),'plugin_version':answer['plugin_version'],'records':answer['records']}
+        assert validate_list(reference,query)==answer['records']
 
 
 def test_concurrent_basis_request_returns_one_immutable_receipt(tmp_path):

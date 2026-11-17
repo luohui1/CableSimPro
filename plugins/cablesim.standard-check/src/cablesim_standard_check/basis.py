@@ -141,6 +141,14 @@ def validate_list(ref,query):
             raise BasisIntegrityError('依据表封签发行与查询条件不一致，请重新取依据。')
         if not isinstance(ref.get('records'),list) or not ref['records']:
             raise BasisIntegrityError('依据表封签记录缺失；未收录的表须明确返回 uncovered。')
+        if set(query)!={'schema_version','operation','standard','edition','locator'} or query['operation']!='list':
+            raise BasisIntegrityError('依据表封签仅接受完整列出，不接受条件或记录筛选。')
+        key=json.dumps([query['standard'],query['edition'],query['locator']],ensure_ascii=False,separators=(',',':'))
+        expected=RECORDS['complete_lists'].get(key)
+        ids=[record['id'] for record in ref['records']]
+        if (expected is None or len(ids)!=len(set(ids)) or len(ids)!=expected['record_count']
+                or digest(sorted(ids))!=expected['record_ids_sha256']):
+            raise BasisIntegrityError('依据表封签成员集合不完整或不一致；禁止删档、重复或拼接其他表。')
         for record in ref['records']:
             bare = {k:v for k,v in record.items() if k not in ('record_sha256','citation')}
             if RECORDS['records'].get(record['id']) != digest(bare) or record.get('verification',{}).get('status') != 'verified':
