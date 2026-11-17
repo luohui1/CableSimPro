@@ -103,7 +103,7 @@ def config(path: Path) -> dict:
     defaults = {
         "server": {"host": "127.0.0.1", "port": 8100, "open_browser": True,
                    "startup_timeout_seconds": 300, "trusted_hosts": []},
-        "storage": {"data_dir": "../CableSimPro-data"},
+        "storage": {"data_dir": "~/CableSimPro-data"},
         "initialization": {"seed_examples": True},
         "model": {"base_url": "", "model": "", "api_key_env": "CABLESIM_LLM_API_KEY"},
     }

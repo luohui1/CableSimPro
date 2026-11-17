@@ -11,8 +11,9 @@ trusted_hosts = []
 
 [storage]
 # 工程库、数据集、复现资料、备份及保留的程序版本均放在这个目录。
-# 升级时继续使用同一份配置；不要把数据目录设在解压目录内。
-data_dir = "../CableSimPro-data"
+# 默认放在用户主目录，避免 Windows Downloads 的解压目录层级导致路径过长。
+# 升级时继续使用同一份配置；已有显式路径保持不变，不要把数据设在解压目录内。
+data_dir = "~/CableSimPro-data"
 
 [initialization]
 # 只在工程库不存在时经现有发布流程创建教学示例；升级永不重置已有库。

@@ -697,7 +697,10 @@ def main() -> int:
     try:
         if not args.require_offline:
             gate.result["offline"] = {"status": "云端无法验证", "reason": "此次运行没有启用操作系统禁网。"}
-        with TemporaryDirectory(prefix="cablesim-install-") as directory:
+        # A fresh short Windows path exercises ordinary MAX_PATH-compatible
+        # destinations even when the hosted runner enables long paths globally.
+        with TemporaryDirectory(prefix="cs-" if os.name == "nt" else "cablesim-install-",
+                                dir=Path.home() if os.name == "nt" else None) as directory:
             temporary = Path(directory)
             with gate.step("从发行压缩包解压到全新目录"):
                 archive = args.archive.resolve()
@@ -725,6 +728,21 @@ def main() -> int:
             release_spec.loader.exec_module(release_support)
             installed = release_support.installation(temporary / "data", manifest["build_id"])
             interpreter = installed / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            if os.name == "nt":
+                with gate.step("真实 wheel 路径满足 Windows 默认长度限制"):
+                    defaults = release_support.config(root / "release.toml")
+                    default_app = release_support.installation(defaults["data_dir"], manifest["build_id"])
+                    # This is a conservative path calculation, not a registry
+                    # change or a claim that this runner disables long paths.
+                    default_policy = release_support.windows_path_policy(default_app, root / "wheelhouse",
+                                                                          long_paths_enabled=False)
+                    actual_policy = release_support.windows_path_policy(installed, root / "wheelhouse",
+                                                                         long_paths_enabled=False)
+                    gate.artifact("windows-default-paths.json", {
+                        "actual_registry_long_paths_enabled": release_support.windows_long_paths_enabled(),
+                        "default_data_dir": str(defaults["data_dir"]), "default_path_policy": default_policy,
+                        "acceptance_data_dir": str(temporary / "data"), "acceptance_path_policy": actual_policy,
+                        "registry_changed": False})
             guard = windows_firewall(temporary, interpreter, gate) if args.require_offline == "windows-firewall" else nullcontext()
             with guard:
                 if args.require_offline:

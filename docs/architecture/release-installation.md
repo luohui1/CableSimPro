@@ -44,8 +44,10 @@ ZIP 内含后端、SDK、封签插件、种子入口、规格书样式、预构�
 ## 一条命令安装并启动
 
 解压后编辑根目录的 `release.toml`（源模板为 `scripts/release.toml`）。保留这份配置，
-升级继续使用同一个 `storage.data_dir`。路径相对于配置文件目录解释，Windows 推荐
-使用 `D:/CableSimPro-data` 形式。数据目录必须放在解压目录之外。
+升级继续使用同一个 `storage.data_dir`。新配置默认 `~/CableSimPro-data`，其中 `~` 是
+用户主目录；Windows 不依赖 Downloads 中可能很深的解压路径。已有配置里的显式路径
+继续原样使用。其它相对路径仍相对于配置文件目录解释，也可指定 `D:/CableSimPro-data`
+等短路径。数据目录必须放在解压目录之外。
 
 Windows：
 

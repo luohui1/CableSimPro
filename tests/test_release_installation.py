@@ -378,6 +378,18 @@ def test_native_runtime_declared_glibc_requirement_is_checked_before_install(tmp
         release_support.native_runtime_policy(root)
 
 
+def test_shipped_default_keeps_data_outside_a_deep_extracted_archive(tmp_path):
+    extracted = tmp_path / 'Downloads/CableSimPro-Windows/CableSimPro'
+    extracted.mkdir(parents=True)
+    configuration = extracted / 'release.toml'
+    configuration.write_text(Path(release_support.__file__).with_name('release.toml').read_text('utf-8'), encoding='utf-8')
+    assert release_support.config(configuration)['data_dir'] == (Path.home() / 'CableSimPro-data').resolve()
+    configuration.write_text('', encoding='utf-8')
+    assert release_support.config(configuration)['data_dir'] == (Path.home() / 'CableSimPro-data').resolve()
+    configuration.write_text('[storage]\ndata_dir="../CableSimPro-data"\n', encoding='utf-8')
+    assert release_support.config(configuration)['data_dir'] == extracted.parent / 'CableSimPro-data'
+
+
 def test_config_resolves_paths_and_keeps_keys_only_in_environment(tmp_path, monkeypatch):
     config_path = tmp_path / "config/release.toml"
     config_path.parent.mkdir()
