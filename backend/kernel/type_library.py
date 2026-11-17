@@ -64,6 +64,10 @@ class Mapping(StrictModel):
         return self
 
 
+class CatalogueComparison(StrictModel):
+    reference_scenario_confirmed: bool = Field(default=False, strict=True)
+
+
 class Batch(StrictModel):
     request_id: UUID
     operation: Literal['check', 'calculate', 'review']
@@ -457,11 +461,11 @@ def make_router(service):
                         headers={'Content-Disposition': f'attachment; filename="{name}.csv"'})
 
     @router.post('/catalogue-comparison/{name}')
-    def comparison(name: str):
+    def comparison(name: str, body: CatalogueComparison | None = None):
         from .catalogue_agreement import reference_report
         from .public_catalogues import SAMPLES
         if name not in SAMPLES:
             tables.fail('PUBLIC_SAMPLE_UNKNOWN', '公开样本不存在。', 404)
-        return reference_report(name)
+        return reference_report(name, reference_scenario_confirmed=bool(body and body.reference_scenario_confirmed))
 
     return router

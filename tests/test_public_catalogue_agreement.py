@@ -68,11 +68,95 @@ def test_csv_keeps_the_original_rows_and_locates_a_bad_cell():
 
 @pytest.fixture(scope='module')
 def agreement():
-    return {name: reference_report(name) for name in ('people-mv', 'bahra-mv')}
+    return {name: reference_report(name, reference_scenario_confirmed=True)
+            for name in ('people-mv', 'bahra-mv')}
+
+
+@pytest.mark.parametrize(('name', 'count'), [('people-mv', 46), ('bahra-mv', 13)])
+def test_default_manufacturer_comparison_preserves_all_originals_without_running_assumptions(monkeypatch, name, count):
+    from backend.kernel import catalogue_agreement
+
+    def must_not_run(*_args, **_kwargs):
+        pytest.fail('The default manufacturer comparison must not construct or run an assumed scenario.')
+    monkeypatch.setattr(catalogue_agreement.structure, 'build', must_not_run)
+    monkeypatch.setattr(catalogue_agreement.catalogue, 'single_core_entry', must_not_run)
+    monkeypatch.setattr(catalogue_agreement.product, 'rating_table_batch', must_not_run)
+    report = reference_report(name)
+    assert len(report['rows']) == count
+    assert report['reference_scenario']['confirmed'] is False
+    assert report['reference_scenario']['executed'] is False
+    assert report['reference_calculation'] is None
+    assert report['summary']['ampacity_compared'] == report['summary']['four_metric_passed'] == 0
+    assert report['summary']['ampacity_refused'] == count
+    for row in report['rows']:
+        original = catalogue_reference(name, row['sheet'], row['area_mm2'])
+        for key in ('outer_diameter', 'weight', 'r20', 'ampacity'):
+            metric = row['metrics'][key]
+            assert metric['published'] == original[key]
+            assert metric['difference'] is metric['relative_difference'] is None
+        rating = row['metrics']['ampacity']
+        assert rating['value'] is None and rating['status'] == 'refused'
+        assert rating['method'] is rating['tier'] is None
+        missing = {item['field'] for item in rating['missing_fields']}
+        assert {'installation.bonding', 'structure.conductor_screen_thickness',
+                'structure.insulation_screen_thickness'} <= missing
+        assert ('installation.depth_m' in missing) is (name == 'people-mv')
+        assert all(item['label'] and item['reason'] for item in rating['missing_fields'])
+    assumptions = {item['key']: item for item in report['reference_scenario']['assumptions']}
+    for item in assumptions.values():
+        assert item['manufacturer_data'] is False and item['confidence'] == 'reference'
+        assert item['source']['reference'] and item['source']['version']
+        assert len(item['source']['file_sha256']) == 64
+    assert assumptions['installation.bonding']['value'] == 'both_ends'
+    if name == 'people-mv':
+        assert assumptions['installation.depth_m']['value'] == .7
+        assert assumptions['modelling.core_lay_length']['value'] == 2.152
+    else:
+        assert assumptions['conductor_screen_thickness_mm']['value'] == .6
+
+
+def test_reference_calculations_never_count_as_manufacturer_acceptance(agreement):
+    for name, confirmed in agreement.items():
+        ordinary = reference_report(name)
+        assert confirmed['rows'] == ordinary['rows']
+        assert confirmed['summary'] == ordinary['summary']
+        assert confirmed['reference_scenario']['confirmed'] is True
+        assert confirmed['reference_scenario']['executed'] is True
+        assert confirmed['reference_calculation']['manufacturer_comparison'] is False
+        assert confirmed['reference_calculation']['human_reviewed'] is False
+        assert len(confirmed['reference_calculation']['rows']) == len(ordinary['rows'])
+
+
+def test_comparison_api_requires_explicit_boolean_confirmation(tmp_path, monkeypatch, agreement):
+    from backend.main import create_app
+    from backend.kernel import catalogue_agreement
+    calls = []
+
+    def already_verified_scenario(name):
+        calls.append(name)
+        return agreement[name]['reference_calculation']
+    monkeypatch.setattr(catalogue_agreement, '_reference_calculation', already_verified_scenario)
+    with TestClient(create_app(tmp_path / 'comparison.sqlite')) as client:
+        path = '/api/type-library/catalogue-comparison/bahra-mv'
+        for body in ({}, {'reference_scenario_confirmed': False}):
+            response = client.post(path, json=body)
+            assert response.status_code == 200, response.text
+            assert response.json()['reference_calculation'] is None
+        assert client.post(path).status_code == 200
+        for invalid in ('true', 1, None):
+            assert client.post(path, json={'reference_scenario_confirmed': invalid}).status_code == 422
+        assert calls == []
+        response = client.post(path, json={'reference_scenario_confirmed': True})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert calls == ['bahra-mv']
+        assert result['summary']['ampacity_compared'] == 0
+        assert result['reference_calculation']['summary']['ampacity_compared'] == 13
+        assert all(row['metrics']['ampacity']['value'] is None for row in result['rows'])
 
 
 def test_bahra_all_thirteen_sizes_use_real_methods_and_preserve_deviations(agreement):
-    report = agreement['bahra-mv']
+    report = agreement['bahra-mv']['reference_calculation']
     assert len(report['rows']) == 13
     assert report['summary']['ampacity_compared'] == 13
     assert report['summary']['ampacity_refused'] == 0
@@ -100,7 +184,7 @@ def test_bahra_all_thirteen_sizes_use_real_methods_and_preserve_deviations(agree
 
 
 def test_people_every_size_keeps_real_refusals_and_missing_reference_values(agreement):
-    report = agreement['people-mv']
+    report = agreement['people-mv']['reference_calculation']
     assert len(report['rows']) == 46
     assert report['summary']['ampacity_compared'] == 21
     assert report['summary']['ampacity_refused'] == 25
@@ -184,7 +268,10 @@ def test_public_samples_import_into_canonical_models_without_synthetic_facts(tmp
             assert set(current['payload']['results']) >= {'standards', 'rating', 'geometry'}
             assert all(source['freshness'] == 'current' for source in current['payload']['sources'])
         assert len(calculated['generation_runs']) == 11
-        expected = {row['area_mm2']: row['metrics']['ampacity']['value'] for row in agreement['people-mv']['rows']
+        # This batch explicitly selects the same research conditions. Its
+        # reference must remain outside the refused manufacturer comparison.
+        expected = {row['area_mm2']: row['metrics']['ampacity']['value']
+                    for row in agreement['people-mv']['reference_calculation']['rows']
                     if row['table'] == 'three-core'}
         assert len(calculated['check']['items']) == len(calculated['calculate']['items']) == 11
         for result in calculated['calculate']['items']:
