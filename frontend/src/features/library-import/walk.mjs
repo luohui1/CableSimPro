@@ -380,6 +380,10 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       assert.equal(comparedResponse.ok(), true, await comparedResponse.text());
       const compared = await comparedResponse.json();
       await recordResponse(`${sample.id}-manufacturer-comparison`, comparedResponse, compared);
+      if (sample.id === 'bahra-mv') {
+        assert.equal(compared.source.location, 'construction table: printed p. 17 / PDF p. 18; technical information: printed p. 18 / PDF p. 19; rating assumptions: printed p. 11 / PDF p. 12', '来源原始页码声明须保持不变');
+        await expect(page.getByLabel('厂家样本来源', { exact: true })).toContainText('结构表：印刷第 17 页 / PDF 第 18 页; 技术信息：印刷第 18 页 / PDF 第 19 页; 载流量计算假设：印刷第 11 页 / PDF 第 12 页');
+      }
       assert.deepEqual(comparedResponse.request().postDataJSON(), {}, '默认厂家核验不得隐含确认研究假设');
       assert.equal(compared.rows.length, sample.count);
       assert.deepEqual([compared.summary.ampacity_compared, compared.summary.ampacity_refused, compared.summary.four_metric_passed], [0, sample.count, 0]);

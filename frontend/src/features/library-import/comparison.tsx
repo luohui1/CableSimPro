@@ -13,6 +13,11 @@ const METRICS = [{ key: 'outer_diameter', label: '外径', unit: 'mm' }, { key: 
 const STATUS = { declared_input: '输入保真，非独立验证', missing: '缺少独立数据', refused: '拒绝计算', compared: '有独立计算对照' };
 const number = (value: number | null, digits = 3) => value === null ? '—' : value.toLocaleString('zh-CN', { maximumFractionDigits: digits, useGrouping: false });
 const percent = (value: number | null) => value === null ? '—' : `${number(value * 100, 2)} %`;
+const SOURCE_SECTIONS: Record<string, string> = { 'construction table': '结构表', 'technical information': '技术信息', 'rating assumptions': '载流量计算假设' };
+function sourceLocation(value: string) {
+  return value.replace(/(construction table|technical information|rating assumptions): printed p\. (\d+) \/ PDF p\. (\d+)/g,
+    (_match, section: string, printedPage: string, pdfPage: string) => `${SOURCE_SECTIONS[section]}：印刷第 ${printedPage} 页 / PDF 第 ${pdfPage} 页`);
+}
 
 function AssumptionValue({ assumption }: { assumption: ReferenceAssumption }) {
   if (typeof assumption.value === 'number') return <span>{String(assumption.value)}</span>;
@@ -60,7 +65,7 @@ export function CatalogueComparison() {
     {busy && <p role="status">{busy === 'reference' ? '正在按已确认的研究假设运行参考情景，厂家缺项仍然保留…' : '正在检查厂家公开数据与所需条件…'}</p>}
     {error && !scenarioOpen && <p className="field-error" role="alert">{error}</p>}
     {report && shown && <>
-      <p className="library-import-source">来源：{text(source.title) || '厂家公开手册'}{text(source.location) && `；${text(source.location)}`}{/^https?:\/\//.test(url) && <> · <a className="object-link" href={url} target="_blank" rel="noreferrer">查看公开原文</a></>}</p>
+      <p className="library-import-source" aria-label="厂家样本来源">来源：{text(source.title) || '厂家公开手册'}{text(source.location) && `；${sourceLocation(text(source.location))}`}{/^https?:\/\//.test(url) && <> · <a className="object-link" href={url} target="_blank" rel="noreferrer">查看公开原文</a></>}</p>
       <p aria-label="厂家独立核验总览">厂家独立核验：{report.summary.specifications} 个规格；载流量可对照 {report.summary.ampacity_compared} 个，拒算 {report.summary.ampacity_refused} 个；四项独立核验全部通过 {report.summary.four_metric_passed} 个。</p>
       <p className="muted">{displayLibraryText(report.scope)}</p>
       <div className="library-import-series-actions">
