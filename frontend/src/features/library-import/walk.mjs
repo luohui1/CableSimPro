@@ -16,7 +16,7 @@ const out = path.resolve(process.env.LIBRARY_IMPORT_EVIDENCE || path.join(root, 
 await fs.mkdir(out, { recursive: true });
 const expect = baseExpect.configure({ timeout: 30000 });
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [] };
+const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [] };
 const saveReport = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
 await saveReport();
 let browser;
@@ -47,6 +47,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     if (response.status() >= 400) report.errors.push({ viewport: viewport.width, kind: 'network', url: response.url(), status: response.status() });
   });
   let shot = 0;
+  let bahraOriginal;
   async function capture(label) {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(() => [...document.querySelectorAll('.dialog-stage')].every(stage => Number(getComputedStyle(stage).opacity) >= .999));
@@ -128,7 +129,140 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(page.getByRole('heading', { name: '核对入库预览', exact: true })).toBeVisible();
     return result.json();
   }
+  async function inspectPublishedGuidance(scope, guidance, full = true) {
+    assert.deepEqual(guidance, bahraOriginal.published_guidance, '指南必须逐值保留原始资料，不能改成计算输入或研究假设');
+    assert.deepEqual([guidance.schema, guidance.usage, guidance.confidence, guidance.reviewed], ['cablesim.catalogue-published-guidance/1', 'published_reference_only', 'reference', false]);
+    assert.deepEqual(guidance.material_facts.map(item => [item.id, item.value, item.unit, item.usage]), [
+      ['copper-alpha20', 0.00393, '1/K', 'resistance_temperature_conversion'],
+      ['aluminium-alpha20', 0.00403, '1/K', 'resistance_temperature_conversion'],
+      ['pvc-permittivity', 4.8, '1', 'capacitance_calculation'],
+      ['xlpe-permittivity', 2.3, '1', 'capacitance_calculation'],
+    ]);
+    assert.deepEqual(guidance.correction_tables.map(table => [table.id, table.factors.length]), [['table-3', 9], ['table-4', 27], ['table-5', 48]]);
+    const region = scope.getByRole('region', { name: '厂家公开指南', exact: true });
+    const outer = region.locator(':scope > details');
+    const changes = [];
+    const watch = request => { if (!['GET', 'HEAD'].includes(request.method())) changes.push({ method: request.method(), url: request.url() }); };
+    const screenshots = [];
+    const conditionLabels = { material: '材料', reference_temperature_c: '参考温度', temperature_c: '适用温度', frequency_hz: '适用频率', installation: '敷设', cores: '芯数', area_mm2: '导体截面', depth_m: '埋深', soil_thermal_resistivity: '土壤热阻率', air_temperature_c: '空气温度', ground_temperature_c: '土壤温度', circuit_count: '回路数', load_factor: '负荷系数', thermally_isolated: '与其他回路及热源热隔离' };
+    const conditionUnits = { reference_temperature_c: '°C', temperature_c: '°C', frequency_hz: 'Hz', area_mm2: 'mm²', depth_m: 'm', soil_thermal_resistivity: 'K·m/W', air_temperature_c: '°C', ground_temperature_c: '°C' };
+    async function assertConditions(locator, conditions) {
+      for (const [key, value] of Object.entries(conditions)) {
+        assert.ok(conditionLabels[key], `厂家指南条件须有明确中文标签：${key}`);
+        const shown = value === null ? '未声明' : typeof value === 'boolean' ? value ? '是' : '否'
+          : typeof value === 'object' ? Object.entries(value).map(([bound, limit]) => `${({ gt: '>', gte: '≥', lt: '<', lte: '≤' })[bound]}${limit}`).join(' 且 ')
+            : ({ copper: '铜', aluminium: '铝', direct_buried: '直埋' })[String(value)] ?? String(value);
+        await expect(locator.getByText(`${conditionLabels[key]}：${shown}${value !== null && conditionUnits[key] ? ` ${conditionUnits[key]}` : ''}`, { exact: true })).toHaveCount(1);
+      }
+    }
+    async function toggle(details, open) {
+      await expect(details).toHaveJSProperty('open', !open);
+      const summary = details.locator(':scope > summary');
+      if (viewport.width === 1366) { await summary.focus(); await page.keyboard.press('Enter'); }
+      else await summary.click();
+      await expect(details).toHaveJSProperty('open', open);
+    }
+    async function picture(label, anchor, visible) {
+      const position = await anchor.evaluate(element => {
+        const container = element.closest('.main-content');
+        if (!(container instanceof HTMLElement)) throw new Error('厂家指南没有对应的页面滚动区域');
+        const inset = Number.parseFloat(getComputedStyle(container).getPropertyValue('--space-2'));
+        if (!Number.isFinite(inset) || inset <= 0) throw new Error('厂家指南缺少显示间距');
+        const before = element.getBoundingClientRect(), bounds = container.getBoundingClientRect();
+        container.scrollTo({ top: Math.floor(container.scrollTop + before.top - bounds.top - inset), behavior: 'instant' });
+        const after = element.getBoundingClientRect();
+        return { before: { top: before.top, bottom: before.bottom, height: before.height }, after: { top: after.top, bottom: after.bottom, height: after.height }, container: { top: bounds.top, bottom: bounds.bottom, height: bounds.height }, inset };
+      });
+      report.guidance_positions.push({ viewport: viewport.width, label, ...position });
+      for (const target of visible) {
+        const box = await target.boundingBox();
+        assert.ok(box && box.y >= position.container.top && box.y + box.height <= position.container.bottom, `${label}须完整位于实际页面滚动区域内`);
+        await expect(target).toBeInViewport({ ratio: 1 });
+      }
+      await capture(label);
+      screenshots.push(report.screenshots.at(-1));
+    }
+    page.on('request', watch);
+    try {
+      await toggle(outer, true);
+      const purpose = region.getByRole('region', { name: '厂家指南用途与限制', exact: true });
+      await expect(purpose).toContainText('4 项材料指南值、84 项离散修正因子');
+      await expect(purpose).toContainText('展开或查看不会填入型号，也不会启动计算');
+      await expect(purpose).toContainText(guidance.source.nature);
+      for (const limitation of guidance.limitations) await expect(purpose).toContainText(limitation);
+      await expect(purpose).toContainText(`${guidance.method.name} · ${guidance.method.version}`);
+      await expect(purpose).toContainText('可信分档：参考 · 尚未人工审核');
+      await expect(purpose.getByRole('link', { name: '打开厂家手册原件', exact: true })).toHaveAttribute('href', guidance.source.url);
+      await picture(full ? 'Bahra厂家指南用途与限制' : 'Bahra入库系列保留只读厂家指南', purpose, [purpose]);
+
+      if (full) {
+        const baseline = region.locator('details[aria-label="厂家指南基准"]');
+        await toggle(baseline, true);
+        await assertConditions(baseline, guidance.baseline.conditions);
+        await expect(baseline).toContainText('PDF 第 12 页／印刷第 11 页');
+        await expect(baseline).toContainText('原文负荷系数：100 %；归一化值：1');
+        for (const limitation of guidance.baseline.limitations) await expect(baseline).toContainText(limitation);
+        const baselineContent = baseline.locator(':scope > div');
+        await picture('Bahra指南原手册载流量基准', baselineContent, [baselineContent]);
+        await toggle(baseline, false);
+
+        const materials = region.locator('details[aria-label="厂家材料计算指南"]');
+        await toggle(materials, true);
+        const materialTable = materials.getByRole('table', { name: '厂家材料指南原值', exact: true });
+        await expect(materialTable.getByRole('row')).toHaveCount(5);
+        for (const fact of guidance.material_facts) {
+          const cells = materialTable.getByRole('row', { name: fact.label, exact: true }).getByRole('cell');
+          assert.deepEqual([fact.source.sha256, fact.source.pdf_page, fact.source.printed_page, fact.confidence, fact.method], [guidance.source.sha256, 7, 6, 'reference', guidance.method]);
+          await expect(cells.nth(0)).toHaveText(fact.label);
+          await expect(cells.nth(1)).toHaveText(`${fact.value} ${fact.unit === '1' ? '无量纲' : 'K⁻¹'}`);
+          await expect(cells.nth(2)).toContainText(fact.usage === 'resistance_temperature_conversion' ? '导体电阻温度换算' : '电容量估算；不能直接代入介质损耗计算');
+          await assertConditions(cells.nth(2), fact.conditions);
+          await expect(cells.nth(3)).toContainText('PDF 第 7 页／印刷第 6 页');
+          await expect(cells.nth(3)).toContainText(fact.source.unit_basis);
+          await expect(cells.nth(4)).toHaveText(`${fact.method.name} · ${fact.method.version} · 参考`);
+        }
+        const materialHeading = materials.getByRole('heading', { name: '材料计算指南', exact: true });
+        await picture('Bahra材料指南电阻温度换算', materialHeading, [materialHeading, materialTable.getByRole('row').nth(1)]);
+        await picture('Bahra材料指南电容量与缺失条件', materialTable.getByRole('row').nth(3), [materialTable.getByRole('row').nth(3), materialTable.getByRole('row').nth(4)]);
+        await toggle(materials, false);
+
+        for (const table of guidance.correction_tables) {
+          const section = region.locator(`details[aria-label="${table.title}"]`);
+          await toggle(section, true);
+          const shown = section.getByRole('table', { name: table.title, exact: true });
+          await expect(shown.getByRole('row')).toHaveCount(table.factors.length + 1);
+          await expect(section).toContainText('不会自动选取因子或改变计算输入');
+          for (const limitation of table.limitations) await expect(section).toContainText(limitation.replaceAll('°C·m/W', '摄氏度·米/瓦'));
+          for (const [index, factor] of table.factors.entries()) {
+            assert.deepEqual([factor.source.sha256, factor.source.pdf_page, factor.source.printed_page, factor.unit, factor.confidence, factor.method], [guidance.source.sha256, 13, 12, '1', 'reference', guidance.method]);
+            const cells = shown.getByRole('row').nth(index + 1).getByRole('cell');
+            await assertConditions(cells.nth(0), factor.conditions);
+            await expect(cells.nth(1)).toHaveText(`${factor.value}（无量纲）`);
+            await expect(cells.nth(2)).toContainText(`PDF 第 13 页／印刷第 12 页，表 ${table.id.slice(-1)}`);
+            await expect(cells.nth(2)).toContainText(`原表第 ${factor.source.row} 行 · 第 ${factor.source.column} 列`);
+            await expect(cells.nth(3)).toHaveText(`${factor.method.name} · ${factor.method.version} · 参考`);
+          }
+          const heading = section.getByRole('heading', { name: table.title, exact: true });
+          await picture(`Bahra${table.title}用途与首档`, heading, [heading, shown.getByRole('row').nth(1)]);
+          await picture(`Bahra${table.title}末档与边界`, shown.getByRole('row').last(), [shown.getByRole('row').last()]);
+          await toggle(section, false);
+        }
+      }
+      const original = region.locator('details[aria-label="厂家指南原始来源"]');
+      await toggle(original, true);
+      await expect(original.getByRole('textbox', { name: '厂家公开指南原始 JSON', exact: true })).toHaveValue(JSON.stringify(guidance, null, 2));
+      await expect(original).toContainText(`原件 SHA-256：${guidance.source.sha256}`);
+      await expect(original).toContainText(`指南内容 SHA-256：${guidance.content_sha256}`);
+      await toggle(original, false);
+      await toggle(outer, false);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.deepEqual(changes, [], '只读查阅厂家指南不得提交计算、选因子或任何写入请求');
+      await fs.writeFile(path.join(out, `${viewport.width}-bahra-guidance-${full ? 'comparison' : 'series'}.json`), JSON.stringify({ guidance, material_values_checked: full ? 4 : 0, correction_factors_checked: full ? 84 : 0, original_json_exact: true, mutation_requests: changes, screenshots }, null, 2));
+      report.checks.push(`${viewport.width}：${full ? '公开样本指南4材料值与84离散因子逐值、单位、条件、原页和方法核对' : '入库系列保留同一厂家指南与全部原始来源'}，仅供查阅，缺项不补齐，零计算或写入请求`);
+    } finally { page.off('request', watch); }
+  }
   try {
+    bahraOriginal = JSON.parse(await fs.readFile(path.join(root, 'backend/kernel/catalogue_core/catalogues/bahra_mv_lead_sheathed.json'), 'utf8'));
     await page.goto(base + '/resources/cables/structure-import');
     await expect(page.getByRole('button', { name: '选择结构表文件', exact: true })).toBeEnabled();
     await expect(page.getByText('读取中', { exact: true })).toHaveCount(0);
@@ -485,12 +619,35 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await expect(page.getByRole('button', { name: '研究参考情景结果', exact: true })).toHaveCount(0);
       await page.getByRole('table', { name: '载流量逐规格对照', exact: true }).locator('thead').evaluate(element => element.scrollIntoView({ block: 'start' }));
       await capture(`${sample.id}-厂家载流量缺项拒算`);
+      if (sample.id === 'bahra-mv') {
+        const lossReasons = [
+          ['materials.insulation_relative_permittivity', '载流量介质损耗计算的绝缘相对介电常数', '手册电容量指南公布 XLPE εr=2.3，但未说明载流量介质损耗计算所用的温频条件；不能据此替换旧版独立参考情景的 IEC εr=2.5。'],
+          ['materials.insulation_loss_tangent', '绝缘介质损耗因数', '手册仅给出含 tanδ 的介质损耗公式，没有公布 tanδ 数值；旧版独立参考情景使用 IEC 参考值 0.004。'],
+        ];
+        for (const row of compared.rows) for (const [field, label, reason] of lossReasons) assert.deepEqual(row.metrics.ampacity.missing_fields.find(item => item.field === field), { field, label, reason });
+        const firstManufacturer = page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('row').nth(1);
+        const visibleReasons = lossReasons.map(([, label, reason]) => firstManufacturer.getByText(`${label}：${reason}`, { exact: true }));
+        await visibleReasons[0].evaluate(element => element.scrollIntoView({ block: 'center' }));
+        for (const reason of visibleReasons) await expect(reason).toBeInViewport({ ratio: 1 });
+        await capture('Bahra电容量指南与介质损耗缺项范围');
+      }
       await page.getByRole('tab', { name: '外径', exact: true }).click();
       await capture(`${sample.id}-外径输入保真非独立验证`);
       await page.getByRole('tab', { name: '重量', exact: true }).click();
       await capture(`${sample.id}-重量缺少独立数据`);
       await page.getByRole('tab', { name: '导体直流电阻', exact: true }).click();
       await capture(`${sample.id}-电阻来源与限制`);
+
+      if (sample.id === 'bahra-mv') {
+        const assumptions = new Map(compared.reference_scenario.assumptions.map(item => [item.key, item]));
+        assert.equal(assumptions.get('insulation.relative_permittivity').value, 2.5, '厂家电容量指南2.3不得改写独立研究假设2.5');
+        assert.equal(assumptions.get('insulation.loss_tangent').value, 0.004, '厂家指南没有损耗因数实测，不得改写独立研究假设');
+        assert.ok(compared.reference_scenario.assumptions.every(item => !item.key.includes('published_guidance')), '厂家指南不得混入研究假设清单');
+        await inspectPublishedGuidance(page.getByRole('region', { name: '公开样本偏差对照', exact: true }), compared.published_guidance);
+      } else {
+        assert.equal(compared.published_guidance, null, '人民资料不得套用Bahra厂家的指南');
+        await expect(page.getByRole('region', { name: '厂家公开指南', exact: true })).toHaveCount(0);
+      }
 
       const comparisonRequests = () => report.requests.filter(item => item.viewport === viewport.width && item.method === 'POST' && item.url.endsWith(`/catalogue-comparison/${sample.id}`)).length;
       const beforeConfirmation = comparisonRequests();
@@ -543,6 +700,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       assert.deepEqual(referenceResponse.request().postDataJSON(), { reference_scenario_confirmed: true });
       assert.deepEqual(reference.rows, compared.rows, '参考计算不能改变厂家原值、缺项或拒算');
       assert.deepEqual(reference.summary, compared.summary, '研究结果不能计入厂家独立核验通过数');
+      assert.deepEqual(reference.published_guidance, compared.published_guidance, '人工确认研究情景不得改变只读厂家指南');
       assert.deepEqual(reference.reference_scenario.assumptions, compared.reference_scenario.assumptions, '执行的参考情景必须保留刚刚逐项确认的假设');
       assert.deepEqual(reference.reference_scenario.raw_assumptions, compared.reference_scenario.raw_assumptions, '执行的原始声明必须与人工查看的一致');
       assert.deepEqual([reference.reference_scenario.confirmed, reference.reference_scenario.executed, reference.reference_scenario.manufacturer_data], [true, true, false]);
@@ -597,7 +755,6 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const bahraDigest = createHash('sha256').update(await fs.readFile(bahraPath)).digest('hex');
     const bahraManifest = (await readApi('/api/type-library/samples')).find(sample => sample.id === 'bahra-mv');
     assert.equal(bahraManifest?.sha256, bahraDigest, '下载字节须匹配本次服务发布的原件摘要');
-    const bahraOriginal = JSON.parse(await fs.readFile(path.join(root, 'backend/kernel/catalogue_core/catalogues/bahra_mv_lead_sheathed.json'), 'utf8'));
     const bahraColumns = [
       ['area', 'mm²', 'm2', 1e-6], ['conductor_diameter', 'mm', 'm', 1e-3],
       ['insulation_thickness', 'mm', 'm', 1e-3], ['metallic_sheath_thickness', 'mm', 'm', 1e-3],
@@ -623,6 +780,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const bahraSheet = bahraInspection.sheets.find(sheet => sheet.name === 'Bahra CU XLPE LC PVC');
     const bahraDeclaration = bahraInspection.declarations.find(item => item.sheet === bahraSheet?.name);
     assert.ok(bahraSheet && bahraDeclaration, '完整原件应识别公开样本工作表与声明');
+    assert.deepEqual(bahraDeclaration.series.reference.published_guidance, bahraOriginal.published_guidance, '下载与上传应保留系列级厂家指南的全部原值和出处');
     assert.equal(bahraSheet.columns.length, 19);
     assert.deepEqual([bahraSheet.first_data_row, bahraSheet.rows, bahraSheet.data_rows], [5, 19, 15], '原表数据区包含13个规格、空行及页尾说明，预览须准确分辨');
     const bahraMapping = Object.fromEntries(bahraColumns.map(([key], index) => [key, index]));
@@ -649,9 +807,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     assert.equal(bahraPreviewResponse.ok(), true, await bahraPreviewResponse.text());
     assert.deepEqual(bahraPreviewResponse.request().postDataJSON().mapping, bahraMapping);
     assert.deepEqual(bahraPreviewResponse.request().postDataJSON().series.modelling, {}, '未提供的计算参数须保持为空，不能自动采用研究参考值');
+    assert.deepEqual(bahraPreviewResponse.request().postDataJSON().series.reference.published_guidance, bahraOriginal.published_guidance);
     const bahraPreview = await bahraPreviewResponse.json();
     await recordResponse('bahra-preview', bahraPreviewResponse, bahraPreview);
     assert.deepEqual([bahraPreview.rows.length, bahraPreview.error_count, bahraPreview.incomplete_count], [13, 0, 13]);
+    assert.deepEqual(bahraPreview.series.modelling, {}, '公开指南不能补入预览的工程参数');
+    assert.deepEqual(bahraPreview.series.reference.published_guidance, bahraOriginal.published_guidance);
     const checkBahraFacts = (facts, originalIndex) => {
       assert.deepEqual(facts.map(fact => fact.key).sort(), bahraColumns.map(([key]) => key).sort());
       for (const [column, [key, displayUnit, unit, scale]] of bahraColumns.entries()) {
@@ -697,6 +858,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await capture('Bahra十三规格人工确认入库');
     const bahraSeries = await readApi(`/api/type-library/series/${bahraReceipt.series_id}`);
     assert.equal(bahraSeries.specs.length, 13);
+    assert.deepEqual(bahraSeries.declaration.reference.published_guidance, bahraOriginal.published_guidance);
+    assert.deepEqual(bahraSeries.declaration.modelling, {}, '保存后的型号参数仍为空，厂家指南不自动代入');
     const bahraSpecs = await Promise.all(bahraSeries.specs.map(spec => readApi(`/api/type-library/specs/${spec.id}`)));
     const bahraModelIds = new Set(bahraSeries.specs.map(spec => spec.model_id));
     const bahraModels = (await readApi('/api/domain-cable-models')).filter(model => bahraModelIds.has(model.id));
@@ -715,6 +878,10 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       assert.deepEqual(item.results, [], '目录性能值不应制造计算运行');
       const model = bahraModels.find(candidate => candidate.id === spec.model_id);
       assert.equal(model.state, 'incomplete');
+      assert.equal(model.payload.cable_type, null);
+      assert.deepEqual(model.payload.materials, [], '厂家通用指南不能生成产品材料物性');
+      assert.equal(Object.hasOwn(model.payload.specification, 'published_guidance'), false);
+      assert.equal(Object.hasOwn(model.payload.specification.values, 'published_guidance'), false);
       for (const key of catalogueResults) {
         assert.equal(Object.hasOwn(model.payload.specification.values, key), false, `${key}不能进入工程结构输入`);
         assert.equal(JSON.parse(model.payload.sources[key].reference).file_sha256, bahraDigest);
@@ -728,6 +895,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       '材料物性：金属套20 °C 电阻率', '材料物性：金属套20 °C 电阻温度系数', '材料物性：外护套热阻率']) await expect(missingDetails).toContainText(label);
     await expect(missingDetails).not.toContainText(/conductor_screen_thickness|insulation_screen_thickness|conductor_form|normal_temperature_k|thermal_resistivity|temperature_coefficient_20|electrical_resistivity_20|relative_permittivity|loss_tangent/);
     await capture('Bahra系列规格缺项与下一步');
+    await inspectPublishedGuidance(page.locator('.library-import-series'), bahraSeries.declaration.reference.published_guidance, false);
     await page.getByRole('table', { name: '系列规格', exact: true }).getByRole('button', { name: bahraFirst.name, exact: true }).click();
     const bahraSources = page.getByRole('dialog', { name: bahraFirst.name, exact: true });
     const bahraValues = bahraSources.getByRole('table', { name: '逐项来源', exact: true });
