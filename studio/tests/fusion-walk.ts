@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { chromium, type Browser, type Frame, type Page } from 'playwright';
+import { chromium, type Browser, type Frame, type Locator, type Page } from 'playwright';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import { gbRequest, installConditionWorkflow, installGbWorkflow, installImportRefusal, installMissingData, installRatingTableWorkflow,
   installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState } from './fusion-scripts.ts';
@@ -175,9 +175,32 @@ async function waitFlow(state: FlowState, label: string): Promise<void> {
   assert.equal(state.failure, undefined, label + ': ' + state.failure);
   assert.ok(state.done, label);
 }
-async function pending(frame: Frame): Promise<void> {
-  const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
+async function pending(frame: Frame, title?: string): Promise<Locator> {
+  const proposals = frame.locator('[data-card="proposal"][data-phase="pending"]');
+  const card = (title ? proposals.filter({ has: frame.getByRole('heading', { name: title, exact: true }) }) : proposals).last();
+  const button = card.getByRole('button', { name: '接受', exact: true });
   await until(async () => await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false), '可审阅的提案', 90_000);
+  return card;
+}
+async function expandProposal(card: Locator): Promise<void> {
+  const trigger = card.getByRole('button', { name: /^完整改动/ });
+  if (await trigger.count() === 0) return;
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
+  const changes = card.locator('[data-proposal-changes]');
+  await until(async () => await trigger.getAttribute('aria-expanded') === 'true' && await changes.evaluate(element => {
+    const panel = element.closest<HTMLElement>('[data-slot="collapsible-content"]');
+    return Boolean(panel && panel.clientHeight > 0 && panel.clientHeight >= panel.scrollHeight - 1
+      && !panel.hasAttribute('data-starting-style') && !panel.hasAttribute('data-ending-style')
+      && panel.getAnimations({ subtree: true }).every(animation => !animation.pending && animation.playState !== 'running'));
+  }).catch(() => false), '完整改动实际展开且动画结束');
+  await card.evaluate(element => element.scrollIntoView({ block: 'start' }));
+  await until(async () => changes.evaluate(element => {
+    const panel = element.closest('[data-slot="collapsible-content"]')!.getBoundingClientRect();
+    return ['dt', 'dd'].every(selector => {
+      const box = element.querySelector(selector)!.getBoundingClientRect();
+      return box.height > 0 && box.top >= Math.max(0, panel.top) && box.bottom <= Math.min(innerHeight, panel.bottom);
+    });
+  }), '展开后的首项字段和值在画面内可见');
 }
 async function accept(frame: Frame): Promise<void> {
   const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
@@ -495,7 +518,7 @@ try {
       assert.ok(changes.length > 8, '真实两工况提案应有完整条件与来源');
       assert.equal(await allChanges.getAttribute('aria-expanded'), 'false');
       assert.equal(await tableProposal.locator('[data-proposal-changes]').count(), 0);
-      await allChanges.click();
+      await expandProposal(tableProposal);
       await until(async () => {
         const value = (await tableProposal.innerText()).replaceAll(/\s/g, '');
         return changes.every(change => [change.label, change.before, change.after].filter(part => part && part !== '—').every(part => value.includes(part.replaceAll(/\s/g, ''))))
@@ -515,10 +538,19 @@ try {
       record(`${viewport.width}/rating-table-review`, true, { changes: changes.length, initiallyCollapsed: true, allValuesAndSourcesPreserved: true, decisionsVisible: true });
       await shot(page, frame, 'rating-table-proposal', { changes: changes.length, type: type.workspace });
       await accept(frame);
-      await pending(frame);
+      await until(() => Boolean(tableFlow.study) || Boolean(tableFlow.failure), '接受载流量表定义后的实际保存回执');
+      assert.equal(tableFlow.failure, undefined);
+      assert.ok(tableFlow.study, '保存回执必须给出实际研究标识');
+      await until(() => frame.evaluate(async () => {
+        const session = decodeURIComponent(location.hash.split('/')[2]);
+        const response = await fetch('/agent-sidecar/api/chat/sessions/' + encodeURIComponent(session));
+        const view = await response.json();
+        return view.waiting.length === 1 && view.waiting[0].operation === 'propose_study_run';
+      }), '对话实际等待独立的运行提案');
+      const tableRunProposal = await pending(frame, '运行研究');
       record(`${viewport.width}/unapproved-rating-table-run-does-not-write`, (await json(backendUrl, `/api/workspaces/${type.workspace}/studies/${tableFlow.study}/runs`)).items.length === 0,
         { study: tableFlow.study, runs: 0 });
-      await accept(frame);
+      await tableRunProposal.getByRole('button', { name: '接受', exact: true }).click();
       await waitFlow(tableFlow, '真实载流量表');
       const savedTable = await json(backendUrl, `/api/design/workspaces/${type.workspace}/rating-table-runs/${tableFlow.run}?view=rows`);
       assert.deepEqual(tableFlow.table, savedTable.rows);
@@ -552,11 +584,12 @@ try {
         { before: gbStudyCount, pending: gbStudyCount, baselineConfirmationFrom: 'explicit human message' });
       const gbProposal = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
       const gbChanges = gbProposal.getByRole('button', { name: /^完整改动/ });
-      if (await gbChanges.count()) await gbChanges.click();
+      await expandProposal(gbProposal);
       const gbReviewText = (await gbProposal.innerText()).replaceAll(/\s/g, '');
       assert.ok(gbReviewText.includes(gb.baselineSource.replaceAll(/\s/g, '')) && gbReviewText.includes(gb.baselineDigest)
         && gbReviewText.includes('基准条件已人工核对'), 'GB人审必须同时保留确认、基准出处、实际PDF摘要和页码');
       record(`${viewport.width}/gb-baseline-review-visible`, true, { actualSourcePreserved: true, pdfSha256: gb.baselineDigest, pdfPage: gb.baselinePage });
+      await gbProposal.locator('dt').filter({ hasText: '基准条件已人工核对' }).scrollIntoViewIfNeeded();
       await shot(page, frame, 'gb-baseline-proposal', { baselinePage: gb.baselinePage, baselineSha256: gb.baselineDigest });
       if (await gbChanges.count()) await gbChanges.click();
       const gbApprovals = await approveAll(frame, correction);
