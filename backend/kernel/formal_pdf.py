@@ -183,6 +183,11 @@ class _Literal(Flowable):
         return self.width, self.height
 
     def split(self, availWidth, availHeight):
+        # Tables can pass the outer column width after measuring this flowable
+        # inside cell padding. Keep the measured content width: widening here
+        # can turn a required split into one unsplit part and break row layout.
+        if self.width > 0:
+            availWidth = min(availWidth, self.width)
         self.wrap(availWidth, availHeight)
         count = int(availHeight // self.leading)
         if count >= len(self._lines):
@@ -273,14 +278,25 @@ def _model_table(table: dict, width: float) -> list[Flowable]:
                                   atomic=numeric or column.get('role') == 'unit',
                                   align='right' if numeric else 'left'))
         rows.append(cells)
-    table_flow = LongTable(rows, colWidths=_column_widths(table, width), repeatRows=1,
+    widths = _column_widths(table, width)
+    table_flow = LongTable(rows, colWidths=widths, repeatRows=1,
                            splitByRow=1, splitInRow=1, hAlign='LEFT', spaceAfter=13)
     table_flow.setStyle(_table_style())
     result = []
     if table.get('title'):
         # Keep the caption with the beginning of a table, not its entire
         # splittable body. keepWithNext on a long table wastes a whole page.
-        result.extend([CondPageBreak(82), _Literal(table['title'], size=10.5, before=8, after=6)])
+        caption = _Literal(table['title'], size=10.5, before=8, after=6)
+        opening = caption.wrap(width, 1000)[1] + caption.getSpaceBefore() + caption.getSpaceAfter()
+        for index, row in enumerate(rows[:2]):
+            heights = [cell.wrap(column_width - 2 * _PADDING, 1000)[1]
+                       for cell, column_width in zip(row, widths)]
+            # Three lines keep a short row whole; longer cells can split into
+            # at least two lines without stranding a one-line remainder.
+            if index:
+                heights = [min(height, 3 * cell.leading) for height, cell in zip(heights, row)]
+            opening += max(heights) + 12  # Actual top and bottom cell padding.
+        result.extend([CondPageBreak(opening), caption])
     result.append(table_flow)
     return result
 
