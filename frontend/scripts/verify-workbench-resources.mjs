@@ -300,9 +300,19 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     const link = page.getByRole('link', { name: `${current.name} · ${current.version}`, exact: true }).first();
     await expect(link).toBeVisible();
     await capture(`${group}-fixed-reference-in-type`);
+    const typeUrl = page.url();
     await link.focus(); await link.press('Enter');
     await expect(page).toHaveURL(new RegExp(`/resources/${group}\\?`));
-    check(`${knownKindLabels[published.kind]}固定引用可返回确切资源版本`, new URL(page.url()).searchParams.get('item') === current.id);
+    check(`${knownKindLabels[published.kind]}固定引用可用键盘返回确切资源版本`, new URL(page.url()).searchParams.get('item') === current.id);
+    if (group === 'standards') await page.getByRole('tab', { name: '资源版本', exact: true }).click();
+    await expect(properties.getByRole('heading', { name: current.name, exact: true })).toBeVisible();
+    await capture(`${group}-fixed-reference-reopened-keyboard`);
+    await page.goBack();
+    await expect(page).toHaveURL(typeUrl);
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`/resources/${group}\\?`));
+    check(`${knownKindLabels[published.kind]}固定引用可用鼠标返回同一资源版本`, new URL(page.url()).searchParams.get('item') === current.id);
     if (group === 'standards') await page.getByRole('tab', { name: '资源版本', exact: true }).click();
     await expect(properties.getByRole('heading', { name: current.name, exact: true })).toBeVisible();
     await capture(`${group}-fixed-reference-reopened`);
@@ -592,6 +602,58 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
           await main.getByRole('button', { name: '上一页资源', exact: true }).click();
         }
       }
+    });
+
+    if (after && group === 'materials') await branch('分用途材料参考物性与完整来源可读', async () => {
+      const catalogue = await api('/api/foundation/assets?kind=material&status=published&q=PVC&limit=100&offset=0');
+      const candidates = catalogue.items.filter(item => item.name.includes('分用途标准参考'));
+      expect(candidates, '真实发布库中须有分用途 PVC 参考材料').toHaveLength(1);
+      const asset = await searchResource('materials', candidates[0].name, candidates[0].version);
+      const references = asset.release.sources.flatMap(source => {
+        try {
+          const value = JSON.parse(source.reference);
+          return value.schema === 'cablesim.reference-data/1' && typeof value.property === 'string' && typeof value.value === 'number' ? [value] : [];
+        } catch { return []; }
+      });
+      expect(references.length).toBeGreaterThanOrEqual(4);
+      const section = properties.locator('section').filter({ has: page.getByRole('heading', { name: '参考物性', exact: true }) });
+      const rows = section.locator('.property-row');
+      await expect(rows).toHaveCount(references.length);
+      await section.scrollIntoViewIfNeeded();
+      await capture('material-long-property-labels-and-complete-source-badges');
+      for (let index = 0; index < references.length; index++) {
+        const row = rows.nth(index), reference = references[index];
+        await row.scrollIntoViewIfNeeded();
+        expect(await row.locator('dd').evaluate(node => node.firstChild.textContent.trim())).toBe(String(reference.value));
+        const geometry = await row.evaluate(node => {
+          const panel = node.closest('.property-panel'), box = panel.getBoundingClientRect();
+          const left = box.left + panel.clientLeft, right = left + panel.clientWidth;
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), clipped = [];
+          while (walker.nextNode()) {
+            if (!walker.currentNode.textContent.trim()) continue;
+            const range = document.createRange(); range.selectNodeContents(walker.currentNode);
+            for (const rect of range.getClientRects()) if (rect.width && (rect.left < left - 1 || rect.right > right + 1)) clipped.push(walker.currentNode.textContent.trim());
+          }
+          return { clipped, width: panel.clientWidth, scrollWidth: panel.scrollWidth };
+        });
+        check('材料物性名称数值单位和来源标记完整显示', geometry.clipped.length === 0 && geometry.scrollWidth <= geometry.width + 1,
+          { resource: asset.id, property: reference.property, value: reference.value, ...geometry });
+        const source = row.getByRole('button', { name: '来源：标准', exact: true });
+        await expect(source).toBeInViewport({ ratio: 1 });
+        await source.focus();
+        const tooltip = page.getByRole('tooltip');
+        await expect(tooltip).toContainText(reference.standard);
+        if (reference.source_digest) await expect(tooltip).toContainText(reference.source_digest);
+        if (index === 0) await capture('material-source-evidence-keyboard-focus');
+        await page.keyboard.press('Escape');
+        await expect(tooltip).toBeHidden();
+        await source.hover();
+        await expect(tooltip).toContainText(reference.standard);
+        await page.mouse.move(0, 0, { steps: 5 });
+        await page.mouse.move(1, 1);
+        await expect(tooltip).toBeHidden();
+      }
+      check('材料每条标准来源可通过键盘焦点与鼠标悬停读取', true, { resource: asset.id, references: references.length });
     });
 
     let typed, imported, versions;
