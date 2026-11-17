@@ -1,4 +1,4 @@
-import { ApiError, optionalRecord, text } from '@/api/client';
+import { ApiError, optionalRecord, record, text } from '@/api/client';
 import { displayText } from '@/lib/display-names';
 
 export interface Field { key: string; label: string; unit: string }
@@ -16,8 +16,24 @@ export interface SeriesDeclaration {
 }
 export type UploadedSeriesDeclaration = Omit<SeriesDeclaration, 'common' | 'common_basis' | 'modelling'>
   & Partial<Pick<SeriesDeclaration, 'common' | 'common_basis' | 'modelling'>>;
-export function normalizeSeriesDeclaration(value: UploadedSeriesDeclaration): SeriesDeclaration {
-  // Omitted parameter maps represent no supplied values.
+export function normalizeSeriesDeclaration(suggestion: UploadedSeriesDeclaration): SeriesDeclaration {
+  const value = structuredClone(suggestion);
+  record(value, '工作表系列声明');
+  if (['name', 'manufacturer', 'designation'].some(key => typeof value[key as keyof UploadedSeriesDeclaration] !== 'string')
+      || !Array.isArray(value.standards) || value.standards.some(item => typeof item !== 'string'))
+    throw new ApiError(502, '工作表系列名称、制造商、型号或执行标准格式不完整，请重新上传并核对声明。');
+  // Omitted maps mean no declared data. Invalid maps must not erase supplied values.
+  for (const [key, label] of [['common', '统一尺寸'], ['common_basis', '尺寸依据'], ['modelling', '计算参数']] as const) {
+    if (value[key] !== undefined) record(value[key], `工作表${label}`);
+  }
+  if (Object.values(value.common ?? {}).some(item => typeof item !== 'number' || !Number.isFinite(item))
+      || Object.values(value.common_basis ?? {}).some(item => typeof item !== 'string'))
+    throw new ApiError(502, '工作表统一尺寸或出处格式不完整，请重新上传并核对声明。');
+  for (const parameter of Object.values(value.modelling ?? {})) {
+    const entry = record(parameter, '工作表计算参数');
+    if (!['number', 'string'].includes(typeof entry.value) || typeof entry.reference !== 'string')
+      throw new ApiError(502, '工作表计算参数的数值或出处缺失，请重新上传并核对声明。');
+  }
   return { ...value, common: value.common ?? {}, common_basis: value.common_basis ?? {}, modelling: value.modelling ?? {} };
 }
 export interface Mapping { name: string; mapping: Record<string, number>; headers: Record<string, string> }

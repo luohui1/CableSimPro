@@ -35,6 +35,7 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
   </div>;
   return <div className="library-import-stack">
     {value.source?.title && <p className="library-import-source">来源：{value.source.title}{value.source.location && `；${sourceLocationText(value.source.location)}`}</p>}
+    {!Object.keys(value.modelling).length && <p className="muted">计算参数与来源尚未提供；预览将保留缺项，需补齐后才能计算。</p>}
     <div className="library-import-fields">
       <label className="text-field">系列名称<Input aria-label="系列名称" required maxLength={120} value={value.name} onChange={event => set({ name: event.target.value })} /></label>
       <label className="text-field">制造商<Input aria-label="制造商" maxLength={120} value={value.manufacturer} onChange={event => set({ manufacturer: event.target.value })} /></label>

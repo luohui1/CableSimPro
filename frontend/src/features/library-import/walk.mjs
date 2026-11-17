@@ -182,7 +182,44 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
     await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`人民 YJV22 公开样本 ${viewport.width} ${stamp}`);
     await capture('公开来源与系列声明');
+    // Hold the real API response so editing or going back can happen in flight.
+    // No response data is mocked and no outdated preview may become confirmable.
+    for (const action of ['edit', 'back']) {
+      let releaseResponse;
+      const release = new Promise(resolve => { releaseResponse = resolve; });
+      const ready = Promise.withResolvers();
+      const delayed = async route => {
+        try {
+          const response = await route.fetch({ timeout: 180000 });
+          ready.resolve(response);
+          await release;
+          await route.fulfill({ response });
+        } catch (error) { ready.reject(error); throw error; }
+      };
+      await page.route('**/api/type-library/imports/preview', delayed, { times: 1 });
+      try {
+        const delivered = page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 });
+        await page.getByRole('button', { name: '逐行校验并预览', exact: true }).click();
+        const actual = await ready.promise;
+        assert.equal(actual.ok(), true, await actual.text());
+        if (action === 'edit') await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`人民 YJV22 已核对 ${viewport.width} ${stamp}`);
+        else await page.getByRole('button', { name: '上一步', exact: true }).click();
+        releaseResponse();
+        assert.equal((await delivered).ok(), true);
+        await expect(page.getByRole('alert')).toContainText('本次旧预览已作废');
+        await expect(page.getByRole('heading', { name: action === 'edit' ? '填写系列声明与来源' : '确认列映射', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: /^确认入库/ })).toHaveCount(0);
+        await capture(action === 'edit' ? '修改声明后旧预览拒绝生效' : '返回列映射后旧预览拒绝跳转');
+        if (action === 'back') await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
+        await expect(page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true })).toHaveValue(`人民 YJV22 已核对 ${viewport.width} ${stamp}`);
+      } finally {
+        releaseResponse();
+        await page.unroute('**/api/type-library/imports/preview', delayed);
+      }
+    }
     const built = await preview();
+    assert.equal(built.series.name, `人民 YJV22 已核对 ${viewport.width} ${stamp}`);
+    report.checks.push(`${viewport.width}：延迟真实预览响应期间修改系列声明或返回列映射，旧响应均作废且不能确认；再次预览严格对应最后保存的声明`);
     assert.equal(built.error_count, 0, '原始公开样本不应有解析错误');
     assert.equal(built.rows.length, 11);
     await capture('逐规格预览');
@@ -569,11 +606,13 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await page.getByRole('combobox', { name: 'I 列对应', exact: true }).evaluate(element => element.scrollIntoView({ block: 'center' }));
     await capture('Bahra十九列映射与性能字段');
     await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
+    await expect(page.getByText('计算参数与来源尚未提供；预览将保留缺项，需补齐后才能计算。', { exact: true })).toBeVisible();
     await page.getByRole('form', { name: '系列声明' }).getByLabel('系列名称', { exact: true }).fill(`Bahra 公开结构与性能 ${viewport.width} ${stamp}`);
     const bahraPreviewResponse = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 }),
       () => page.getByRole('button', { name: '逐行校验并预览', exact: true }).click());
     assert.equal(bahraPreviewResponse.ok(), true, await bahraPreviewResponse.text());
     assert.deepEqual(bahraPreviewResponse.request().postDataJSON().mapping, bahraMapping);
+    assert.deepEqual(bahraPreviewResponse.request().postDataJSON().series.modelling, {}, '未提供的计算参数须保持为空，不能自动采用研究参考值');
     const bahraPreview = await bahraPreviewResponse.json();
     await recordResponse('bahra-preview', bahraPreviewResponse, bahraPreview);
     assert.deepEqual([bahraPreview.rows.length, bahraPreview.error_count, bahraPreview.incomplete_count], [13, 0, 13]);
@@ -654,7 +693,10 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await expect(cells.nth(2)).toContainText(`${fact.source.file} · ${fact.source.sheet} · 第 ${fact.source.row} 行 · ${fact.source.column}`);
       await expect(cells.nth(3)).toContainText('厂家结构表导入 · 1.1.0');
       await expect(cells.nth(3)).toContainText('参考');
-      if (catalogueResults.has(fact.key)) await expect(cells.nth(0)).toContainText('厂家目录值 · 供对照');
+      if (catalogueResults.has(fact.key)) {
+        await expect(cells.nth(0)).toContainText('厂家目录值 · 供对照');
+        await expect(cells.nth(2).locator('summary')).toHaveText('查看目录适用条件');
+      }
     }
     const sourceScreenshots = [];
     for (const [label, keys] of [
@@ -667,7 +709,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       while (start < keys.length) {
         const first = bahraFirst.values.find(fact => fact.key === keys[start]);
         await bahraValues.getByRole('row', { name: first.label, exact: true }).evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
-        const bounds = await bahraSources.locator('.dialog-body').boundingBox();
+        const bounds = await bahraSources.locator('.library-import-dialog-body').boundingBox();
         assert.ok(bounds);
         let end = start;
         while (end < keys.length) {
@@ -715,7 +757,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     let conditionStart = 0;
     while (conditionStart < conditionBlocks.length) {
       await conditionBlocks[conditionStart].element.evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
-      const bounds = await bahraSources.locator('.dialog-body').boundingBox();
+      const bounds = await bahraSources.locator('.library-import-dialog-body').boundingBox();
       assert.ok(bounds);
       let conditionEnd = conditionStart;
       while (conditionEnd < conditionBlocks.length) {
@@ -736,7 +778,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(conditionDetails).toHaveJSProperty('open', false);
     await page.keyboard.press('Escape');
     await expect(bahraSources).toBeHidden();
-    report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
+    report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；未声明的计算参数保持为空。逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

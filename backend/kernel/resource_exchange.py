@@ -27,6 +27,7 @@ from pydantic import Field, ValidationError, model_validator
 from backend.domain.models import DomainDocument
 from backend.foundation.contracts import AssetRelease, content_hash
 from backend.schemas import Scenario, StrictModel
+from .project_exchange import prepare_reference, validate_reference
 from .workspace import fingerprint, stamp
 
 
@@ -80,10 +81,9 @@ def _project_inputs(value):
         fail('EXCHANGE_PROJECT_SOURCES', '工程来源必须为列表。')
     binding = value.get('study_cable_reference')
     if binding is not None:
-        if (not isinstance(value.get('domain'), dict) or not isinstance(binding, dict)
-                or not isinstance(binding.get('payload'), dict)
-                or binding.get('content_sha256') != fingerprint(binding['payload'])):
-            fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照不完整或摘要不一致。')
+        if not isinstance(value.get('domain'), dict):
+            fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照缺少完整领域输入。')
+        validate_reference(binding)
         # Existing reference guards enforce the exact original bound inputs.
         from backend.domain.guards import check_locks
         check_locks(value, value['domain'])
@@ -267,6 +267,7 @@ class ResourceExchange:
             for identifier in body.workspace_ids:
                 row, state = self.store.load(db, identifier)
                 inputs = {key: deepcopy(value) for key, value in state.items() if key in PROJECT_KEYS}
+                prepare_reference(db, inputs)
                 _project_inputs(inputs)
                 projects.append({'origin_id': identifier, 'origin_revision': row['revision'],
                                  'inputs': inputs, 'input_sha256': fingerprint(inputs)})
@@ -301,6 +302,8 @@ class ResourceExchange:
                 'requires_human_confirmation': True, 'approval_inherited': False,
                 'limitations': ['仅搬运已保存输入和资源定义；不复制运行、审核、原始资料或交付历史。',
                                 '资源原始来源记录原样保留，属于来源方的核对声明；本机审核状态为草稿。',
+                                '候选型号保留原始内容摘要、完整来源快照与原标识；工程绑定独立快照，不关联本机同名或同标识型号。',
+                                '已发布型号引用的完整发行证明链不在输入交换范围内，请使用数据库备份恢复。',
                                 '需要完整历史时使用数据库备份恢复。']}
 
     def preview(self, bundle):

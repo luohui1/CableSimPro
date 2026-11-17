@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
-from backend.kernel.resource_exchange import TRANSFER_SHEET, encoded, parse_file
+from backend.kernel.resource_exchange import PROJECT_LIMIT, TRANSFER_SHEET, encoded, parse_file
 from backend.kernel.workspace import fingerprint
 from backend.main import create_app
 
@@ -60,6 +60,31 @@ def study(client):
         'model_id': model['id'], 'content_sha256': model['content_sha256'], 'project_name': '传输测试 · 原有结构演示'})
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def candidate_study(client):
+    """Use actual model APIs and existing explicit teaching inputs, not a solver fixture."""
+    model = next(item for item in client.get('/api/design/cable-models').json()
+                 if item['id'] == 'system.cu-xlpe-al-240')
+    payload = deepcopy(model['payload'])
+    # An unused material proves that a study projection is not the full version.
+    payload['materials'].append({**deepcopy(payload['materials'][0]),
+                                 'id': 'material/unbound', 'label': '未引用的演示材料'})
+    response = client.post('/api/domain-cable-models', json={
+        'name': '传输演示', 'version': '1.0.0', **payload,
+        'sources': {'/': {'kind': 'demo', 'reviewed': False,
+            'reference': f"系统演示 {model['id']} @{model['version']} sha256:{model['content_sha256']}；仅验证输入搬运。"}},
+        'confirmed': False})
+    assert response.status_code == 201, response.text
+    candidate = response.json()
+    response = client.post('/api/design/study-workspaces', json={
+        'model_id': 'candidate:' + candidate['id'], 'content_sha256': candidate['digest'],
+        'project_name': '候选型号研究输入搬运'})
+    assert response.status_code == 201, response.text
+    project = response.json()
+    assert project['study_cable_reference']['content_sha256'] != fingerprint(
+        project['study_cable_reference']['payload'])
+    return candidate, project
 
 
 def export(client, *, asset=None, project=None, format='json'):
@@ -190,4 +215,127 @@ def test_invalid_file_is_explained_without_creating_data(clients, filename, data
     response = target.post('/api/library/exchange/preview', files={'file': (filename, data)})
     assert response.status_code == 422
     assert target.get('/api/foundation/assets').json()['total'] == 0
+    assert target.get('/api/workspaces').json() == []
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
+def test_candidate_study_source_proof_roundtrip_after_both_machines_restart(tmp_path, format):
+    source_path, target_path = tmp_path / 'source.sqlite', tmp_path / 'target.sqlite'
+    with TestClient(create_app(source_path)) as source:
+        candidate, project = candidate_study(source)
+        data, bundle = export(source, project=project, format=format)
+        inputs = bundle['projects'][0]['inputs']
+        binding = inputs['study_cable_reference']
+        assert len(encoded(inputs)) <= PROJECT_LIMIT
+        assert binding['content_sha256'] == candidate['digest']
+        assert binding['payload'] == project['study_cable_reference']['payload']
+        assert binding['source_snapshot']['payload'] == candidate['payload']
+        assert binding['source_snapshot']['origin_id'] == 'candidate:' + candidate['id']
+        assert binding['source_snapshot']['origin_state'] == candidate['state']
+        assert binding['id'].startswith('exchange-model:') and binding['state'] == 'draft'
+        assert inputs['domain'] == project['domain']
+        assert source.get('/api/workspaces/' + project['id']).json() == project
+        assert source.get('/api/domain-cable-models').json() == [candidate]
+    # The source app is stopped. No source lookup is available during import.
+    with TestClient(create_app(target_path)) as target:
+        preview, imported = upload(target, 'data.' + format, data)
+        assert imported.status_code == 201, imported.text
+        assert preview['approval_inherited'] is False
+        target_id = imported.json()['projects'][0]['id']
+        assert target_id != project['id']
+        assert target.get('/api/domain-cable-models').json() == []
+        assert target.get('/api/types/library').json()['items'] == []
+    with TestClient(create_app(target_path)) as target:
+        restored = target.get('/api/workspaces/' + target_id).json()
+        assert restored['study_cable_reference'] == binding
+        assert restored['domain'] == project['domain'] and not restored['runs']
+        assert restored['exchange_origin']['approval_inherited'] is False
+        assert target.get('/api/domain-cable-models').json() == []
+        _, exported_again = export(target, project=restored, format=format)
+        assert exported_again['projects'][0]['inputs'] == inputs
+        # Portability does not weaken the existing immutable-model guards.
+        changed = deepcopy(restored['domain'])
+        changed['cable_types'][0]['cores'][0]['conductor']['r20'] *= 2
+        response = target.put('/api/workspaces/' + target_id + '/domain', json={
+            'expected_revision': restored['revision'], 'document': changed})
+        assert response.status_code == 422
+        assert target.get('/api/workspaces/' + target_id).json()['domain'] == restored['domain']
+
+
+def test_candidate_proof_refuses_rehashed_source_projection_and_local_identity_changes(clients):
+    source, target = clients
+    candidate, project = candidate_study(source)
+    _, original = export(source, project=project)
+    cases = [
+        ('source', 'EXCHANGE_CABLE_SOURCE_DIGEST'),
+        ('digest', 'EXCHANGE_CABLE_SOURCE_DIGEST'),
+        ('projection', 'EXCHANGE_CABLE_PROJECTION'),
+        ('origin_id', 'EXCHANGE_CABLE_IDENTITY'),
+        ('local_id', 'EXCHANGE_CABLE_IDENTITY'),
+        ('approval', 'EXCHANGE_CABLE_IDENTITY'),
+        ('missing', 'EXCHANGE_CABLE_SOURCE'),
+        ('published_without_proof', 'EXCHANGE_PUBLISHED_MODEL_PROOF'),
+    ]
+    for change, code in cases:
+        bundle = deepcopy(original)
+        item = bundle['projects'][0]
+        binding = item['inputs']['study_cable_reference']
+        if change == 'source':
+            binding['source_snapshot']['payload']['materials'][0]['density'] = 8800
+        elif change == 'digest':
+            binding['content_sha256'] = fingerprint(binding['payload'])
+        elif change == 'projection':
+            binding['payload']['cable_type']['cores'][0]['conductor']['r20'] *= 2
+        elif change == 'origin_id':
+            binding['source_snapshot']['origin_id'] = 'candidate:' + str(uuid4())
+        elif change == 'local_id':
+            binding['id'] = 'candidate:' + candidate['id']
+        elif change == 'approval':
+            binding['state'] = 'reviewed'
+        elif change == 'published_without_proof':
+            binding.pop('source_snapshot')
+            binding.update(id='type/unproven-local-family', source='published_type',
+                           content_sha256=fingerprint(binding['payload']))
+        else:
+            binding.pop('source_snapshot')
+        item['input_sha256'] = fingerprint(item['inputs'])
+        bundle['sha256'] = fingerprint({key: value for key, value in bundle.items() if key != 'sha256'})
+        response = target.post('/api/library/exchange/preview', files={'file': ('data.json', encoded(bundle))})
+        assert response.status_code == 422, (change, response.text)
+        assert response.json()['detail']['code'] == code, (change, response.text)
+        response = target.post('/api/library/exchange/import', files={'file': ('data.json', encoded(bundle))},
+            data={'request_id': str(uuid4()), 'reviewed_sha256': bundle['sha256'], 'confirmed': 'true'},
+            headers={'X-CableSim-Actor': 'human'})
+        assert response.status_code == 422, (change, response.text)
+        assert target.get('/api/workspaces').json() == []
+        assert target.get('/api/domain-cable-models').json() == []
+
+
+def test_candidate_source_must_match_pinned_version_and_project_limit_stays_in_force(clients):
+    source, target = clients
+    candidate, project = candidate_study(source)
+    _, bundle = export(source, project=project)
+    item = bundle['projects'][0]
+    item['inputs']['sources'].append({'reference': '输入交换大小边界' * PROJECT_LIMIT})
+    item['input_sha256'] = fingerprint(item['inputs'])
+    bundle['sha256'] = fingerprint({key: value for key, value in bundle.items() if key != 'sha256'})
+    response = target.post('/api/library/exchange/preview', files={'file': ('data.json', encoded(bundle))})
+    assert response.status_code == 413
+    assert response.json()['detail']['code'] == 'EXCHANGE_PROJECT_TOO_LARGE'
+    store = source.app.state.workspace_store
+    with store.db(True) as db:
+        # An inconsistent original database must not silently supply another version.
+        changed = deepcopy(candidate['payload'])
+        changed['version'] = '1.0.1'
+        db.execute('UPDATE domain_cable_models SET payload=?,digest=? WHERE id=?',
+                   (json.dumps(changed), fingerprint(changed), candidate['id']))
+    response = source.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'EXCHANGE_CABLE_SOURCE_DIGEST'
+    assert source.get('/api/workspaces/' + project['id']).json() == project
+    with store.db(True) as db:
+        db.execute('DELETE FROM domain_cable_models WHERE id=?', (candidate['id'],))
+    response = source.post('/api/library/exchange/export', json={'workspace_ids': [project['id']]})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == 'EXCHANGE_CABLE_SOURCE'
     assert target.get('/api/workspaces').json() == []

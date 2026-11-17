@@ -22,6 +22,7 @@ from backend.schemas import StrictModel
 from . import candidates, factory_tables as tables
 from .resource_exchange import MAX_BYTES, TRANSFER_SHEET, _excel_string, parse_file
 from .type_import_models import SeriesDeclaration
+from .type_library_evidence import ExchangeEvidence
 from .workspace import fingerprint, stamp
 
 
@@ -53,7 +54,7 @@ def validate_bundle(value):
         tables.fail('TYPE_EXCHANGE_DIGEST', '型号交换内容与摘要不一致。', 409)
     if not isinstance(value['series'], list) or not 1 <= len(value['series']) <= 20 or not isinstance(value['files'], list) or len(value['files']) > 100:
         tables.fail('TYPE_EXCHANGE_COUNT', '每次交换须为 1–20 个系列、最多 100 个来源文件。')
-    files, names, count = set(), set(), 0
+    files, names, count = {}, set(), 0
     for source in value['files']:
         if not isinstance(source, dict) or set(source) != {'filename', 'sha256', 'content_base64'}:
             tables.fail('TYPE_EXCHANGE_SOURCE', '型号来源原件字段无效。')
@@ -61,7 +62,8 @@ def validate_bundle(value):
         if sha256(raw).hexdigest() != source['sha256'] or source['sha256'] in files:
             tables.fail('TYPE_EXCHANGE_SOURCE', '型号来源原件重复或摘要不一致。', 409)
         tables.read(source['filename'], raw)
-        files.add(source['sha256'])
+        files[source['sha256']] = raw
+    evidence = ExchangeEvidence(files)
     for series in value['series']:
         if not isinstance(series, dict) or set(series) != {'origin_id', 'declaration', 'specs'}:
             tables.fail('TYPE_EXCHANGE_SERIES', '系列字段无效。')
@@ -101,16 +103,11 @@ def validate_bundle(value):
             if (cores != declaration.cores or u0 != declaration.u0_v or voltage != declaration.u_v
                     or abs(area - metadata['area_m2']) > 1e-12 or metadata['key'] != f'{cores}×{area * 1e6:g}'):
                 tables.fail('TYPE_EXCHANGE_SERIES', '型号电压、芯数或截面与系列不一致。')
-            for fact in metadata['values']:
-                if (not isinstance(fact, dict) or not {'key', 'value', 'unit', 'source', 'method', 'confidence'} <= set(fact)
-                        or not isinstance(fact['source'], dict) or not isinstance(fact['method'], dict)):
-                    tables.fail('TYPE_EXCHANGE_SOURCE', '每个规格值须有来源、方法版本和可信分档。')
-                digest = fact['source'].get('file_sha256')
-                if digest and digest not in files:
-                    tables.fail('TYPE_EXCHANGE_SOURCE', '交换文件缺少规格所引用的原始结构表。')
+            evidence.facts(item, declaration)
             count += 1
     if count > 200 or len(encoded(value)) > MAX_BYTES:
         tables.fail('TYPE_EXCHANGE_TOO_LARGE', '每次最多 200 个规格或 8 MiB，请分批导出。', 413)
+    evidence.verify()
     return value
 
 

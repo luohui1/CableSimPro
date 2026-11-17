@@ -66,6 +66,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
   const picker = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const requestId = useRef('');
+  const previewGeneration = useRef(0);
   const selectedSheet = upload?.sheets.find(sheet => sheet.name === sheetName);
   const columns = selectedSheet?.columns || [];
   const fields = upload?.fields || vocabulary.fields;
@@ -78,9 +79,9 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     heading.current?.closest('.main-content')?.scrollTo({ top: 0 });
   }, [step, receipt]);
 
-  const invalidatePreview = () => { setPreview(null); setPreviewRow(null); setConfirmed(false); setSkipErrors(false); requestId.current = ''; };
+  const invalidatePreview = () => { previewGeneration.current++; setPreview(null); setPreviewRow(null); setConfirmed(false); setSkipErrors(false); requestId.current = ''; };
   const updateSeries = (next: SeriesDeclaration) => { setSeries(next); invalidatePreview(); };
-  const changeStep = (next: number) => { setError(''); setStep(next); };
+  const changeStep = (next: number) => { if (next !== 4) previewGeneration.current++; setError(''); setStep(next); };
   async function run(label: string, action: () => Promise<void>) {
     if (busy) return;
     setBusy(label); setError('');
@@ -97,6 +98,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       setFileName(file.name);
       const body = new FormData(); body.append('file', file);
       const result = await libraryRequest<Upload>('/imports/upload', { method: 'POST', body });
+      if (result.declarations) result.declarations = result.declarations.map(item => ({ ...item, series: normalizeSeriesDeclaration(item.series) }));
       setUpload(result);
       const sheet = result.sheets.find(item => item.table) || result.sheets[0];
       if (!sheet) throw new Error('文件中没有可以读取的工作表。');
@@ -197,7 +199,12 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     </div>;
   } else if (step === 3) {
     body = <form className="library-import-stack" aria-label="系列声明" onSubmit={event => { event.preventDefault(); void run('正在逐行核对结构表', async () => {
+      const generation = previewGeneration.current;
       const result = await libraryPost<Preview>('/imports/preview', { upload_id: upload!.upload_id, sheet: sheetName, first_data_row: first, mapping, series });
+      if (generation !== previewGeneration.current) {
+        setError('预览期间设置已修改，本次旧预览已作废。请核对当前设置后重新逐行校验。');
+        return;
+      }
       setPreview(result); setConfirmed(false); setSkipErrors(false); requestId.current = crypto.randomUUID(); changeStep(4);
     }); }}>
       <h2 ref={heading} tabIndex={-1}>填写系列声明与来源</h2>
@@ -208,7 +215,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
   } else if (preview) {
     body = <div className="library-import-stack">
       <h2 ref={heading} tabIndex={-1}>核对入库预览</h2>
-      <p>{series.name} · 可入库 {importable} 行 · 其中缺项 {preview.incomplete_count} 行 · 错误 {preview.error_count} 行</p>
+      <p>{preview.series.name} · 可入库 {importable} 行 · 其中缺项 {preview.incomplete_count} 行 · 错误 {preview.error_count} 行</p>
       <p className="muted">缺项资料可以保存为草稿，缺少必需数据的规格不能计算。错误行须更正或明确排除。</p>
       {preview.series.resistance_basis === 'standard_limit' && <p className="library-import-source">缺少原表电阻的规格采用 GB/T 3956—2008 表 2 标准上限，不是厂家实测值；每个数保留标准出处。</p>}
       <DataTable label="逐行入库预览" showGroups={false} groups={[{ id: 'preview', label: '逐行预览', rows: preview.rows.map(row => ({ ...row, id: String(row.row_number) })) }]} rowLabel={row => `原表第 ${row.row_number} 行`} columns={[
