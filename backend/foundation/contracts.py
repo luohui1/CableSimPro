@@ -17,7 +17,7 @@ Digest = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]*$")]
 Version = Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$", max_length=64)]
 AssetKind = Literal["material", "component", "assembly", "installation", "study_template", "rule"]
-Dimension = Literal["length", "area", "absolute_temperature", "temperature_difference", "linear_resistance", "thermal_resistivity", "thermal_conductivity", "current", "frequency"]
+Dimension = Literal["length", "area", "absolute_temperature", "temperature_difference", "linear_resistance", "thermal_resistivity", "thermal_conductivity", "current", "frequency", "mass_density", "resistivity", "volumetric_heat_capacity", "dimensionless"]
 
 
 class Contract(BaseModel):
@@ -40,6 +40,13 @@ UNITS: dict[str, tuple[Dimension, float, float, str]] = {
     "W/(m.K)": ("thermal_conductivity", 1.0, 0.0, "W/(m.K)"),
     "A": ("current", 1.0, 0.0, "A"),
     "Hz": ("frequency", 1.0, 0.0, "Hz"),
+    "kg/m3": ("mass_density", 1.0, 0.0, "kg/m3"),
+    "kg/m³": ("mass_density", 1.0, 0.0, "kg/m3"),
+    "ohm.m": ("resistivity", 1.0, 0.0, "ohm.m"),
+    "Ω·m": ("resistivity", 1.0, 0.0, "ohm.m"),
+    "J/(m3.K)": ("volumetric_heat_capacity", 1.0, 0.0, "J/(m3.K)"),
+    "J/(m³·K)": ("volumetric_heat_capacity", 1.0, 0.0, "J/(m3.K)"),
+    "1": ("dimensionless", 1.0, 0.0, "1"),
 }
 
 

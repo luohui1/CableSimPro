@@ -70,6 +70,21 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 `GET /api/library/resources/catalogue?category=materials|environment|manufacturing` 和 `/table?category=...&table_id=...` 读取真实封签数据插件。`POST /api/library/resources/select` 要求固定 `release_digest/data_sha256/standard/edition/locator/quantity/record_id/conditions`，返回数值、适用条件、出处和可信分档。选择记录不直接修改工程，也不代表批准。
 
+基础资源的 `Quantity.dimension` 另支持标准数据已有的 `mass_density`、`resistivity`、`volumetric_heat_capacity`、`dimensionless`。相应 SI 单位为 `kg/m3`、`ohm.m`、`J/(m3.K)`、`1`，接受原文的 `kg/m³`、`Ω·m`、`J/(m³·K)` 等值写法，原显示值和原单位仍保留。不同量纲的单位、布尔值及数字字符串明确拒绝。真实的 Huang 密度、IEC 电阻率与介电常数、Nielsen 体积热容可经查询、选择、`POST /api/foundation/assets/import` 和资源回读保存为来源完整的草稿，不因此写入工程或批准材料。T1 的生成类型与量纲显示应同步这四个既有名字。
+
+此次对 `backend/foundation/contracts.py` 只追加上述量纲与单位；实际依赖闭包中仅 `cablesim.native-reference` 引用该文件，因此该插件发行升为 `1.0.7` 并重封签。原有计算算法和能力方法版本 `1.0.0` 不变，不以静态封签检查代替原生仿真验证。
+
+现有资源操作应按用途分别接入：
+
+| 接口 | 保存的内容与边界 |
+| --- | --- |
+| `POST /api/library/resources/select` | 选择固定版本参考记录，`applied_to_workspace:false`。 |
+| `POST /api/types/{wid}/resources/bind` 及 `/resources/material-preview`、`/resources/material-confirm` | 绑定及确认材料或标准出处，不替换材料物性。 |
+| `GET /api/types/{wid}/material-comparison` 与 `POST /api/types/{wid}/material-comparison/adopt` | 比较并按现有门禁逐项采用适用材料值，写入新工程修订和来源。 |
+| `POST /api/design/workspaces/{wid}/section-template` | 应用既有的受限敷设模板。 |
+
+普通 `component`、`assembly`、`study_template` 尚无通用的“应用到工程”接口，继续列为未完成；参考选择、来源绑定和材料值采用不能相互冒充。
+
 ## 公开样本对照
 
 `GET /api/type-library/samples` 提供人民电缆和 Bahra 的原始来源及随附表声明；`/samples/{name}.xlsx` 或 `.csv?table=...` 下载可直接导入的结构表。
