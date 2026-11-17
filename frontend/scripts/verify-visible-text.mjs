@@ -362,7 +362,9 @@ try {
       report.pages.push({ ...surface, actualUrl: surfaceUrl, readiness, ...size });
     } catch (error) {
       const screenshot = 'uncovered-' + createHash('sha256').update(surface.route + size.width).digest('hex').slice(0, 12) + '.png';
-      await page.screenshot({ path: path.join(out, screenshot) }).catch(() => {});
+      // Keep the performance report's uncovered images in its early artifact,
+      // instead of leaving them only in the separate text-traversal directory.
+      await page.screenshot({ path: path.join(performanceAudit?.out || out, screenshot) }).catch(() => {});
       report.uncovered.push({ page: surface.route, label: surface.label, owner: surface.owner, ...size, reason: error.message, screenshot });
       if (page.isClosed() || !session.browser.isConnected()) throw Error('浏览器会话退出，停止该批巡检；未访问的页面不能计为通过。' + error.message);
       if (performanceMode && surface.route === '/') throw error; // Stop if the changed real creation flow fails.
