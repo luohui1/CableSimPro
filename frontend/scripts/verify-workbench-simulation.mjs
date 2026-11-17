@@ -23,6 +23,78 @@ await walkthrough('simulation', async ({
   const form = page.getByLabel('有限元方法参数', { exact: true });
   const mesh = form.locator('input[data-field-path="/mesh/size_m"]');
   let createdComparison;
+  async function readyPreflight(dialog, response, result, saved) {
+    const request = new URL(response.url()), workspace = await api(`/api/workspaces/${saved.workspace}`);
+    const method = configuration(saved).method;
+    expect(response.ok(), '输入预检必须读取成功').toBe(true);
+    expect(response.request().method()).toBe('GET');
+    expect(request.pathname).toBe(`${hpcStudyPath(saved)}/input-preflight`);
+    expect(request.searchParams.get('expected_revision')).toBe(String(workspace.revision));
+    expect(request.searchParams.get('expected_study_revision')).toBe(String(saved.revision));
+    expect(request.searchParams.get('module')).toBe(saved.definition.modules?.['thermal-field'] ? 'thermal-field' : null);
+    expect(result.local_only).toBe(true);
+    expect(result.ready).toBe(false);
+    expect(typeof result.input_ready).toBe('boolean');
+    if (result.method_scopes?.length) expect(result.method_scopes[0].method).toEqual(method);
+    await expect(dialog).toHaveAccessibleDescription(`${method.plugin_id === 'cablesim.simulation' ? '电缆有限元仿真' : displayName(method.plugin_id)} · ${method.version}`);
+    // Receiving input-preflight is not the final UI state: the control still
+    // refreshes availability before replacing its loading body with these cases.
+    await expect(dialog.getByText('正在核对已保存输入', { exact: true })).toBeHidden();
+    await expect(dialog.locator('.run-checks')).toBeVisible();
+    await expect(dialog.locator('.run-checks > div')).toHaveCount(result.cases.length + (result.crosschecks?.length || 0));
+    const summary = dialog.getByRole('region', { name: '预检步骤', exact: true });
+    await expect(summary.getByText(`输入完整性与范围：${result.input_ready ? '已通过输入检查' : '请修正下列缺项'}`, { exact: true })).toBeVisible();
+    await expect(summary.locator('.solver-location')).toContainText('超算');
+    await expect(summary.getByText('未配置', { exact: true })).toBeVisible();
+    await expect(summary.getByRole('link', { name: '去设置', exact: true })).toHaveAttribute('href', /^\/settings\/compute(?:\?|$)/);
+    await expect(dialog).not.toContainText(/读取配置中|能力声明未读取|配置读取失败/);
+    await expect(dialog.getByRole('button', { name: '确认并运行', exact: true })).toBeDisabled();
+    return { workspace: saved.workspace, study: saved.id, revision: workspace.revision, studyRevision: saved.revision,
+      module: request.searchParams.get('module'), method, inputReady: result.input_ready, visible: await dialog.innerText() };
+  }
+  async function readyComputeSettings(method) {
+    const [profile, cards] = await Promise.all([api('/api/hpc/profile'), api('/api/methods?view=summary')]);
+    expect(profile.configured).toBe(false);
+    expect(profile.status).toBe('not_configured');
+    const card = cards.find(row => ['plugin_id', 'version', 'release_digest'].every(key => row.method[key] === method[key]));
+    const capability = card?.capabilities.find(row => row.id === method.capability);
+    expect(capability, '设置页须显示保存方法固定发行的能力').toBeTruthy();
+    expect(capability.solver).toBe('slurm');
+    const settings = page.getByRole('region', { name: '超算连接', exact: true });
+    await expect(settings).toHaveAttribute('data-state', 'empty');
+    await expect(settings.getByRole('button', { name: '测试连接', exact: true })).toBeDisabled();
+    await expect(settings).toContainText('先保存完整连接配置。');
+    await expect(page.getByRole('region', { name: '本机能力', exact: true })).toBeVisible();
+    const remote = page.getByRole('region', { name: '超算能力', exact: true });
+    await expect(remote).toBeVisible();
+    const row = remote.getByRole('listitem').filter({ has: page.getByText(capability.title, { exact: true }) })
+      .filter({ has: page.getByText(`${card.name} · ${method.version}`, { exact: true }) });
+    await expect(row).toHaveCount(1);
+    await expect(row.locator('.solver-location')).toContainText('超算');
+    await expect(row.getByText('未配置', { exact: true })).toBeVisible();
+    await expect(page.getByText('读取配置中', { exact: true })).toHaveCount(0);
+    return { method, profile: { configured: profile.configured, status: profile.status }, capability: await row.innerText() };
+  }
+  async function readyRunDirectory() {
+    const listing = await api('/api/index/objects?kind=run&limit=10&offset=0');
+    const card = listing.items.find(row => row.parent?.kind === 'study');
+    expect(card, '真实发布库首屏须有保存运行，不能只等空作业区').toBeTruthy();
+    const region = page.getByRole('region', { name: '运行', exact: true });
+    const table = region.getByRole('table', { name: '运行', exact: true });
+    await expect(table).toBeVisible();
+    await expect(region.getByText('正在读取方法与结论', { exact: true })).toBeHidden({ timeout: 90000 });
+    await expect(region.getByRole('button', { name: '重新读取摘要', exact: true })).toHaveCount(0);
+    await expect(table.getByRole('link', { name: '保存运行', exact: true })).toHaveCount(0);
+    const row = table.getByRole('row').filter({ has: page.locator(`a[href*=${JSON.stringify('run=' + card.id)}]`) });
+    await expect(row).toHaveCount(1);
+    const target = new URL(await row.locator('a[href*="run="]').first().getAttribute('href'), base);
+    expect(target.pathname).toBe('/studies/' + card.parent.id);
+    expect(target.searchParams.get('run')).toBe(card.id);
+    await expect(row.getByRole('cell').nth(3)).toContainText(' · ');
+    await expect(row.getByRole('cell').nth(4)).not.toHaveText('—');
+    return { run: card.id, study: card.parent.id, method: await row.getByRole('cell').nth(3).innerText(),
+      conclusion: await row.getByRole('cell').nth(4).innerText() };
+  }
   // These helpers only select/enter visible controls. The schema supplies units,
   // and saved API reads supply object identities and traceable source values.
   async function editor(scope, pointer) {
@@ -239,6 +311,7 @@ await walkthrough('simulation', async ({
       await expect(setup).toBeVisible(); await setup.focus(); await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/\/settings\/compute/);
       await expect(page.getByRole('region', { name: '超算连接', exact: true })).toBeVisible();
+      evidence.projectSettings = await readyComputeSettings(configuration(referenceThermal).method);
       check('工程概览的超算设置入口可用键盘打开，且不提交配置或运行', report.writes.length === writesBefore,
         { writesBefore, writesAfter: report.writes.length, url: page.url() });
       evidence.projectSolverLocations = shown;
@@ -254,6 +327,7 @@ await walkthrough('simulation', async ({
       await page.goto(base + '/runs?theme=light');
       const jobs = page.getByRole('region', { name: '超算作业', exact: true });
       await expect(jobs.getByRole('heading', { name: '尚无超算作业', exact: true })).toBeVisible();
+      evidence.runDirectory = await readyRunDirectory();
       const start = jobs.getByRole('link', { name: '选择仿真研究', exact: true });
       await start.scrollIntoViewIfNeeded();
       await expect(start).toBeInViewport({ ratio: 1 });
@@ -579,12 +653,14 @@ await walkthrough('simulation', async ({
 
     if(createdComparison)await step('02b-new-comparison-input-preflight',async()=>{
       const current={workspace:iec.workspace,id:createdComparison.id};
+      const saved=await api(studyPath(current));
       const availability=await api(`${hpcStudyPath(current)}/availability`);
       expect(availability.configured).not.toBe(true);
       const pending=page.waitForResponse(response=>new URL(response.url()).pathname===`${hpcStudyPath(current)}/input-preflight`);
       await page.getByRole('toolbar',{name:'工程命令',exact:true}).getByRole('button',{name:/预检|运行/}).first().click();
       const response=await pending,result=await response.json();
       const dialog=page.getByRole('dialog',{name:'运行前预检',exact:true});await expect(dialog).toBeVisible();
+      evidence.comparison.preflightView=await readyPreflight(dialog,response,result,saved);
       check('新建对照使用自己的保存输入完成真实预检',response.ok() && typeof result.input_ready==='boolean',{status:response.status(),result});
       await expect(dialog.getByRole('button',{name:'确认并运行',exact:true})).toBeDisabled();
       await expect(dialog.getByRole('link',{name:'去设置',exact:true})).toBeVisible();
@@ -722,7 +798,7 @@ await walkthrough('simulation', async ({
       evidence.preflight.result = await response.json();
       const dialog = page.getByRole('dialog', { name: '运行前预检', exact: true });
       await expect(dialog).toBeVisible();
-      await expect(dialog.getByText(/输入完整性与范围：/)).toContainText(/已通过输入检查|请修正下列缺项/);
+      evidence.preflight.view = await readyPreflight(dialog, response, evidence.preflight.result, saved);
       evidence.preflight.visible = await dialog.innerText();
       await check('未配置超算也能获得真实输入预检结果', response.ok()
         && typeof evidence.preflight.result.input_ready === 'boolean', evidence.preflight);
@@ -740,6 +816,7 @@ await walkthrough('simulation', async ({
       await expect(page).toHaveURL(/\/settings\/compute/);
       const settings = page.getByRole('region', { name: '超算连接', exact: true });
       await expect(settings).toBeVisible();
+      evidence.computeSettings = await readyComputeSettings(configuration(thermal).method);
       await expect(settings.getByRole('button', { name: '测试连接', exact: true })).toBeDisabled();
       await check('去设置能到达可理解的超算配置页面',
         await settings.getByLabel('分区', { exact: true }).isVisible()
@@ -811,6 +888,7 @@ await walkthrough('simulation', async ({
         await page.getByRole('toolbar',{name:'工程命令',exact:true}).getByRole('button',{name:/预检|运行/}).first().click();
         const responseCheck=await pending,result=await responseCheck.json();
         const preflight=page.getByRole('dialog',{name:'运行前预检',exact:true});await expect(preflight).toBeVisible();
+        evidence.newTask.preflightView=await readyPreflight(preflight,responseCheck,result,saved);
         check('新建仿真恢复后保留真实预检与禁用原因',responseCheck.ok() && typeof result.input_ready==='boolean' && await preflight.getByRole('button',{name:'确认并运行',exact:true}).isDisabled(),{result,availability});
         evidence.newTask.preflight=result;
       }
