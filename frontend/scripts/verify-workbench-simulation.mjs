@@ -326,6 +326,7 @@ await walkthrough('simulation', async ({
       await expect(dialog.getByRole('link',{name:'去设置',exact:true})).toBeVisible();
       evidence.comparison.preflight=result;
       await capture('02b-new-comparison-no-hpc');await page.keyboard.press('Escape');
+      await expect(dialog).not.toBeVisible();
     });
 
     await step('03-saved-fem-parameters', async () => {
@@ -349,7 +350,10 @@ await walkthrough('simulation', async ({
         if(sources.length){
           const sourceDetail=form.locator('.parameter-source').first();
           await sourceDetail.locator(':scope > summary').click();
-          await expect(sourceDetail.locator('textarea')).toHaveValue(sources[0]);
+          const sourceInput=sourceDetail.locator('textarea');
+          await expect(sourceInput).toHaveValue(sources[0]);
+          await sourceInput.scrollIntoViewIfNeeded();
+          await expect(sourceInput).toBeInViewport({ratio:1});
           await capture('03-full-source-readable');
           await sourceDetail.locator(':scope > summary').click();
         }
@@ -380,8 +384,12 @@ await walkthrough('simulation', async ({
         && alerts.some(text => /请填写.*(?:网格|尺寸)|(?:网格|尺寸).*必填/.test(text)),
       evidence.parameters.missing);
       await mesh.scrollIntoViewIfNeeded();
-      await capture('04-empty-required-mesh');
       if (await missingNotice.isVisible()) await missingNotice.scrollIntoViewIfNeeded();
+      if(report.phase==='after'){
+        await expect(mesh).toBeInViewport({ratio:1});
+        await expect(missingNotice).toBeInViewport({ratio:1});
+      }
+      await capture('04-empty-required-mesh');
     });
 
     await step('05-save-fem-parameters', async () => {
