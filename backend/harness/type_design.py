@@ -122,7 +122,7 @@ def read(research, task, args):
     add('overview', object=card, construction=cable['construction'], base_reference={key:base[key] for key in identity_keys if key in base} or None,
         creation=creation_summary or None,
         locks=describe_locks(state), source=source)
-    if view in ('summary', 'structure', 'review'):
+    if view in ('summary', 'input', 'structure', 'review'):
         def fields(item, tokens):
             if isinstance(item, dict):
                 for key, child in item.items():
@@ -173,7 +173,9 @@ def read(research, task, args):
                         for key in ('inner_diameter_m','outer_diameter_m','thickness_m') if key in layer])
     after = args.get('after',0); limit = args.get('limit',20)
     data = {'object':card,'type_id':wid,'type_revision':row['revision'],'view':view,'total':len(entries),'items':[], 'next_page':None}
-    result = ToolResult(status='ok', summary='已读取保存型号输入及已有运行；缺项、历史结果与标准未覆盖均未推算为通过。', data=data)
+    summary = ('已读取保存型号输入与草稿缺项；未读取已有运行或标准核对，输入完整不代表计算或符合性通过。'
+               if view == 'input' else '已读取保存型号输入及已有运行；缺项、历史结果与标准未覆盖均未推算为通过。')
+    result = ToolResult(status='ok', summary=summary, data=data)
     count = 0
     for entry in entries[after:after+limit]:
         result.data['items'].append(entry)

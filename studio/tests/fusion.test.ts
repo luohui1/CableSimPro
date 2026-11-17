@@ -110,7 +110,7 @@ test('a question about a study reaches the platform through a session of its own
   assert.deepEqual(done.map(step => [step.tool, step.status]), [['object_find', 'done'], ['run_read', 'done']]);
   assert.equal(done[1].label, '读取运行结果要点');
   assert.equal(done[1].target, `研究「${STUDY}」`);
-  assert.deepEqual(done[1].card, { kind: 'open', label: STUDY, href: 'cablesim:study/st-1?workspace=w-1' });
+  assert.deepEqual(done[1].card, { kind: 'open', label: '查看已保存运行', href: 'cablesim:study/st-1?workspace=w-1&run=r-1' });
   assert.equal(lastText(view), '结论在卡片里。');
 });
 
@@ -170,7 +170,9 @@ test('a historical result card retains the saved method version and never infers
   class HistoricalBackend extends Backend {
     read = async <T>(path: string): Promise<T> => {
       if (path.includes('/runs?')) return { items: [{ id: 'saved-run', sequence: 2, freshness: 'historical', headline: '允许电流 612.3 A（连续额定）受限于电缆 A' }], next_cursor: null } as T;
-      if (path.endsWith('/input')) return { input: { cable_types: [{ construction: 'single_core', cores: [{ layers: [{ role: 'conductor', form: 'round' }] }] }],
+      if (path.endsWith('/input')) return { run_id: 'saved-run', case_id: 'case', integrity: 'verified', input: {
+        cable_types: [{ id: 'type', rating: { max_conductor_temperature: { normal: 363.15 } } }],
+        circuits: [{ id: 'circuit', cable_type: 'type', cables: [{ id: 'cable' }] }],
         sections: [{ medium: { surface_temperature: 298.15 } }], load_cases: [{ currents: { circuit: 500 } }] } } as T;
       if (path.startsWith('/api/index/objects')) return { items: [{ id: 'saved-study', name: '历史校核' }] } as T;
       if (path.startsWith('/api/methods')) return [{ method: { plugin_id: 'cablesim.iec60287', version: '9.0.0' }, name: 'IEC 60287 稳态载流量' }] as T;
@@ -180,9 +182,13 @@ test('a historical result card retains the saved method version and never infers
   const backend = new HistoricalBackend('http://127.0.0.1:9', 'unused');
   const result = ok({ run_id: 'saved-run', study_id: 'saved-study', status: 'succeeded',
     method: { plugin_id: 'cablesim.iec60287', capability: 'steady-rating', version: '1.2.3' },
-    headlines: [{ key: 'ampacity', entity: 'circuit', display_value: 612.3456, display_unit: 'A' },
-      { key: 'conductor_temperature', entity: 'cable', condition: 'operating', display_value: 78.2, display_unit: '°C' }],
-    cases: [{ case_id: 'case', factors: [{ key: 'limiting_cable', entity: 'cable' }, { key: 'temperature_margin', entity: 'cable', value: 11.8 }, { key: 'current_margin', value: 112.3456 }] }],
+    headlines: [{ key: 'ampacity', case_id: 'case', condition: 'rating', entity: 'circuit', display_value: 612.3456, display_unit: 'A' },
+      { key: 'conductor_temperature', case_id: 'case', entity: 'cable', condition: 'operating', display_value: 78.2, display_unit: '°C' }],
+    cases: [{ case_id: 'case', status: 'succeeded', results: [{ key: 'ampacity', entity: 'circuit', case: 'rating', status: 'available', value: 612.3456, unit: 'A' }],
+      factors: [{ key: 'limiting_cable', entity: 'cable' },
+        { key: 'temperature_margin', entity: 'cable', condition: 'operating', unit: 'K', value: 11.8 },
+        { key: 'current_margin', entity: 'circuit', condition: 'rating', unit: 'A', value: 112.3456 }]
+        .map(factor => ({ ...factor, source: { run_id: 'saved-run', case_id: 'case' } })) }],
   }) as ToolResult;
   const shown = await describeResult(backend, 'run_read', { study_id: 'saved-study' }, result, 'workspace');
   assert.equal(shown.card?.kind, 'saved_run');

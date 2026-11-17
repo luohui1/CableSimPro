@@ -48,34 +48,46 @@ const href = (kind: string, id: string, extra: Record<string, string | undefined
   return `cablesim:${kind}/${encodeURIComponent(id)}${query ? '?' + query : ''}`;
 };
 
-interface Headline { key: string; condition?: string; entity?: string; display_value?: number; display_unit?: string }
-interface Factor { key: string; entity?: string; value?: number }
+interface Headline { key: string; case_id?: string; condition?: string; entity?: string; display_value?: number; display_unit?: string }
+interface Factor { key: string; entity?: string; condition?: string; value?: number; unit?: string; source?: { run_id?: string; case_id?: string } }
+interface Quantity {
+  key: string; entity?: string; case?: string; value?: number; unit?: string; status?: string;
+  rating_basis?: { kind?: string; varied_circuits?: string[]; fixed_currents_a?: Record<string, number> };
+}
+interface SavedCase { case_id?: string; status?: string; results?: Quantity[]; factors?: Factor[] }
 interface RunSummary { id: string; sequence: number; freshness: SavedRunView['freshness']; headline: string | null }
 interface Domain {
-  cable_types?: { construction?: string; cores?: { layers?: { role?: string; form?: string }[] }[]; common_layers?: { role?: string; form?: string }[] }[];
+  cable_types?: { id?: string; rating?: { max_conductor_temperature?: { normal?: number } } }[];
   sections?: { backfill?: unknown; medium?: { surface_temperature?: number | null; air_temperature?: number | null } }[];
-  circuits?: unknown[];
-  load_cases?: { currents?: Record<string, number> }[];
+  circuits?: { id?: string; cable_type?: string; cables?: { id?: string }[] }[];
+  load_cases?: { currents?: Record<string, unknown> }[];
 }
 
 const IEC = 'cablesim.iec60287';
 const STEADY = 'steady-rating';
 const KELVIN = 273.15;
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const only = <T>(items: T[]): T | undefined => items.length === 1 ? items[0] : undefined;
 
 async function savedRun(backend: Backend, workspace: string, result: ToolResult, signal?: AbortSignal): Promise<{ card: CardRef; notes: string[] } | undefined> {
   const data = result.data;
-  if (data.method?.plugin_id !== IEC || data.method?.capability !== STEADY || data.status !== 'succeeded' || !data.study_id || !data.run_id) return undefined;
+  if (!data.study_id || !data.run_id) return undefined;
   const study = String(data.study_id);
   const run = String(data.run_id);
+  const open = (reason = '请在工作台查看此运行的完整保存结果。'): { card: CardRef; notes: string[] } => ({
+    card: { kind: 'open', label: '查看已保存运行', href: href('study', study, { workspace, run }) }, notes: [reason],
+  });
+  if (data.method?.plugin_id !== IEC || data.method?.capability !== STEADY || data.status !== 'succeeded') return open();
   const headlines: Headline[] = data.headlines ?? [];
-  const ampacity = headlines.find(item => item.key === 'ampacity' && typeof item.display_value === 'number');
-  const kase = (data.cases ?? [])[0];
-  if (!ampacity || !kase?.case_id) return undefined;
-  const factors: Factor[] = (data.cases ?? []).flatMap((item: { factors?: Factor[] }) => item.factors ?? []);
-  const limitingCable = factors.find(item => item.key === 'limiting_cable')?.entity;
-  const conductor = headlines.find(item => item.key === 'conductor_temperature' && item.condition === 'operating' && (!limitingCable || item.entity === limitingCable));
-  const temperatureMargin = factors.find(item => item.key === 'temperature_margin' && item.entity === limitingCable)?.value;
-  const currentMargin = factors.find(item => item.key === 'current_margin')?.value;
+  const ampacity = only(headlines.filter(item => item.key === 'ampacity'));
+  const kase = only<SavedCase>(data.cases ?? []);
+  if (!kase?.case_id || kase.status !== 'succeeded') return open('此记录没有唯一可用工况，请在工作台逐项查看保存结果。');
+  // run_read(case_id=...) narrows cases, while headlines may still describe a different recommended selection case.
+  // Never join those by array position, or treat a multi-circuit minimum as the first circuit's rating and margin.
+  if (!ampacity || !finite(ampacity.display_value) || ampacity.display_unit !== 'A' || ampacity.case_id !== kase.case_id
+    || !ampacity.entity || !['rating', 'rating-simultaneous'].includes(ampacity.condition ?? '')) {
+    return open('保存结论的工况或额定口径无法唯一对应，请在工作台查看此运行。');
+  }
 
   // The producer's own sentence for the record (the conclusion, what it means, which cable limits), the record's number, the saved input.
   let summary: RunSummary | undefined;
@@ -85,22 +97,60 @@ async function savedRun(backend: Backend, workspace: string, result: ToolResult,
     if (page.next_cursor === null || page.next_cursor === undefined) break;
     after = page.next_cursor;
   }
-  const input = await backend.read<{ input: Domain; parameters?: Record<string, unknown> | null }>(`/api/workspaces/${workspace}/studies/${study}/runs/${run}/cases/${kase.case_id}/input`, signal);
+  const input = await backend.read<{ input: Domain; run_id?: string; case_id?: string; integrity?: string }>(`/api/workspaces/${workspace}/studies/${study}/runs/${run}/cases/${kase.case_id}/input`, signal);
+  if (input.integrity !== 'verified' || input.run_id !== run || input.case_id !== kase.case_id) return open('保存输入与此运行的工况标识无法核对，请在工作台查看记录。');
+  const document = input.input;
+  const circuit = only(document.circuits ?? []);
+  const section = only(document.sections ?? []);
+  const loadCase = only(document.load_cases ?? []);
+  if (!circuit?.id || circuit.id !== ampacity.entity || !section || !loadCase || Object.keys(loadCase.currents ?? {}).length !== 1) {
+    return open('此记录的回路、敷设段或负荷工况无法唯一对应，请在工作台分别查看。');
+  }
+  const load = loadCase.currents?.[circuit.id];
+  if (!finite(load)) return open('此记录没有唯一的保存负荷电流，请在工作台查看各相或各回路结果。');
+
+  const ratings = (kase.results ?? []).filter(item => item.key === 'ampacity');
+  const rating = only(ratings.filter(item => item.entity === circuit.id && item.case === ampacity.condition));
+  if (!rating || rating.unit !== 'A' || rating.status !== 'available' || rating.value !== ampacity.display_value) {
+    return open('保存结论与同工况的额定电流证据不一致，请在工作台核对记录。');
+  }
+  // One balanced circuit can explicitly declare equivalent individual/common ratings. Retain that existing card only when
+  // both saved quantities declare the same physical basis and agree at the displayed precision; never aggregate new values.
+  if (ratings.length !== 1 && !(ratings.length === 2 && new Set(ratings.map(item => item.case)).size === 2
+    && ratings.every(item => item.entity === circuit.id && ['rating', 'rating-simultaneous'].includes(item.case ?? '')
+      && item.status === 'available' && item.unit === 'A' && finite(item.value) && fixed(item.value) === fixed(ampacity.display_value)
+      && item.rating_basis?.kind === 'single_circuit' && item.rating_basis.varied_circuits?.length === 1
+      && item.rating_basis.varied_circuits[0] === circuit.id && item.rating_basis.fixed_currents_a !== undefined
+      && Object.keys(item.rating_basis.fixed_currents_a).length === 0))) {
+    return open('此记录含多个不能合并展示的额定口径，请在工作台分别查看保存结果。');
+  }
+  const factors = (kase.factors ?? []).filter(item => item.source?.run_id === run && item.source.case_id === kase.case_id);
+  const limitingCable = only(factors.filter(item => item.key === 'limiting_cable'))?.entity;
+  const conductor = only(headlines.filter(item => item.key === 'conductor_temperature' && item.case_id === kase.case_id
+    && item.condition === 'operating' && item.entity === limitingCable));
+  const temperatureMargin = only(factors.filter(item => item.key === 'temperature_margin' && item.entity === limitingCable
+    && item.condition === 'operating' && item.unit === 'K'))?.value;
+  const currentMargin = only(factors.filter(item => item.key === 'current_margin' && item.entity === circuit.id
+    && item.condition === ampacity.condition && item.unit === 'A'))?.value;
+  const limit = only((document.cable_types ?? []).filter(item => item.id === circuit.cable_type))?.rating?.max_conductor_temperature?.normal;
+  if (!limitingCable || !circuit.cables?.some(item => item.id === limitingCable) || conductor?.display_unit !== '°C'
+    || !finite(conductor.display_value) || !finite(temperatureMargin) || !finite(currentMargin) || !finite(limit)
+    || fixed(conductor.display_value + temperatureMargin) !== fixed(limit - KELVIN)
+    || fixed(ampacity.display_value - load) !== fixed(currentMargin)) {
+    return open('限制对象、温限或余量无法与同一工况和保存负荷对应，请在工作台核对完整结果。');
+  }
   const index = await backend.read<{ items: { id: string; name: string }[] }>(`/api/index/objects?kind=study&q=${encodeURIComponent(study)}&limit=5`, signal);
   const studyName = index.items.find(item => item.id === study)?.name;
   const methods = await backend.read<{ method: { plugin_id: string; version: string }; name: string }[]>('/api/methods?view=summary', signal);
   const method = methods.find(item => item.method.plugin_id === IEC);
-  if (!summary || !studyName || !method) return undefined;
+  if (!summary || !studyName || !method) return open();
 
   const text = summary.headline ?? '';
   const basis = /（([^）]+)）/.exec(text)?.[1] ?? '';
   const name = /受限于(.+)$/.exec(text)?.[1]?.trim() ?? '—';
-  const document = input.input;
-  const medium = document.sections?.[0]?.medium;
+  const medium = section.medium;
   const surface = medium?.surface_temperature ?? medium?.air_temperature ?? null;
-  const circuit = headlines.find(item => item.key === 'ampacity')?.entity;
-  const load = circuit ? document.load_cases?.[0]?.currents?.[circuit] : undefined;
-  const celsius = conductor?.display_unit === '°C' && typeof conductor.display_value === 'number' ? conductor.display_value : null;
+  const celsius = conductor.display_value;
   const view: SavedRunView = {
     title: `${studyName} · 第 ${summary.sequence} 条记录`,
     // The platform's saved evidence has no engineering confidence classification. Geometry and today's installed method are not
@@ -108,9 +158,9 @@ async function savedRun(backend: Backend, workspace: string, result: ToolResult,
     tier: 'reference', tier_note: '保存记录未声明工程可信分档，按参考结果展示；不据结构推定可交付。', method: `${method.name} ${String(data.method.version)}`,
     current: fixed(ampacity.display_value), basis, freshness: summary.freshness,
     limiting: {
-      name, conductor: celsius, limit: celsius !== null && typeof temperatureMargin === 'number' ? Math.round((celsius + temperatureMargin) * 10) / 10 : null,
-      ambient: typeof surface === 'number' ? Math.round((surface - KELVIN) * 10) / 10 : null,
-      load: typeof load === 'number' ? `${compact(load)} A` : null, margin: typeof currentMargin === 'number' ? `${fixed(currentMargin)} A` : null,
+      name, conductor: celsius, limit: Math.round((limit - KELVIN) * 10) / 10,
+      ambient: finite(surface) ? Math.round((surface - KELVIN) * 10) / 10 : null,
+      load: `${compact(load)} A`, margin: `${fixed(currentMargin)} A`,
     },
   };
   return {
@@ -145,7 +195,8 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
       if (saved) return { ...shown, ...saved };
     }
     if ((tool === 'run_read' || tool === 'run_list' || tool === 'study_read') && workspace && study) {
-      return { ...shown, card: { kind: 'open', label: nameOf(study) ?? '研究', href: href('study', study, { workspace }) } };
+      return { ...shown, card: { kind: 'open', label: nameOf(study) ?? '研究', href: href('study', study, { workspace,
+        run: tool === 'run_read' && typeof args.run_id === 'string' ? args.run_id : undefined }) } };
     }
     if (tool === 'project_digest' && workspace) return { ...shown, card: { kind: 'open', label: nameOf(workspace) ?? '工程', href: href('project', workspace) } };
     if (tool === 'type_read' && typeof args.type_id === 'string') {
