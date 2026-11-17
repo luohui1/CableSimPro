@@ -209,6 +209,152 @@ class SourceReader:
         return observed
 
 
+
+def rendered_text(cell):
+    return cell.get("display", {}).get("text", cell.get("display_text", cell["raw_text"]))
+
+
+def displayed_unit(cell):
+    return cell.get("display", {}).get("unit", cell.get("display_unit", cell.get("unit")))
+
+
+def check_engineering_number(cell: dict, payloads: dict) -> dict:
+    """Independent Decimal oracle: do not import the producer or its rounding helper."""
+    reference = cell["value_ref"]
+    value = pointer_value(payloads[reference["source_id"]], reference["pointer"])
+    require(canonical(value) == canonical(cell["value"]), "Display has no exact saved source")
+    path = reference["pointer"].lower()
+    field = path.rsplit("/", 1)[-1]
+    parent = pointer_value(payloads[reference["source_id"]], reference["pointer"].rsplit("/", 1)[0])
+    hints = field + " " + (" ".join(str(parent.get(k, "")) for k in
+                         ("key", "id", "title", "label", "property", "quantity")) if isinstance(parent, dict) else "")
+    hints = hints.lower()
+    role = "quantity"
+    unit = cell["unit"]
+    if unit in ("K", "\u00b0C", "\u2103") and any(word in hints for word in
+        ("difference", "margin", "temperature_rise", "headroom", "delta_", "critical_temperature_rise")):
+        role = "temperature_interval"
+    elif any(word in hints for word in ("thickness", "\u539a\u5ea6")):
+        role = "thickness"
+    elif any(word in hints for word in ("diameter", "radius", "duct_inner_m", "duct_outer_m",
+        "\u5916\u5f84", "\u5185\u5f84", "\u76f4\u5f84", "\u534a\u5f84")):
+        role = "diameter"
+    elif unit == "m" and any(word in path for word in ("/layers/", "/common_layers/", "/conductor/")):
+        role = "dimension"
+    scale, offset, quantum, target = Decimal(1), Decimal(0), None, unit
+    if unit in ("K", "\u00b0C", "\u2103"):
+        target, quantum = "\u00b0C", Decimal("0.1")
+        if unit == "K" and role != "temperature_interval":
+            offset = Decimal("-273.15")
+    elif unit in ("m2", "m^2", "m\u00b2"):
+        target, scale = "mm\u00b2", Decimal(1000000)
+    elif unit in ("mm2", "mm^2", "mm\u00b2"):
+        target = "mm\u00b2"
+    elif unit in ("ohm/m", "\u03a9/m", "ohm/km", "\u03a9/km"):
+        target = "\u03a9/km"
+        scale = Decimal(1000) if unit in ("ohm/m", "\u03a9/m") else Decimal(1)
+    elif unit in ("kg/m", "kg/km"):
+        target, quantum = "kg/km", Decimal(1)
+        scale = Decimal(1000) if unit == "kg/m" else Decimal(1)
+    elif unit == "A":
+        quantum = Decimal(1)
+    elif unit in ("m", "mm") and role in ("diameter", "thickness", "dimension"):
+        target, scale = "mm", Decimal(1000) if unit == "m" else Decimal(1)
+        quantum = Decimal("0.01") if role == "thickness" else Decimal("0.1")
+    if "K" in target and unit not in ("K", "\u00b0C", "\u2103"):
+        target = target.replace("K", "\u00b0C")
+    raw = Decimal(original_text(value))
+    with localcontext() as context:
+        context.prec = max(64, len(raw.as_tuple().digits) + abs(raw.adjusted()) + 32)
+        converted = raw * scale + offset
+        fixed = quantum is not None
+        if quantum is None:
+            quantum = Decimal(1).scaleb(converted.adjusted() - 3) if converted else Decimal(1)
+        answer = converted.quantize(quantum, rounding=ROUND_HALF_EVEN)
+        if not answer:
+            answer = answer.copy_abs()
+        text = format(answer, "f")
+        if not fixed:
+            if answer and answer.as_tuple().exponent < -6:
+                text = format(answer, "E")
+            elif "." in text and target not in ("\u03a9/km", "\u03a9", "\u03a9\u00b7m"):
+                text = text.rstrip("0").rstrip(".")
+    expected = {"policy": "cablesim.engineering-display/1", "text": text, "unit": target,
+                "scale": str(scale), "offset": str(offset), "quantum": str(quantum),
+                "rounding": "ROUND_HALF_EVEN", "precision": "fixed_interval" if fixed else "4_significant_digits",
+                "role": role}
+    require((cell.get("display") or cell.get("display_origin")) == expected,
+            "Display does not equal independently converted and once-rounded saved value")
+    return expected
+
+
+def check_engineering_body(model, payloads, body_tables):
+    if not model.get("presentation"):
+        return
+    policy = model["presentation"]
+    require(policy["id"] == "cablesim.engineering-display/1" and policy["round_once"] is True
+            and policy["source_values_unchanged"] is True and policy["rounding"] == "ROUND_HALF_EVEN",
+            "Undeclared engineering rounding policy")
+    body, expected_trace = [], Counter()
+    def numerical(cell):
+        display = check_engineering_number(cell, payloads)
+        expected_trace[canonical([cell["value_ref"], cell["raw_text"], cell["unit"], display])] += 1
+    for section in model["sections"]:
+        if section["role"] != "body":
+            continue
+        body.append(section["heading"])
+        body.extend(p["text"] for p in section.get("paragraphs", []))
+        for figure in section.get("figures", []):
+            if figure.get("diameter_cell"):
+                numerical(figure["diameter_cell"])
+    require(any("GB/T 8170-2008" in text for text in body), "Rounding declaration missing from body")
+    for table_id in body_tables:
+        table = model["tables"][table_id]
+        body.append(table.get("title", ""))
+        for column in table["columns"]:
+            body.append(column["label"])
+            for fact in column.get("header_facts", []):
+                cell = fact["cell"]
+                validate_contract_unit(cell, payloads, model["sources"])
+                numerical(cell)
+        for row in table["rows"]:
+            for cell in row["cells"].values():
+                if type(cell["value"]) in (int, float):
+                    numerical(cell)
+                body += [rendered_text(cell), str(displayed_unit(cell) or "")]
+    forbidden = re.compile(r"\d+\.\d{7,}|(?<![A-Za-z])K(?![A-Za-z])|\bcase-\d+\b|\bthree_core_[a-z_]+|(?:ohm|\u03a9)/m\b", re.I)
+    require(not any(forbidden.search(text) for text in body), "Engineering body contains raw decimals, K or internal identifiers")
+    actual_trace = Counter()
+    for row in model["tables"]["presentation:values"]["rows"]:
+        cell = row["cells"]["original"]
+        display = check_engineering_number(cell, payloads)
+        relation = f"y = x * {display['scale']} + ({display['offset']}); q = {display['quantum']}"
+        require(row["cells"]["display"]["value"] == display["text"] + " " + display["unit"]
+                and row["cells"]["relation"]["value"] == relation,
+                "Printed trace conversion disagrees with raw source")
+        actual_trace[canonical([cell["value_ref"], cell["raw_text"], cell["unit"], display])] += 1
+    require(actual_trace == expected_trace, "Printed original/display trace does not cover every body/header/diagram quantity")
+    if model["kind"] == "rating_table":
+        matrices = [model["tables"][k] for k in body_tables if model["tables"][k].get("matrix_source")]
+        require(bool(matrices), "Ampacity is not a specification-by-condition matrix")
+        refs = []
+        for table in matrices:
+            require([c["key"] for c in table["columns"][:2]] == ["specification", "area"], "Matrix row axis is not specification/area")
+            for column in table["columns"][2:]:
+                labels = [f["label"] for f in column["header_facts"]]
+                require("\u73af\u5883\u6e29\u5ea6" in labels and "\u5bfc\u4f53\u6700\u9ad8\u5141\u8bb8\u6e29\u5ea6" in labels,
+                        "Matrix is missing temperature premises")
+                for row in table["rows"]:
+                    cell = row["cells"][column["key"]]
+                    if type(cell["value"]) in (int, float):
+                        require(cell["unit"] == "A" and cell["value_ref"]["source_id"] == table["matrix_source"], "Matrix current is not bound to saved projection")
+                        refs.append(canonical(cell["value_ref"]))
+        expected_refs = [canonical({"source_id": k, "pointer": "/rows/" + str(i) + "/value_a"})
+                         for k, source in model["sources"].items() if source["kind"] == "rating_projection"
+                         for i, row in enumerate(payloads[k]["rows"]) if type(row["value_a"]) in (int, float)]
+        require(Counter(refs) == Counter(expected_refs), "Matrix dropped or duplicated saved ampacity results")
+
+
 def validate_model(model: dict, payloads: dict, *, expected_document: dict | None = None) -> dict:
     """Check every visible value and reference, including original numeric text."""
     require(model.get("schema") == SCHEMA, "正式文件模型版本不正确。")
