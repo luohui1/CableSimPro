@@ -1394,4 +1394,128 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await search.clear();
     await expect(browser.getByRole('table', { name: '标准完整表格', exact: true })).toBeVisible();
   });
+
+  await branch('逐个放大阅读真实插件方法图与验证图', async () => {
+    const writesBefore = report.writes.length;
+    try {
+      await sidebar.getByRole('link', { name: '插件', exact: true }).click();
+      const pluginList = page.getByRole('navigation', { name: '已安装插件', exact: true });
+      await expect(pluginList).toBeVisible();
+      // The host returns the sealed, digest-qualified URL actually used by the
+      // page. Corroborate it; never substitute SVG bytes or a fabricated image.
+      const installed = await api('/api/methods');
+      const figures = installed.flatMap(plugin => (plugin.resources || [])
+        .filter(resource => ['method', 'validation'].includes(resource.role))
+        .map(resource => ({ plugin, resource })));
+      check('插件阅读走查覆盖真实清单展示图', figures.length > 0, figures.map(({ plugin, resource }) => ({
+        plugin: plugin.method.plugin_id, role: resource.role, url: resource.url, sha256: resource.sha256,
+      })));
+
+      async function loadedImage(image) {
+        await expect(image).toBeVisible();
+        await expect.poll(() => image.evaluate(node => node.complete && node.naturalWidth > 0 && node.naturalHeight > 0)).toBe(true);
+        return image.evaluate(async node => {
+          await node.decode();
+          const bounds = node.getBoundingClientRect();
+          return { complete: node.complete, decoded: true, src: node.getAttribute('src'), currentSrc: node.currentSrc,
+            naturalWidth: node.naturalWidth, naturalHeight: node.naturalHeight, readWidth: bounds.width, readHeight: bounds.height };
+        });
+      }
+
+      for (const { plugin, resource } of figures) {
+        const label = `${plugin.method.plugin_id}-${resource.role}`;
+        await pluginList.getByRole('link').filter({ hasText: plugin.name }).first().click();
+        const detail = page.getByRole('article', { name: plugin.name, exact: true });
+        await expect(detail).toBeVisible();
+        await detail.getByRole('tab', { name: resource.role === 'method' ? '方法' : '验证', exact: true }).click();
+        const figure = detail.locator('.plugin-figure');
+        await expect(figure).toHaveCount(1);
+        const thumbnail = await loadedImage(figure.locator(':scope > img'));
+        const expectedUrl = new URL(resource.url, base).href;
+        check('缩略图引用真实封签资源', thumbnail.currentSrc === expectedUrl, { label, sha256: resource.sha256, expectedUrl, thumbnail });
+        const opener = figure.getByRole('button', { name: '放大阅读', exact: true });
+        await expect(opener).toBeVisible();
+        await capture(`${label}-thumbnail`);
+
+        // Mouse opening and closing must retain the original reader entry.
+        await opener.click();
+        const dialog = page.getByRole('dialog', { name: resource.title, exact: true });
+        const reading = dialog.locator('.plugin-figure-reading-image');
+        const region = dialog.getByRole('region', { name: `${resource.title}大图`, exact: true });
+        const zoom = dialog.getByRole('combobox', { name: '阅读大小', exact: true });
+        const close = dialog.getByRole('button', { name: '关闭', exact: true });
+        await expect(dialog).toBeVisible();
+        await expect(reading).toHaveAttribute('data-state', 'ready');
+        const standard = await loadedImage(reading);
+        check('大图完成解码并以标准阅读宽度呈现同一资源', standard.currentSrc === expectedUrl
+          && standard.src === thumbnail.src && Math.abs(standard.readWidth - 1152) < 1,
+        { label, sha256: resource.sha256, expectedUrl, standard });
+        await expect(zoom).toHaveText('标准大小');
+        await capture(`${label}-reader-standard`);
+        await close.click();
+        await expect(dialog).toBeHidden();
+        await expect(opener).toBeFocused();
+
+        // Enter opens the same entry. Select's actual UI changes the reading
+        // width; no DOM style/source edits or synthetic component events.
+        await opener.press('Enter');
+        await expect(dialog).toBeVisible();
+        await expect(reading).toHaveAttribute('data-state', 'ready');
+        await loadedImage(reading);
+        const zooms = [];
+        for (const factor of [1.5, 2, 3]) {
+          await zoom.press('Enter');
+          await expect(page.getByRole('listbox')).toBeVisible();
+          await page.keyboard.press('ArrowDown');
+          await page.keyboard.press('Enter');
+          await expect(zoom).toHaveText(`放大${factor}倍`);
+          await expect(region).toHaveAttribute('data-zoom', String(factor));
+          const image = await loadedImage(reading);
+          zooms.push({ factor, ...image });
+          check('键盘选择阅读大小保留原图并增大实际绘制宽度', image.currentSrc === expectedUrl
+            && Math.abs(image.readWidth - 1152 * factor) < 1, { label, factor, input: 'keyboard', image });
+        }
+        await zoom.press('Tab');
+        await expect(region).toBeFocused();
+        await region.press('Control+Home');
+        await region.press('PageDown');
+        await expect.poll(() => region.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+        await region.press('Control+End');
+        await expect.poll(() => region.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)).toBeLessThan(2);
+        const keyboardEnd = await region.evaluate(node => ({ top: node.scrollTop, height: node.clientHeight, scrollHeight: node.scrollHeight }));
+        await region.press('Control+Home');
+        await expect.poll(() => region.evaluate(node => node.scrollTop)).toBe(0);
+        await region.hover();
+        await page.mouse.wheel(0, 100000);
+        await expect.poll(() => region.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop)).toBeLessThan(2);
+        await loadedImage(reading);
+        await capture(`${label}-reader-bottom`);
+        await page.mouse.wheel(100000, 0);
+        await expect.poll(() => region.evaluate(node => node.scrollWidth - node.clientWidth - node.scrollLeft)).toBeLessThan(2);
+        const mouseEnd = await region.evaluate(node => ({ left: node.scrollLeft, top: node.scrollTop,
+          width: node.clientWidth, height: node.clientHeight, scrollWidth: node.scrollWidth, scrollHeight: node.scrollHeight }));
+        const fixedControls = await dialog.evaluate(node => {
+          const bounds = node.getBoundingClientRect();
+          return [...node.querySelectorAll('.plugin-figure-header, .plugin-figure-toolbar')].map(control => {
+            const box = control.getBoundingClientRect();
+            return { text: control.textContent.trim(), visible: box.top >= bounds.top && box.bottom <= bounds.bottom
+              && box.left >= bounds.left && box.right <= bounds.right && box.top >= 0 && box.bottom <= innerHeight };
+          });
+        });
+        check('键盘和鼠标可读到图末尾且标题控件保持可见', keyboardEnd.top > 0 && mouseEnd.left > 0
+          && mouseEnd.top > 0 && fixedControls.length === 2 && fixedControls.every(control => control.visible),
+        { label, expectedUrl, sha256: resource.sha256, zooms, keyboardEnd, mouseEnd, fixedControls });
+        await expect(close).toBeVisible();
+        await loadedImage(reading);
+        await capture(`${label}-reader-right-bottom`);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+        await expect(opener).toBeFocused();
+        check('Escape关闭大图并回到放大阅读按钮', await opener.evaluate(node => node === document.activeElement), { label });
+      }
+    } finally {
+      const writes = report.writes.slice(writesBefore);
+      check('插件大图阅读全程没有API写入', writes.length === 0, { writes });
+    }
+  });
 });

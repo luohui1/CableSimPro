@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { studyIndex } from "@/api/research";
@@ -17,6 +18,8 @@ import { METRIC_STATES, quantityLabel, percentText } from "@/lib/validation-labe
 import { displayUnit } from "@/lib/display-names";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { Tooltip } from "@/components/ui/tooltip";
 import { RelationPanel } from "@/components/relation-panel";
 import { SolverLocation } from '@/components/solver-location';
@@ -45,6 +48,61 @@ const list = (value: unknown) => (Array.isArray(value) ? value : []);
 const pluginId = (row: Row) => text(optionalRecord(row.method).plugin_id);
 /** 插件封签内的展示资源（封面、方法图、验证图），由宿主核验摘要后提供。 */
 const resource = (row: Row, role: string) => list(row.resources).map(optionalRecord).find((item) => text(item.role) === role);
+
+/** 图内文字随缩略图缩小；阅读窗口使用同一封签资源，独立滚动，不更改图或其来源。 */
+function PluginFigure({ figure }: { figure: Row }) {
+  const title = text(figure.title) || "插件示意图";
+  const [open, setOpen] = useState(false);
+  const [zoom, setZoom] = useState("1");
+  const [imageState, setImageState] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const image = useRef<HTMLImageElement>(null);
+
+  async function decoded(target: HTMLImageElement) {
+    try {
+      await target.decode();
+      if (target === image.current && target.isConnected)
+        setImageState(target.complete && target.naturalWidth > 0 && target.naturalHeight > 0 ? "ready" : "error");
+    } catch {
+      if (target === image.current && target.isConnected) setImageState("error");
+    }
+  }
+
+  return <figure className="plugin-figure">
+    <img src={text(figure.url)} alt={title} />
+    <figcaption title={text(figure.description)}><b>{title}</b>{figureCaption(text(figure.description))}</figcaption>
+    <Dialog open={open} onOpenChange={(next) => {
+      if (next) { setZoom("1"); setImageState("loading"); }
+      setOpen(next);
+    }}>
+      <DialogTrigger asChild><Button size="compact" className="plugin-figure-open">放大阅读</Button></DialogTrigger>
+      <DialogContent className="plugin-figure-dialog">
+        <header className="plugin-figure-header">
+          <div>
+            <DialogTitle className="dialog-title">{title}</DialogTitle>
+            <DialogDescription className="plugin-figure-help">滚动查看完整图片；按 Esc 返回。</DialogDescription>
+          </div>
+          <DialogClose asChild><Button size="compact">关闭</Button></DialogClose>
+        </header>
+        <div className="plugin-figure-toolbar">
+          <Select label="阅读大小" value={zoom} onChange={setZoom} options={[
+            { value: "1", label: "标准大小" }, { value: "1.5", label: "放大1.5倍" },
+            { value: "2", label: "放大2倍" }, { value: "3", label: "放大3倍" },
+          ]} />
+          <p className="plugin-figure-status" role="status">{imageState === "loading" ? "正在读取图片" : imageState === "error" ? "图片读取失败" : "图片已载入"}</p>
+        </div>
+        <div className="plugin-figure-scroll" role="region" aria-label={`${title}大图`} tabIndex={0} data-zoom={zoom} aria-busy={imageState === "loading"}>
+          {imageState === "error" && <div className="plugin-figure-error">
+            <p role="alert">图片未能读取，请重试。</p>
+            <Button size="compact" onClick={() => { setImageState("loading"); setAttempt((value) => value + 1); }}>重新读取图片</Button>
+          </div>}
+          <img key={attempt} ref={image} className="plugin-figure-reading-image" data-state={imageState}
+            src={text(figure.url)} alt={title} onLoad={(event) => void decoded(event.currentTarget)} onError={() => setImageState("error")} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  </figure>;
+}
 
 /** 插件：左侧按领域分组的已安装插件，右侧逐项剖析选中插件（能力、验证、范围、运行策略、被谁使用）。 */
 export function PluginsPage() {
@@ -159,7 +217,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           <TabsTrigger value="technical">技术信息</TabsTrigger>
         </TabsList>
         <TabsContent value="method" className="plugin-section">
-          {figure ? <figure className="plugin-figure"><img src={text(figure.url)} alt={text(figure.title)} /><figcaption title={text(figure.description)}><b>{text(figure.title)}</b>{figureCaption(text(figure.description))}</figcaption></figure>
+          {figure ? <PluginFigure key={text(figure.url)} figure={figure} />
             : <InlineEmpty title="插件没有提供方法示意图。" />}
         </TabsContent>
         <TabsContent value="capabilities" className="plugin-section">
@@ -192,7 +250,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           </ol>
         </TabsContent>
         <TabsContent value="validation" className="plugin-section">
-          {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption title={text(validationFigure.description)}><b>{text(validationFigure.title)}</b>{figureCaption(text(validationFigure.description))}</figcaption></figure>}
+          {validationFigure && <PluginFigure key={text(validationFigure.url)} figure={validationFigure} />}
           {text(presentation.validation_note) && <p className="muted">{text(presentation.validation_note)}</p>}
           <PluginValidation pluginId={id} />
           <Link className="detail-link" to="/validation" search={{ theme, snapshot: "" }}>全部验证算例</Link>
