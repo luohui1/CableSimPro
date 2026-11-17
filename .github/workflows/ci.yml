@@ -176,6 +176,8 @@ jobs:
       - name: Walk resources at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
+        env:
+          WORKBENCH_PHASE: after
         run: npm run test:workbench-resources 2>&1 | tee ../.data/workbench-walk/logs/resources.log
       - name: Walk simulation preflight without submitting a solver
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
