@@ -644,7 +644,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     expect(variableLayout.text).toContain(variableControl.text);
     expect(variableLayout.text).toMatch(/\/\s*\S/);
     check('扫描变量使用32px控件并关联完整可见说明', Math.abs(variableControl.height - 32) <= 1 && variableControl.inView, variableControl);
-    check('已保存扫描变量在方法栏完整显示名称与单位', variableLayout.complete && variableLayout.inView && variableLayout.font >= 13, variableLayout);
+    check('已保存扫描变量在方法栏以正文尺寸完整显示名称与单位', variableLayout.complete && variableLayout.inView && variableLayout.font >= 14, variableLayout);
     await scanVariable.focus();
     await page.keyboard.press('Space');
     const variableOptions = page.locator('.study-sweep-variable-options');
@@ -663,7 +663,15 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await mountedChart.dispose();
 
     await page.getByRole('button', { name: '还原结果面板', exact: true }).click();
+    await expect(canvas).toBeVisible();
+    const layingView = canvas.getByRole('button', { name: '敷设截面', exact: true });
+    await expect(layingView).toBeVisible();
+    if (size.width === 1920) { await layingView.focus(); await page.keyboard.press('Enter'); }
+    else await layingView.click();
+    await expect(layingView).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/view=section/);
     await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+    await capture('10-sweep-select-laying-view');
     const cable = canvas.locator('[data-section-object^="cable/"]').first();
     await expect(cable).toBeVisible();
     const identity = await cable.getAttribute('data-section-object');
@@ -814,6 +822,18 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         }));
         expect(fields.length).toBeGreaterThan(0);
         const document = fixed ? savedDocument : before.workspace.domain;
+        if (tab === 'media') {
+          const legacySoil = document.materials.filter(material => material.label === 'v0 soil' && material.category === 'soil');
+          expect(legacySoil.length, '从本次保存输入核对实际旧土壤显示，不制造迁移材料').toBeGreaterThan(0);
+          for (const material of legacySoil) {
+            const row = table.locator('[id="row-' + label + '-' + material.id + '"]');
+            await expect(row.getByRole('cell').first()).toHaveText('旧版土壤材料');
+            await expect(row.getByRole('cell').last()).toHaveText('旧版土壤材料');
+          }
+          await expect(table).not.toContainText('v0 soil');
+          check('介质对象与材料引用一致显示中文，原保存名称留在来源中', true,
+            { fixed, materials: legacySoil.map(material => ({ id: material.id, originalLabel: material.label })) });
+        }
         for (const field of fields) {
           const raw = sourceValue(document, field.path);
           expect(raw == null || typeof raw === 'number', `表格字段 ${field.path} 必须来自所选实际输入`).toBe(true);

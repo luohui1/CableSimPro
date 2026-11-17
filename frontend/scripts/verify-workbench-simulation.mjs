@@ -244,6 +244,54 @@ await walkthrough('simulation', async ({
       evidence.projectSolverLocations = shown;
     });
 
+    if (report.phase === 'after') await step('00a-empty-hpc-jobs-open-real-simulation', async () => {
+      const endpoint = studyPath(thermal), workspaceEndpoint = `/api/workspaces/${thermal.workspace}`;
+      const [beforeJobs, beforeStudy, beforeWorkspace] = await Promise.all([
+        api('/api/hpc/jobs?offset=0&limit=20'), api(endpoint), api(workspaceEndpoint),
+      ]);
+      expect(beforeJobs.items, '只使用真实无超算作业的发布库，不删除作业制造空态').toEqual([]);
+      const writesBefore = report.writes.length;
+      await page.goto(base + '/runs?theme=light');
+      const jobs = page.getByRole('region', { name: '超算作业', exact: true });
+      await expect(jobs.getByRole('heading', { name: '尚无超算作业', exact: true })).toBeVisible();
+      const start = jobs.getByRole('link', { name: '选择仿真研究', exact: true });
+      await start.scrollIntoViewIfNeeded();
+      await expect(start).toBeInViewport({ ratio: 1 });
+      await expect(page.locator('.button-primary:visible,.button-run:visible')).toHaveCount(1);
+      await capture('00a-empty-hpc-jobs-action');
+      if (size.width === 1366) { await start.focus(); await start.press('Enter'); }
+      else await start.click();
+      await page.waitForURL(url => url.pathname === '/studies' && url.searchParams.get('kind') === 'simulation'
+        && url.searchParams.get('theme') === 'light');
+      await expect(page.getByRole('heading', { name: '电缆仿真研究', exact: true })).toBeVisible();
+      const table = page.getByRole('table', { name: '研究列表', exact: true });
+      await expect(table).toBeVisible();
+      const study = table.locator('a.object-link[href^="/studies/' + thermal.id + '/"]');
+      await expect(study).toHaveCount(1);
+      const target = new URL(await study.getAttribute('href'), base);
+      expect(target.pathname).toMatch(new RegExp('^/studies/' + thermal.id + '/'));
+      expect(target.searchParams.get('workspace')).toBe(thermal.workspace);
+      await study.scrollIntoViewIfNeeded();
+      await capture('00a-hpc-empty-start-lists-real-simulations');
+      if (size.width === 1920) { await study.focus(); await study.press('Enter'); }
+      else await study.click();
+      await page.waitForURL(url => url.pathname === target.pathname && url.searchParams.get('workspace') === thermal.workspace);
+      await expect(page.locator('.study-workbench')).toBeVisible();
+      await expect(page.getByRole('navigation', { name: '工程浏览器', exact: true })).toBeVisible();
+      await capture('00a-hpc-empty-start-opens-saved-simulation');
+      const [afterJobs, afterStudy, afterWorkspace] = await Promise.all([
+        api('/api/hpc/jobs?offset=0&limit=20'), api(endpoint), api(workspaceEndpoint),
+      ]);
+      check('超算作业空态可键鼠进入真实仿真研究，未提交作业或修改保存输入', report.writes.length === writesBefore
+        && afterJobs.items.length === 0 && afterJobs.total === beforeJobs.total
+        && afterStudy.id === beforeStudy.id && afterStudy.revision === beforeStudy.revision
+        && JSON.stringify(afterStudy.definition) === JSON.stringify(beforeStudy.definition)
+        && afterWorkspace.revision === beforeWorkspace.revision
+        && JSON.stringify(afterWorkspace.domain) === JSON.stringify(beforeWorkspace.domain),
+      { study: thermal.id, workspace: thermal.workspace, url: page.url(), writes: report.writes.slice(writesBefore) });
+      evidence.hpcEmptyStart = { study: thermal.id, workspace: thermal.workspace, url: page.url(), jobs: afterJobs.items.length };
+    });
+
     if (report.phase === 'after') await step('00b-unconfigured-native-empty-starts', async () => {
       const endpoint = studyPath(iec), workspaceEndpoint = `/api/workspaces/${iec.workspace}`;
       const [beforeStudy, beforeWorkspace, beforeRuns] = await Promise.all([
@@ -376,7 +424,10 @@ await walkthrough('simulation', async ({
       await page.keyboard.press('Escape'); await expect(listbox).toBeHidden(); await expect(sourceControl).toBeFocused();
       await expect(sourceControl.locator(':scope > span').first()).toHaveText(sourceLabel);
       const execution = batch.locator('section.input-section').filter({ has: page.getByRole('heading', { name: '超算执行', exact: true }) });
-      await execution.scrollIntoViewIfNeeded(); await expect(execution).toBeInViewport({ ratio: 1 });
+      await execution.scrollIntoViewIfNeeded();
+      await execution.getByRole('heading', { name: '超算执行', exact: true }).hover();
+      await page.mouse.wheel(0, 120);
+      await expect(execution).toBeInViewport({ ratio: 1 });
       await capture('00c-batch-space-complete-execution-values');
       const horizontal = await dock.evaluate(node => ({ dock: { width: node.clientWidth, scroll: node.scrollWidth },
         root: { width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth } }));
@@ -448,6 +499,27 @@ await walkthrough('simulation', async ({
           if(value!==undefined && value!==null)await inheritedChoice(dialog,schema,'/iec/'+key,value);
         }
         await check('切换参数来源保留已保存 IEC 的真实选项',true,{t4_form:iec.definition.parameters.t4_form,eddy:iec.definition.parameters.eddy,rating_mode:iec.definition.parameters.rating_mode});
+        // A temperature difference must not acquire an absolute-temperature
+        // offset. Inspect the actual control before editing; do not compensate
+        // for incorrect plugin metadata in the host or in the test's input.
+        const differencePath='/temperature_tolerance_k';
+        const differenceField=parameterSchema(schemaAt(schema,differencePath),schema);
+        const differenceEditor=await editor(dialog,differencePath);
+        await differenceEditor.scrollIntoViewIfNeeded();
+        await expect(differenceEditor).toBeInViewport({ratio:1});
+        const differenceInput=differenceEditor.locator('input').first();
+        const differenceUnit=await differenceEditor.locator('[data-slot="input-group-addon"][data-align="inline-end"]').innerText();
+        const differenceValue=await differenceInput.inputValue();
+        const declaredDifferenceUnit=differenceField['x-unit'];
+        evidence.comparison.temperatureDifference={pin,path:differencePath,declared:declaredDifferenceUnit,
+          defaultSi:differenceField.default,displayedValue:differenceValue,displayedUnit:differenceUnit,
+          visibleText:await differenceEditor.innerText()};
+        await capture('02-comparison-temperature-difference-unit');
+        check('温度更新容差按温差显示原默认值，不加绝对温度偏移',
+          declaredDifferenceUnit?.si==='K' && declaredDifferenceUnit.scale===1 && declaredDifferenceUnit.offset===0
+          && ['K','°C'].includes(differenceUnit.trim()) && differenceValue.trim()!==''
+          && Number(differenceValue)===differenceField.default,
+          evidence.comparison.temperatureDifference,{fatal:false});
         // An empty required field must be caught locally and receive focus.
         await dialog.getByRole('button',{name:'建立研究',exact:true}).click();
         await expect(dialog.locator('[role="alert"]:visible').first()).toBeVisible();
@@ -493,6 +565,8 @@ await walkthrough('simulation', async ({
         expect(saved.definition.parameters.bounds_m,'保存负坐标与边界顺序').toEqual(bounds);
         expect(saved.definition.parameters.section_id,'截面引用属于原边界的保存工程').toBe(referenceParameters.domain_options.section_id);
         expect(saved.definition.parameters.load_id,'负荷引用属于原边界的保存工程').toBe(referenceParameters.domain_options.load_id);
+        if(evidence.comparison.temperatureDifference)expect(saved.definition.parameters.temperature_tolerance_k,'只观察温差控件，不改写插件默认SI容差')
+          .toBe(evidence.comparison.temperatureDifference.defaultSi);
         check('创建后的真实 API 保留 IEC 来源精度、选项与负坐标',true,{iec:saved.definition.parameters.iec,bounds:saved.definition.parameters.bounds_m});
       } else {
         await expect(dialog.getByRole('alert')).toBeVisible();
