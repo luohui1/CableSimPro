@@ -54,7 +54,9 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
     const enumLabels = optionalRecord(source['x-enum-labels']), declaredUnit = optionalRecord(source['x-unit']);
     const items = source.type === 'array' ? expand(source.items, root) : {}, mapped = source.type === 'object' && !source.properties ? expand(source.additionalProperties, root) : {};
     if (source.type==='object' && source.properties) structure='object';
-    else if (source.type==='string' && (key==='source' || source['x-group']==='evidence')) structure='source';
+    // A presentation group does not change a declared enum or object binding
+    // into free text (for example IEC reference_basis in the evidence group).
+    else if (source.type==='string' && !Array.isArray(source.enum) && bound===undefined && !source['x-bind'] && (key==='source' || source['x-group']==='evidence')) structure='source';
     else if (isRangeField(key, source, root)) structure = 'range';
     else if (source.type === 'array' && (items.type === 'number' || items.type === 'integer')) structure = 'list';
     else if (source.type === 'array' && items.type === 'object' && items.properties) structure = 'rows';

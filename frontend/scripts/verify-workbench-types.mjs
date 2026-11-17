@@ -98,6 +98,44 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       if (await section.getAttribute('open') === null) await section.locator(':scope > summary').click();
     }
   }
+  async function fillRatingParameters(parameters, source) {
+    const form = page.locator('.parameter-form');
+    await expect(form.locator('.buzzform-contract').first()).toBeVisible();
+    await advanced(form);
+    for (const [key, label] of [['ks', '集肤效应系数'], ['kp', '邻近效应系数']]) {
+      expect(Number.isFinite(parameters[key]), key + '必须来自已保存的教学条件').toBeTruthy();
+      await field(label, parameters[key], form);
+    }
+    const celsius = value => Number((value - 273.15).toPrecision(12));
+    for (const [key, label, fields] of [
+      ['solver', '求解设置', [['initial_sheath_temperature_k', '护套迭代初温', celsius],
+        ['max_iterations', '最大迭代次数'], ['current_tolerance_a', '电流容差']]],
+      ['duct', '排管模型', [['u', '排管系数 u'], ['v_per_m', '管内热阻直径系数'],
+        ['y_per_m_k', '管内热阻温径系数'], ['initial_mean_air_temperature_k', '管内平均空气初温', celsius]]],
+    ]) {
+      expect(parameters[key], label + '必须来自已保存的教学条件').toBeTruthy();
+      const group = form.locator(`.parameter-structured[data-field-path="/${key}"]`);
+      // Optional objects start unset. Configure them through the visible editor,
+      // then open the newly mounted advanced fields before entering source data.
+      await choose(label + ' · 配置', '逐项配置', group);
+      await expect(group.locator(':scope > .buzzform-contract')).toBeVisible();
+      await advanced(group);
+      for (const [fieldKey, fieldLabel, convert = value => value] of fields) {
+        expect(Number.isFinite(parameters[key][fieldKey]), key + '/' + fieldKey + '必须来自已保存的教学条件').toBeTruthy();
+        await field(fieldLabel, convert(parameters[key][fieldKey]), group);
+      }
+    }
+    expect(parameters.t4_form).toBe('exact');
+    expect(parameters.eddy).toBe('ignored');
+    expect(parameters.reference_basis).toBe('iec2023');
+    await choose('外部热阻形式', '精确形式', form);
+    await choose('涡流损耗处理', '忽略', form);
+    await choose('参考依据', 'IEC 2023 依据', form);
+    const sourceEditor = form.locator('.parameter-structured[data-field-path="/source"] details.parameter-source');
+    await expect(sourceEditor).toBeVisible();
+    if (await sourceEditor.getAttribute('open') === null) await sourceEditor.locator(':scope > summary').click();
+    await field('来源', source, sourceEditor);
+  }
   async function openNew(origin, title) {
     await dismissDialog();
     await page.goto(base + '/types?theme=light');
@@ -723,28 +761,18 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await save(main.id);
     await capture('载流量表-工况与来源已保存');
     await page.getByRole('tab', { name: '方法参数', exact: true }).click();
-    await expect(page.locator('.parameter-form .buzzform-contract')).toBeVisible();
-    await advanced(page.locator('.parameter-form'));
     const teaching = await teachingDesign();
     expect(teaching, '方法条件须能追溯到发布种子的教学型号').toBeTruthy();
     const teachingSeed = teaching.seed;
     const parameters = teaching.studies.find(item => item.definition.driver.kind === 'batch'
       && /教学/.test(item.definition.parameters?.source || ''))?.definition.parameters;
-    expect(parameters?.duct, '教学种子须提供合同要求的管内换热条件').toBeTruthy();
-    for (const [label, value] of [['集肤效应系数', parameters.ks], ['邻近效应系数', parameters.kp],
-      ['护套迭代初温', Number((parameters.solver.initial_sheath_temperature_k - 273.15).toPrecision(12))],
-      ['最大迭代次数', parameters.solver.max_iterations], ['电流容差', parameters.solver.current_tolerance_a],
-      ['排管系数 u', parameters.duct.u], ['管内热阻直径系数', parameters.duct.v_per_m],
-      ['管内热阻温径系数', parameters.duct.y_per_m_k],
-      ['管内平均空气初温', Number((parameters.duct.initial_mean_air_temperature_k - 273.15).toPrecision(12))]]) await field(label, value);
-    await choose('外部热阻形式', '精确形式');
-    await choose('涡流损耗处理', '忽略');
-    await choose('参考依据', 'IEC 2023 依据');
-    await field('来源', `T1 隔离走查：复用发布教学型号 ${teachingSeed.name} 已保存的方法参数（${parameters.source}）；直埋工况未启用排管分支，管内参数仅按方法合同保留，非现场测量或批准数据。`);
+    const source = `T1 隔离走查：复用发布教学型号 ${teachingSeed.name} 已保存的方法参数（${parameters.source}）；直埋工况未启用排管分支，管内参数仅按方法合同保留，非现场测量或批准数据。`;
+    await fillRatingParameters(parameters, source);
     (report.ratingSources ||= []).push({ ...size, copy: main.id, source: teachingSeed.id, parameters });
     await save(main.id);
     const ratingStudy = (await api(`/api/workspaces/${main.id}/studies`))
       .filter(item => item.definition.driver.kind === 'batch').sort((a, b) => b.created.localeCompare(a.created))[0];
+    expect(ratingStudy?.definition.parameters).toMatchObject({ ...parameters, source });
     check('载流量方法条件与明确教学来源已保存', ratingStudy?.definition.parameters.ks === 1
       && ratingStudy?.definition.parameters.kp === 1
       && /T1 隔离走查/.test(ratingStudy?.definition.input_sources?.['/parameters/ks']?.reference || ''), ratingStudy?.definition);
@@ -999,17 +1027,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await field('条件来源', condition.source);
     await save(delivery.id);
     await page.getByRole('tab', { name: '方法参数', exact: true }).click();
-    await expect(page.locator('.parameter-form .buzzform-contract')).toBeVisible();
-    await advanced(page.locator('.parameter-form'));
-    for (const [label, value] of [['集肤效应系数', parameters.ks], ['邻近效应系数', parameters.kp],
-      ['护套迭代初温', celsius(parameters.solver.initial_sheath_temperature_k)], ['最大迭代次数', parameters.solver.max_iterations],
-      ['电流容差', parameters.solver.current_tolerance_a], ['排管系数 u', parameters.duct.u],
-      ['管内热阻直径系数', parameters.duct.v_per_m], ['管内热阻温径系数', parameters.duct.y_per_m_k],
-      ['管内平均空气初温', celsius(parameters.duct.initial_mean_air_temperature_k)]]) await field(label, value);
-    expect(parameters.t4_form).toBe('exact'); expect(parameters.eddy).toBe('ignored'); expect(parameters.reference_basis).toBe('iec2023');
-    await choose('外部热阻形式', '精确形式'); await choose('涡流损耗处理', '忽略'); await choose('参考依据', 'IEC 2023 依据');
-    await field('来源', parameters.source);
+    await fillRatingParameters(parameters, parameters.source);
     await save(delivery.id);
+    const saved = (await api(`/api/workspaces/${delivery.id}/studies`)).filter(item => item.definition.driver.kind === 'batch')
+      .sort((a, b) => b.created.localeCompare(a.created))[0];
+    expect(saved?.definition.parameters).toMatchObject(parameters);
     await capture('教学交付-载流量工况与已有来源已保存');
     await page.getByRole('tab', { name: '结果表', exact: true }).click();
     if (!await run('计算所选工况', 'rating-table-results')) return;
