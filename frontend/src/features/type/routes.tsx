@@ -1,14 +1,15 @@
 import { useEffect } from 'react';
-import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteComponent, type AnyRootRoute } from '@tanstack/react-router';
+import { createRoute, Outlet, useNavigate, useParams, useSearch, type AnyRootRoute } from '@tanstack/react-router';
+import { lazyWorkbenchRoute } from '@/lib/lazy-workbench-route';
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
 import { queryClient } from '@/lib/query-client';
 import { loadWorkspace, typeEvidence, moduleMethods, runArtifact, typeRequirements } from './api';
 import { typeSpecification } from './version-api';
 import {preloadTypeModule} from './module-loader';
-const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
-const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
-const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
+const TypeListPage = lazyWorkbenchRoute(() => import('./list-page'), 'TypeListPage');
+const TypeProvider = lazyWorkbenchRoute(() => import('./provider'), 'TypeProvider');
+const TypeWorkspace = lazyWorkbenchRoute(() => import('./workspace'), 'TypeWorkspace');
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
   create: value.create === '1' || value.create === 1 || value.create === true ? true : undefined,

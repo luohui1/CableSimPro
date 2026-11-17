@@ -146,10 +146,31 @@ jobs:
         env:
           WORKBENCH_PHASE: after
         run: npm run test:workbench-research 2>&1 | tee ../.data/workbench-walk/logs/research.log
+      - name: Preserve the research walkthrough before continuing
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-research
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .data/workbench-walk/after/research/
+            .data/workbench-walk/logs/research.log
       - name: Walk type design at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
         run: npm run test:workbench-types 2>&1 | tee ../.data/workbench-walk/logs/types.log
+      - name: Preserve the type walkthrough before continuing
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-types
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .data/workbench-walk/before/types/
+            .data/workbench-walk/after/types/
+            .data/workbench-walk/logs/types.log
       - name: Walk resources at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
