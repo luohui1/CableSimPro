@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearch } from '@tanstack/react-router';
 import { statusLabel } from '@/lib/status-vocabulary';
 import { displayName } from "@/lib/display-names";
 import { savedEntityLabel, savedRunLabel } from './study-run-label';
 import { frozenInputDifferences, comparisonCellText } from './run-records-comparison';
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { compareRuns } from "@/api/comparison";
 import { inputContractQuery, capabilityInputContracts, exactContract } from "@/api/input-contracts";
 import {
@@ -15,6 +15,8 @@ import {
   text,
   message,
   ApiError,
+  api,
+  responseData,
 } from "@/api/client";
 import {
   moduleConfiguration,
@@ -53,7 +55,7 @@ export function StudyCompare({
   onComparison: (ids: string) => void;
   readOnly: boolean;
 }) {
-  const context = useStudy(),
+  const queries = useQueryClient(), context = useStudy(),
     definition = (
       readOnly && run
         ? optionalRecord(run.snapshot).study_definition ||
@@ -73,6 +75,8 @@ export function StudyCompare({
     [method, setMethod] = useState(""),
     [error, setError] = useState("");
   const [physics, setPhysics] = useState("thermal");
+  const [exporting, setExporting] = useState(false), [exportError, setExportError] = useState('');
+  const exportPending = useRef(false);
   const search = useSearch({strict:false});
   const ids = [...new Set(selectedRuns.split(",").filter(Boolean))];
   useEffect(() => setChosen([...new Set(selectedRuns.split(',').filter(Boolean))]), [selectedRuns]);
@@ -292,8 +296,71 @@ export function StudyCompare({
   const rows: CatalogRow[] = diffs.flatMap((difference, index) =>
     (Array.isArray(difference.quantities) ? difference.quantities : [])
       .map(optionalRecord)
-      .map((row, at) => ({ ...row, comparisonRun: difference.run_id, id: index + "/" + at })),
+      .map((row, at) => ({ ...row,
+        baselineRun: difference.baseline_run_id || (!ids.length ? run?.id : undefined),
+        comparisonRun: difference.run_id || (!ids.length ? run?.id : undefined),
+        id: index + "/" + at })),
   );
+  async function exportComparison() {
+    if (exportPending.current) return;
+    exportPending.current = true; setExporting(true); setExportError('');
+    try {
+      // Comparisons retain full fixed inputs but do not return run digests.
+      // Read the authenticated details only for an explicit export, sharing the
+      // workbench cache instead of hashing a browser projection of saved JSON.
+      const runIds = [...new Set(rows.flatMap(row => [text(row.baselineRun), text(row.comparisonRun)]))];
+      const savedRuns = new Map(await Promise.all(runIds.map(async rid => {
+        const source = sourceFor(rid), snapshot = optionalRecord(source?.snapshot);
+        const wid = text(snapshot.workspace_id), sid = text(snapshot.study_id);
+        if (!rid || wid !== context.study.workspace || !sid)
+          throw Error('比较结果缺少准确的运行归属，请重新选择保存运行。');
+        const saved = await queries.fetchQuery({
+          queryKey: ['saved-run', wid, sid, rid, 'detail'], staleTime: 30000, retry: false,
+          queryFn: async ({signal}) => record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {
+            params: {path: {wid, sid, rid}, query: {view: 'detail'}},
+            signal: AbortSignal.any([signal, AbortSignal.timeout(60000)]),
+          })), '保存运行'),
+        });
+        if (saved.id !== rid || saved.workspace !== wid || saved.study !== sid || saved.integrity !== 'verified'
+          || !['succeeded', 'partial'].includes(text(saved.status))
+          || !/^[0-9a-f]{64}$/.test(text(saved.input_digest)) || !/^[0-9a-f]{64}$/.test(text(saved.output_digest))
+          || !Number.isInteger(saved.sequence) || Number(saved.sequence) < 1)
+          throw Error('保存运行的身份、完整性或摘要不可用，不能导出比较结果。');
+        return [rid, saved] as const;
+      })));
+      const trace = (rid: unknown, row: CatalogRow, comparison: boolean) => {
+        const saved = savedRuns.get(text(rid));
+        if (!saved) throw Error('比较结果未找到对应保存运行，请重新读取。');
+        const caseId = text(row.case_id);
+        const savedCase = array(optionalRecord(saved.output).cases).map(optionalRecord).find(item => item.case_id === caseId);
+        if (caseId && !savedCase) throw Error('比较结果的工况不属于对应保存运行，不能导出。');
+        // A single crosscheck run has two methods in the same immutable run.
+        // Ordinary saved-run comparisons use the actual matched output case.
+        const method = optionalRecord(savedCase?.method || (comparison && row.method)
+          || optionalRecord(optionalRecord(saved.snapshot).definition).method);
+        const pin = {plugin_id: text(method.plugin_id), capability: text(method.capability),
+          version: text(method.version), release_digest: text(method.release_digest)};
+        if (!pin.plugin_id || !pin.capability || !pin.version || !/^[0-9a-f]{64}$/.test(pin.release_digest))
+          throw Error('保存运行缺少准确的方法版本，请核对固定记录后再导出。');
+        return {workspace_id: saved.workspace, study_id: saved.study, run_id: saved.id, sequence: saved.sequence,
+          input_digest: saved.input_digest, output_digest: saved.output_digest, method: pin};
+      };
+      downloadCsv([
+        ['物理量', '对象', '输出条件', '基准 / SI', '对照 / SI', '差值 / SI', '单位', '来源'],
+        ...rows.map(row => [
+          text(row.title) || displayName(text(row.key)),
+          savedEntityLabel(sourceFor(row.comparisonRun) || run || {}, text(row.case_id), text(row.entity)),
+          displayName(text(row.condition)), row.baseline, row.value, row.difference, row.unit,
+          JSON.stringify({
+            quantity: {case_id: text(row.case_id) || null, key: text(row.key), entity: text(row.entity),
+              condition: text(row.condition), unit: row.unit},
+            baseline: trace(row.baselineRun, row, false), comparison: trace(row.comparisonRun, row, true),
+          }),
+        ]),
+      ], 'method-comparison.csv');
+    } catch (problem) { setExportError(message(problem)); }
+    finally { exportPending.current = false; setExporting(false); }
+  }
   if (view.error)
     return (
       <ErrorState title="方法对比不可用" description={message(view.error)} />
@@ -652,6 +719,7 @@ export function StudyCompare({
             {sources.length>=2 && <p>{sources.map((source,index)=>`${index===0?'基准':'对照'}：${methodLabel(optionalRecord(optionalRecord(optionalRecord(source.snapshot).definition).method),source.snapshot)}`).join('；')}</p>}
             <p className="muted">
               输入、边界与方法差异见“输入差异”；未配对结果保留在证据中。
+              CSV 逐行保留运行与摘要；完整输入与未配对量可下载“固定记录”。
             </p>
           </section>
           <Toolbar>
@@ -659,37 +727,14 @@ export function StudyCompare({
             <div className="spacer" />
             <Button
               size="compact"
-              onClick={() =>
-                downloadCsv(
-                  [
-                    [
-                      "物理量",
-                      "对象",
-                      "输出条件",
-                      "基准 / SI",
-                      "对照 / SI",
-                      "差值 / SI",
-                      "单位",
-                      "来源",
-                    ],
-                    ...rows.map((row) => [
-                      text(row.title) || displayName(text(row.key)),
-                      savedEntityLabel(sourceFor(row.comparisonRun) || run || {}, text(row.case_id), text(row.entity)),
-                      displayName(text(row.condition)),
-                      row.baseline,
-                      row.value,
-                      row.difference,
-                      row.unit,
-                      JSON.stringify(sources),
-                    ]),
-                  ],
-                  "method-comparison.csv",
-                )
-              }
+              loading={exporting}
+              title={exporting ? '正在核对本次比较的保存运行与摘要' : undefined}
+              onClick={() => void exportComparison()}
             >
               导出对比 CSV
             </Button>
           </Toolbar>
+          {exportError && <ErrorState title="对比 CSV 未导出" description={exportError} />}
           <DataTable
             label="方法结果差异"
             rowLabel={(row) => text(row.key)}
