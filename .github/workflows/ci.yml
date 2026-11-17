@@ -45,6 +45,19 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             studio/package-lock.json
+      - name: Install system libraries for the existing CAD gallery inputs
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libxrender1 fonts-arphic-uming
+      - name: Generate the existing CAD gallery inputs required by TypeScript
+        run: |
+          python scripts/prepare_plugin_environment.py cablesim.cable-geometry
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv/Scripts/python.exe frontend/src/features/cad/prepare-fixtures.py
+          else
+            .venv/bin/python frontend/src/features/cad/prepare-fixtures.py
+          fi
       - name: Frontend style rules, types and unit tests
         working-directory: frontend
         run: |
@@ -266,6 +279,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r backend/requirements-dev.txt
+      - name: Prepare the empty runtime directory used during application import
+        run: python -c "from pathlib import Path; Path('.data').mkdir(exist_ok=True)"
       - name: Prepare the declared geometry environment separately from the host Python
         run: |
           sudo apt-get update
@@ -281,19 +296,106 @@ jobs:
           retention-days: 14
           path: artifacts/
   verified-demo:
-    name: Package only after every check passes
-    needs: [hygiene, native-plugins, backend]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Offline release installation / ${{ matrix.os }}
+    # These are verification artifacts, not published releases. Build beside
+    # every existing check so a slow or failed test cannot suppress diagnosis;
+    # the pull request still requires all non-native checks to pass.
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python scripts/package_demo.py
-      - uses: actions/upload-artifact@v4
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements*.txt
+            plugins/cablesim.cable-geometry/src/requirements.txt
+      - name: Verify Windows firewall and loopback before expensive builds
+        if: runner.os == 'Windows'
+        run: python scripts/verify_installation.py --windows-firewall-preflight --output artifacts/firewall-preflight-Windows
+      - uses: actions/setup-node@v4
         with:
-          name: CableSimPro-demo
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install build and evidence inspection dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: Install Linux runtime system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libxrender1
+      - uses: actions/cache/restore@v4
+        id: occt
+        with:
+          path: |
+            .data/occt-toolchain
+            .data/occt-downloads
+            frontend/src/features/cad/node_modules/.cache/cablesim-occt
+          key: release-occt-${{ runner.os }}-${{ hashFiles('frontend/src/features/cad/native/**', 'frontend/src/features/cad/prepare-runtime.mjs', 'scripts/prepare_release_frontend.py', 'scripts/release_toolchains.json') }}
+      - name: Prepare verified OCCT assets from pinned sources
+        run: python scripts/prepare_release_frontend.py --jobs 4 --download-cache .data/occt-downloads
+      - name: Preserve verified OCCT assets before installation checks
+        if: steps.occt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .data/occt-toolchain
+            .data/occt-downloads
+            frontend/src/features/cad/node_modules/.cache/cablesim-occt
+          key: ${{ steps.occt.outputs.cache-primary-key }}
+      - name: Build the shipped frontend
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run build:release -- --outDir ../.data/release/frontend --emptyOutDir
+      - name: Build a platform-specific offline release archive
+        run: python scripts/build_release.py --frontend-dist .data/release/frontend --output artifacts/CableSimPro-${{ runner.os }}.zip
+      - name: Install, calculate and export with only loopback networking (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          release_python="$(command -v python)"
+          sudo unshare --net -- bash -c 'ip link set lo up; exec "$@"' bash \
+            "$release_python" scripts/verify_installation.py \
+            --archive artifacts/CableSimPro-Linux.zip \
+            --output artifacts/installation-Linux \
+            --require-offline linux-network-namespace
+      - name: Install, calculate and export with external traffic blocked (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # The gate installs per-program firewall rules for its Python and the
+          # installed Python before pip/host/plugin execution, records the real
+          # application filters, and removes rules/restores profiles in finally.
+          # The runner agent retains its connection while application egress is blocked.
+          python scripts/verify_installation.py `
+            --archive artifacts/CableSimPro-Windows.zip `
+            --output artifacts/installation-Windows `
+            --require-offline windows-firewall
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CableSimPro-release-${{ runner.os }}
           retention-days: 14
-          path: artifacts/CableSimPro-demo.zip
+          path: |
+            artifacts/CableSimPro-${{ runner.os }}.zip
+            artifacts/CableSimPro-${{ runner.os }}.zip.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CableSimPro-installation-${{ runner.os }}
+          retention-days: 14
+          path: |
+            artifacts/installation-${{ runner.os }}/
+            artifacts/firewall-preflight-${{ runner.os }}/
           if-no-files-found: error

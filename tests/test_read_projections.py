@@ -584,7 +584,7 @@ def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
 
 
 def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
-    """Once managed warm-up completes, reads reuse its receipts in under 300 ms."""
+    """Windows reuses notified receipts; other platforms revalidate exact source bytes."""
     from backend.kernel import input_contracts
     from time import perf_counter
     from threading import Event
@@ -605,6 +605,37 @@ def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
     with TestClient(app) as client:
         assert warmed.wait(20), 'Managed catalogue warm-up did not complete'
         research = client.app.state.research
+        if os.name != 'nt':
+            # SourceWatch deliberately has no notification backend on Linux.
+            # A warm result is not a reusable receipt without a source generation.
+            assert research.catalog_read_responses.generation(False) is None
+            assert research.catalog_read_responses.get(('methods',), False) is None
+            assert research.catalog_read_responses.get(('input-contracts',), False) is None
+            for path in ('/api/input-contracts', '/api/methods'):
+                first = client.get(path)
+                second = client.get(path)
+                assert first.status_code == second.status_code == 200
+                assert first.json() == second.json()
+                assert first.headers['X-CableSim-Read-Cache'] == second.headers['X-CableSim-Read-Cache'] == 'miss'
+            # A later read must not reuse pre-mutation catalog bytes. Change only
+            # this isolated fixture copy, never a live repository/plugin package.
+            package = tmp_path / 'plugins/cablesim.thermal-network'
+            manifest = json.loads((package / 'plugin.json').read_text('utf-8'))
+            source = package / next(row['path'] for row in manifest['files'] if row['path'].endswith('.py'))
+            source.write_bytes(source.read_bytes() + b'\n# changed after managed warm-up\n')
+            rejected = client.get('/api/input-contracts')
+            assert rejected.status_code == 409, rejected.text
+            assert rejected.json()['detail']['code'] == 'PACKAGE_DIGEST_MISMATCH'
+            # /methods is metadata discovery, not execution admission. Its next
+            # read must observe new manifest bytes instead of an old warm result.
+            manifest['name'] = '发布目录重新读取的名称'
+            (package / 'plugin.json').write_text(json.dumps(manifest, ensure_ascii=False), encoding='utf-8')
+            changed = client.get('/api/methods')
+            assert changed.status_code == 200, changed.text
+            assert changed.json()[0]['name'] == manifest['name']
+            assert changed.headers['X-CableSim-Read-Cache'] == 'miss'
+            return
+        assert research.catalog_read_responses.watch.healthy
         assert research.catalog_read_responses.get(('methods',), False)
         assert research.catalog_read_responses.get(('input-contracts',), False)
         before = research.catalog_read_responses.generation(False)
