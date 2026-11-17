@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { createRoute, Outlet, useNavigate, useParams, useSearch, type AnyRootRoute } from '@tanstack/react-router';
+import { QueryObserver, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { lazyWorkbenchRoute } from '@/lib/lazy-workbench-route';
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
@@ -13,6 +14,33 @@ import { contractFields } from '@/lib/heavy-components';
 const TypeListPage = lazyWorkbenchRoute(() => import('./list-page'), 'TypeListPage');
 const TypeProvider = lazyWorkbenchRoute(() => import('./provider'), 'TypeProvider');
 const TypeWorkspace = lazyWorkbenchRoute(() => import('./workspace'), 'TypeWorkspace');
+
+function typeEvidenceOptions(wid: string, history: boolean, module: string) {
+  return queryOptions({ queryKey: ['type-evidence', wid, history ? 'history' : 'recent', module],
+    queryFn: ({ signal }) => typeEvidence(wid, AbortSignal.any([signal, AbortSignal.timeout(20000)]), !history, module),
+    retry: false, staleTime: 30000 });
+}
+export async function readTypeEvidenceForWorkspace(options: ReturnType<typeof typeEvidenceOptions>, read: () => ReturnType<typeof typeEvidence>,
+  signal: AbortSignal, client: QueryClient = queryClient) {
+  signal.throwIfAborted();
+  // fetchQuery is not an observer. Keep this dependency alive when changing
+  // saved runs unmounts the old workspace's last evidence observer.
+  const observer = new QueryObserver(client, { ...options, enabled: false });
+  const release = observer.subscribe(() => {});
+  let abort!: () => void;
+  const cancelled = new Promise<never>((_, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+  });
+  try {
+    const evidence = await Promise.race([read(), cancelled]);
+    signal.throwIfAborted();
+    return evidence;
+  } finally {
+    signal.removeEventListener('abort', abort);
+    release();
+  }
+}
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
   create: value.create === '1' || value.create === 1 || value.create === true ? true : undefined,
@@ -41,12 +69,13 @@ export function createTypeRoutes(root: AnyRootRoute) {
     // The saved input and result preload share this route's query promise.
     // Its own query signal keeps cancellation independent of the workspace read.
     let savedEvidence: ReturnType<typeof typeEvidence> | undefined;
-    const readEvidence=()=>savedEvidence??=queryClient.fetchQuery({queryKey:['type-evidence',params.wid,history?'history':'recent',module],
-      queryFn:({signal})=>typeEvidence(params.wid,AbortSignal.any([signal,AbortSignal.timeout(20000)]),!history,module),retry:false,staleTime:30000});
+    const evidenceOptions = typeEvidenceOptions(params.wid, history, module);
+    const readEvidence=()=>savedEvidence??=queryClient.fetchQuery(evidenceOptions);
     // Start the selected saved input together with both route bundles, rather
     // than waiting for the provider bundle before issuing the first read.
     const workspace = queryClient.fetchQuery({ queryKey: ['type-workspace', params.wid, search.revision, search.run],
-      queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run, search.run ? readEvidence() : undefined), staleTime: 0 });
+      queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run,
+        search.run ? readTypeEvidenceForWorkspace(evidenceOptions, readEvidence, signal) : undefined), staleTime: 0 });
     void workspace.catch(()=>{ /* The provider retains its loading/error state. */ });
     if(tab==='parameters'&&['electrical','short-circuit','rating-table'].includes(module))
       void contractFields.preload().catch(()=>{ /* The form keeps its normal load/error state. */ });

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {createElement} from 'react';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 
 const frontend = fileURLToPath(new URL('../../../../', import.meta.url));
 const server = await createServer({ configFile: false, root: frontend, server: { middlewareMode: true }, optimizeDeps: { noDiscovery: true, include: [] }, resolve: { alias: { '@': path.join(frontend, 'src') } } });
@@ -30,6 +31,64 @@ const {SavedFormula}=await server.ssrLoadModule('/src/features/type/saved-formul
 const {dimensionBasis}=await server.ssrLoadModule('/src/features/type/dimension-basis.ts');
 const {methodErrorText,MethodErrorDetail}=await server.ssrLoadModule('/src/features/type/method-error.tsx');
 const {structureIssue}=await server.ssrLoadModule('/src/features/type/structure-issue.tsx');
+const {readTypeEvidenceForWorkspace}=await server.ssrLoadModule('/src/features/type/routes.tsx');
+
+function pendingHistory() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  let resolve, reject, signal, reads = 0, shared;
+  const response = new Promise((done, fail) => { resolve = done; reject = fail; });
+  const options = { queryKey: ['type-evidence', 'workspace', 'history', 'electrical'], retry: false, staleTime: 30000,
+    queryFn: context => {
+      reads++; signal = context.signal;
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      return response;
+    } };
+  return { client, options, resolve, reject, get signal() { return signal; }, get reads() { return reads; },
+    read: () => shared ??= client.fetchQuery(options),
+    observers: () => client.getQueryCache().find({ queryKey: options.queryKey })?.getObserversCount() || 0 };
+}
+test('A saved workspace retains the shared history read after the old view unsubscribes', async () => {
+  for (const stale of [false, true]) {
+    const history = pendingHistory(), controller = new AbortController();
+    if (stale) history.client.setQueryData(history.options.queryKey, [{ run: { id: 'older' } }], { updatedAt: Date.now() - 60000 });
+    const oldView = new QueryObserver(history.client, history.options), leave = oldView.subscribe(() => {});
+    const retained = readTypeEvidenceForWorkspace(history.options, history.read, controller.signal, history.client);
+    leave();
+    assert.equal(history.observers(), 1); assert.equal(history.signal.aborted, false); assert.equal(history.reads, 1);
+    const saved = Object.freeze([{ run: Object.freeze({ id: 'selected', integrity: 'verified' }) }]);
+    history.resolve(saved);
+    assert.equal(await retained, saved); assert.equal(await history.read(), saved);
+    assert.equal(history.reads, 1); assert.equal(history.observers(), 0);
+    history.client.clear();
+  }
+});
+test('An aborted workspace releases only its history observer and cannot consume the saved result', async () => {
+  for (const otherConsumer of [false, true]) {
+    const history = pendingHistory(), controller = new AbortController();
+    const oldView = new QueryObserver(history.client, history.options), leave = oldView.subscribe(() => {});
+    const retained = readTypeEvidenceForWorkspace(history.options, history.read, controller.signal, history.client);
+    if (!otherConsumer) leave();
+    const reason = new DOMException('Workspace navigation cancelled', 'AbortError');
+    controller.abort(reason);
+    await assert.rejects(retained, error => error === reason);
+    assert.equal(history.observers(), otherConsumer ? 1 : 0); assert.equal(history.signal.aborted, !otherConsumer);
+    assert.equal(history.reads, 1);
+    if (otherConsumer) { const saved = [{ run: { id: 'still-needed' } }]; history.resolve(saved); assert.equal(await history.read(), saved); leave(); }
+    history.client.clear();
+  }
+});
+test('Shared history errors remain failures; an already cancelled workspace starts no read', async () => {
+  const history = pendingHistory(), controller = new AbortController();
+  const retained = readTypeEvidenceForWorkspace(history.options, history.read, controller.signal, history.client);
+  const failure = new Error('Saved history transport failed'); history.reject(failure);
+  await assert.rejects(retained, error => error === failure);
+  assert.equal(history.reads, 1); assert.equal(history.observers(), 0);
+  history.client.clear();
+  const cancelled = pendingHistory(); controller.abort();
+  await assert.rejects(readTypeEvidenceForWorkspace(cancelled.options, cancelled.read, controller.signal, cancelled.client), error => error === controller.signal.reason);
+  assert.equal(cancelled.reads, 0); assert.equal(cancelled.observers(), 0);
+  cancelled.client.clear();
+});
 test('Input-basis rejection and missing coefficients retain their real diagnosis without an installation claim',()=>{
   const rejected='标准依据快照与已封签的判据不一致，请重新查询当前发行。';
   assert.match(methodErrorText(rejected),/标准依据/);
