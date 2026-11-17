@@ -250,6 +250,14 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       currentWorkspaceRevision: current.revision, method: archiveBefore.snapshot.definition.method,
       applicable: true, navigations: [] };
     (report.fixedTypeRunNavigation ||= []).push(evidence);
+    const historyRequests = [], historyEndpoint = '/api/types/' + encodeURIComponent(source.wid) + '/display-runs';
+    const onHistoryRequest = request => {
+      const url = new URL(request.url());
+      if (request.method() === 'GET' && url.pathname === historyEndpoint && !url.searchParams.has('recent'))
+        historyRequests.push({ url: url.pathname + url.search, after: Number(url.searchParams.get('after')),
+          limit: Number(url.searchParams.get('limit')) });
+    };
+    page.on('request', onHistoryRequest);
     async function openRunRecord() {
       await page.goto(base + '/runs?theme=light');
       const table = page.getByRole('table', { name: '运行', exact: true });
@@ -288,6 +296,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       return { link, href: url.pathname + url.search };
     }
     async function openFixed(label, action) {
+      const readsBefore = historyRequests.length;
       const [archiveResponse, ratingResponse] = await Promise.all([
         page.waitForResponse(response => {
           const url = new URL(response.url());
@@ -339,10 +348,17 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         await expect(surface.getByRole('checkbox', { name: '选择全部工况', exact: true })).toBeDisabled();
       }
       const shot = await capture('固定型号运行-' + target.label + '-' + label);
+      const historyReads = historyRequests.slice(readsBefore);
+      // The input snapshot and result view must share the same real paged
+      // history, while all existing full-input/digest assertions remain above.
+      check(target.label + ' · ' + label + '的完整历史每页只读取一次', historyReads.length > 0
+        && historyReads.every((read, index) => read.limit === 5 && Number.isInteger(read.after)
+          && (index === 0 ? read.after === 0 : read.after > historyReads[index - 1].after)),
+      { run: source.rid, historyReads }, { fatal: false });
       evidence.navigations.push({ label, url: page.url(), screenshot: shot.screenshot, archiveHttp: archiveResponse.status(),
         ratingHttp: ratingResponse?.status(), run: observed.id, inputDigest: observed.input_digest,
         outputDigest: observed.output_digest, workspaceRevision: observed.snapshot.workspace_revision,
-        studyRevision: observed.snapshot.study_revision });
+        studyRevision: observed.snapshot.study_revision, historyReads });
       if (!evidence.readOnlyReason) {
         // CommandBar wraps a native disabled button in the real tooltip trigger.
         const trigger = calculate.locator('xpath=..');
@@ -392,6 +408,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         check('历史结构推导可键鼠返回同一当前型号并重新打开原保存运行', true, evidence.currentInputEntry);
       }
     } finally {
+      page.off('request', onHistoryRequest);
       const [afterWorkspace, afterStudy, afterArchive] = await Promise.all([workspace(source.wid), api(prefix), api(source.fullPath)]);
       check(target.label + '固定入口检查没有改动当前输入或原运行', report.writes.length === writesBefore
         && afterWorkspace.revision === current.revision && JSON.stringify(afterWorkspace.domain) === JSON.stringify(current.domain)

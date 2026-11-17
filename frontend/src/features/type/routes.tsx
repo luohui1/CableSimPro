@@ -35,13 +35,19 @@ export function createTypeRoutes(root: AnyRootRoute) {
     return <Navigation location={location}><TypeListPage /></Navigation>;
   } });
   const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, beforeLoad: ({ params, search, location }) => {
+    const module=location.pathname.split('/')[3]||'structure';
+    const tab=location.pathname.split('/')[4]||typeModules.find(item=>item.id===module)?.tabs[0][0]||'section';
+    const history=!!search.run||search.revision!==undefined||queryClient.getQueryData(['type-evidence-history',params.wid])===true;
+    // The saved input and result preload share this route's query promise.
+    // Its own query signal keeps cancellation independent of the workspace read.
+    let savedEvidence: ReturnType<typeof typeEvidence> | undefined;
+    const readEvidence=()=>savedEvidence??=queryClient.fetchQuery({queryKey:['type-evidence',params.wid,history?'history':'recent',module],
+      queryFn:({signal})=>typeEvidence(params.wid,AbortSignal.any([signal,AbortSignal.timeout(20000)]),!history,module),retry:false,staleTime:30000});
     // Start the selected saved input together with both route bundles, rather
     // than waiting for the provider bundle before issuing the first read.
     const workspace = queryClient.fetchQuery({ queryKey: ['type-workspace', params.wid, search.revision, search.run],
-      queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run), staleTime: 0 });
+      queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run, search.run ? readEvidence() : undefined), staleTime: 0 });
     void workspace.catch(()=>{ /* The provider retains its loading/error state. */ });
-    const module=location.pathname.split('/')[3]||'structure';
-    const tab=location.pathname.split('/')[4]||typeModules.find(item=>item.id===module)?.tabs[0][0]||'section';
     if(tab==='parameters'&&['electrical','short-circuit','rating-table'].includes(module))
       void contractFields.preload().catch(()=>{ /* The form keeps its normal load/error state. */ });
     if(module!=='structure')void preloadTypeModule(module);
@@ -52,9 +58,7 @@ export function createTypeRoutes(root: AnyRootRoute) {
     if(module!=='structure'||tab==='quantities'||!!search.run||search.revision!==undefined) {
       // Start the actual module and its saved evidence alongside the workspace,
       // instead of downloading them only after the shell has mounted.
-      const history=!!search.run||search.revision!==undefined||queryClient.getQueryData(['type-evidence-history',params.wid])===true;
-      const evidence = queryClient.fetchQuery({queryKey:['type-evidence',params.wid,history?'history':'recent',module],
-        queryFn:({signal})=>typeEvidence(params.wid,AbortSignal.any([signal,AbortSignal.timeout(20000)]),!history,module),retry:false,staleTime:30000});
+      const evidence = readEvidence();
       // The requirement directory depends on the selected immutable run, not
       // on React mounting its table. Begin that read as soon as evidence arrives.
       void evidence.then(items=>{

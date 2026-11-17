@@ -18,9 +18,11 @@ export function projectWorkspace(value: unknown): Workspace {
   for (const key of ['cable_types', 'materials', 'circuits', 'sections', 'load_cases']) array(domain[key], key);
   return { id, revision, document: domain as unknown as DomainDocument, raw };
 }
-export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?: number, runId?: string) {
+export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?: number, runId?: string, savedEvidence?: ReturnType<typeof typeEvidence>) {
   if (runId) {
-    const found = (await typeEvidence(wid, signal)).find(item => item.run.id === runId);
+    const evidence = await (savedEvidence ?? typeEvidence(wid, signal));
+    signal?.throwIfAborted();
+    const found = evidence.find(item => item.run.id === runId);
     if (!found || found.run.integrity !== 'verified') throw new ApiError(409, '固定运行不存在或完整性未通过');
     let snapshot = record(found.run.snapshot, '固定运行输入');
     if (!snapshot.workspace_state && snapshot.workspace_state_ref) {
