@@ -80,6 +80,7 @@ export async function walkManufacturer({ page, base, viewport, out, root, expect
   assert.deepEqual(request.mapping, mapping);
   assert.deepEqual(request.series.source, source, '来源附件必须经实际表单保存到预览请求');
   assert.deepEqual([request.series.u0_v, request.series.u_v, request.series.cores, request.series.origin, request.series.resistance_basis], [26000, 35000, 3, 'public', 'stated']);
+  assert.equal(preview.series.resistance_basis, 'stated', '预览必须保留选择的电阻缺项策略');
   assert.equal(request.series.um_v ?? null, null);
   assert.equal(request.series.armour_material ?? null, null, '原文只称钢带，不猜镀锌钢等具体类别');
   for (const key of ['common', 'common_basis', 'modelling']) assert.deepEqual(request.series[key], {}, '加载来源不得填充结构或工况');

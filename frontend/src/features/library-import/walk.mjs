@@ -40,8 +40,8 @@ async function readApi(url) {
 for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
   const context = await browser.newContext({ viewport, acceptDownloads: true, locale: 'zh-CN' });
   const page = await context.newPage();
-  page.on('pageerror', error => report.errors.push({ viewport: viewport.width, kind: 'page', message: error.message }));
-  page.on('console', entry => { if (entry.type() === 'error') report.errors.push({ viewport: viewport.width, kind: 'console', message: entry.text() }); });
+  page.on('pageerror', error => report.errors.push({ viewport: viewport.width, kind: 'page', page: page.url(), time: new Date().toISOString(), message: error.message }));
+  page.on('console', entry => { if (entry.type() === 'error') report.errors.push({ viewport: viewport.width, kind: 'console', page: page.url(), time: new Date().toISOString(), location: entry.location(), message: entry.text() }); });
   page.on('requestfailed', request => { if (!request.failure()?.errorText.includes('ERR_ABORTED')) report.errors.push({ viewport: viewport.width, kind: 'request', url: request.url(), message: request.failure()?.errorText }); });
   page.on('response', response => {
     if (!response.url().includes('/api/')) return;
@@ -65,7 +65,16 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       }
       await assertLayout(page, `${viewport.width} ${label}`);
     }
-    catch (error) { report.layout_failures.push({ viewport: viewport.width, screenshot: name, message: String(error) }); }
+    catch (error) {
+      const primaryActions = await page.locator('.button-primary,.button-run').evaluateAll(nodes => nodes.map(node => {
+        const box = node.getBoundingClientRect();
+        return { text: node.textContent?.trim(), disabled: node.disabled === true,
+          visible: node.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true }),
+          folded: !!node.closest('details:not([open]),[hidden],[aria-hidden="true"]'),
+          bounds: { x: box.x, y: box.y, width: box.width, height: box.height } };
+      }));
+      report.layout_failures.push({ viewport: viewport.width, screenshot: name, page: page.url(), message: String(error), primary_actions: primaryActions });
+    }
     await saveReport();
     console.log(`${viewport.width} ${label}`);
   }

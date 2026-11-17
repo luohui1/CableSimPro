@@ -8,7 +8,7 @@ import { displayUnit } from '@/lib/display-names';
 import { sourceLocationText, type Field, type SeriesDeclaration, type Vocabulary } from './api';
 
 export function emptyDeclaration(): SeriesDeclaration {
-  return { name: '', manufacturer: '', designation: '', cores: 3, u0_v: 0, u_v: 0, standards: [], origin: 'factory', common: {}, common_basis: {}, modelling: {} };
+  return { name: '', manufacturer: '', designation: '', cores: 3, u0_v: 0, u_v: 0, standards: [], origin: 'factory', resistance_basis: 'stated', common: {}, common_basis: {}, modelling: {} };
 }
 const numberOf = (value: string) => value.trim() === '' || !Number.isFinite(Number(value)) ? undefined : Number(value);
 const PARTS = [
