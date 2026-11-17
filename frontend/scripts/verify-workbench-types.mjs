@@ -400,13 +400,17 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
               } catch { break; }
               geometry = await notationGeometry(target, token, iframe);
             }
-            await expect.poll(() => target.evaluate(node => new Promise(resolve => {
-              const before = node.getBoundingClientRect();
-              requestAnimationFrame(() => requestAnimationFrame(() => {
-                const after = node.getBoundingClientRect();
-                resolve(Math.abs(after.left - before.left) < 1 && Math.abs(after.top - before.top) < 1);
-              }));
-            })), { timeout: 3000 }).toBe(true);
+            // The document preview intentionally disallows page scripts. Read
+            // its geometry from the test runner instead of scheduling an rAF
+            // callback inside that sandbox, which the browser must reject.
+            let previousBounds;
+            await expect.poll(async () => {
+              const bounds = await target.boundingBox();
+              const stable = Boolean(previousBounds && bounds && ['x', 'y', 'width', 'height']
+                .every(key => Math.abs(bounds[key] - previousBounds[key]) < 1));
+              previousBounds = bounds;
+              return stable;
+            }, { timeout: 3000 }).toBe(true);
             geometry = await notationGeometry(target, token, iframe);
             const shot = await capture(label + '-' + (token === 'Case2/10' ? '算例来源' : '附录诊断') + '-' + (index + 1));
             item.screenshot = shot.screenshot;
