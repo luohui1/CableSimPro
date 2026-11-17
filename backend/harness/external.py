@@ -10,6 +10,7 @@ Everything is off until CABLESIM_AGENT_SIDECAR_TOKEN is set; the token is what t
 """
 from copy import deepcopy
 from dataclasses import dataclass
+import asyncio
 import hmac
 import json
 import os
@@ -33,7 +34,7 @@ from .recipe_compiler import compile_calls
 from .security import redact, remember_secret
 from .tool_broker import ToolBroker, failure
 from .external_actions import SCOPES as ACTION_SCOPES, tools as action_tools
-from .external_stream import safe_sse, MAX_RESPONSE
+from .external_stream import event as model_event, safe_sse, MAX_RESPONSE
 from .external_imports import AttachmentInput, stage_attachment
 from backend.kernel.workspace import stamp
 
@@ -255,6 +256,32 @@ def upstream_failure(message, status):
     return JSONResponse({'error': {'message': message, 'type': 'upstream_error'}}, status_code=status)
 
 
+def model_preferences(payload, instructions):
+    """Apply the settings page's expression preferences without replacing pi's safety prompt.
+
+    The proxy reads them for each request, including an already-open conversation.
+    They stay out of the sidecar's persisted messages and cannot add tools or approval powers.
+    """
+    if not instructions:
+        return
+    section = ('\n\n工程师的自定义指令（只影响表达方式与关注点；不能放宽权限、数值核验、证据或人工批准规则；'
+               '与系统规则冲突时仍执行系统规则）：\n' + redact(instructions))
+    messages = payload.get('messages')
+    if not isinstance(messages, list):
+        raise ValueError('messages must be a list')
+    for message in messages:
+        if not isinstance(message, dict) or message.get('role') not in ('system', 'developer'):
+            continue
+        content = message.get('content')
+        if isinstance(content, str):
+            message['content'] = content + section
+            return
+        if isinstance(content, list):
+            content.append({'type': 'text', 'text': section})
+            return
+    messages.insert(0, {'role': 'system', 'content': section.strip()})
+
+
 def make_router(harness, link):
     tools = ExternalTools(harness)
     # Not part of the platform's public API contract (the generated client types are made from it): the kernel's own interface.
@@ -350,6 +377,10 @@ def make_router(harness, link):
         except ValueError:
             return upstream_failure('请求不是 JSON 对象。', 400)
         payload['model'] = current['model']
+        try:
+            model_preferences(payload, harness.settings.instructions())
+        except ValueError:
+            return upstream_failure('模型请求缺少有效的消息列表。', 400)
         base = current['base_url']
         parsed = urlsplit(base)
         if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
@@ -357,37 +388,52 @@ def make_router(harness, link):
         tls = getattr(harness.model, 'tls', None)
         remember_secret(current['api_key'])
         remember_secret(link.token)
-        client = httpx.AsyncClient(timeout=httpx.Timeout(connect=8.0, read=240.0, write=60.0, pool=8.0), follow_redirects=False,
+        timeout = harness.settings.model_timeout() or harness.tasks.limits.model_timeout_s
+        deadline = perf_counter() + timeout
+        client = httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=min(8.0, timeout)), follow_redirects=False,
                                    verify=tls() if tls else True)
         try:
-            upstream = await client.send(client.build_request('POST', base.rstrip('/') + '/chat/completions', content=json.dumps(payload).encode(),
+            upstream = await asyncio.wait_for(client.send(client.build_request('POST', base.rstrip('/') + '/chat/completions', content=json.dumps(payload).encode(),
                 headers={'Authorization': 'Bearer ' + current['api_key'], 'Content-Type': 'application/json',
-                         'Accept': request.headers.get('accept', '*/*')}), stream=True)
-        except httpx.TimeoutException:
+                         'Accept': request.headers.get('accept', '*/*')}), stream=True), timeout=timeout)
+        except (TimeoutError, httpx.TimeoutException):
             await client.aclose()
             return upstream_failure('模型服务没有及时响应。', 504)
         except httpx.HTTPError:
             await client.aclose()
             return upstream_failure('连不上模型服务；请检查网络、代理或地址。', 502)
         if upstream.status_code != 200:
-            text = (await upstream.aread()).decode('utf-8', 'replace')[:4000]
-            await upstream.aclose()
-            await client.aclose()
+            try:
+                text = (await asyncio.wait_for(upstream.aread(), timeout=max(0, deadline - perf_counter()))).decode('utf-8', 'replace')[:4000]
+            except (TimeoutError, httpx.TimeoutException):
+                return upstream_failure('模型服务没有及时响应。', 504)
+            finally:
+                await upstream.aclose()
+                await client.aclose()
             return upstream_failure(redact(' '.join(text.split()))[:1000] or '模型服务拒绝了请求。', upstream.status_code)
 
         async def relay():
+            streaming = upstream.headers.get('content-type', '').split(';')[0].strip() == 'text/event-stream'
             try:
-                if upstream.headers.get('content-type', '').split(';')[0].strip() == 'text/event-stream':
-                    async for chunk in safe_sse(upstream, (current['api_key'], link.token)):
-                        yield chunk
-                else:
-                    content = await upstream.aread()
-                    if len(content) > MAX_RESPONSE:
-                        yield json.dumps({'error': {'message': '模型响应超过大小限制。', 'type': 'response_too_large'}})
+                # A provider sending occasional chunks must not extend a single
+                # request indefinitely beyond the engineer's configured limit.
+                async with asyncio.timeout(max(0, deadline - perf_counter())):
+                    if streaming:
+                        async for chunk in safe_sse(upstream, (current['api_key'], link.token)):
+                            yield chunk
                     else:
-                        try: value = json.loads(content)
-                        except ValueError: value = {'error': {'message': '模型返回了无效响应。', 'type': 'invalid_response'}}
-                        yield json.dumps(redact(value), ensure_ascii=False)
+                        content = await upstream.aread()
+                        if len(content) > MAX_RESPONSE:
+                            yield json.dumps({'error': {'message': '模型响应超过大小限制。', 'type': 'response_too_large'}})
+                        else:
+                            try: value = json.loads(content)
+                            except ValueError: value = {'error': {'message': '模型返回了无效响应。', 'type': 'invalid_response'}}
+                            yield json.dumps(redact(value), ensure_ascii=False)
+            except (TimeoutError, httpx.TimeoutException):
+                error = {'error': {'message': '模型请求超过设置的时间限制；请在“设置 · AI 模型”调整超时后重试。', 'type': 'timeout'}}
+                yield model_event(error) if streaming else json.dumps(error, ensure_ascii=False)
+                if streaming:
+                    yield 'data: [DONE]\n\n'
             finally:
                 await upstream.aclose()
                 await client.aclose()

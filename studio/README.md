@@ -138,7 +138,7 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 - **资源与表结果**：`resource_read` 仅开放现有资产、厂家资料页、保存提取记录和本工作区的载流量表 JSON 接口；不接受任意 URL 或接口名。分页续读固定响应摘要，资源变化时拒绝混读。载流量表卡逐行显示保存结果、单位、口径和失败原因，跳转到老型号工作台的同一运行。
 - **厂家结构表**：对话可附上 CSV / XLSX 原件，附件只作为用户消息输入暂存在老后端，pi 不保存文件字节或工程数据。`propose_structure_upload`、`propose_structure_preview`、`propose_structure_import`、`propose_structure_check` 分别等待人工接受，再调用 T3 的老平台原件、固定预览、原子草稿入库和普通标准核对服务。会话归属、原件摘要、列映射、逐行来源/单位/缺项、错误行策略及规格修订均绑定；模型拿不到人工批准字段。`structure_import_read` 固定类型分页读取这些保存事实。没有原件、接口、来源或必要数据就明确拒绝；上传/预览在响应丢失时不会自动重复写入。每条消息附件合计不超过 1 MiB；单批最多 100 个规格，超出审阅限额须拆分。
 - **能力边界**：GB 与单次 CAD 的正式本地能力按方法清单和宿主路由核对，不以是否支持 preview 判断；有限元、原生仿真与超算任务仍须在工作台确认。工程交付格式沿用老平台：计算书为 HTML，内部规格书为 PDF；客户发布要求仍由平台决定。结构表保存为草稿、标准运行完成和产品审核发布分别记录；不会借导入批准产品。
-- **模型密钥只在老后端**：沿用设置页的模型配置，后备为 `CABLESIM_LLM_*`，再后备为 `CABLE_STUDIO_MODEL_BASE_URL`、`CABLE_STUDIO_MODEL_ID`、`CABLE_STUDIO_MODEL_API_KEY`。Node 只调用后端 `/internal/llm/v1/chat/completions`；模型请求的凭据由 Python 加入，响应和分块流都要脱敏。演示启动器会从 Node 子进程环境中移除模型密钥。无配置、后端不可达和边车未运行分别显示原因。
+- **模型密钥只在老后端**：沿用设置页的模型配置，后备为 `CABLESIM_LLM_*`，再后备为 `CABLE_STUDIO_MODEL_BASE_URL`、`CABLE_STUDIO_MODEL_ID`、`CABLE_STUDIO_MODEL_API_KEY`。Node 只调用后端 `/internal/llm/v1/chat/completions`；模型请求的凭据由 Python 加入，响应和分块流都要脱敏。Python 也在每次模型请求中应用已保存的自定义表达指令与超时（留空使用宿主默认 30 秒），保留原有权限、证据和人工批准规则；超时覆盖首包等待与完整响应流。演示启动器会从 Node 子进程环境中移除模型密钥。无配置、后端不可达和边车未运行分别显示原因。
 - **结果与跳转**：载流量卡直接读取保存运行中的数值和方法版本，型号卡直接读取老平台结构，文件卡预览 / 下载实际存档。卡片不使用模型生成的数字。没有保存可信等级的旧结果明确注明“未声明”，不能套用独立 Studio 的分档规则。对象的“在工作台打开”通过校验来源的 `postMessage` 跳到老前端对应路由。
 - **页面**：`npm run build:fusion` 把 `ui/fusion/` 构建到 `dist-fusion/`，后端 `/agent-app/` 提供静态入口，老前端 iframe 嵌入。配色、字体和圆角共用 `design/tokens.css`；切换主题同步到 iframe，保留当前对话。
 
