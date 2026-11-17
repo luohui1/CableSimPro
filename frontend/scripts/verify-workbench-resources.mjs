@@ -1463,12 +1463,21 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
         await expect(reading).toHaveAttribute('data-state', 'ready');
         await loadedImage(reading);
         const zooms = [];
+        let selectedSize = '标准大小';
         for (const factor of [1.5, 2, 3]) {
           await zoom.press('Enter');
-          await expect(page.getByRole('listbox')).toBeVisible();
+          const listbox = page.getByRole('listbox');
+          await expect(listbox).toBeVisible();
+          await expect(listbox.getByRole('option', { name: selectedSize, exact: true })).toBeFocused();
           await page.keyboard.press('ArrowDown');
+          // Radix moves focus after the key event. Confirm the real target
+          // before Enter; otherwise a fast sequence selects the previous item.
+          selectedSize = `放大${factor}倍`;
+          await expect(listbox.getByRole('option', { name: selectedSize, exact: true })).toBeFocused();
           await page.keyboard.press('Enter');
-          await expect(zoom).toHaveText(`放大${factor}倍`);
+          await expect(listbox).toBeHidden();
+          await expect(zoom).toBeFocused();
+          await expect(zoom).toHaveText(selectedSize);
           await expect(region).toHaveAttribute('data-zoom', String(factor));
           const image = await loadedImage(reading);
           zooms.push({ factor, ...image });
