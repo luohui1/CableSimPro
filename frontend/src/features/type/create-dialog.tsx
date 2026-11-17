@@ -93,7 +93,9 @@ export function CreateTypeDialog({ open, onClose, initialModelId }: { open: bool
         Object.assign(base, { [origin === 'library' ? 'resource_id' : 'proposal_id']: selected.id, content_sha256: selected.content_sha256 });
       }
       const workspace = await newType({ ...base, request_id: attempt(base) });
-      await queries.invalidateQueries({ queryKey: ['type-list'] }); onClose(); navigate(typePath(workspace.id, 'structure', 'section', location.theme));
+      await Promise.all(['type-list', 'type-index', 'workspace-index'].map(key =>
+        queries.invalidateQueries({ queryKey: [key], refetchType: 'all' })));
+      onClose(); navigate(typePath(workspace.id, 'structure', 'section', location.theme));
       delete attempts.current[JSON.stringify(base)];
       try { sessionStorage.removeItem('cablesim:type-create-attempt'); } catch { /* A confirmed response completes this attempt. */ }
     } catch (failure) { setError(message(failure)); setRepair(failure instanceof ApiError ? text(optionalRecord(failure.detail).repair_url) : ''); } finally { pending.current = false; setBusy(false); }

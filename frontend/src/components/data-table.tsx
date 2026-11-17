@@ -159,15 +159,16 @@ export function DataTable<T extends { id: string }>({
                       }
                       tabIndex={onSelect || onActivate ? 0 : undefined}
                       onClick={(event) => {
+                        // 行内控件处理自己的操作，不能再触发行的选择或打开动作。
+                        if (event.target instanceof Element && event.target.closest("a,button,input,select,textarea,label,[role=combobox]")) return;
                         if (onActivate) onActivate(row);
                         else if (onSelect) onSelect(row);
-                        // 没有选中动作的表格：点行的空白处等于点这一行的第一个链接（点在控件或链接上时不代劳）
-                        else if (!(event.target instanceof HTMLElement && event.target.closest("a,button,input,select,textarea,label,[role=combobox]")))
-                          event.currentTarget.querySelector<HTMLAnchorElement>("a[href]")?.click();
+                        // 没有选中动作的表格：点行的空白处等于点这一行的第一个链接。
+                        else event.currentTarget.querySelector<HTMLAnchorElement>("a[href]")?.click();
                       }}
                       onKeyDown={(event) => {
                         if (!onSelect && !onActivate) return;
-            if(event.target instanceof HTMLElement && event.target!==event.currentTarget && event.target.closest("input,button,select,textarea,[role=combobox]"))return;
+                        if (event.target !== event.currentTarget) return;
                         if (["Enter", " "].includes(event.key)) {
                           event.preventDefault();
                           if (onActivate) onActivate(row); else onSelect?.(row);
