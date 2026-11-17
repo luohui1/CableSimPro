@@ -387,6 +387,11 @@
 .workbench-no-canvas > .workbench-dock, .workbench[data-dock="max"] > .workbench-dock { flex: 1 1 0; }
 .workbench[data-dock="max"] .workbench-canvas { display: none; }
 .workbench-no-canvas > .workbench-splitter, .workbench[data-dock="max"] > .workbench-splitter { display: none; }
+/* 三维工具栏不能把模型压成窄条；放大时保留同一画布和结果实例，只切换可见布局。 */
+.study-workbench[data-canvas="max"] > .workbench-canvas { flex: 1 1 0; }
+.study-workbench[data-canvas="max"] > .workbench-dock,
+.study-workbench[data-canvas="max"] > .workbench-splitter { display: none; }
+.study-canvas-toolbar > .study-model-size { flex-shrink: 0; }
 /* 画布与结果区之间的分隔条：拖动、↑↓ 调整，双击复原（components/workbench-splitter.tsx） */
 .workbench-splitter { position: relative; height: var(--space-2); cursor: row-resize; touch-action: none; background: var(--panel); border-bottom: 1px solid var(--line); }
 .workbench-splitter::after { content: ""; position: absolute; top: 50%; left: 50%; width: var(--space-8); height: 2px; border-radius: var(--radius-pill); background: var(--control-border); transform: translate(-50%, -50%); }

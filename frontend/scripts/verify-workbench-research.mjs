@@ -995,6 +995,17 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       await page.waitForURL(next => next.pathname === `/studies/${selection.id}/selection/results`
         && next.searchParams.get('view') === view && next.searchParams.get('run') === before.run.id
         && next.searchParams.get('workspace') === selection.workspace && next.searchParams.get('theme') === 'light');
+      const modelSize = canvas.locator('.study-model-size');
+      if (view === 'three') {
+        // Opening 3D gives the model the available height. Restore the actual
+        // results through the UI before checking the same saved candidate table.
+        await expect(workbench).toHaveAttribute('data-canvas', 'max');
+        await expect(modelSize).toHaveText('还原模型布局');
+        await expect(modelSize).toHaveAttribute('aria-pressed', 'true');
+        await modelSize.click();
+        await expect(workbench).not.toHaveAttribute('data-canvas', 'max');
+        await expect(modelSize).toBeFocused();
+      }
       // The template canvas may mount before the run and then be replaced by
       // its hydrated saved candidate. Wait for that actual result first.
       await savedSelectionReady('saved-alias-' + view);
@@ -1018,7 +1029,63 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         const renderer = cad.locator('.cad-canvas-host canvas');
         await expect(renderer).toHaveAttribute('data-webgl-renderer', /.+/);
         await expect.poll(async () => Number(await renderer.getAttribute('data-webgl-colors'))).toBeGreaterThan(8);
-        const viewport = await cad.elementHandle(), location = page.url();
+        const viewport = await cad.elementHandle(), rendererNode = await renderer.elementHandle(), location = page.url();
+        const modelLayouts = [];
+        async function observeModelLayout(expanded, label) {
+          if (expanded) {
+            await expect(workbench).toHaveAttribute('data-canvas', 'max');
+            await expect(workbench.locator('.workbench-dock')).toBeHidden();
+            await expect(modelSize).toHaveText('还原模型布局');
+            await expect.poll(() => renderer.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(240);
+          } else {
+            await expect(workbench).not.toHaveAttribute('data-canvas', 'max');
+            await expect(page.getByRole('table', { name: '真实选型候选', exact: true })).toBeVisible();
+            await expect(modelSize).toHaveText('放大模型');
+          }
+          await expect(modelSize).toHaveAttribute('aria-pressed', String(expanded));
+          await expect(cad).toHaveAttribute('aria-busy', 'false');
+          // Preserve the real renderer and its saved case. data-webgl-size is
+          // only the first-frame diagnostic; the final PNG below exercises a
+          // fresh renderer capture at the expanded dimensions.
+          expect(await viewport.evaluate(node => node.isConnected && node === document.querySelector('.workbench-canvas .cad-viewport'))).toBe(true);
+          expect(await rendererNode.evaluate(node => node.isConnected && node === document.querySelector('.workbench-canvas .cad-canvas-host canvas'))).toBe(true);
+          expect(page.url()).toBe(location);
+          await expect(thermal).toHaveAttribute('data-run-id', before.run.id);
+          await expect(thermal).toHaveAttribute('data-case-id', caseId);
+          const geometry = await cad.evaluate(node => {
+            const stage = node.querySelector('.cad-stage'), rect = stage.getBoundingClientRect(), boundary = node.getBoundingClientRect();
+            const controls = [...node.querySelectorAll('.cad-tools button,.cad-tools [role="combobox"]')].map(control => {
+              const box = control.getBoundingClientRect();
+              return { label: control.getAttribute('aria-label') || control.textContent.trim(), fontSize: parseFloat(getComputedStyle(control).fontSize),
+                visible: control.checkVisibility(), inside: box.left >= boundary.left - 1 && box.right <= boundary.right + 1
+                  && box.top >= boundary.top - 1 && box.bottom <= boundary.bottom + 1 && box.bottom <= innerHeight };
+            });
+            return { stage: { width: rect.width, height: rect.height }, controls };
+          });
+          if (expanded) {
+            expect(geometry.stage.width).toBeGreaterThanOrEqual(320);
+            expect(geometry.controls.length).toBeGreaterThan(0);
+            expect(geometry.controls.every(control => control.visible && control.inside && control.fontSize >= 13)).toBe(true);
+          }
+          modelLayouts.push({ label, expanded, ...geometry });
+          await capture(label);
+        }
+        await observeModelLayout(false, '11-saved-three-mouse-restores-results');
+        await modelSize.focus();
+        await page.keyboard.press('Enter');
+        await observeModelLayout(true, '11-saved-three-keyboard-expands-model');
+        await expect(modelSize).toBeFocused();
+        await page.keyboard.press('Enter');
+        await observeModelLayout(false, '11-saved-three-keyboard-restores-results');
+        await expect(modelSize).toBeFocused();
+        await modelSize.click();
+        await observeModelLayout(true, '11-saved-three-mouse-expands-model');
+        await cad.getByRole('button', { name: '全景', exact: true }).click();
+        await expect(cad).toHaveAttribute('data-cad-mode', 'scene');
+        const fit = cad.getByRole('button', { name: '适应窗口 F', exact: true });
+        await fit.focus();
+        await page.keyboard.press('Enter');
+        await expect(cad).toHaveAttribute('aria-busy', 'false');
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         expect(page.url()).toBe(location);
         expect(await viewport.evaluate(node => node.isConnected && node === document.querySelector('.workbench-canvas .cad-viewport')
@@ -1030,10 +1097,13 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         await png.saveAs(imagePath);
         const bytes = await fs.readFile(imagePath);
         expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+        const imageSize = { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+        expect(imageSize.width).toBeGreaterThanOrEqual(640);
+        expect(imageSize.height).toBeGreaterThanOrEqual(480);
         await expect(cad.locator('.cad-slice-error')).toHaveCount(0);
         await expect(thermal).toHaveAttribute('data-run-id', before.run.id);
         await expect(thermal).toHaveAttribute('data-case-id', caseId);
-        savedCad = { ...source, caseId, url: page.url(), image: path.basename(imagePath), bytes: bytes.length,
+        savedCad = { ...source, caseId, url: page.url(), modelLayouts, image: path.basename(imagePath), imageSize, bytes: bytes.length,
           sha256: createHash('sha256').update(bytes).digest('hex'),
           viewport: await cad.evaluate(node => ({ state: node.dataset.cadState, resultState: node.dataset.cadResultState,
             ready: node.dataset.cadReady, firstDisplayMs: Number(node.dataset.cadFirstDisplayMs), busy: node.getAttribute('aria-busy') })),
@@ -1042,6 +1112,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         // The product's existing export rejects dirty/provisional images and a
         // field runId different from the selected saved run; do not bypass it.
         check('固定三维已绘制所选保存运行工况，真实导出保留运行绑定', true, savedCad);
+        check('三维默认放大，键鼠可还原和放大同一模型，实际绘图区与查看工具完整可用', true, { ...source, caseId, modelLayouts, imageSize });
       } else await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
       await expect(page.getByRole('group', { name: '模型视图', exact: true })
         .getByRole('button', { name: view === 'three' ? '三维' : '敷设截面', exact: true })).toHaveAttribute('aria-pressed', 'true');

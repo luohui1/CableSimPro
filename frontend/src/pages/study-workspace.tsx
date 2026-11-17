@@ -144,14 +144,16 @@ export function StudyWorkspace(): ReactElement {
   const [selected, setSelected] = useState<SelectionRow | undefined>();
   const [fullFieldDomain,setFullFieldDomain]=useState(false);
   useEffect(()=>setFullFieldDomain(false),[sid,search.run]);
-  // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
+  // 曲线研究默认放大数据区；直接打开三维时给模型完整高度，其余模型保留分栏。
   const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
   const [dockMax, setDockMax] = useState(!search.view && plotFirst(module));
+  const [canvasMax, setCanvasMax] = useState(search.view === 'three');
   const [canvasMounted, setCanvasMounted] = useState(!!search.view || !plotFirst(module));
   const [canvasExpanded,setCanvasExpanded]=useState(!!search.view || module!=='selection');
   useEffect(()=>{
     setCanvasExpanded(!!search.view || module!=='selection');
     setDockMax(!search.view && plotFirst(module));
+    setCanvasMax(search.view === 'three');
   },[sid,module,search.view]);
   const [creating, setCreating] = useState(false);
   const catalog = useQuery(methodCardsQuery());
@@ -541,7 +543,7 @@ export function StudyWorkspace(): ReactElement {
           {commandBar}
           <div className="workbench-frame">
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined}>
+          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined} data-canvas={showCanvas && canvasMax ? 'max' : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
           {mountCanvas && (
             <section className="workbench-canvas" aria-label="模型">
@@ -552,7 +554,9 @@ export function StudyWorkspace(): ReactElement {
                     <Icon name={icon} /><span className="study-view-label">{label}</span>
                   </button>
                 ))}
-                </div><div data-drawing-toolbar-slot />
+                </div>
+                <Button size="compact" variant="ghost" className="study-model-size" aria-pressed={canvasMax} onClick={() => setCanvasMax(value => !value)}>{canvasMax ? '还原模型布局' : '放大模型'}</Button>
+                <div data-drawing-toolbar-slot />
                 {canvasView==='field' && fieldView?.kind==='fem' && <Button size="compact" variant="ghost" onClick={()=>setFullFieldDomain(value=>!value)}>{fullFieldDomain ? '对准电缆区域' : '适配全域'}</Button>}
               </div>
               {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
