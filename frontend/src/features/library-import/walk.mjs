@@ -7,6 +7,8 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as baseExpect } from '@playwright/test';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
+import { walkShortBasis } from './short-basis-walk.mjs';
+import { walkManufacturer } from './manufacturer-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -993,6 +995,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await page.keyboard.press('Escape');
     await expect(bahraSources).toBeHidden();
     report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；未声明的计算参数保持为空。逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
+    await walkShortBasis({ page, base, viewport, out, capture, expect, report, readApi });
+    await walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report });
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

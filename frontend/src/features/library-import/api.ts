@@ -8,7 +8,7 @@ export interface SeriesDeclaration {
   u0_v: number; u_v: number; um_v?: number | null; standards: string[];
   origin: 'factory' | 'public' | 'demo'; common: Record<string, number>;
   common_basis: Record<string, string>; modelling: Record<string, GivenParameter>;
-  source?: { title?: string; location?: string; sha256?: string; file?: string; url?: string };
+  source?: Record<string, unknown> & { title?: string; location?: string; sha256?: string; file?: string; url?: string; locator?: string };
   armour_material?: string;
   conductor?: 'copper' | 'aluminium'; insulation?: 'XLPE' | 'PVC';
   metal_sheath?: 'lead' | 'corrugated_aluminium' | 'smooth_aluminium'; oversheath?: 'PVC' | 'PE';
@@ -176,7 +176,7 @@ export function sourceText(source: unknown): string {
   const record = optionalRecord(reference.record);
   const basis = text(row.reference) || text(row.title) || text(row.basis)
     || [text(reference.standard), text(reference.edition), text(reference.locator), text(record.reference)].filter(Boolean).join(' · ');
-  const original = [text(catalogue.title), sourceLocationText(text(catalogue.location))].filter(Boolean).join(' · ');
+  const original = [text(catalogue.title), ...new Set([text(catalogue.location), text(catalogue.locator)].filter(Boolean).map(sourceLocationText))].filter(Boolean).join(' · ');
   const location = [row.file, row.sheet, row.row_number ? `第 ${row.row_number} 行` : row.row ? `第 ${row.row} 行` : '', row.column].filter(Boolean).join(' · ');
   if (row.origin === 'standard') return ['标准上限，非厂家实测值', basis, location ? `关联规格：${location}` : ''].filter(Boolean).join('；');
   return [row.kind === 'demo' ? '结构演示' : '', basis, original, location].filter(Boolean).join('；') || '来源未登记';

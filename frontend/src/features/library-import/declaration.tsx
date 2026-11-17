@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
@@ -21,8 +21,33 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
   value: SeriesDeclaration; onChange: (value: SeriesDeclaration) => void; vocabulary: Vocabulary; mapped: Set<string>;
 }) {
   const [part, setPart] = useState('conductor');
+  const [sourceError, setSourceError] = useState(''), [sourceNotice, setSourceNotice] = useState(''), [loadingSource, setLoadingSource] = useState(false);
+  const sourcePicker = useRef<HTMLInputElement>(null), currentValue = useRef(value);
+  currentValue.current = value;
   const originalStandards = Array.isArray(value.reference?.original_standards) ? value.reference.original_standards.filter((item): item is string => typeof item === 'string') : [];
   const set = (values: Partial<SeriesDeclaration>) => onChange({ ...value, ...values });
+  async function loadSource(file: File | undefined) {
+    if (!file || loadingSource) return;
+    setLoadingSource(true); setSourceError(''); setSourceNotice('');
+    try {
+      if (!/\.json$/i.test(file.name) || !file.size || file.size > 1024 * 1024) throw new Error('请选择非空且不超过 1 MiB 的 JSON 来源说明。');
+      const parsed: unknown = JSON.parse(await file.text());
+      const object = (candidate: unknown): candidate is Record<string, unknown> => candidate !== null && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length > 0;
+      if (!object(parsed)) throw new Error('来源说明必须是非空 JSON 对象，不能是数组、空对象或单个值。');
+      const source = 'source' in parsed ? parsed.source : parsed;
+      if (!object(source)) throw new Error('来源说明的 source 字段必须是非空对象。');
+      for (const key of ['title', 'location', 'sha256', 'file', 'url', 'locator']) {
+        if (source[key] !== undefined && typeof source[key] !== 'string') throw new Error('资料名称、位置、摘要、文件名及网址须使用文本，请核对来源说明。');
+      }
+      onChange({ ...currentValue.current, source });
+      setSourceNotice(`已加载“${file.name}”。请在预览中核对原列口径、原件定位与限制。`);
+    } catch (error) {
+      setSourceError(error instanceof SyntaxError ? '来源说明不是有效 JSON，请检查文件格式。' : error instanceof Error ? error.message : '来源说明读取失败，请重新选择文件。');
+    } finally {
+      setLoadingSource(false);
+      if (sourcePicker.current) sourcePicker.current.value = '';
+    }
+  }
   const common = (key: string, text: string) => {
     const next = { ...value.common }, number = numberOf(text);
     if (number === undefined) delete next[key]; else next[key] = number;
@@ -59,6 +84,17 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
       <label className="text-field">资料名称<Input aria-label="资料名称" placeholder="厂家结构表或产品手册全名" value={value.source?.title || ''} onChange={event => set({ source: { ...value.source, title: event.target.value } })} /></label>
       <label className="text-field">资料位置<Input aria-label="资料位置" placeholder="原始表号、版本或页码" value={value.source?.location || ''} onChange={event => set({ source: { ...value.source, location: event.target.value } })} /></label>
     </div>}
+    <details className="library-import-details">
+      <summary>补充原列口径与原件定位</summary>
+      <div className="library-import-stack">
+        <p className="muted">加载来源说明只替换本次资料来源，不自动填充结构、材料物性、执行标准或工况。之后仍需逐行预览并确认入库。</p>
+        <p className="muted">支持不超过 1 MiB 的非空 JSON 来源对象；文件带有 source 字段时，只读取该来源对象。原列含义、单位、定位与限制按原文保存。</p>
+        <div><Button type="button" loading={loadingSource} onClick={() => sourcePicker.current?.click()}>加载来源说明（JSON）</Button></div>
+        <Input ref={sourcePicker} type="file" hidden tabIndex={-1} aria-label="来源说明 JSON 文件" accept=".json,application/json" disabled={loadingSource} onChange={event => void loadSource(event.target.files?.[0])} />
+        {sourceError && <p role="alert" className="field-error">{sourceError}</p>}
+        {sourceNotice && <p role="status">{sourceNotice}</p>}
+      </div>
+    </details>
     <section className="library-import-stack" aria-label="全系列统一尺寸">
       <h2>全系列统一尺寸</h2>
       <p className="muted">原表已有的列按逐行数值导入；其余尺寸需写明取值依据。未提供的参数保留缺项。</p>
