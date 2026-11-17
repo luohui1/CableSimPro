@@ -168,19 +168,16 @@ export function prefetchCatalogs(client: QueryClient) {
 }
 
 /** 进入研究前并行预取研究、工程与运行；失败留给页面自己的错误状态处理，不在 loader 抛出。 */
-export function prefetchStudy(client: QueryClient, workspace: string, sid: string, run: string) {
+export function prefetchStudy(client: QueryClient, workspace: string, sid: string, run: string, module = '', tab = '') {
   // The ordinary entry first discovers ownership and then redirects to a tab.
   // Download its existing workbench in parallel, rather than start that second
   // chunk chain only after the provider has committed the verified context.
   // The route keeps its own component loading/error handling.
   void import('@/pages/study-workspace').catch(() => {});
   prefetchCatalogs(client);
-  // On a full navigation the explicit destination is already in the address.
-  // Its conclusion may start before even the study-card read; the endpoint
-  // verifies ownership and capability. Hover prefetch on other pages keeps the
-  // metadata-gated path below and never guesses a method from a run ID.
-  if (workspace && run && typeof window!=='undefined'
-      && window.location.pathname===`/studies/${sid}/thermal-field/results`) {
+  // The explicit route selects this saved field. Both entry and hover prefetch
+  // use that destination, while the host verifies ownership and capability.
+  if (workspace && run && module === 'thermal-field' && tab === 'results') {
     void client.prefetchQuery(femConclusionQuery(workspace,run));
     // This route explicitly selects a saved field. Its host endpoint verifies
     // ownership and source bytes; do not serialize it behind study metadata.
@@ -190,15 +187,15 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
     // The provider already owns the complete loading/error state. Blocking the
     // route on ownership discovery also invokes its minimum pending duration,
     // delaying the same cached workspace after its verified data has arrived.
-    void client.prefetchQuery(studyContextQuery(client, workspace, sid, run));
+    void client.prefetchQuery(studyContextQuery(client, workspace, sid, run, module, tab));
     return;
   }
   // The mounted provider owns loading/error states on both entry paths. Do not
   // make an explicit-workspace navigation wait for the router's minimum pending
   // duration after these same verified query results have already arrived.
   void Promise.all([
-    client.prefetchQuery(studyContextQuery(client, workspace, sid)),
-    client.prefetchQuery(studyRunsQuery(client, workspace, sid, run)),
+    client.prefetchQuery(studyContextQuery(client, workspace, sid, run, module, tab)),
+    client.prefetchQuery(studyRunsQuery(client, workspace, sid, run, module, tab)),
     client.fetchQuery(savedStudyQuery(workspace, sid)).then(study => {
       // Start the saved FEM conclusion once study ownership/type is known,
       // so it does not become a second request chain after the display finishes.

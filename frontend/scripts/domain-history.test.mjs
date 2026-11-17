@@ -1,11 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from 'node:fs';
+import { declaredParameterDefaults, parameterErrors, parameterReferences, setParameterValue } from '../src/lib/study-parameter-form.ts';
 import { missingInputDestination } from "../src/lib/missing-input.ts";
 import { countInputChanges } from "../src/lib/input-changes.ts";
 import {
   domainDraftReducer,
   emptyDomainHistory,
 } from "../src/lib/domain-draft-history.ts";
+
+test('正式仿真契约只带入声明值，可空对象不触发不存在的子项要求',()=>{
+  const manifest=JSON.parse(fs.readFileSync(new URL('../../plugins/cablesim.simulation/plugin.json',import.meta.url),'utf8'));
+  const schema=manifest.capabilities.find(cap=>cap.id==='iec-fem-comparison').parameter_schema;
+  const defaults=declaredParameterDefaults(schema);
+  assert.deepEqual(defaults.mesh_scales,[1.5,1,0.75]);
+  assert.equal(defaults.feedback,null);
+  assert.equal(defaults.frozen_coefficients_acknowledged,false);
+  for(const key of ['section_id','load_id','bounds_m','source'])assert.equal(key in defaults,false);
+  const errors=parameterErrors(schema,defaults);
+  assert.ok(errors['/section_id']);assert.ok(errors['/source']);
+  assert.equal(Object.keys(errors).some(path=>path.startsWith('/feedback/')),false);
+  assert.equal(Object.keys(errors).some(path=>path.startsWith('/mesh_scales/')),false);
+});
+
+test('参数编辑保留转义对象身份与坐标顺序，不把空槽位移成相邻坐标',()=>{
+  const original={bounds_m:[-8,-8,8,0],per_cable:{'cable/a':{source:'已保存来源'}}};
+  const changed=setParameterValue(original,'/per_cable/cable~1a/source','工程师核对');
+  assert.equal(changed.per_cable['cable/a'].source,'工程师核对');
+  assert.equal(original.per_cable['cable/a'].source,'已保存来源');
+  assert.deepEqual(setParameterValue(original,'/bounds_m/1',undefined).bounds_m,[-8,null,8,0]);
+  const schema={type:'object',required:['rows'],properties:{rows:{type:'object',additionalProperties:{type:'object',required:['value'],properties:{value:{type:'number',minimum:1}}}}}};
+  assert.deepEqual(Object.keys(parameterErrors(schema,{rows:{'a/b':{value:0}}})),['/rows/a~1b/value']);
+});
+
+test('创建表单只引用当前真实工程里的截面、负荷和对象',()=>{
+  const refs=parameterReferences({sections:[{id:'s',enclosures:[{id:'duct',type:'duct'},{id:'tray',type:'tray'}]}],load_cases:[{id:'load'}],circuits:[{id:'circuit',cables:[{id:'wire'}]}]},id=>'名称 '+id);
+  assert.deepEqual(refs.section_id,[{value:'s',label:'名称 s'}]);
+  assert.deepEqual(refs.load_id,refs.load_case_id);
+  assert.deepEqual(refs.cable,[{value:'wire',label:'名称 wire'}]);
+  assert.deepEqual(refs.duct,[{value:'duct',label:'名称 duct'}]);
+  assert.deepEqual(refs.material,[]);
+});
 test('未保存计数合并数值与来源，按稳定对象身份处理新增和删除', () => {
   const before = {layers: [{id: 'a', thickness: 1}, {id: 'b', thickness: 2}], provenance: {}};
   const changed = {layers: [{id: 'a', thickness: 3}, {id: 'b', thickness: 4}], provenance: {'/layers': {kind: 'user'}}};

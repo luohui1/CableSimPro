@@ -32,14 +32,19 @@ export function TextField() {
     label,
     placeholder,
     description,
-    errors,
-    isInvalid,
+    errors: ownErrors,
+    isInvalid: ownInvalid,
     descriptionId,
     errorId,
-    ariaDescribedBy,
+    ariaDescribedBy: ownDescription,
     handleChange,
     handleBlur,
   } = useDataField<TextFieldDef>();
+
+  const hostError = typeof field.meta?.error === 'string' ? field.meta.error : '';
+  const isInvalid = ownInvalid || !!hostError;
+  const errors = hostError ? [{ message: hostError }] : ownErrors;
+  const ariaDescribedBy = hostError ? errorId : ownDescription;
 
   const value = (fieldApi.state.value as string) ?? "";
   const ui = field.ui as TextUi | undefined;
