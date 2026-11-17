@@ -8,10 +8,18 @@ import { repeatedOpens } from './repeated-opens';
 
 const STATE: Record<StepStatus, StepState> = { running: 'running', waiting_review: 'waiting', done: 'done', failed: 'failed', rejected: 'rejected', interrupted: 'interrupted' };
 
-const toStep = (step: ChatStep): Step => ({
-  id: step.id, label: step.label, target: step.target, state: STATE[step.status], notes: step.notes, reason: step.reason,
-  seconds: step.duration_ms === undefined ? undefined : step.duration_ms / 1000,
-});
+export function toStep(step: ChatStep): Step {
+  // StepCards/ProposalBlock already keep the full diagnostic in their refusal card. Passing it to StepTrace would repeat it in
+  // both the task summary and its expanded line. Preserve the original step for the card and keep the timeline's state and label.
+  const hasFailureCard = step.proposal
+    ? step.proposal.status === 'accepted' && ['failed', 'rejected', 'interrupted'].includes(step.status)
+    : step.status === 'failed' && Boolean(step.reason);
+  return {
+    id: step.id, label: step.label, target: step.target, state: STATE[step.status], notes: step.notes,
+    reason: hasFailureCard ? undefined : step.reason,
+    seconds: step.duration_ms === undefined ? undefined : step.duration_ms / 1000,
+  };
+}
 
 export function StepGroup({ indices }: { indices: readonly number[] }) {
   const parts = useAuiState(state => state.message.parts);
