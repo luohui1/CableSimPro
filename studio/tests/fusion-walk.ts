@@ -1,0 +1,470 @@
+// A browser acceptance run of the fused product. Only the language model is scripted: the old backend, its ToolBroker,
+// proposal approval, calculation methods, saved records, files, sidecar and old frontend all run for real on a fresh seed.
+// Prepare the environment described in the issue/CI, then:
+//   npm run build:fusion && CABLE_STUDIO_PYTHON=/path/to/python npm run walk:fusion [artifact folder]
+// PLAYWRIGHT_EXECUTABLE_PATH can select a system Chromium when the Playwright browser download is unavailable.
+import assert from 'node:assert/strict';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { chromium, type Browser, type Frame, type Page } from 'playwright';
+import { createSidecar, type Sidecar } from '../fusion/server.ts';
+import { installConditionWorkflow, installImportRefusal, installMissingData, installStudyRead, installStudyWorkflow,
+  installTypeWorkflow, type FlowState } from './fusion-scripts.ts';
+import { probe } from './layout-probe.ts';
+import { scriptedModel } from './support.ts';
+
+const repo = resolve(import.meta.dirname, '..', '..');
+const out = resolve(process.argv[2] ?? join(repo, '.tmp', 'fusion-walk'));
+const home = mkdtempSync(join(tmpdir(), 'cablesim-fusion-walk-'));
+const python = process.env.CABLE_STUDIO_PYTHON || 'python';
+const database = join(home, 'engineering.sqlite');
+const token = randomBytes(32).toString('hex');
+// The sentinel stays in memory and the child's environment. It makes the leak check meaningful without a live model credential.
+const sentinel = 'walk-key-' + randomBytes(28).toString('hex');
+const secrets = [sentinel, token, process.env.CABLE_STUDIO_MODEL_API_KEY, process.env.CABLESIM_LLM_API_KEY].filter((value): value is string => Boolean(value));
+const configuredRealModel = ['CABLE_STUDIO_MODEL_BASE_URL', 'CABLE_STUDIO_MODEL_ID', 'CABLE_STUDIO_MODEL_API_KEY'].every(name => Boolean(process.env[name]?.trim()));
+const children: ChildProcess[] = [];
+const processLogs: Record<string, string> = {};
+const network: Record<string, unknown>[] = [];
+const consoles: Record<string, unknown>[] = [];
+const browserErrors: Record<string, unknown>[] = [];
+const leakLocations = new Set<string>();
+const checks: { id: string; status: '通过' | '未通过' | '云端无法验证'; evidence: unknown }[] = [];
+const screenshots: Record<string, unknown>[] = [];
+let stage = 'startup';
+let browser: Browser | undefined;
+let sidecar: Sidecar | undefined;
+let failure: string | undefined;
+mkdirSync(out, { recursive: true });
+
+function clean(value: string, where: string): string {
+  let safe = value;
+  for (const secret of secrets) {
+    if (safe.includes(secret)) { leakLocations.add(where); safe = safe.replaceAll(secret, '[redacted]'); }
+  }
+  return safe;
+}
+function record(id: string, passed: boolean, evidence: unknown): void {
+  checks.push({ id, status: passed ? '通过' : '未通过', evidence });
+  assert.ok(passed, id);
+}
+async function until(check: () => boolean | Promise<boolean>, label: string, milliseconds = 60_000): Promise<void> {
+  const end = Date.now() + milliseconds;
+  while (!(await check())) {
+    if (Date.now() >= end) throw new Error('等待超时：' + label);
+    await new Promise(done => setTimeout(done, 100));
+  }
+}
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  await new Promise<void>(done => server.close(() => done()));
+  return address.port;
+}
+function launch(label: string, command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess {
+  processLogs[label] = '';
+  const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  children.push(child);
+  child.stdout?.on('data', chunk => { processLogs[label] += String(chunk); });
+  child.stderr?.on('data', chunk => { processLogs[label] += String(chunk); });
+  child.on('error', error => { processLogs[label] += error.message; });
+  return child;
+}
+async function completed(child: ChildProcess, label: string, milliseconds = 300_000): Promise<void> {
+  await until(() => child.exitCode !== null || child.signalCode !== null, label, milliseconds);
+  assert.equal(child.exitCode, 0, clean(processLogs[label].slice(-8000), label));
+}
+async function stop(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill('SIGTERM');
+  try { await until(() => child.exitCode !== null || child.signalCode !== null, '关闭进程', 5000); }
+  catch { child.kill('SIGKILL'); }
+}
+async function ready(url: string, child?: ChildProcess): Promise<void> {
+  await until(async () => {
+    assert.ok(!child || child.exitCode === null, '服务在就绪前退出：' + url);
+    return fetch(url, { signal: AbortSignal.timeout(1500) }).then(response => response.ok).catch(() => false);
+  }, url, 60_000);
+}
+async function json<T = any>(base: string, path: string, body?: unknown): Promise<T> {
+  const response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? {} : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const text = clean(await response.text(), 'setup/public-api');
+  assert.ok(response.ok, `${response.status} ${path}: ${text.slice(0, 1200)}`);
+  return JSON.parse(text) as T;
+}
+
+/** Records browser traffic, including the SSE data that a response.body() cannot read until the connection is closed. */
+async function observe(page: Page): Promise<() => Promise<void>> {
+  const pending = new Set<Promise<unknown>>();
+  const track = (task: Promise<unknown>) => { pending.add(task); void task.finally(() => pending.delete(task)); };
+  page.on('console', message => {
+    const item = { stage, type: message.type(), text: clean(message.text(), 'browser/console'), location: message.location() };
+    consoles.push(item);
+    if (message.type() === 'error') browserErrors.push({ ...item, expected: stage === 'sidecar-down'
+      && item.location.url.includes('/agent-sidecar/api/status') && /502|503/.test(message.text()) });
+  });
+  page.on('pageerror', error => browserErrors.push({ stage, type: 'pageerror', text: clean(error.message, 'browser/pageerror'), expected: false }));
+  page.on('request', request => {
+    if (!/\/(api|agent-sidecar)\//.test(request.url())) return;
+    network.push({ stage, type: 'request', method: request.method(), url: request.url(),
+      headers: clean(JSON.stringify(request.headers()), 'browser/request-headers'), body: clean(request.postData() || '', 'browser/request-body') });
+  });
+  page.on('requestfailed', request => {
+    const reason = request.failure()?.errorText || 'request failed';
+    const expected = /ERR_ABORTED/.test(reason) || stage === 'sidecar-down' && /\/agent-sidecar\/api\/(status|events)(?:\?|$)/.test(request.url());
+    browserErrors.push({ stage, type: 'requestfailed', url: request.url(), reason, expected });
+  });
+  page.on('response', response => {
+    if (!/\/(api|agent-sidecar)\//.test(response.url())) return;
+    const at = stage;
+    const header = response.headers()['content-type'] || '';
+    const expected = at === 'sidecar-down' && response.url().includes('/agent-sidecar/api/status') && [502, 503].includes(response.status());
+    if (response.status() >= 400) browserErrors.push({ stage: at, type: 'http', url: response.url(), status: response.status(), expected });
+    if (header.includes('text/event-stream')) return;
+    track((async () => {
+      const body = header.includes('json') || header.includes('text/') ? await response.text().catch(() => '[response closed during navigation]') : '[binary file]';
+      network.push({ stage: at, type: 'response', url: response.url(), status: response.status(), contentType: header,
+        body: clean(body, 'browser/response-body') });
+    })());
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  cdp.on('Network.eventSourceMessageReceived', event => network.push({ stage, type: 'sse', data: clean(event.data, 'browser/sse') }));
+  return async () => { await Promise.allSettled([...pending]); await cdp.detach().catch(() => undefined); };
+}
+async function agentFrame(page: Page): Promise<Frame> {
+  await page.locator('iframe[title="Agent 对话"]').waitFor();
+  const element = await page.locator('iframe[title="Agent 对话"]').elementHandle();
+  const frame = await element!.contentFrame();
+  assert.ok(frame);
+  await frame.getByRole('textbox', { name: '给 Agent 的消息' }).waitFor();
+  return frame;
+}
+async function speak(frame: Frame, text: string): Promise<void> {
+  await frame.getByRole('textbox', { name: '给 Agent 的消息' }).fill(text);
+  await frame.getByRole('button', { name: '发送', exact: true }).click();
+}
+async function newChat(frame: Frame): Promise<void> {
+  const id = /^#\/chat\/([^/]+)/.exec(new URL(frame.url()).hash)?.[1];
+  if (id) await until(() => frame.evaluate(async session => {
+    const response = await fetch('/agent-sidecar/api/chat/sessions/' + encodeURIComponent(session));
+    const view = await response.json();
+    return !view.running;
+  }, decodeURIComponent(id)), '上一项对话保存完成');
+  await frame.getByRole('button', { name: '新对话', exact: true }).click();
+  await frame.getByRole('heading', { name: '今天要完成哪项工作？' }).waitFor();
+}
+async function waitFlow(state: FlowState, label: string): Promise<void> {
+  await until(() => state.done || Boolean(state.failure), label, 90_000);
+  assert.equal(state.failure, undefined, label + ': ' + state.failure);
+  assert.ok(state.done, label);
+}
+async function pending(frame: Frame): Promise<void> {
+  const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
+  await until(async () => await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false), '可审阅的提案', 90_000);
+}
+async function accept(frame: Frame): Promise<void> {
+  const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+}
+async function approveAll(frame: Frame, state: FlowState): Promise<number> {
+  let count = 0;
+  while (!state.done && !state.failure) {
+    const button = frame.locator('[data-card="proposal"][data-phase="pending"]').last().getByRole('button', { name: '接受', exact: true });
+    await until(async () => state.done || Boolean(state.failure) || await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false), '下一项待审提案', 90_000);
+    if (state.done || state.failure) break;
+    const card = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
+    const description = await card.innerText();
+    await accept(frame);
+    count += 1;
+    assert.ok(count <= 10, '单项任务不应无限产生提案');
+    await until(async () => state.done || Boolean(state.failure) || await card.count() === 0 || await card.innerText({ timeout: 500 }).catch(() => '') !== description, '已接受提案后的继续', 90_000);
+  }
+  await waitFlow(state, '多步任务完成');
+  return count;
+}
+async function shot(page: Page, frame: Frame | undefined, name: string, detail: Record<string, unknown> = {}): Promise<void> {
+  await page.evaluate(() => document.fonts.ready);
+  if (frame) await frame.evaluate(() => document.fonts.ready);
+  const layout = [...await page.evaluate(probe), ...frame ? await frame.evaluate(probe) : []];
+  const filename = `${page.viewportSize()!.width}x${page.viewportSize()!.height}-${name}.png`;
+  const visible = clean((frame ? await frame.locator('body').innerText() : await page.locator('body').innerText()), 'browser/dom');
+  await page.screenshot({ path: join(out, filename), fullPage: false });
+  screenshots.push({ file: filename, state: name, viewport: page.viewportSize(), url: page.url(), frame: frame?.url(), layout, visibleText: visible, ...detail });
+  record(`${filename}/layout`, layout.length === 0, layout);
+}
+
+try {
+  assert.ok(existsSync(join(repo, 'studio', 'dist-fusion', 'fusion.html')), '先执行 npm run build:fusion。');
+  const backendPort = await freePort();
+  const sidecarPort = await freePort();
+  const frontendPort = await freePort();
+  const backendUrl = `http://127.0.0.1:${backendPort}`;
+  const frontendUrl = `http://127.0.0.1:${frontendPort}`;
+  const env = { ...process.env, PYTHONUNBUFFERED: '1', CABLESIM_DB: database,
+    CABLESIM_DATASETS_DIR: join(home, 'datasets'), CABLESIM_REPRODUCTION_LIBRARY: join(home, 'library'),
+    CABLESIM_AGENT_SIDECAR_TOKEN: token, CABLESIM_AGENT_SIDECAR_URL: `http://127.0.0.1:${sidecarPort}`,
+    CABLESIM_AGENT_UI: join(repo, 'studio', 'dist-fusion'), CABLESIM_FRONTEND_DIST: join(home, 'no-built-frontend'),
+    CABLE_STUDIO_MODEL_BASE_URL: 'http://127.0.0.1:1/v1', CABLE_STUDIO_MODEL_ID: 'scripted-browser-walk', CABLE_STUDIO_MODEL_API_KEY: sentinel };
+  const frontendEnv: NodeJS.ProcessEnv = { ...process.env, BACKEND_URL: backendUrl };
+  for (const name of Object.keys(frontendEnv)) {
+    if (/^(CABLE_STUDIO_MODEL_|CABLESIM_LLM_|CABLESIM_AGENT_SIDECAR_TOKEN$)/.test(name)) delete frontendEnv[name];
+  }
+  console.log('准备独立发布种子；真实 CAD 预检与 IEC 计算，不提交本机原生场求解。');
+  const seed = launch('seed', python, ['-c',
+    'import importlib.util,pathlib,sys; spec=importlib.util.spec_from_file_location("fusion_walk_seed","frontend/scripts/seed-engineering-demo.py"); module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); module.seed_release(pathlib.Path(sys.argv[1]))', database], repo, env);
+  await completed(seed, 'seed');
+  const seeded = JSON.parse(readFileSync(database.replace(/\.sqlite$/, '.seed.json'), 'utf8'));
+  record('fresh-release-seed', seeded.complete && seeded.native_core_hours === 0, { complete: seeded.complete, native_core_hours: seeded.native_core_hours,
+    studyCount: seeded.studies.length, typeCount: seeded.types.length, source: seeded.source });
+  const source = seeded.studies.find((item: any) => item.title.includes('城南') && item.title.includes('110 kV') && item.status === 'succeeded' && item.run);
+  const type = seeded.types.find((item: any) => item.name.startsWith('YJV22') && !item.teaching);
+  assert.ok(source && type, '种子必须提供真实研究与型号');
+  const backend = launch('backend', python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)], repo, env);
+  await ready(backendUrl + '/api/health', backend);
+  const model = await scriptedModel();
+  sidecar = createSidecar({ backendUrl, token, home: join(home, 'conversations'), port: sidecarPort, runtime: model.runtime });
+  await new Promise<void>(done => sidecar!.server.listen(sidecarPort, '127.0.0.1', done));
+  const frontend = launch('frontend', process.execPath, [join(repo, 'frontend', 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], join(repo, 'frontend'), frontendEnv);
+  record('frontend-environment-has-no-model-credentials', !Object.keys(frontendEnv).some(name => /^(CABLE_STUDIO_MODEL_|CABLESIM_LLM_|CABLESIM_AGENT_SIDECAR_TOKEN$)/.test(name)),
+    { modelCredentialsPassed: false, sidecarTokenPassed: false });
+  await ready(frontendUrl + '/api/health', frontend);
+  await ready(frontendUrl + '/agent-sidecar/api/status');
+  console.log('后端、边车、老前端就绪；开始浏览器实聊。');
+
+  // A deliberately incomplete saved study is fixture setup through the same public API an engineer uses. No result is inserted.
+  const workspace = await json(backendUrl, `/api/workspaces/${source.workspace}`);
+  const sourceStudies = await json(backendUrl, `/api/workspaces/${source.workspace}/studies`);
+  const definition = structuredClone(sourceStudies.find((item: any) => item.id === source.study).definition);
+  const incomplete = structuredClone(workspace.domain);
+  for (const cable of incomplete.cable_types) for (const core of cable.cores) { core.conductor.r20 = null; core.conductor.r20_basis = null; }
+  const missing = await json(backendUrl, `/api/workspaces/${source.workspace}/studies`, { ...definition, modules: {}, title: 'Agent 验收 · 缺少导体电阻',
+    input_source: 'study', method_input: incomplete, expected_revision: workspace.revision });
+  record('missing-data-fixture-no-run', (await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${missing.id}/runs`)).items.length === 0,
+    { study: missing.id, removed: 'core.conductor.r20, core.conductor.r20_basis', createdThrough: 'public study API' });
+
+  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+    args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+    const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+    const page = await context.newPage();
+    const flush = await observe(page);
+    try {
+      stage = 'empty';
+      await page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' });
+      let frame = await agentFrame(page);
+      await frame.getByRole('heading', { name: '今天要完成哪项工作？' }).waitFor();
+      await shot(page, frame, 'empty');
+
+      stage = 'saved-result';
+      const read = installStudyRead(model.faux, source);
+      await speak(frame, '城南线路 110 kV 直埋单回校核保存的结论是什么，受什么限制？');
+      await waitFlow(read, '只读研究结论');
+      const current = read.result!.headlines.find((row: any) => row.key === 'ampacity').display_value.toFixed(1);
+      const rating = frame.locator('[data-card="rating"]').last();
+      await rating.waitFor();
+      const ratingText = await rating.innerText();
+      record(`${viewport.width}/saved-value`, ratingText.includes(current), { workspace: source.workspace, study: source.study, run: source.run,
+        backendAmpacity: current, cardText: ratingText });
+      await rating.scrollIntoViewIfNeeded();
+      await shot(page, frame, 'result-card', { run: source.run, ampacityA: current });
+      const frameIdentity = await frame.evaluate(() => { (window as any).__fusionWalkIdentity = Math.random(); return (window as any).__fusionWalkIdentity; });
+      await page.getByRole('button', { name: '本机用户' }).click();
+      await page.getByRole('menuitem', { name: '切换深色模式' }).click();
+      await until(() => frame.evaluate(() => document.documentElement.dataset.theme === 'dark'), 'iframe主题同步');
+      record(`${viewport.width}/theme-keeps-conversation`, await frame.evaluate(() => (window as any).__fusionWalkIdentity) === frameIdentity,
+        { frame: frame.url(), theme: 'dark', reloaded: false });
+      await page.getByRole('button', { name: '本机用户' }).click();
+      await page.getByRole('menuitem', { name: '切换浅色模式' }).click();
+      await rating.getByRole('button', { name: '在工作台打开', exact: true }).click();
+      await page.waitForURL(/\/studies\//);
+      await until(() => page.locator('body').innerText().then(text => text.includes(current)), '工作台显示同一保存数值', 90_000);
+      record(`${viewport.width}/same-workbench-result`, page.url().includes(source.run), { run: source.run, ampacityA: current, workbenchUrl: page.url() });
+      await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
+      frame = await agentFrame(page);
+      await frame.locator('[data-card="rating"]').waitFor();
+
+      stage = 'study-proposal';
+      await newChat(frame);
+      const studyBefore = await json(backendUrl, `/api/workspaces/${source.workspace}/studies`);
+      const deliveriesBefore = await json(backendUrl, `/api/workspaces/${source.workspace}/deliveries`);
+      const flow = installStudyWorkflow(model.faux, { workspace: source.workspace, study: source.study, title: `Agent 验收 · ${viewport.width} 直埋校核` });
+      await speak(frame, '按城南已保存工况新建一项直埋校核，算出来，再导出计算书。每个写操作先让我接受。');
+      await pending(frame);
+      const studyPending = await json(backendUrl, `/api/workspaces/${source.workspace}/studies`);
+      record(`${viewport.width}/unapproved-create-does-not-write`, studyPending.length === studyBefore.length, { before: studyBefore.length, pending: studyPending.length });
+      await frame.locator('[data-card="proposal"][data-phase="pending"]').last().scrollIntoViewIfNeeded();
+      await shot(page, frame, 'pending-proposal');
+      await accept(frame);
+      await until(() => Boolean(flow.study) || Boolean(flow.failure), '接受创建后继续');
+      assert.equal(flow.failure, undefined);
+      await pending(frame);
+      const runsBefore = await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${flow.study}/runs`);
+      record(`${viewport.width}/unapproved-run-does-not-write`, runsBefore.items.length === 0, { createdStudy: flow.study, runs: runsBefore.items.length });
+      await frame.locator('[data-card="proposal"][data-phase="pending"]').last().scrollIntoViewIfNeeded();
+      await shot(page, frame, 'accepted-continues', { createdStudy: flow.study, pendingRun: true });
+      await accept(frame);
+      await until(() => Boolean(flow.run) || Boolean(flow.failure), '真实计算后继续', 90_000);
+      assert.equal(flow.failure, undefined);
+      await pending(frame);
+      const deliveriesPending = await json(backendUrl, `/api/workspaces/${source.workspace}/deliveries`);
+      record(`${viewport.width}/unapproved-report-does-not-write`, deliveriesPending.length === deliveriesBefore.length,
+        { before: deliveriesBefore.length, pending: deliveriesPending.length });
+      await accept(frame);
+      await waitFlow(flow, '研究计算书');
+      await frame.locator('[data-card="file"]').last().waitFor();
+      const saved = await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${flow.study}/runs/${flow.run}`);
+      const file = await fetch(backendUrl + flow.file!);
+      const reportHtml = clean(await file.text(), 'download/report');
+      record(`${viewport.width}/study-run-report`, saved.status === 'succeeded' && file.ok && Boolean(file.headers.get('x-artifact-sha256')) && /<html[\s>]/i.test(reportHtml),
+        { study: flow.study, run: flow.run, runStatus: saved.status, integrity: saved.integrity, file: flow.file,
+          archiveDigest: file.headers.get('x-artifact-sha256'), downloadedBytes: Buffer.byteLength(reportHtml) });
+      const fileCard = frame.locator('[data-card="file"]').last();
+      await fileCard.getByRole('button', { name: '预览', exact: true }).click();
+      const previewElement = frame.locator('[role="dialog"] iframe');
+      await previewElement.waitFor();
+      const previewFrame = await (await previewElement.elementHandle())!.contentFrame();
+      assert.ok(previewFrame);
+      await until(() => previewFrame.locator('body').innerText().then(text => text.includes('计算书')), '打开真实计算书预览');
+      record(`${viewport.width}/report-preview`, true, { file: flow.file, previewUrlKind: new URL(previewFrame.url()).protocol,
+        sandboxed: await previewElement.getAttribute('sandbox') === '' });
+      await frame.getByRole('button', { name: '关闭', exact: true }).click();
+      const downloadEvent = page.waitForEvent('download');
+      await fileCard.getByRole('button', { name: '下载', exact: true }).click();
+      const downloaded = await downloadEvent;
+      record(`${viewport.width}/report-download`, await downloaded.failure() === null, { url: downloaded.url(), filename: downloaded.suggestedFilename() });
+      await fileCard.scrollIntoViewIfNeeded();
+      await shot(page, frame, 'saved-report', { run: flow.run, file: flow.file });
+
+      stage = 'rejection';
+      await newChat(frame);
+      const beforeReject = (await json(backendUrl, `/api/workspaces/${source.workspace}/studies`)).length;
+      installStudyWorkflow(model.faux, { workspace: source.workspace, study: source.study, title: `不可创建 · ${viewport.width}` });
+      await speak(frame, '先给我一份复制保存研究的提案。');
+      await pending(frame);
+      const reject = frame.locator('[data-card="proposal"][data-phase="pending"]').last();
+      await reject.getByRole('button', { name: '拒绝', exact: true }).click();
+      await frame.getByRole('textbox', { name: '拒绝的原因' }).fill('当前工况还需要人工核对。');
+      await frame.getByRole('button', { name: '确认拒绝', exact: true }).click();
+      await frame.locator('[data-card="proposal"][data-phase="rejected"]').waitFor();
+      record(`${viewport.width}/rejected-write-does-not-happen`, (await json(backendUrl, `/api/workspaces/${source.workspace}/studies`)).length === beforeReject,
+        { studiesBefore: beforeReject, refusal: '当前工况还需要人工核对。' });
+
+      stage = 'missing-data';
+      await newChat(frame);
+      const missingFlow = installMissingData(model.faux, { workspace: source.workspace, study: missing.id });
+      await speak(frame, '运行这项缺少导体电阻的研究；有缺项就说明，不要补猜。');
+      await pending(frame);
+      await accept(frame);
+      await waitFlow(missingFlow, '缺数据拒算');
+      await frame.locator('[data-card="refusal"]').waitFor();
+      const refusedRuns = await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${missing.id}/runs`);
+      record(`${viewport.width}/missing-data-refuses`, refusedRuns.items.length === 0, { study: missing.id, runCount: refusedRuns.items.length,
+        reason: await frame.locator('[data-card="refusal"]').innerText() });
+      await frame.locator('[data-card="refusal"]').scrollIntoViewIfNeeded();
+      await shot(page, frame, 'missing-data-refusal', { study: missing.id, runCount: refusedRuns.items.length });
+
+      stage = 'condition-workflow';
+      await newChat(frame);
+      const currentWorkspace = await json(backendUrl, `/api/workspaces/${source.workspace}`);
+      const soilId = currentWorkspace.domain.sections[0].medium.material;
+      const soil = currentWorkspace.domain.materials.find((item: any) => item.id === soilId);
+      const soilPath = '/materials/' + String(soilId).replaceAll('~', '~0').replaceAll('/', '~1') + '/thermal_resistivity';
+      const nextSoil = Number(soil.thermal_resistivity) + 0.1;
+      const condition = installConditionWorkflow(model.faux, { workspace: source.workspace, study: source.study, run: source.run,
+        path: soilPath, value: nextSoil, unit: 'K*m/W' });
+      await speak(frame, `把城南土壤热阻率改为 ${nextSoil.toFixed(1)} K·m/W，重算后和最初保存的记录比较。`);
+      const conditionApprovals = await approveAll(frame, condition);
+      record(`${viewport.width}/conditions-recalculate-compare`, conditionApprovals === 2 && Boolean(condition.comparison && condition.run),
+        { approvals: conditionApprovals, newRun: condition.run, originalRun: source.run, comparison: condition.comparison });
+      await frame.locator('[data-role="assistant"]').last().scrollIntoViewIfNeeded();
+      await shot(page, frame, 'conditions-compared', { run: condition.run, originalRun: source.run });
+
+      stage = 'type-workflow';
+      await newChat(frame);
+      const typeBefore = await json(backendUrl, `/api/workspaces/${type.workspace}`);
+      const typeFlow = installTypeWorkflow(model.faux, { workspace: type.workspace, typeId: type.workspace, thicknessMm: 4.7 + (viewport.width === 1920 ? 0.1 : 0) });
+      await speak(frame, `把 YJV22-8.7/15 3×300 草稿的绝缘厚度改为 ${viewport.width === 1920 ? '4.8' : '4.7'} mm，核对后出内部规格书。每一步让我接受。`);
+      await pending(frame);
+      const typePending = await json(backendUrl, `/api/workspaces/${type.workspace}`);
+      record(`${viewport.width}/unapproved-structure-does-not-write`, typePending.revision === typeBefore.revision,
+        { type: type.workspace, revisionBefore: typeBefore.revision, revisionPending: typePending.revision });
+      const typeApprovals = await approveAll(frame, typeFlow);
+      await frame.locator('[data-card="file"]').last().waitFor();
+      const specification = await fetch(backendUrl + typeFlow.file!);
+      const pdf = Buffer.from(await specification.arrayBuffer());
+      record(`${viewport.width}/type-change-check-specification`, typeApprovals === 5 && specification.ok && specification.headers.get('content-type')?.includes('application/pdf') === true && pdf.subarray(0, 5).toString() === '%PDF-',
+        { type: typeFlow.typeId, approvals: typeApprovals, study: typeFlow.study, run: typeFlow.run, file: typeFlow.file,
+          artifactDigest: specification.headers.get('x-artifact-sha256'), downloadedBytes: pdf.length });
+      await frame.locator('[data-card="file"]').last().scrollIntoViewIfNeeded();
+      await shot(page, frame, 'type-specification', { type: typeFlow.typeId, run: typeFlow.run, file: typeFlow.file });
+
+      stage = 'import-unavailable';
+      await newChat(frame);
+      const imported = installImportRefusal(model.faux);
+      await speak(frame, '导入厂家结构表.xlsx，先预览和映射列，再让我确认。');
+      await waitFlow(imported, '导入能力缺口如实说明');
+      await frame.locator('[data-card="refusal"]').waitFor();
+      await shot(page, frame, 'import-unavailable');
+    } catch (error) {
+      const visibleFrame = page.frames().find(item => item.url().includes('/agent-app/fusion.html'));
+      await shot(page, visibleFrame, `${stage}-failed`, { error: clean(error instanceof Error ? error.message : String(error), 'browser/scenario-failure') }).catch(() => undefined);
+      throw error;
+    } finally { await flush(); await context.close(); }
+  }
+
+  // A real stopped sidecar, reached through the old backend proxy. No intercepted response is used for this state.
+  await sidecar.close();
+  sidecar = undefined;
+  stage = 'sidecar-down';
+  for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+    const context = await browser.newContext({ viewport });
+    const page = await context.newPage();
+    const flush = await observe(page);
+    try {
+      await page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' });
+      await page.getByRole('heading', { name: 'Agent 对话服务未连接' }).waitFor();
+      await shot(page, undefined, 'sidecar-down');
+      record(`${viewport.width}/sidecar-down-explanation`, await page.getByRole('button', { name: '重试', exact: true }).isVisible(),
+        { actualServiceStopped: true, visible: await page.locator('.agent-page').innerText() });
+    } finally { await flush(); await context.close(); }
+  }
+  checks.push({ id: 'manufacturer-structure-import', status: '未通过', evidence: 'T3 结构表预览、列映射与批量草稿提交接口尚未接入；浏览器如实拒绝，没有写入型号库。' });
+  checks.push({ id: 'real-model-six-phrases', status: '云端无法验证', evidence: configuredRealModel
+    ? '检测到真实模型配置；本脚本只验脚本化模型，请另附真实模型六句话走查证据。'
+    : '三项 CABLE_STUDIO_MODEL_* 环境配置不齐全；本轮未调用真实模型，也没有把脚本化模型结果标成真实模型验收。' });
+  record('browser-console-network', browserErrors.every(item => item.expected === true), { unexpected: browserErrors.filter(item => !item.expected),
+    expected: browserErrors.filter(item => item.expected), policy: '仅忽略导航取消请求，以及主动停止边车阶段的 502/503 和断连；其余错误失败。' });
+} catch (error) {
+  failure = clean(error instanceof Error ? error.stack || error.message : String(error), 'walk/failure');
+  checks.push({ id: 'walk-completion', status: '未通过', evidence: failure });
+} finally {
+  if (browser) await browser.close().catch(() => undefined);
+  if (sidecar) await sidecar.close().catch(() => undefined);
+  await Promise.all(children.map(stop));
+  for (const [label, content] of Object.entries(processLogs)) writeFileSync(join(out, `${label}.log`), clean(content, `process/${label}`));
+  const browserObserved = network.some(item => item.type === 'request') && network.some(item => item.type === 'sse');
+  const secretCheck = { passed: browserObserved && leakLocations.size === 0, browserObserved,
+    credentialsExamined: 'in-memory model sentinel, sidecar token, and any supplied model keys',
+    matchedLocations: [...leakLocations], browserRequests: network.filter(item => item.type === 'request').length,
+    browserResponses: network.filter(item => item.type === 'response').length, browserSseEvents: network.filter(item => item.type === 'sse').length,
+    processLogs: Object.keys(processLogs), actualSecretValuesSaved: false };
+  checks.push({ id: 'model-keys-absent-from-network-and-logs', status: leakLocations.size ? '未通过' : browserObserved ? '通过' : '云端无法验证', evidence: secretCheck });
+  writeFileSync(join(out, 'browser-network.json'), clean(JSON.stringify(network, null, 2), 'artifact/network'));
+  writeFileSync(join(out, 'browser-console.json'), clean(JSON.stringify({ consoles, errors: browserErrors }, null, 2), 'artifact/console'));
+  writeFileSync(join(out, 'acceptance.json'), clean(JSON.stringify({ testedAt: new Date().toISOString(), mode: 'scripted-model-real-platform',
+    serverTopology: ['real FastAPI backend with fresh release seed', 'real pi sidecar with scripted model provider', 'old frontend Vite server'],
+    visualReview: '截图已生成，必须由操作者逐张打开检查后才可在 PR 标为通过。', failure, checks, screenshots, secretCheck }, null, 2), 'artifact/acceptance'));
+  rmSync(home, { recursive: true, force: true });
+}
+console.log(`走查证据：${out}`);
+if (failure || leakLocations.size) { console.error(failure || '密钥泄漏检查失败，详见验收记录中的匹配位置。'); process.exitCode = 1; }
+else console.log(`脚本化模型真实平台走查完成：${screenshots.length} 张截图；待操作者逐张检查。真实模型和导入接口的限制已单列。`);

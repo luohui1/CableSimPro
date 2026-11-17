@@ -15,7 +15,9 @@
     "fusion": "node fusion/server.ts",
     "test": "node --test --test-concurrency=1 \"tests/*.test.ts\"",
     "walk": "node tests/walk.ts",
-    "walk:agent": "node tests/agent-walk-run.ts"
+    "walk:agent": "node tests/agent-walk-run.ts",
+    "walk:fusion": "node tests/fusion-walk.ts",
+    "test:fusion": "node --test tests/fusion-integration.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.36",
