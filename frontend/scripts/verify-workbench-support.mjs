@@ -75,9 +75,17 @@ export async function walkthrough(name, scenario) {
   }
   async function api(endpoint) {
     assert.ok(endpoint.startsWith('/api/'), '证据读取必须来自本次隔离服务');
-    const response = await fetch(base + endpoint, { signal: AbortSignal.timeout(90000) });
-    assert.ok(response.ok, endpoint + ': HTTP ' + response.status + ' ' + await response.clone().text());
-    return response.json();
+    // Use the existing isolated Playwright session for real read-only requests.
+    // Node's fetch transport hit an uncaught internal parser assertion in CI.
+    // Read one body; HTTP, timeout and JSON errors still fail this viewport.
+    const response = await context.request.get(base + endpoint, { timeout: 90000, failOnStatusCode: false });
+    try {
+      const body = new TextDecoder().decode(await response.body());
+      assert.ok(response.ok(), endpoint + ': HTTP ' + response.status() + ' ' + body);
+      return JSON.parse(body);
+    } finally {
+      await response.dispose();
+    }
   }
   async function choose(label, option, scope = page) {
     await scope.getByRole('combobox', { name: label, exact: true }).click();

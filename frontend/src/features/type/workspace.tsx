@@ -187,9 +187,15 @@ export function TypeWorkspace() {
   </nav>;
   // 命令栏与研究工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
   const specification = typeModules.find(entry => entry.id === 'specification');
+  const savePrimary = state.dirty && !state.readOnly && !state.loading && !!state.workspace && !!document;
+  const moduleAction: CommandAction | null = primaryAction
+    ? { ...primaryAction, variant: savePrimary ? 'outline' : primaryAction.variant }
+    : location.module === 'structure' && !state.dirty && !state.readOnly && !state.loading && !state.busy && state.workspace && document && cable
+      ? { id: 'next-standard-check', label: '标准核对', icon: 'module/standard-check', role: 'primary', onSelect: () => go('standard-check', 'results') }
+      : null;
   const commandBar = <CommandBar label="型号命令" status={state.dirty ? `${state.changeCount} 处未保存` : location.module === 'specification' ? undefined : commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), false)} actions={[
-    { id:'save', label:'保存', icon:'action/save', role:'save', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
-    ...(primaryAction ? [primaryAction] : []),
+    { id:'save', label:'保存', icon:'action/save', role:'save', variant:savePrimary?'primary':'outline', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
+    ...(moduleAction ? [moduleAction] : []),
     { id:'undo', label:'撤销', icon:'action/undo', priority:40, disabledReason:state.readOnly?'此版本只读':state.busy?'正在保存或恢复修改':state.undoReason||(!state.canUndo?'当前模块没有可撤销的修改':undefined), onSelect:()=>void state.undo() },
     { id:'redo', label:'重做', icon:'action/redo', priority:40, disabledReason:state.readOnly?'此版本只读':state.busy?'正在保存或恢复修改':state.redoReason||(!state.canRedo?'当前模块没有可重做的修改':undefined), onSelect:()=>void state.redo() },
     { id:'study', label:'用于载流量研究', icon:'nav/study', priority:30, disabledReason:state.readOnly?'先基于此版本建立设计草稿':state.dirty?'请先保存型号修改':state.busy||!state.workspace?'型号尚未就绪':undefined, onSelect:()=>setStudyOpen(true) },
