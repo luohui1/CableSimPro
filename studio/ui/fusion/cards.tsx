@@ -9,6 +9,7 @@ import { Metric } from '@/kit/metric';
 import { TierMark } from '@/kit/marks';
 import { useOpen } from './open';
 import { ProposalBlock } from './proposal';
+import { SavedRatingTable } from './rating-table';
 
 function SavedRun({ view, href }: { view: SavedRunView; href: string }) {
   const open = useOpen();
@@ -108,6 +109,7 @@ export function StepCards({ step }: { step: ChatStep }) {
   return <>
     {step.proposal && <ProposalBlock proposal={step.proposal} step={step} />}
     {card?.kind === 'saved_run' && <SavedRun view={card.view} href={card.href} />}
+    {card?.kind === 'saved_rating_table' && <SavedRatingTable card={card} />}
     {card?.kind === 'saved_type' && <SavedType card={card} />}
     {card?.kind === 'saved_file' && <SavedFile card={card} />}
     {card?.kind === 'open' && <OpenResult card={card} />}

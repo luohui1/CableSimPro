@@ -5,6 +5,7 @@ import type { CardRef } from '../shared/types.ts';
 import type { SavedRunView } from '../shared/fusion-types.ts';
 import { compact, fixed } from '../shared/format.ts';
 import type { Backend, ToolResult } from './backend.ts';
+import { savedRatingTable } from './rating-table.ts';
 
 export interface Shown { card?: CardRef; notes?: string[]; target?: string }
 
@@ -175,6 +176,25 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
   const shown: Shown = target ? { target } : {};
   const study = typeof args.study_id === 'string' ? args.study_id : undefined;
   try {
+    if (tool === 'resource_read' && result.data.resource?.kind === 'rating_table' && (args.offset === undefined || args.offset === 0)) {
+      const table = await savedRatingTable(backend, result.data.resource, signal);
+      if (table) return { ...shown, ...table };
+    }
+    if (tool === 'resource_read' && typeof result.data.resource?.id === 'string') {
+      const resource = result.data.resource;
+      const kind = resource.kind === 'asset' ? 'asset' : ['document', 'document_page', 'document_extraction'].includes(resource.kind) ? 'document' : undefined;
+      if (kind) {
+        const index = await backend.read<{ items: { id: string; name: string; subtype?: string }[] }>(
+          `/api/index/objects?kind=${kind}&q=${encodeURIComponent(resource.id)}&limit=5`, signal);
+        const item = index.items.find(item => item.id === resource.id);
+        if (item) {
+          const groups: Record<string, string> = { material: 'materials', component: 'materials', assembly: 'materials',
+            installation: 'templates', study_template: 'templates', rule: 'standards' };
+          return { ...shown, card: { kind: 'open', label: item.name,
+            href: href(kind, item.id, kind === 'asset' ? { group: groups[item.subtype ?? ''] ?? 'materials' } : {}) } };
+        }
+      }
+    }
     const receipt = result.data.receipt;
     if (receipt && ['delivery', 'specification'].includes(receipt.kind) && typeof receipt.download_url === 'string'
       && /^\/(?!\/)/.test(receipt.download_url) && typeof receipt.href === 'string' && /^\/(?!\/)/.test(receipt.href)) {

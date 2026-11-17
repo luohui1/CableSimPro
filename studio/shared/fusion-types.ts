@@ -36,3 +36,23 @@ export interface SavedTypeView {
   complete: boolean;
   source: string;
 }
+
+/** Rows of an authenticated platform rating-table run. Nulls and refusal reasons are retained, never filled by the model. */
+export interface SavedRatingTableView {
+  title: string;
+  /** The saved method's display name and version. */
+  method: string;
+  freshness: 'current' | 'historical' | 'unknown';
+  rows: {
+    case_id: string;
+    name: string;
+    depth_m: number | null;
+    soil_rho_k_m_w: number | null;
+    ambient_temperature_c: number | null;
+    value_a: number | null;
+    status: string;
+    reason: string | null;
+    rating_basis: string;
+  }[];
+  total: number;
+}
