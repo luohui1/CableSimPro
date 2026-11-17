@@ -699,11 +699,13 @@ export function StudyCompare({
               {
                 id: "quantity",
                 label: "物理量",
+                wrap: true,
                 render: (row) => text(row.title) || displayName(text(row.key)),
               },
               {
                 id: "entity",
                 label: "对象 / 条件",
+                wrap: true,
                 render: (row) =>
                   savedEntityLabel(sourceFor(row.comparisonRun) || run || {}, text(row.case_id), text(row.entity)) +
                   " · " +
@@ -715,6 +717,7 @@ export function StudyCompare({
                   key
                 ],
                 numeric: true,
+                wrap: true,
                 render: (row: CatalogRow) => (
                   <EngineeringValue
                     quantity={

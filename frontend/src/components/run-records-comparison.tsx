@@ -24,7 +24,7 @@ function collectLabels(value: unknown, labels = new Map<string, string>()) {
   if (Array.isArray(value)) value.forEach(item => collectLabels(item, labels));
   else if (value && typeof value === 'object') {
     const row = optionalRecord(value);
-    if (text(row.id)) labels.set(text(row.id), text(row.label) || displayName(text(row.id)));
+    if (text(row.id)) labels.set(text(row.id), displayName(text(row.label) || text(row.id)));
     Object.entries(row).filter(([key]) => !receipts.has(key)).forEach(([, item]) => collectLabels(item, labels));
   }
   return labels;
@@ -35,7 +35,7 @@ function collectLabels(value: unknown, labels = new Map<string, string>()) {
 function flatten(value: unknown, path = '', units: Record<string, string> = {}, out = new Map<string, Cell>(), names: Record<string, string> = {}, scope = '', labels = new Map<string, string>()) {
   if (Array.isArray(value)) value.forEach((item, index) => {
     const row = optionalRecord(item), id = text(row.id) || text(row.case_id) || text(row.role) || String(index);
-    const label = text(row.label) || (text(row.case_id) ? displayName(text(row.case_id)) : '') || (text(row.role) ? fieldLabel(text(row.role)) : '') || String(index + 1);
+    const label = (text(row.label) ? displayName(text(row.label)) : '') || (text(row.case_id) ? displayName(text(row.case_id)) : '') || (text(row.role) ? fieldLabel(text(row.role)) : '') || String(index + 1);
     flatten(item, `${path}/${escape(id)}`, units, out, names, [scope, label].filter(Boolean).join(' · '), labels);
   });
   else if (value && typeof value === 'object') {
@@ -43,7 +43,7 @@ function flatten(value: unknown, path = '', units: Record<string, string> = {}, 
     if (row.schema_version === 'cablesim.domain/1') labels = collectLabels(row, new Map(labels));
     if ('value' in row && typeof row.unit === 'string') out.set(path, { value: row.value, unit: row.unit, name: scope });
     else Object.entries(row).filter(([key]) => !receipts.has(key)).forEach(([key, v]) => flatten(v, `${path}/${escape(key)}`, units, out, names, [scope, names[`${path}/${escape(key)}`] || fieldLabel(key)].filter(Boolean).join(' · '), labels));
-  } else out.set(path, { value, display: typeof value === 'string' ? labels.get(value) || displayNames[value] || value : undefined,
+  } else out.set(path, { value, display: typeof value === 'string' ? displayName(labels.get(value) || value) : undefined,
     name: scope, unit: units[path] || (path.includes('/input/') ? domainFieldUnits[path.split('/').at(-1) || ''] || (path.includes('/currents/') ? 'A' : '') : '') });
   return out;
 }

@@ -185,11 +185,44 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     const difference = page.getByRole('table', { name: '对比输入差异', exact: true });
     await expect(difference).toBeVisible();
     const soil = difference.getByRole('row').filter({hasText:'热阻率'});
-    check('对比指出改动的具体条件及前后值', await soil.count() > 0
-      && /0[.]8/.test(await soil.first().innerText()) && /1[.]1/.test(await soil.first().innerText()), await difference.innerText());
+    await expect(soil.first()).toBeVisible();
+    await soil.first().evaluate(row => row.scrollIntoView({ block: 'center', inline: 'nearest' }));
+    const soilText = await soil.first().innerText();
     await capture('07-input-differences');
+    check('对比指出改动的具体条件及前后值', /0[.]8/.test(soilText) && /1[.]1/.test(soilText), soilText);
+    check('保存输入的土壤材料名称以中文显示', /土壤/.test(soilText) && !/v0 soil/.test(soilText), soilText);
     await page.getByRole('tab', { name: '结果', exact: true }).click();
-    await expect(page.getByRole('table', { name: '方法结果差异', exact: true })).toBeVisible();
+    const results = page.getByRole('table', { name: '方法结果差异', exact: true });
+    await expect(results).toBeVisible();
+    async function checkResultWidth(position) {
+      const geometry = await results.evaluate(table => {
+        let left = 0, right = innerWidth;
+        const containers = [];
+        for (let node = table.parentElement; node; node = node.parentElement) {
+          if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(node).overflowX)) {
+            const box = node.getBoundingClientRect();
+            left = Math.max(left, box.left); right = Math.min(right, box.right);
+            containers.push({ width: node.clientWidth, content: node.scrollWidth });
+          }
+        }
+        const box = table.getBoundingClientRect();
+        const clipped = [...table.querySelectorAll('tr > :last-child')].flatMap(cell => {
+          const bounds = cell.getBoundingClientRect();
+          return bounds.left < left - 1 || bounds.right > right + 1 || cell.scrollWidth > cell.clientWidth + 1
+            ? [{ text: cell.textContent, left: bounds.left, right: bounds.right, width: cell.clientWidth, content: cell.scrollWidth }] : [];
+        });
+        return { left, right, tableLeft: box.left, tableRight: box.right, width: table.clientWidth, content: table.scrollWidth, containers, clipped };
+      });
+      check(`比较结果${position}五列无需横向滚动且差值完整显示`, geometry.tableLeft >= geometry.left - 1
+        && geometry.tableRight <= geometry.right + 1 && geometry.content <= geometry.width + 1
+        && geometry.containers.every(item => item.content <= item.width + 1) && geometry.clipped.length === 0, geometry);
+    }
+    await results.locator('thead').evaluate(header => header.scrollIntoView({ block: 'start', inline: 'nearest' }));
+    await capture('07-result-differences-start');
+    await checkResultWidth('首部');
+    await results.locator('tbody tr').last().evaluate(row => row.scrollIntoView({ block: 'end', inline: 'nearest' }));
+    await capture('07-result-differences-end');
+    await checkResultWidth('尾部');
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: '导出对比 CSV', exact: true }).click();
     const file = await pending;
@@ -220,11 +253,19 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await page.goto(base + '/?theme=light');
     await page.getByRole('button', { name: '新建研究', exact: true }).first().click();
     const create = page.getByRole('dialog', {name:'新建研究',exact:true});
+    await expect(create.getByRole('combobox', {name:'研究任务',exact:true})).toBeVisible();
     const entry = create.getByRole('button', {name:'新建型号',exact:true});
-    if (!check('研究中的新建型号入口可操作', await entry.count() > 0)) return;
+    await expect(entry).toBeEnabled();
+    check('研究中的新建型号入口可操作', await entry.isVisible() && await entry.isEnabled());
+    await capture('09-create-type-entry');
     await entry.click();
-    await page.waitForURL(/\/types\?/);
-    await expect(page.getByRole('dialog')).toContainText('新建型号');
-    await expect(page.getByRole('textbox', {name:'型号名称',exact:true})).toBeVisible();
+    await page.waitForURL(url => url.pathname === '/types' && url.searchParams.get('create') === 'true');
+    const typeCreate = page.getByRole('dialog', {name:'新建型号设计',exact:true});
+    const typeName = typeCreate.getByRole('textbox', {name:'型号名称',exact:true});
+    await expect(typeName).toBeEditable();
+    await expect(typeCreate.getByRole('radiogroup', {name:'起点',exact:true})).toBeVisible();
+    await typeName.fill('研究转型号 · ' + tag);
+    await expect(typeName).toHaveValue('研究转型号 · ' + tag);
+    check('研究入口实际打开可编辑的型号创建表单', await typeCreate.isVisible() && await typeName.isEditable());
   });
 });
