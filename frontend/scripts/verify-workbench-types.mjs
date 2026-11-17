@@ -391,6 +391,112 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     return create(dialog, 'library');
   });
 
+  let editFixture;
+  await attempt('02b-键盘修改型号名称并核对保存与取消', async () => {
+    // Keep this editable fixture independent of the calculation model, whose
+    // original missing provenance must remain available to the rating check.
+    const dialog = await openNew('从型号库复制', name('名称与来源编辑'));
+    const source = options.library.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || options.library[0];
+    if (!check('名称与来源编辑有真实独立起点', Boolean(source), await dialog.innerText())) return;
+    await choose('型号版本', source.name + ' · ' + versionLabel(source.version), dialog);
+    editFixture = await create(dialog, 'library');
+    const before = await workspace(editFixture.id), title = name('名称已编辑');
+    const opener = page.getByRole('button', { name: '修改型号名称', exact: true });
+    await opener.click();
+    const rename = page.getByRole('dialog', { name: '修改型号名称', exact: true });
+    const input = rename.getByRole('textbox', { name: '新的型号名称', exact: true });
+    await expect(input).toHaveValue(before.domain.name);
+    await input.fill(title);
+    await input.press('Enter');
+    await expect(rename).toBeHidden();
+    await expect.poll(dirty).toBe(true);
+    const uncommitted = await workspace(editFixture.id);
+    check('确认名称仅修改草稿而不隐式保存', uncommitted.revision === before.revision
+      && JSON.stringify(uncommitted.domain) === JSON.stringify(before.domain), { workspace: before.id, revision: before.revision });
+    await capture('型号名称-键盘确认后的未保存草稿');
+    const saved = await save(editFixture.id);
+    expect({ ...saved.domain, name: before.domain.name }).toEqual(before.domain);
+    expect(saved.type_lifecycle?.name).toBe(before.type_lifecycle?.name);
+    check('型号名称经键盘保存后真实回读且方案身份不变', saved.domain.name === title && saved.revision > before.revision, {
+      workspace: saved.id, before: before.domain.name, after: saved.domain.name,
+      revision: saved.revision, plan: saved.type_lifecycle?.name,
+    });
+    await expectIdentity(saved);
+    await capture('型号名称-真实保存与独立方案身份');
+
+    await opener.click();
+    await expect(input).toHaveValue(title);
+    await input.fill(name('取消的名称'));
+    await input.press('Escape');
+    await expect(rename).toBeHidden();
+    await expect(opener).toBeFocused();
+    await expect.poll(dirty).toBe(false);
+    const cancelled = await workspace(editFixture.id);
+    check('取消改名未写入保存版本且焦点返回原入口', cancelled.revision === saved.revision
+      && JSON.stringify(cancelled.domain) === JSON.stringify(saved.domain), { workspace: saved.id, revision: cancelled.revision });
+    await expect(page.locator('.topbar h1')).toContainText(title);
+    await capture('型号名称-Escape取消且焦点返回入口');
+  });
+
+  await attempt('02c-结构来源逐字录入保存并撤销未保存修改', async () => {
+    if (!check('结构来源编辑使用独立创建的真实型号', Boolean(editFixture))) return;
+    await page.goto(base + '/types/' + editFixture.id + '/structure/table?theme=light');
+    await expect(layers()).toBeVisible();
+    const before = await workspace(editFixture.id), cable = before.domain.cable_types[0];
+    const reference = before.type_creation?.source?.references?.['/cable_type']?.reference;
+    if (!check('结构来源录入有真实型号版本出处', typeof reference === 'string' && Boolean(reference.trim()), {
+      workspace: before.id, origin: before.type_creation?.source,
+    })) return;
+    const escape = value => value.replaceAll('~', '~0').replaceAll('/', '~1');
+    const sourcePath = '/cable_types/' + escape(cable.id);
+    const editor = page.locator('.type-structure-source');
+    if (await editor.getAttribute('open') === null) await editor.locator(':scope > summary').press('Enter');
+    const input = editor.getByRole('textbox', { name: '型号结构来源', exact: true });
+    await expect(input).toBeVisible();
+    const previousText = await input.inputValue();
+    // If the same citation is already present, a trailing line break exercises
+    // the editor without inventing a different engineering source.
+    const enteredReference = previousText === reference ? reference + '\n' : reference;
+    await input.fill(enteredReference);
+    await input.press('Tab');
+    await expect.poll(dirty).toBe(true);
+    const uncommitted = await workspace(editFixture.id);
+    check('来源录入仅进入草稿且未自动批准或保存', uncommitted.revision === before.revision
+      && JSON.stringify(uncommitted.domain) === JSON.stringify(before.domain), { workspace: before.id, path: sourcePath });
+    const undo = await command('撤销');
+    expect(undo, '结构来源有可用的撤销入口').not.toBeNull();
+    await undo.click();
+    await expect.poll(dirty).toBe(false);
+    await expect(input).toHaveValue(previousText);
+    const cancelled = await workspace(editFixture.id);
+    check('撤销来源编辑恢复原出处且保存修订未改变', cancelled.revision === before.revision
+      && JSON.stringify(cancelled.domain) === JSON.stringify(before.domain), { workspace: before.id, revision: cancelled.revision });
+    await input.scrollIntoViewIfNeeded();
+    await capture('型号结构来源-撤销未保存编辑后保留原出处');
+
+    await input.fill(enteredReference);
+    await input.press('Tab');
+    await expect.poll(dirty).toBe(true);
+    const saved = await save(editFixture.id), source = saved.domain.provenance[sourcePath];
+    expect({ ...saved.domain, provenance: before.domain.provenance }).toEqual(before.domain);
+    for (const [key, value] of Object.entries(before.domain.provenance || {})) {
+      if (key !== sourcePath) expect(saved.domain.provenance[key]).toEqual(value);
+    }
+    expect(saved.type_resource_bindings).toEqual(before.type_resource_bindings);
+    check('结构来源真实保存且物性逐字段来源与固定引用保持', saved.revision > before.revision
+      && source.kind === 'user' && source.reviewed === false && source.reference === enteredReference, {
+      workspace: saved.id, revision: saved.revision, path: sourcePath, originalReference: reference, saved: source,
+    });
+    (report.structureEditSources ||= []).push({ ...size, workspace: saved.id, revision: saved.revision,
+      path: sourcePath, originalReference: reference, enteredReference, saved: source });
+    await page.reload();
+    await expect(layers()).toBeVisible();
+    if (await editor.getAttribute('open') === null) await editor.locator(':scope > summary').press('Enter');
+    await expect(input).toHaveValue(enteredReference);
+    await input.scrollIntoViewIfNeeded();
+    await capture('型号结构来源-重载后保留真实全文与待核对状态');
+  });
+
   await attempt('03-从零建立型号并通过缺项定位填写截面', async () => {
     const dialog = await openNew('空白', name('从零'));
     await choose('结构类型', '单芯', dialog);
@@ -665,6 +771,21 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await expect(added).toHaveCount(0);
       const undo = await command('撤销', true);
       if (!check('删除新增层后仍可撤销', undo && await undo.isEnabled(), await visibleText())) return;
+      await expect(page.getByRole('heading', { name: '外护套', exact: true })).toBeVisible();
+      const materialReference = page.getByRole('combobox', { name: '材料引用', exact: true });
+      await expect(materialReference).toBeVisible();
+      await expect(materialReference.locator(':scope > span:not([data-select-arrow])')).toBeVisible();
+      const materialWidth = await materialReference.evaluate(control => {
+        const selected = control.querySelector(':scope > span:not([data-select-arrow])');
+        const rect = control.getBoundingClientRect();
+        return { text: selected.textContent.trim(), scrollWidth: selected.scrollWidth, clientWidth: selected.clientWidth,
+          left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
+          viewportWidth: window.innerWidth, viewportHeight: window.innerHeight };
+      });
+      check('外护套材料引用控件完整位于视口内', materialWidth.left >= 0 && materialWidth.top >= 0
+        && materialWidth.right <= materialWidth.viewportWidth && materialWidth.bottom <= materialWidth.viewportHeight, materialWidth);
+      check('外护套材料引用已选文字完整显示且无截断', Boolean(materialWidth.text) && materialWidth.clientWidth > 0
+        && materialWidth.scrollWidth <= materialWidth.clientWidth + 1, materialWidth);
       await capture('结构编辑-删除新增层后仍可撤销');
       await undo.click();
       await expect(added).toHaveCount(1);
