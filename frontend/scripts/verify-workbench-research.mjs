@@ -479,4 +479,101 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       { created: saved.id, typeCount: typeIndex.length, projectCount: projectIds.size, visibleObjects: objects });
     }
   });
+  if (report.phase === 'after') await step('10-saved-sweep-canvas-draft-survives-maximize', async () => {
+    const projects = await api('/api/workspaces');
+    const studies = (await Promise.all(projects.map(project => api(`/api/workspaces/${project.id}/studies`)))).flat();
+    const scan = studies.find(row => row.definition.driver?.kind === 'sweep'
+      && row.definition.input_source === 'domain' && row.latest_run?.status === 'succeeded'
+      && row.definition.method.plugin_id === 'cablesim.iec60287');
+    expect(scan, '发布库必须有真实保存的扫描研究；本回归不新建结果或启动计算').toBeTruthy();
+    const scanPrefix = `/api/workspaces/${scan.workspace}/studies/${scan.id}`;
+    async function savedInputs() {
+      const [workspace, study, runs, run] = await Promise.all([
+        api(`/api/workspaces/${scan.workspace}`), api(scanPrefix),
+        api(scanPrefix + '/runs?view=summary&limit=100'), api(scanPrefix + '/runs/' + scan.latest_run.id + '?view=full'),
+      ]);
+      return { workspace: { id: workspace.id, revision: workspace.revision, domain: workspace.domain },
+        study: { id: study.id, revision: study.revision, definition: study.definition },
+        runs: runs.items.map(item => ({ id: item.id, sequence: item.sequence, status: item.status })),
+        run: { id: run.id, integrity: run.integrity, status: run.status, input_digest: run.input_digest,
+          output_digest: run.output_digest, snapshot: run.snapshot, output: run.output } };
+    }
+    const baseline = await savedInputs(), writesStart = report.writes.length;
+    expect(baseline.run.integrity).toBe('verified');
+    expect(baseline.run.status).toBe('succeeded');
+    expect(baseline.run.snapshot.definition.driver.kind).toBe('sweep');
+    const source = { workspace: scan.workspace, workspaceRevision: baseline.workspace.revision,
+      study: scan.id, studyRevision: baseline.study.revision, run: baseline.run.id,
+      inputDigest: baseline.run.input_digest, outputDigest: baseline.run.output_digest };
+    await page.goto(`${base}/studies/${scan.id}/sweep/curve?workspace=${scan.workspace}&theme=light&view=section&inspector=input`);
+    const workbench = page.locator('.study-workbench[data-analysis="sweep"]');
+    const canvas = workbench.locator('.workbench-canvas');
+    await expect(page.locator('.study-sweep-results .series-chart')).toBeVisible();
+    await expect(workbench).toHaveAttribute('data-dock', 'max');
+    await expect(canvas).toHaveCount(0);
+    check('保存扫描先显示真实曲线，未打开的隐藏画布尚未挂载', true, source);
+    await capture('10-saved-sweep-before-opening-canvas');
+
+    await page.getByRole('button', { name: '还原结果面板', exact: true }).click();
+    await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+    const cable = canvas.locator('[data-section-object^="cable/"]').first();
+    await expect(cable).toBeVisible();
+    const identity = await cable.getAttribute('data-section-object');
+    const placement = baseline.workspace.domain.sections.flatMap(section => section.placements)
+      .find(item => 'cable/' + item.cable === identity);
+    expect(placement, '图中电缆必须来自保存工程的真实敷设').toBeTruthy();
+    await cable.click();
+    const xField = field('水平位置 x'), zField = field('高程 z');
+    await expect(xField).toBeEditable();
+    await expect(zField).toBeEditable();
+    const coordinates = async () => ({ x: Number(await xField.inputValue()), z: Number(await zField.inputValue()) });
+    const original = await coordinates();
+    expect(original.x).toBeCloseTo(placement.x, 3);
+    expect(original.z).toBeCloseTo(placement.z, 3);
+    const edited = { ...original, x: Number((original.x + 0.025).toFixed(3)) };
+    await fill('水平位置 x', String(edited.x));
+    await expect.poll(coordinates).toEqual(edited);
+    await expect(command().getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
+    await capture('10-sweep-canvas-coordinate-edit-is-unsaved');
+
+    const point = await cable.locator('.drawing-hit-area').boundingBox();
+    expect(point).toBeTruthy();
+    const x = point.x + point.width / 2, y = point.y + point.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down();
+    await page.mouse.move(x + 20, y - 12, { steps: 8 }); await page.mouse.up();
+    await expect.poll(coordinates).not.toEqual(edited);
+    const dragged = await coordinates();
+    await expect(cable).toHaveAttribute('aria-pressed', 'true');
+    await capture('10-sweep-canvas-drag-is-unsaved');
+
+    await page.getByRole('button', { name: '放大结果面板', exact: true }).click();
+    await expect(workbench).toHaveAttribute('data-dock', 'max');
+    await expect(canvas).toHaveCount(1);
+    await expect(canvas).not.toBeVisible();
+    await expect.poll(coordinates).toEqual(dragged);
+    await capture('10-sweep-maximized-with-unsaved-coordinates');
+    await page.getByRole('button', { name: '还原结果面板', exact: true }).click();
+    await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+    await expect(cable).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(coordinates).toEqual(dragged);
+    await expect(command().getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
+    check('扫描画布放大再还原后保留所选电缆、手填与拖动后的未保存坐标', true,
+      { ...source, cable: identity, original, edited, dragged });
+    check('扫描画布切换与未保存编辑不改工程、研究或保存运行', isDeepStrictEqual(await savedInputs(), baseline), source);
+    await capture('10-sweep-restored-with-selection-and-draft');
+
+    await clickCommand('撤销');
+    await expect.poll(coordinates).toEqual(edited);
+    await expect(command().getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
+    await capture('10-sweep-undo-drag-keeps-coordinate-edit');
+    await clickCommand('撤销');
+    await expect.poll(coordinates).toEqual(original);
+    await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+    await expect(cable).toHaveAttribute('aria-pressed', 'true');
+    check('扫描画布可逐次撤销拖动和坐标编辑，恢复保存输入且保留选择', true,
+      { cable: identity, original, edited, dragged, restored: await coordinates() });
+    check('画布恢复回归全过程不写保存库，也不启动试算或新运行',
+      isDeepStrictEqual(await savedInputs(), baseline) && report.writes.length === writesStart,
+      { ...source, writes: report.writes.slice(writesStart) });
+  });
 });
