@@ -212,6 +212,55 @@ def test_a_single_calculation_cannot_be_mislabelled_as_a_saved_rating_table(save
     assert error.value.detail['code'] == 'FORMAL_NOT_RATING_TABLE'
 
 
+def test_saved_temperature_limits_and_current_map_leaves_keep_their_identity(saved):
+    model = model_for(saved, 'rating_table')
+    seen = set()
+    for table in model['tables'].values():
+        for row in table['rows']:
+            cell = row['cells'].get('value', {})
+            reference = cell.get('value_ref')
+            if not reference or '/snapshot/cases/' not in reference['pointer']:
+                continue
+            path = reference['pointer']
+            label = row['cells']['item']['value']
+            if '/max_conductor_temperature/normal' in path:
+                assert '持续工况' in label
+                seen.add('normal')
+            if '/max_conductor_temperature/short_circuit' in path:
+                assert '短路工况' in label
+                seen.add('short_circuit')
+            if '/currents/' in path:
+                run_source = model['sources'][reference['source_id']]['payload']
+                case_index = int(path.split('/')[3])
+                document = run_source['snapshot']['cases'][case_index]['input']
+                circuit_id = path.rsplit('/', 1)[-1].replace('~1', '/').replace('~0', '~')
+                circuit = next(item for item in document['circuits'] if item['id'] == circuit_id)
+                assert circuit['label'] in label
+                seen.add('current')
+    assert seen == {'normal', 'short_circuit', 'current'}
+
+
+def test_inactive_duct_conditions_stay_archived_without_implying_they_were_used(saved):
+    model = model_for(saved, 'rating_table')
+    source = 'rating:' + saved['rating_table']['id']
+    references = {(cell['value_ref']['source_id'], cell['value_ref']['pointer'])
+                  for cell in all_cells(model) if cell['value_ref']}
+    archived = {(item['source_id'], item['pointer']) for item in model['coverage']['additional_inputs']}
+    layouts = set()
+    for index, row in enumerate(model['sources'][source]['payload']['rows']):
+        duct = row['condition']['layout'] in ('ducts', 'three_core_ducts_horizontal')
+        layouts.add(duct)
+        for key in ('duct_inner_m', 'duct_outer_m', 'duct_rho_k_m_w'):
+            if key not in row['condition']:
+                continue
+            reference = (source, f'/rows/{index}/condition/{key}')
+            if duct:
+                assert reference in references
+            else:
+                assert reference not in references and reference in archived
+    assert layouts == {False, True}
+
+
 @pytest.mark.parametrize('damage,code', [('revision', 'FORMAL_REVISION_CHANGED'),
                                       ('input_digest', 'FORMAL_SOURCE_CHANGED'),
                                       ('output_digest', 'FORMAL_SOURCE_CHANGED')])

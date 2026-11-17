@@ -253,17 +253,25 @@ def _entities(document):
 
 
 def _input_label(document, path, title):
-    pieces = path[1:].split('/')[:-1]
+    decoded = [part.replace('~1', '/').replace('~0', '~') for part in path[1:].split('/')]
+    pieces = decoded[:-1]
     labels = []
     names = _entities(document)
     for part in pieces:
-        part = part.replace('~1', '/').replace('~0', '~')
         if part.isdigit():
             labels.append(str(int(part) + 1))
         elif part in _PATH_LABELS:
-            labels.append(_PATH_LABELS[part])
+            if _PATH_LABELS[part] != title:
+                labels.append(_PATH_LABELS[part])
         elif part in names:
             labels.append(names[part])
+    # These leaf keys carry engineering identity, not just a field spelling:
+    # normal/short-circuit are separate limits, and current maps are per circuit.
+    leaf = decoded[-1]
+    if leaf in ('normal', 'short_circuit'):
+        labels.append(_PATH_LABELS[leaf])
+    elif leaf in names:
+        labels.append(names[leaf])
     return ' · '.join([*labels, title])
 
 
@@ -478,13 +486,19 @@ def _rating_tables(model, section, run):
             {'contract': 'type-rating-table', 'field': 'value_a'}, context))
         for key, (label, unit) in _RATING_UNITS.items():
             if key != 'value_a' and key in item['condition']:
+                if key.startswith('duct_') and item['condition'].get('layout') not in ('ducts', 'three_core_ducts_horizontal'):
+                    # The saved rating API projection also retains optional
+                    # fields for inactive branches. Do not imply a buried or
+                    # air case applied those duct conditions; retain the source.
+                    model.value['coverage']['additional_inputs'].append(_ref(source, path + '/condition/' + key))
+                    continue
                 conditions.append(model.row(source + path + ':' + key, item['name'] + ' · ' + label,
                     source, path + '/condition/' + key, unit,
                     {'contract': 'type-rating-table', 'field': key}, context))
         if isinstance(item['condition'].get('source'), str):
             model.citation(source, path + '/condition/source', item['name'] + '条件来源')
     model.table(section, source + ':currents', '载流量与共同负荷口径', currents)
-    model.table(section, source + ':conditions', '保存工况的 API 原始条件投影', conditions)
+    model.table(section, source + ':conditions', '载流量计算条件', conditions)
 
 
 def _assessments(model, section, run):
