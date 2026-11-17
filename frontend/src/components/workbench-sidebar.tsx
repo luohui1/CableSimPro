@@ -107,7 +107,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       <div className="tree-caption">工作</div>
       <Link className="module-item" to="/studies" search={{ theme }} activeOptions={{ exact: true }} title="工程"><Icon name="object/folder" /><span>工程</span></Link>
       {indexError && <div className="tree-empty" role="status">{navigationIndex ? '目录更新失败，暂显示上次读取结果。' : '工程与型号分类读取失败。'}<Button size="compact" variant="ghost" onClick={retryIndexes}>重新读取目录</Button></div>}
-      {!navigationIndex ? !indexError && <div className="tree-empty" role="status">正在读取工程与型号</div> : <>
+      {!navigationIndex ? !indexError && <div className="tree-empty" aria-live="polite">正在读取工程与型号</div> : <>
         {/* 只列最近几个，当前打开的始终在列；其余到列表页找，侧栏不随数量无限变长 */}
         {recent(projects, (project) => text(project.id) === activeProject).map(project => {
           const id = text(project.id), count = (studies.data?.items || []).filter(row => row.parent?.id === id).length;
