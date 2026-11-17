@@ -56,7 +56,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           python scripts/prepare_plugin_environment.py cablesim.cable-geometry
-          .venv/Scripts/python.exe frontend/src/features/cad/prepare-fixtures.py
+          .venv/Scripts/python.exe -X utf8 frontend/src/features/cad/prepare-fixtures.py
       - name: Frontend style rules, types and unit tests
         working-directory: frontend
         run: |
