@@ -375,6 +375,132 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.getByRole('table', { name: '文档修订记录', exact: true })).toBeVisible();
   }
 
+  async function declareTeachingScope(id) {
+    await module('规格书');
+    await choose('文档版本', '客户版');
+    await page.getByRole('tab', { name: '审核与发布', exact: true }).click();
+    const before = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+    const original = await workspace(id), declarations = new Map((before.payload.release_exclusions || [])
+      .map(item => [item.check_id, item.reason])), captured = new Set();
+    const row = key => page.locator('[data-check-id=' + JSON.stringify(key) + ']');
+    const excluded = () => page.locator('[data-review-group="已声明不含"]');
+    async function openChecks() {
+      for (const detail of await page.locator('.type-review-groups > section > details').all()) {
+        if (await detail.getAttribute('open') === null) await detail.locator(':scope > summary').click();
+      }
+    }
+    await openChecks();
+    // The interface, not a copied backend eligibility function, identifies the
+    // items the engineer can explicitly exclude from this teaching delivery.
+    const ids = await page.locator('[data-check-id]').filter({ has: page.locator('.type-scope-declaration') })
+      .evaluateAll(nodes => nodes.map(node => node.getAttribute('data-check-id')));
+    expect(ids.length, '真实保存检查须有可声明的未量测或未覆盖项').toBeGreaterThan(0);
+    const absentShort = before.payload.checks.find(item => item.id === 'short_circuit/missing' && item.blocking);
+    if (absentShort) {
+      await expect(row(absentShort.id).locator('.type-scope-declaration')).toHaveCount(0);
+      check('短路缺少保存运行没有限定范围绕行入口', true, absentShort);
+    }
+    await capture('教学交付-逐项限定范围前仍保留真实阻断');
+    const endpoint = `/api/types/${id}/release-scope`;
+    async function confirm(key, reason) {
+      await openChecks();
+      const item = row(key), disclosure = item.locator('.type-scope-declaration');
+      await expect(disclosure).toBeVisible();
+      if (await disclosure.getAttribute('open') === null) await disclosure.locator(':scope > summary').click();
+      const input = disclosure.getByRole('textbox', { name: /^不含原因：/ });
+      const button = disclosure.getByRole('button', { name: '本人确认不含此项', exact: true });
+      const writesBefore = report.writes.length;
+      await input.fill('');
+      await expect(button).toBeDisabled();
+      await input.fill(reason); await input.press('Tab');
+      await expect(button).toBeEnabled();
+      expect(report.writes.length, '填写范围原因尚未执行确认或写入').toBe(writesBefore);
+      const [response] = await Promise.all([
+        page.waitForResponse(value => value.request().method() === 'POST' && new URL(value.url()).pathname === endpoint),
+        button.click(),
+      ]);
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const request = response.request().postDataJSON(), receipt = await response.json();
+      expect(request.human_confirmed).toBe(true);
+      expect(request.expected_revision).toBe(original.revision);
+      expect(response.request().headers()['x-cablesim-actor']).toBe('human');
+      declarations.set(key, reason);
+      expect(receipt.exclusions.map(item => item.check_id).sort()).toEqual([...declarations.keys()].sort());
+      expect(receipt.exclusions.find(item => item.check_id === key)?.reason).toBe(reason);
+      await expect(item).toHaveCount(0);
+      await expect(excluded().getByText(reason, { exact: false })).toBeVisible();
+      return receipt;
+    }
+    for (const [index, key] of ids.entries()) {
+      const checkRow = before.payload.checks.find(item => item.id === key), result = checkRow?.result;
+      expect(checkRow?.blocking).toBe(true);
+      expect(['failed', 'fail'].includes(result?.status) || ['failed', 'fail'].includes(result?.verdict)
+        || result?.satisfied === false, '不满足结果不能被范围声明移除').toBe(false);
+      const title = result?.title || checkRow.message;
+      const category = result?.basis === 'measurement' ? '尚无实测记录'
+        : ['uncovered', 'not_applicable'].includes(result?.status || result?.verdict) ? '方法未覆盖' : '工程条件未完备';
+      const reason = category === '尚无实测记录'
+        ? `本次隔离教学交付不含“${title}”的出厂检验合格证明；尚无同一试样的实测记录，不以设计值代替。`
+        : category === '方法未覆盖'
+          ? `本次隔离教学交付不含“${title}”的保证值或符合性结论；保存方法未覆盖此项，须以适用方法与证据另行核对。`
+          : `本次隔离教学交付不含“${title}”的符合性结论；设计条件或依据尚不完整，须补齐并重新核对后另行交付。`;
+      const receipt = await confirm(key, reason);
+      if (!captured.has(category)) {
+        await capture('教学交付-明确声明不含-' + category); captured.add(category);
+      }
+      if (index === 0) {
+        const saved = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+        const active = saved.payload.checks.find(item => item.id === key);
+        expect(active).toMatchObject({ excluded: true, blocking: false, exclusion_reason: reason, result });
+        const decision = excluded().locator('.type-review-item').filter({ hasText: reason });
+        await responseFor('POST', endpoint, () => decision.getByRole('button', { name: '撤销声明', exact: true }).click());
+        declarations.delete(key);
+        await expect(row(key)).toHaveCount(1); await openChecks();
+        await expect(row(key)).toBeVisible();
+        const restored = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+        expect(restored.payload.checks.find(item => item.id === key)).toEqual(checkRow);
+        expect(restored.payload.release_exclusions.some(item => item.check_id === key)).toBe(false);
+        check('撤销限定范围恢复原检查阻断及完整证据', true, { check: key, original: checkRow });
+        await capture('教学交付-撤销不含声明后恢复原缺项');
+        await confirm(key, reason);
+      }
+      (report.scopeDeclarations ||= []).push({ ...size, workspace: id, revision: original.revision,
+        check: key, category, reason, original: checkRow, receipt: receipt.exclusions.find(item => item.check_id === key) });
+    }
+    const after = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
+    expect(after.payload.sources).toEqual(before.payload.sources);
+    expect(after.payload.results).toEqual(before.payload.results);
+    expect(after.payload.document).toEqual(before.payload.document);
+    expect(after.lifecycle.status).toBe(before.lifecycle.status);
+    for (const checkRow of before.payload.checks) {
+      const current = after.payload.checks.find(item => item.id === checkRow.id), reason = declarations.get(checkRow.id);
+      expect(current).toEqual(reason ? { ...checkRow, excluded: true, blocking: false, exclusion_reason: reason } : checkRow);
+    }
+    expect(after.payload.release_exclusions.length).toBe(declarations.size);
+    for (const audience of ['customer', 'internal']) {
+      const specification = audience === 'customer' ? after : await api(`/api/types/${id}/specification?audience=internal&view=detail`);
+      const documentText = await page.evaluate(html => new DOMParser().parseFromString(html, 'text/html').body.textContent, specification.html);
+      expect(documentText).toContain('本次发布不含项');
+      for (const reason of declarations.values()) expect(documentText).toContain(reason);
+    }
+    const current = await workspace(id);
+    expect(current.revision).toBe(original.revision);
+    expect(current.domain).toEqual(original.domain);
+    if (absentShort) {
+      expect(after.payload.checks.find(item => item.id === absentShort.id)).toEqual(absentShort);
+      expect(after.ready).toBe(false);
+      await expect(page.getByRole('button', { name: '提交评审', exact: true })).toBeDisabled();
+      check('逐项限定范围仍保留短路缺运行并阻止客户发布', true, { remaining: after.payload.checks.filter(item => item.blocking) });
+    }
+    check('限定交付逐项回读且未改写输入结果或批准状态', true, { workspace: id, revision: current.revision,
+      count: declarations.size, categories: [...captured], remaining: after.payload.checks.filter(item => item.blocking).map(item => item.id) });
+    await page.reload();
+    await expect(page.locator('[data-type-page="specification-results"]')).not.toHaveAttribute('data-type-state', 'loading');
+    await page.getByRole('tab', { name: '审核与发布', exact: true }).click();
+    await expect(excluded().locator('.type-review-item')).toHaveCount(declarations.size);
+    await capture('教学交付-重载保留逐项不含声明和剩余阻断');
+  }
+
   const options = await api('/api/types/creation-options');
   await attempt('01-型号列表与批量操作入口', async () => {
     await page.goto(base + '/types?theme=light');
@@ -1231,6 +1357,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const result = current && await api(`/api/design/workspaces/${delivery.id}/rating-table-runs/${current.id}`);
     check('教学交付载流量由当前真实运行取得正电流', result?.rows.some(row => row.name === caseName && row.value_a > 0), result);
   });
+  await attempt('17b-教学交付逐项限定范围并保留未闭合门禁', () => declareTeachingScope(delivery.id));
   await attempt('18-教学交付副本生成客户规格书并下载真实PDF', () => generateSpecification(delivery.id, '教学交付规格书', 'teaching'));
   await attempt('19-教学交付副本逐项审核并执行版本流程', () => reviewSpecification(delivery.id, '教学交付规格书'));
   const sourceAfterDelivery = await workspace(delivery.source);
