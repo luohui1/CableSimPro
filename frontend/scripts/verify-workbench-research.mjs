@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { walkthrough } from './verify-workbench-support.mjs';
-import { waitForPageReady } from './page-readiness.mjs';
+import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
 
 // Chromium's native PDF viewer has no DOM paint signal. Read its unmodified
 // screenshot: a blob URL or a loaded iframe can still be an entirely dark shell.
@@ -66,7 +66,9 @@ function csvRows(text) {
 }
 
 // Engineering changes go through the real interface. GETs verify saved identities.
+let readinessInstalled = false;
 await walkthrough('research', async ({ page, expect, base, api, choose, step, check, capture, out, size, tag, report }) => {
+  if (!readinessInstalled) { await installReadinessObserver(page); readinessInstalled = true; }
   const command = () => page.getByRole('toolbar', { name: '工程命令', exact: true });
   const field = label => page.getByLabel(label, { exact: true });
   async function clickCommand(label) {
@@ -1118,12 +1120,158 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         .getByRole('button', { name: view === 'three' ? '三维' : '敷设截面', exact: true })).toHaveAttribute('aria-pressed', 'true');
       await capture(`11-saved-section-alias-${view}`);
     }
+
+    // Reuse the selected, verified archive and its real IEC field. Layout
+    // changes must not create a run, change its case, or remount the renderer.
+    const fieldWritesStart = report.writes.length;
+    await canvas.getByRole('button', { name: '土壤温度场', exact: true }).click();
+    await page.waitForURL(next => next.searchParams.get('view') === 'field'
+      && next.searchParams.get('run') === before.run.id && next.searchParams.get('workspace') === selection.workspace);
+    const fieldSlot = canvas.locator('.study-field-slot'), soilField = fieldSlot.locator('.field-view');
+    const fieldRenderer = soilField.locator('canvas.field-canvas'), basis = fieldSlot.locator('.field-basis');
+    const modelSize = canvas.locator('.study-model-size');
+    await expect(fieldSlot).toHaveAttribute('data-run-id', before.run.id);
+    await expect(fieldSlot).toHaveAttribute('data-case-id', /.+/);
+    const caseId = await fieldSlot.getAttribute('data-case-id');
+    const savedCase = before.run.output.cases.find(item => item.case_id === caseId);
+    expect(savedCase, '场图工况必须来自此保存运行').toBeTruthy();
+    expect(before.run.output.assessment.some(item => item.case_id === caseId)).toBe(true);
+    const savedField = savedCase.artifacts['x-cablesim.temperature-field'];
+    expect(savedField.source.binding).toBe('iec-trace');
+    expect(savedField.source.trace_sha256).toBe(savedCase.artifact_digests['x-cablesim.iec60287-trace']);
+    expect(savedCase.artifact_digests['x-cablesim.temperature-field']).toMatch(/^[a-f0-9]{64}$/);
+    const trace = Object.values(savedCase.artifacts).find(artifact => Array.isArray(artifact?.operating?.cable_states));
+    const currents = [...new Set((trace?.operating.cable_states || []).map(state => state.current_a).filter(value => typeof value === 'number' && Number.isFinite(value)))];
+    const loadLabel = currents.length === 1 ? `保存负荷 ${Number(currents[0].toFixed(1))} A`
+      : currents.length ? `保存负荷 ${currents.map(value => Number(value.toFixed(1)) + ' A').join(' / ')}` : '保存负荷（详见本次运行输入）';
+    const expectedBasis = `${loadLabel} · 额定温升需按允许电流另行运行`;
+    const expectedTitle = `${loadLabel}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${savedField.analytical_soil_view.limitations.join('；')}`;
+    const fixedTemperature = value => Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(1);
+    await expect(soilField).toHaveAttribute('aria-label', `土壤温度场（IEC 解析） · ${loadLabel}`);
+    await expect(basis).toHaveText(expectedBasis);
+    await expect(basis).toHaveAttribute('title', expectedTitle);
+    await expect(soilField.locator('[data-field-label="hotspot"] text')).toHaveText(`土壤最高 ${fixedTemperature(savedField.hotspot.temperature_k - 273.15)} °C`);
+    const fieldNode = await soilField.elementHandle(), rendererNode = await fieldRenderer.elementHandle(), fieldUrl = page.url();
+    const fieldLayouts = [];
+    async function observeFieldLayout(expanded, label) {
+      if (expanded) {
+        await expect(workbench).toHaveAttribute('data-canvas', 'max');
+        await expect(workbench.locator('.workbench-dock')).toBeHidden();
+      } else {
+        await expect(workbench).not.toHaveAttribute('data-canvas', 'max');
+        await expect(page.getByRole('table', { name: '真实选型候选', exact: true })).toBeVisible();
+      }
+      await expect(modelSize).toHaveText(expanded ? '还原模型布局' : '放大模型');
+      await expect(modelSize).toHaveAttribute('aria-pressed', String(expanded));
+      await expect(fieldSlot).toHaveAttribute('data-run-id', before.run.id);
+      await expect(fieldSlot).toHaveAttribute('data-case-id', caseId);
+      expect(page.url()).toBe(fieldUrl);
+      const ready = await waitForPageReady(page, { timeout: 60000 });
+      expect(ready.errors).toEqual([]);
+      await expect(fieldRenderer).toHaveAttribute('data-audit-first-draw', /.+/);
+      // The first draw alone does not prove that a resize has painted. Wait for
+      // the existing WebGL buffer and SVG viewport to match the actual layout.
+      await expect.poll(() => soilField.evaluate(node => {
+        const canvas = node.querySelector('canvas'), svg = node.querySelector('svg');
+        if (!canvas || !svg) return false;
+        const plot = canvas.getBoundingClientRect(), box = node.getBoundingClientRect(), ratio = Math.min(devicePixelRatio || 1, 2);
+        return plot.width > 0 && plot.height > 0 && Math.abs(canvas.width - plot.width * ratio) <= 2
+          && Math.abs(canvas.height - plot.height * ratio) <= 2 && Math.abs(Number(svg.getAttribute('width')) - box.width) <= 1
+          && Math.abs(Number(svg.getAttribute('height')) - box.height) <= 1;
+      })).toBe(true);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      expect(await fieldNode.evaluate(node => node.isConnected && node === document.querySelector('.study-field-slot .field-view'))).toBe(true);
+      expect(await rendererNode.evaluate(node => node.isConnected && node === document.querySelector('.study-field-slot canvas.field-canvas'))).toBe(true);
+      const geometry = await canvas.evaluate(node => {
+        const rect = box => ({ left: box.left, top: box.top, right: box.right, bottom: box.bottom, width: box.width, height: box.height });
+        const bounds = element => rect(element.getBoundingClientRect());
+        const unclipped = element => {
+          const box = bounds(element);
+          for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent), clip = bounds(parent);
+            if (/(hidden|clip|auto|scroll)/.test(style.overflowX)) { box.left = Math.max(box.left, clip.left); box.right = Math.min(box.right, clip.right); }
+            if (/(hidden|clip|auto|scroll)/.test(style.overflowY)) { box.top = Math.max(box.top, clip.top); box.bottom = Math.min(box.bottom, clip.bottom); }
+          }
+          return box;
+        };
+        const field = node.querySelector('.field-view'), basis = node.querySelector('.field-basis'), range = document.createRange();
+        range.selectNodeContents(basis);
+        const style = getComputedStyle(basis);
+        const dock = node.parentElement.querySelector('.workbench-dock');
+        return { model: bounds(node), modelVisible: unclipped(node), viewport: { left: 0, top: 0, right: innerWidth, bottom: innerHeight },
+          field: bounds(field), plot: bounds(field.querySelector('canvas')), toolbar: bounds(node.querySelector('.study-canvas-toolbar')),
+          legend: bounds(field.querySelector('.field-colorbar')), orientation: field.dataset.colorbarPosition,
+          dock: { visible: dock.checkVisibility(), rect: bounds(dock), clip: unclipped(dock), toolbar: bounds(dock.querySelector('.workbench-dock-bar')),
+            controls: [...dock.querySelectorAll('.workbench-dock-bar button')].map(button => ({ text: button.textContent, rect: bounds(button), visible: button.checkVisibility() })) },
+          ticks: [...field.querySelectorAll('.field-colorbar text')].map(text => ({ text: text.textContent, rect: bounds(text), fontSize: parseFloat(getComputedStyle(text).fontSize) })),
+          basis: { rect: bounds(basis), text: basis.textContent, title: basis.title, textRects: [...range.getClientRects()].map(rect),
+            fontSize: parseFloat(style.fontSize), textOverflow: style.textOverflow, visible: basis.checkVisibility(),
+            clientWidth: basis.clientWidth, scrollWidth: basis.scrollWidth, clientHeight: basis.clientHeight, scrollHeight: basis.scrollHeight } };
+      });
+      const inside = (inner, outer) => inner.left >= outer.left - 1 && inner.right <= outer.right + 1 && inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
+      const overlaps = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+      expect(geometry.basis.text).toBe(expectedBasis);
+      expect(geometry.basis.title).toBe(expectedTitle);
+      expect(geometry.basis.visible).toBe(true);
+      expect(geometry.basis.fontSize).toBeGreaterThanOrEqual(14);
+      expect(geometry.basis.textOverflow).not.toBe('ellipsis');
+      expect(geometry.basis.scrollWidth).toBeLessThanOrEqual(geometry.basis.clientWidth + 1);
+      expect(geometry.basis.scrollHeight).toBeLessThanOrEqual(geometry.basis.clientHeight + 1);
+      expect(geometry.basis.textRects.length).toBeGreaterThan(0);
+      expect(geometry.basis.textRects.every(box => inside(box, geometry.basis.rect))).toBe(true);
+      expect(geometry.plot.height, 'IEC 绘图区必须留出超过上下各48px的拟合边距').toBeGreaterThan(96);
+      for (const box of [geometry.field, geometry.basis.rect, geometry.legend, geometry.plot, geometry.toolbar]) {
+        expect(inside(box, geometry.modelVisible) && inside(box, geometry.viewport)).toBe(true);
+      }
+      expect(inside(geometry.legend, geometry.field)).toBe(true);
+      expect(overlaps(geometry.basis.rect, geometry.legend) || overlaps(geometry.basis.rect, geometry.plot)
+        || overlaps(geometry.plot, geometry.legend) || overlaps(geometry.field, geometry.toolbar)).toBe(false);
+      expect(geometry.ticks.length).toBeGreaterThanOrEqual(3);
+      expect(geometry.ticks.every(tick => tick.fontSize >= 13 && inside(tick.rect, geometry.field) && !overlaps(tick.rect, geometry.basis.rect))).toBe(true);
+      if (!expanded) {
+        expect(geometry.dock.visible && inside(geometry.dock.toolbar, geometry.dock.clip) && inside(geometry.dock.toolbar, geometry.viewport)).toBe(true);
+        expect(geometry.dock.rect.height).toBeGreaterThan(geometry.dock.toolbar.height);
+        expect(geometry.dock.controls.length).toBeGreaterThan(0);
+        expect(geometry.dock.controls.every(control => control.visible && inside(control.rect, geometry.dock.toolbar) && inside(control.rect, geometry.viewport))).toBe(true);
+      }
+      const shot = await capture(label);
+      fieldLayouts.push({ label, expanded, screenshot: shot.screenshot, ...geometry });
+    }
+    await observeFieldLayout(false, '11-saved-soil-field-full-basis-and-colorbar');
+    const splitter = workbench.getByRole('separator', { name: '拖动调整画布与结果区高度，双击复原', exact: true });
+    const originalSplit = Number(await splitter.getAttribute('aria-valuenow'));
+    expect(originalSplit >= 15 && originalSplit <= 85 && originalSplit % 5 === 0).toBe(true);
+    await splitter.focus();
+    await page.keyboard.press('Home');
+    await expect(splitter).toHaveAttribute('aria-valuenow', '15');
+    await expect(workbench).toHaveAttribute('data-split', '15');
+    await observeFieldLayout(false, '11-saved-soil-field-minimum-split');
+    const records = workbench.locator('.workbench-dock-bar').getByRole('button', { name: '运行记录', exact: true });
+    await records.focus();
+    await expect(records).toBeFocused();
+    // Restore the user's original proportion through the existing keyboard UI.
+    await splitter.focus();
+    for (let share = 15; share < originalSplit; share += 5) await page.keyboard.press('ArrowDown');
+    await expect(splitter).toHaveAttribute('aria-valuenow', String(originalSplit));
+    await modelSize.click();
+    await observeFieldLayout(true, '11-saved-soil-field-mouse-expands-model');
+    await modelSize.focus();
+    await page.keyboard.press('Enter');
+    await observeFieldLayout(false, '11-saved-soil-field-keyboard-restores-model');
+    await expect(modelSize).toBeFocused();
+    expect(fieldLayouts[2].field.height).toBeGreaterThan(fieldLayouts[0].field.height);
+    expect(Math.abs(fieldLayouts[3].field.height - fieldLayouts[0].field.height)).toBeLessThanOrEqual(1);
+    const savedSoilField = { ...source, caseId, url: fieldUrl, fieldDigest: savedCase.artifact_digests['x-cablesim.temperature-field'],
+      traceDigest: savedField.source.trace_sha256, layouts: fieldLayouts, writes: report.writes.slice(fieldWritesStart) };
+    expect(savedSoilField.writes).toEqual([]);
+    check('保存土壤温度场说明全文、色标刻度与绘图区完整可见且互不覆盖', true, savedSoilField);
+    check('鼠标放大与Enter还原保留同一场图实例、保存运行和工况', true, savedSoilField);
     check('坐标和介质表分别读取当前输入与固定运行输入，固定输入只读且可键鼠返回', true, { ...source, tables: tableEvidence });
     check('旧截面与三维入口保留固定运行并打开正确模型视图', true, source);
     check('选型正文和工况链接均来自同一真实保存运行，不把读取外壳当结果', candidateEvidence.length === 9,
       { ...source, pages: candidateEvidence });
     check('模型入口与坐标介质回归不写工程、研究、运行或启动计算', isDeepStrictEqual(await readSource(), before)
       && report.writes.length === writesStart, { ...source, writes: report.writes.slice(writesStart) });
-    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence, candidates: candidateEvidence, savedCad });
+    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence, candidates: candidateEvidence, savedCad, savedSoilField });
   });
 });

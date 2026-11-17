@@ -561,7 +561,7 @@ export function StudyWorkspace(): ReactElement {
               </div>
               {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
               {canvasView === "field" && fieldView ? (
-                <div className="study-field-slot"><FieldView
+                <div className="study-field-slot" data-run-id={text((needsFieldProjection ? fieldRun : shownRun)?.id)} data-case-id={text(fieldView.case.case_id)}><FieldView
                   label={fieldView.kind === "iec" ? `土壤温度场（IEC 解析） · ${fieldLoadLabel(fieldView.case)}` : "温度场"}
                   key={fullFieldDomain ? 'full-domain' : 'cable-region'}
                   points={focusedField!.points}
@@ -582,7 +582,9 @@ export function StudyWorkspace(): ReactElement {
                   hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: fieldView.kind === "iec" ? "土壤最高" : "最高" }}
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
                   limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
-                /></div>
+                />
+                {fieldView.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
+                </div>
               ) : canvasView === 'field' && needsFieldProjection && fieldProjection.isPending ? <LoadingState title="正在读取保存场图" />
                 : canvasView === 'field' && fieldProjection.error ? <ErrorState title="场图读取失败" description={message(fieldProjection.error)} action={<Button onClick={() => void fieldProjection.refetch()}>重新读取</Button>} />
                 : canvasView === 'field' ? <InlineEmpty title="该保存运行没有温度场" />
@@ -596,7 +598,6 @@ export function StudyWorkspace(): ReactElement {
                   downloadBlob(image.blob, '三维视图.png');
                 }} />
               )}
-              {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
             </section>
           )}
           {showCanvas && <WorkbenchSplitter kind="study" />}

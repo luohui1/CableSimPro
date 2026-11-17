@@ -1,8 +1,8 @@
 /* Bound the observed plot and inspector to the workspace's allocated grid area. */
 .work-body:has(> .study-inspector) { grid-template-rows: minmax(0, 1fr); }
 .study-inspector { min-width: 0; contain: size layout; }
-.study-field-slot { position: absolute; inset: 0; contain: size layout paint; overflow: hidden; }
-.study-field-slot > .field-view { min-height: 0; }
+.study-field-slot { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; contain: size layout paint; overflow: hidden; }
+.study-field-slot > .field-view { flex: 1 1 0; height: auto; min-height: 0; }
 /* Reserve a host row above the drawing's trial controls. Drawing actions already
    reserve space in their own plot, so keep them over that reserved area. */
 .workbench-canvas:has(.geometry-what-if) > .workbench-views { position: static; align-self: flex-start; margin: var(--space-2); }
@@ -84,6 +84,8 @@
 .study-workbench .preview-strip > .preview-tag, .study-workbench .preview-strip > .muted { flex-shrink: 0; white-space: nowrap; }
 .study-workbench .preview-value small { font-size: var(--text-note); }
 .study-workbench .workbench-canvas { min-height: calc(var(--space-4) * 14); }
+/* Reserve the toolbar, explanation, legend and IEC framing even at the minimum split. */
+.study-workbench .workbench-canvas:has(.study-field-slot) { min-height: calc(var(--space-12) * 7); }
 .study-workbench[data-dock="max"] .workbench-canvas { min-height: 0; }
 .inspector-calculation-meta { margin: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); }
 .inspector-calculation-meta > summary { display: flex; justify-content: space-between; gap: var(--space-2); cursor: pointer; min-height: var(--control-compact); align-items: center; font-size: var(--text-note); }
