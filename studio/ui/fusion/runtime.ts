@@ -4,13 +4,13 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useExternalStoreRuntime, type AppendMessage, type ThreadMessageLike } from '@assistant-ui/react';
 import { useMutation } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ChatMessage, ChatStep } from '@shared/types';
 import { reportFailure } from '@/components/notice';
 import { api } from '@/state/api';
 import { chatQuery, queryClient, useChat, useChats, useStatus } from '@/state/queries';
 import { ALL_STARTERS } from './starters';
-import { MESSAGE_SOURCE } from './open';
+import { MESSAGE_SOURCE, notifyPlatformChanged } from './open';
 
 const stepFailed = (step: ChatStep) => step.status === 'failed' || step.status === 'rejected';
 
@@ -37,12 +37,26 @@ export function useAgentRuntime(sessionId: string | undefined) {
   const chats = useChats();
   const view = useChat(sessionId);
   const status = useStatus();
+  const notified = useRef(new Set<string>());
   const query = new URLSearchParams(window.location.search);
   const workspace = query.get('workspace');
   const context = workspace ? { workspace_id: workspace, study_id: query.get('study') || undefined, label: query.get('context') || undefined } : undefined;
   useEffect(() => {
     window.parent.postMessage({ source: MESSAGE_SOURCE, type: 'session', session: sessionId || null }, window.location.origin);
   }, [sessionId]);
+  useEffect(() => {
+    // Recovered conversations can contain an accepted write whose original HTTP callback was lost.
+    // These are platform step states, never conclusions parsed out of model text.
+    const workspaces = new Set<string | undefined>();
+    for (const item of view.data?.items || []) for (const part of item.parts) {
+      if (part.type !== 'step' || part.proposal?.status !== 'accepted' || !['done', 'failed', 'interrupted'].includes(part.status)) continue;
+      const key = `${sessionId}/${part.id}/${part.status}`;
+      if (notified.current.has(key)) continue;
+      notified.current.add(key);
+      workspaces.add(part.proposal.project_id);
+    }
+    for (const workspace of workspaces) notifyPlatformChanged(workspace);
+  }, [sessionId, view.data?.items]);
 
   const send = useMutation({
     mutationFn: async (text: string) => api.send(text, sessionId, undefined, context),

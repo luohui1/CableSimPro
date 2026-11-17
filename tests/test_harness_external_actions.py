@@ -58,6 +58,9 @@ def test_create_run_export_requires_each_human_decision_and_resumes(client):
     record = client.get('/api/agent/sessions/' + scope['session']).json()
     assert record['budget']['tool_calls'] == 1
     run_plan = propose(client, scope, 'propose_study_run', {'study_id': saved['study_id']})
+    _, capability = client.app.state.research.resolve(source['definition']['method'])
+    assert run_plan['assumptions'] == capability.limitations
+    assert not any(limit in run_plan['checks'] for limit in capability.limitations)
     assert counts(client)['study_runs'] == before['study_runs']
     result = decide(client, run_plan)
     assert result['receipt']['status'] == 'succeeded', result
@@ -116,23 +119,59 @@ def test_rejection_and_stale_revision_never_write_and_cross_session_cannot_read_
     assert decide(client, proposal) == rejected
 
 
-def test_missing_real_input_refuses_execution_without_inventing_results(client):
+@pytest.mark.parametrize('missing,label,field', [
+    ('resistance', '20 °C 直流电阻（R20）', '/conductor/r20_ohm_m'),
+    ('soil', '热阻率', '/installation/soil_rho_k_m_w'),
+    ('parameter', '集肤效应构造系数', '/parameters/ks'),
+    ('crosscheck', '集肤效应构造系数', '/parameters/ks'),
+])
+def test_missing_real_input_refuses_execution_without_inventing_results(client, missing, label, field):
     w, s = study(client)
     definition = deepcopy(s['definition'])
-    for cable in definition['method_input']['cable_types']:
-        for core in cable['cores']:
-            core['conductor']['r20'] = None
-            core['conductor']['r20_basis'] = None
+    if missing == 'resistance':
+        for cable in definition['method_input']['cable_types']:
+            for core in cable['cores']:
+                core['conductor']['r20'] = None
+                core['conductor']['r20_basis'] = None
+    elif missing == 'soil':
+        soil_id = definition['method_input']['sections'][0]['medium']['material']
+        next(material for material in definition['method_input']['materials'] if material['id'] == soil_id)['thermal_resistivity'] = None
+    elif missing == 'parameter':
+        definition['parameters'].pop('ks')
+    else:
+        parameters = deepcopy(definition['parameters'])
+        parameters.pop('ks')
+        definition['driver'] = {'kind': 'crosscheck'}
+        definition['crosschecks'] = [{'method': definition['method'], 'parameters': parameters}]
     saved = client.put(f'/api/workspaces/{w["id"]}/studies/{s["id"]}', json={**definition,
         'expected_revision': w['revision'], 'expected_study_revision': s['revision']})
     assert saved.status_code == 200, saved.text
+    preflight = client.get(f'/api/workspaces/{w["id"]}/studies/{s["id"]}/preflight', params={
+        'expected_revision': w['revision'], 'expected_study_revision': saved.json()['revision']})
+    assert preflight.status_code == 200, preflight.text
+    rejected_cases = [case for case in preflight.json()['cases'] + preflight.json()['crosschecks'] if case['status'] != 'succeeded']
+    assert rejected_cases, preflight.json()
+    if missing == 'crosscheck':
+        assert all(case['status'] == 'succeeded' for case in preflight.json()['cases'])
     scope = open_session(client, w)
     proposal = propose(client, scope, 'propose_study_run', {'study_id': s['id']})
     before = counts(client)
     failed = decide(client, proposal)
     assert failed['receipt']['status'] == 'failed' and failed['receipt']['executed'] is False, failed
     assert failed['receipt']['error']['code'] == 'MISSING_INPUT', failed
+    error = failed['receipt']['error']
+    assert label in error['message'] and field in error['message'], error
+    assert '工作台' in error['message'] and '来源' in error['message'] and '未创建运行' in error['message']
+    assert ('方法参数' if missing in ('parameter', 'crosscheck') else '敷设工况' if missing == 'soil' else '电缆模型') in error['message']
+    assert 'Input should' not in error['message'], error
+    assert 'required' not in error['message'], error
+    assert error['path'] == field and error['issues'][0]['path'] == field
+    assert error['diagnostics'] == [{'case_id': case['case_id'], 'status': case['status'], 'error': case['error']} for case in rejected_cases]
+    assert error['workbench_path'].startswith(f'/studies/{s["id"]}?workspace={w["id"]}')
+    assert ('inspector=method' if missing in ('parameter', 'crosscheck') else 'inspector=input') in error['workbench_path']
+    assert failed['receipt']['study_id'] == s['id']
     assert 'result' not in failed['receipt'] and 'run_id' not in failed['receipt']
+    assert decide(client, proposal) == failed
     assert counts(client) == before
     continued = resume(client, scope)
     response = call(client, 'study_read', {'study_id': s['id']}, continued['session'], continued['turn'])

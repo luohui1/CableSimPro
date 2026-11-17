@@ -9,7 +9,7 @@ test('研究路由的共享工程请求跨过 StrictMode 重挂，保留成功�
   // as the browser. Only the HTTP transport is controlled by this lifecycle test.
   const server = await createServer({
     root: fileURLToPath(new URL('../', import.meta.url)),
-    server: { middlewareMode: true, watch: null },
+    server: { middlewareMode: true, watch: null, hmr: false, ws: false },
     logLevel: 'error',
   });
   t.after(() => server.close());

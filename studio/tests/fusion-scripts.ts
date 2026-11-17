@@ -88,7 +88,7 @@ export function installStudyWorkflow(faux: Faux, input: { workspace: string; stu
   return state;
 }
 
-export function installConditionWorkflow(faux: Faux, input: { workspace: string; study: string; run: string; path: string; value: number; unit: string }): FlowState {
+export function installConditionWorkflow(faux: Faux, input: { workspace: string; study: string; run: string; path: string; value: number }): FlowState {
   const state: FlowState = { done: false, study: input.study, previousRun: input.run };
   const afterCompare: Reply = context => {
     state.comparison = data(context).comparison;
@@ -105,9 +105,12 @@ export function installConditionWorkflow(faux: Faux, input: { workspace: string;
   };
   const afterChange: Reply = context => { receipt(context); return advance(faux, state, afterRun, 'propose_study_run', { workspace_id: input.workspace, study_id: input.study }); };
   faux.setResponses([() => advance(faux, state, context => {
-    const result = data(context); assert.ok(result.fields?.length, 'the saved field must be read before proposing it');
+    const result = data(context);
+    const field = result.fields?.find((item: any) => item.path === input.path);
+    assert.ok(field, 'the exact saved field must be read before proposing it');
+    assert.equal(typeof field.unit, 'string', 'use the display unit declared by the platform, not an assumed spelling');
     return advance(faux, state, afterChange, 'propose_domain_changes', { workspace_id: input.workspace, title: '调整明确给定的敷设条件',
-      changes: [{ path: input.path, value: input.value, unit: input.unit }] });
+      changes: [{ path: input.path, value: input.value, unit: field.unit }] });
   }, 'workspace_read', { workspace_id: input.workspace, paths: [input.path] })]);
   return state;
 }
