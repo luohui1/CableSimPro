@@ -157,7 +157,43 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
                for item in factory['specification_drafts'])
     assert all(item['generation']['status'] == 'blocked' and item['generation']['channel'] == 'geometry'
                for item in factory['specification_drafts'])
-    assert len(factory['generation_runs']) == 11
+    assert len(factory['generation_runs']) == 33
+    assert len(factory['analysis_runs']) == 22
+    assert all(item['status'] == 'succeeded' and item['run_id'] for item in factory['analysis_runs'])
+    for draft in factory['specification_drafts']:
+        payload = draft['snapshot']['payload']
+        assert {'electrical/missing', 'short_circuit/missing'}.isdisjoint(check['id'] for check in draft['blockers'])
+        assert any(check['id'] == 'geometry/mass' for check in draft['blockers'])
+        electrical = payload['results']['electrical']['artifact']['rows']
+        for core in payload['document']['cable_types'][0]['cores']:
+            resistance = next(row for row in electrical if row['id'] == core['id'] + ':r20')
+            assert resistance['value'] == core['conductor']['r20'] and resistance['input_source']
+            capacitance = next(row for row in electrical if row['id'] == core['id'] + ':capacitance')
+            assert capacitance['status'] == 'available' and capacitance['value'] > 0
+        dc = next(row for row in electrical if row['id'].endswith(':dc'))
+        assert dc['value'] is None and {'temperature_k', 'r20_length_basis'} <= set(dc['missing_parameters'])
+        charging = next(row for row in electrical if row['id'].endswith(':charging'))
+        assert charging['value'] is None and charging['missing_parameters'] == ['phase_voltage_v']
+        short = payload['results']['short_circuit']['artifact']
+        conductor = next(row for row in short['rows'] if row['id'].endswith(':conductor-adiabatic'))
+        assert conductor['value'] is None and conductor['status'] == 'missing'
+        assert {'duration_s', 'initial_temperature_k', 'final_temperature_k'} <= set(conductor['missing_parameters'])
+        # The detail projection links the immutable records instead of repeating
+        # them. Verify the actual saved artifact against that link's digest.
+        from backend.kernel.workspace import fingerprint
+        source = next(row for row in payload['sources'] if row['channel'] == 'short_circuit')
+        with closing(sqlite3.connect(database)) as connection:
+            output = json.loads(connection.execute('SELECT output FROM study_runs WHERE id=?', (source['run_id'],)).fetchone()[0])
+        archived = output['cases'][0]['artifacts']['x-cablesim.type-short-circuit']['rows']
+        references = next(row for row in archived if row['id'] == conductor['id'])['basis_references']
+        assert conductor['basis_records_ref'] == {
+            'url': f'/api/types/{draft["workspace_id"]}/specification?audience=internal&view=full',
+            'sha256': fingerprint(references)}
+        assert references and all(ref['plugin_version'] == receipt['identity']['plugins']['cablesim.standards-basis']['version']
+                                  for ref in references)
+        assert all(row['value'] is None for row in short['rows'] if row['unit'] == 'A')
+        assert all(value is None for line in short['curve']['series'] for value in line['values_a'])
+        assert all(source['freshness'] == 'current' for source in payload['sources'])
     factory_runs = [item for operation in ('check', 'calculate') for item in factory[operation]['items']]
     assert len(factory_runs) == 22 and all(item['status'] == 'succeeded' and item['run_id'] for item in factory_runs)
     assert receipt['examples']['factory']['series_ids']

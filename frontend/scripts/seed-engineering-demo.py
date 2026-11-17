@@ -354,7 +354,7 @@ def release_identity():
     hv,hv_digest = bundled_hv()
     evidence = evidence_availability(verify=True)
     chengnan = evidence_availability(verify=True,scope='chengnan')
-    return {'seed_revision':17, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':18, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'public_catalogues':{item['id']:{'workbook_sha256':item['sha256'], 'source_sha256':item['source']['sha256'],
                                            'declarations_sha256':fingerprint(item['declarations'])}
                                  for item in sample_manifest()},
@@ -496,6 +496,97 @@ def release_teaching_mv_design(api):
             'unbound':[{'name':t['name'],'reason':t['match_reason']} for t in bindings['targets'] if t['state']=='unbound']},
         'modules':modules,'review':{'ready':False,'blockers':[{'id':c['id'],'message':c['message'],'channel':c['channel']}
             for c in review['payload']['checks'] if c['blocking']], 'teaching':True}}
+
+
+def save_factory_analyses(api, factory):
+    """Save independent chapters even when genuine mass gaps stop generation.
+
+    The existing rating run supplies its declared frequency/coefficient inputs
+    and its computed lay factor. No operating voltage, R20 length convention,
+    short-circuit temperatures or protection time is inferred from the type.
+    Missing quantities remain explicit rows in the saved method artifacts.
+    """
+    entry = next(row for row in api('/api/methods') if row['method']['plugin_id'] == 'cablesim.type-electrical')
+    factory['analysis_runs'] = []
+    for draft in factory['specification_drafts']:
+        wid = draft['workspace_id']
+        workspace = api('/api/workspaces/' + wid)
+        rating = next(item for item in factory['calculate']['items'] if item['spec_id'] == draft['spec_id'])
+        rating_path = f'/api/workspaces/{wid}/studies/{rating["study_id"]}/runs/{rating["run_id"]}'
+        saved = api(rating_path + '?view=full')
+        if (saved['status'] != 'succeeded' or saved['integrity'] != 'verified' or saved['freshness'] != 'current'
+                or saved['version_status']['status'] != 'current'
+                or saved['input_digest'] != rating['input_digest'] or saved['output_digest'] != rating['output_digest']):
+            raise RuntimeError('厂家系列电气条件的载流量来源不再有效：' + draft['name'])
+        condition = rating['rows'][0]
+        case = next(case for case in saved['output']['cases'] if case['case_id'] == condition['case_id'])
+        trace = case['artifacts']['x-cablesim.iec60287-trace']
+        states = trace['simultaneous_rating']['cable_states']
+        if len(states) != 1:
+            raise RuntimeError('厂家系列电气条件必须明确对应同一根三芯电缆：' + draft['name'])
+        reference = {'run_id': saved['id'], 'study_id': saved['study'], 'workspace_id': wid,
+                     'input_digest': saved['input_digest'], 'output_digest': saved['output_digest'],
+                     'method': saved['snapshot']['definition']['method'], 'case_id': case['case_id'],
+                     'method_version': trace['method_version'], 'confidence': 'reference',
+                     'artifact_digest': case['artifact_digests']['x-cablesim.iec60287-trace'],
+                     'scope': '复用已保存的公开样本参考计算输入与推导值，非厂家实测或产品批准。'}
+        def source(path, description):
+            return json.dumps({**reference, 'path': path, 'description': description}, ensure_ascii=False)
+        electrical = {'cable_type_id': workspace['domain']['cable_types'][0]['id'],
+                      'frequency_hz': condition['condition']['frequency_hz'],
+                      'ks': saved['snapshot']['definition']['parameters']['ks'],
+                      'kp': saved['snapshot']['definition']['parameters']['kp'],
+                      'core_lay_factor': states[0]['core_lay_factor'],
+                      'sources': {'frequency_hz': source('/snapshot/definition/driver/cases/0/metadata/condition/frequency_hz', condition['condition']['source']),
+                                  'core_lay_factor': source('/simultaneous_rating/cable_states/0/core_lay_factor',
+                                                           '已封签 IEC 60287 方法按保存的成缆节距与结构推导；不填默认绞入系数。')}}
+        for key in ('ks', 'kp'):
+            electrical['sources'][key] = source('/snapshot/definition/parameters/' + key,
+                                               saved['snapshot']['definition']['parameters']['source'])
+        basis = api('/api/types/' + wid + '/short-circuit-basis', 'POST',
+                    {'request_id': str(uuid4()), 'expected_revision': workspace['revision'], 'parameters': {}})
+        for channel, capability, parameters in (('electrical', 'electrical', electrical),
+                                                ('short_circuit', 'short-circuit', basis['parameters'])):
+            prefix = '/api/workspaces/' + wid + '/studies'
+            study = api(prefix, 'POST', {'expected_revision': workspace['revision'],
+                'title': '公开系列 · 电气参数' if channel == 'electrical' else '公开系列 · 短路条件核查',
+                'input_source': 'domain', 'method': {**entry['method'], 'capability': capability},
+                'parameters': parameters,
+                'input_sources': {'/parameters': {'kind': 'user', 'reviewed': False,
+                    'reference': '按已保存型号及精确标准依据运行；未声明的工况保留缺项，不以正常温限代替短路初温。'}}})
+            path = prefix + '/' + study['id']
+            checked = api(path + f'/preflight?expected_revision={workspace["revision"]}&expected_study_revision={study["revision"]}')
+            receipt = {'spec_id': draft['spec_id'], 'workspace_id': wid, 'channel': channel,
+                       'study_id': study['id'], 'method': study['definition']['method']}
+            if not checked['ready']:
+                receipt.update(status='blocked', preflight=checked)
+            else:
+                run = api(path + '/runs', 'POST', {'expected_revision': workspace['revision'],
+                    'expected_study_revision': study['revision'], 'request_id': str(uuid4()),
+                    'scope_acknowledged': True, 'lock_digest': checked['lock_digest']})
+                deadline = time.monotonic() + 180
+                while run['status'] in ('accepted', 'running', 'validating') and time.monotonic() < deadline:
+                    time.sleep(.2)
+                    run = api(path + '/runs/' + run['id'])
+                if (run['status'] != 'succeeded' or run['integrity'] != 'verified' or run['freshness'] != 'current'
+                        or run['version_status']['status'] != 'current'):
+                    raise RuntimeError('厂家系列分析未保存有效诊断：' + draft['name'] + ' / ' + channel)
+                artifact_type = 'x-cablesim.type-electrical' if channel == 'electrical' else 'x-cablesim.type-short-circuit'
+                artifact = run['output']['cases'][0]['artifacts'][artifact_type]
+                receipt.update(status=run['status'], run_id=run['id'], input_digest=run['input_digest'],
+                               output_digest=run['output_digest'], coverage=artifact['counts'],
+                               missing_parameters=sorted({key for row in artifact['rows'] for key in row['missing_parameters']}))
+            if channel == 'short_circuit':
+                receipt['basis_missing'] = basis['missing']
+            factory['analysis_runs'].append(receipt)
+        snapshot = api(draft['endpoint'])
+        draft.update(digest=snapshot['digest'], ready=snapshot['ready'],
+                     snapshot={key: snapshot[key] for key in ('payload', 'digest', 'lifecycle', 'audience')},
+                     blockers=[{key: check[key] for key in ('id', 'channel', 'message')}
+                               for check in snapshot['payload']['checks'] if check['blocking']])
+    factory['generation_runs'] = [{**source, 'workspace_id': draft['workspace_id']}
+        for draft in factory['specification_drafts'] for source in draft['snapshot']['payload']['sources']
+        if source['channel'] not in ('standards', 'rating')]
 
 
 def build_release_seed(staged, database, identity):
@@ -691,6 +782,7 @@ def build_release_seed(staged, database, identity):
             from frontend.scripts.catalogue_seed import import_public_catalogues, calculate_factory_series
             result['public_catalogues'] = import_public_catalogues(client)
             result['factory_series_calculations'] = calculate_factory_series(client, result['public_catalogues'])
+            save_factory_analyses(api, result['factory_series_calculations'])
             result['examples'] = {
                 'factory': {'title':'电缆厂 · 8.7/15 kV 完整系列',
                             'series_ids':[item['series_id'] for item in result['public_catalogues'] if item['sample_id']=='people-mv'],
