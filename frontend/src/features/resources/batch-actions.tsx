@@ -37,6 +37,12 @@ export function ResourceOperationsDialog({ open, onClose, onChanged, onInspect, 
   const unknown = items.some(item => item.state === 'uncertain' || item.state === 'running');
   const ready = items.filter(item => item.selected && item.state === 'ready');
   const actionLabel = mode === 'export' ? '导出定义' : assetActions[mode];
+  const publicationScope = !items.length || items.some(item => !item.asset) ? '发布后的可用范围将在版本预检完成后显示。'
+    : items.every(item => item.asset?.kind === 'installation' || item.asset?.kind === 'study_template') ? '发布后保留固定版本。当前组织模板尚无应用到工程或研究的入口。'
+    : items.every(item => item.asset?.kind === 'component') ? '发布后保留固定版本。当前部件尚无应用到工程的入口。'
+    : items.every(item => item.asset?.kind === 'assembly') ? '发布后保留固定版本。当前普通结构尚无应用到工程的入口；已发布的型号版本请从型号设计继续建立方案。'
+    : items.every(item => item.asset?.kind === 'material' || item.asset?.kind === 'rule') ? '发布后可作为新引用；'
+    : '发布后各项保留固定版本。所选类别的引用入口与支持范围，请分别查看资源页说明。';
 
   function replace(next: Item[], persist = started) {
     if (!mounted.current) return;
@@ -150,7 +156,7 @@ export function ResourceOperationsDialog({ open, onClose, onChanged, onInspect, 
     {error && <p className="field-error" role="alert">{error}</p>}
     <div className="resource-batch-body" data-resource-operation={mode}>
       {mode !== 'export' && <label className="text-field">操作说明<textarea aria-label="资源操作说明" value={note} maxLength={1000} disabled={busy || started} onChange={event => setNote(event.target.value)} placeholder="说明核对依据、发布范围或退回、停用原因" /></label>}
-      {mode === 'publish' && <p>仅发布已经核对且依赖完整的版本。发布后可作为新引用；发布记录不等同于工程认证。</p>}
+      {mode === 'publish' && <p>仅发布已经核对且依赖完整的版本。{publicationScope}发布记录不等同于工程认证。</p>}
       {mode === 'return_to_draft' && <p>退回后需重新核对内容，再单独发布。</p>}
       {mode === 'deprecate' && <p>停用后不再允许新的引用，既有研究的固定版本记录仍保留。请确认停用范围。</p>}
       {items.map(item => <section className="resource-batch-item" key={item.id} data-resource-item={item.id} data-resource-state={item.state}>
