@@ -1,0 +1,133 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { walkthrough } from './verify-workbench-support.mjs';
+
+// Engineering changes go through the real interface. GETs verify saved identities.
+await walkthrough('research', async ({ page, expect, base, api, choose, step, check, capture, out, tag }) => {
+  const command = () => page.getByRole('toolbar', { name: '工程命令', exact: true });
+  const field = label => page.getByLabel(label, { exact: true });
+  async function fill(label, value) {
+    await field(label).fill(value);
+    await field(label).press('Enter');
+  }
+  await step('01-create-project-and-research', async () => {
+    await page.goto(base + '/?theme=light');
+    await page.getByRole('button', { name: '新建研究', exact: true }).first().click();
+    await choose('所属工程', '新建工程');
+    await choose('研究任务', '额定载流量');
+    await field('研究名称').fill('直埋载流量 · ' + tag);
+    await choose('引用型号版本', /^YJL02-12\/20 kV 1×400（结构演示）/);
+    await choose('计算方法', /^IEC 60287/);
+    await capture('01-new-project-form');
+    check('新建工程可以填写明确工程名', await page.getByRole('textbox', { name: '工程名称', exact: true }).count() > 0);
+    check('研究可从选择电缆进入新建型号', await page.getByRole('button', { name: /新建型号|新建电缆/ }).count() > 0);
+    await page.getByRole('button', { name: '建立研究', exact: true }).first().click();
+    await page.waitForURL(/\/studies\/[^/?]+\/ampacity\/results/);
+    await expect(page.getByRole('button', { name: '预检并运行', exact: true })).toBeVisible();
+  });
+  const url = new URL(page.url());
+  const sid = url.pathname.split('/')[2], wid = url.searchParams.get('workspace');
+  expect(wid).toBeTruthy();
+  const prefix = `/api/workspaces/${wid}/studies/${sid}`;
+  await step('02-installation-load-and-environment', async () => {
+    await page.getByRole('button', { name: '敷设模板', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '敷设模板', exact: true });
+    await choose('模板', '单回品字', dialog);
+    await dialog.getByLabel('中心埋深', { exact: true }).fill('0.9');
+    await dialog.getByRole('button', { name: '应用模板', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await fill('介质热阻率', '0.8');
+    await fill('回路 1 · 电流', '500');
+    check('草稿显示改了几项', /改了\s*\d+\s*项|\d+\s*项修改/.test(await command().innerText()));
+    await command().getByRole('button', { name: '保存修改', exact: true }).click();
+    await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+  });
+  await step('03-keyboard-undo-and-redo', async () => {
+    await fill('介质热阻率', '1.1');
+    await page.getByRole('button', { name: '敷设模板', exact: true }).focus();
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => Number(await field('介质热阻率').inputValue())).toBe(0.8);
+    await page.keyboard.press('Control+Shift+z');
+    await expect.poll(async () => Number(await field('介质热阻率').inputValue())).toBe(1.1);
+    await page.keyboard.press('Control+z');
+    await expect.poll(async () => Number(await field('介质热阻率').inputValue())).toBe(0.8);
+  });
+  async function run(previous) {
+    await page.getByRole('button', { name: '预检并运行', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '运行前预检' });
+    await expect(dialog).toContainText('你的工况在适用范围内', { timeout: 90000 });
+    if (await dialog.getByRole('checkbox').count()) await dialog.getByRole('checkbox').check();
+    await capture('run-preflight');
+    await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 90000 });
+    await page.waitForURL(next => !!next.searchParams.get('run') && next.searchParams.get('run') !== previous, { timeout: 120000 });
+    const id = new URL(page.url()).searchParams.get('run');
+    const saved = await api(prefix + '/runs/' + id);
+    expect(saved.integrity).toBe('verified');
+    expect(saved.status).toBe('succeeded');
+    return saved;
+  }
+  let first, second;
+  await step('04-run-and-read-conclusion', async () => {
+    first = await run();
+    await expect(page.locator('.conclusion')).toBeVisible();
+    await expect(page.locator('.conclusion')).toContainText(/允许|载流量/);
+    await expect(page.locator('.conclusion')).toContainText(/最热|温限/);
+  });
+  await step('05-temperature-and-loss-details', async () => {
+    const tabs = page.getByRole('tablist', { name: /页签/ });
+    const temperature = tabs.getByRole('tab', { name: /温度/ });
+    const losses = tabs.getByRole('tab', { name: /损耗/ });
+    check('结果有各层温度入口', await temperature.count() > 0, await tabs.innerText());
+    if (await temperature.count()) { await temperature.first().click(); await capture('05-layer-temperatures'); }
+    check('结果有损耗入口', await losses.count() > 0, await tabs.innerText());
+    if (await losses.count()) { await losses.first().click(); await capture('05-losses'); }
+  });
+  await step('06-change-one-condition-and-rerun', async () => {
+    await fill('介质热阻率', '1.1');
+    await page.keyboard.press('Control+s');
+    await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+    await expect(page.locator('.study-history-line')).toBeVisible();
+    await capture('06-previous-result-is-historical');
+    second = await run(first.id);
+    const preserved = await api(prefix + '/runs/' + first.id);
+    expect(preserved.input_digest).toBe(first.input_digest);
+    expect(second.input_digest).not.toBe(first.input_digest);
+  });
+  const resultUrl = page.url();
+  await step('07-compare-saved-runs', async () => {
+    await choose('分析', '方法对比');
+    const table = page.getByRole('table', { name: '可比较运行', exact: true });
+    await expect(table).toBeVisible();
+    const choices = table.getByRole('checkbox');
+    await expect(choices).toHaveCount(2);
+    await choices.nth(0).check(); await choices.nth(1).check();
+    await page.getByRole('button', { name: '比较所选运行', exact: true }).click();
+    const difference = page.getByRole('table', { name: '对比输入差异', exact: true });
+    await expect(difference).toBeVisible();
+    check('对比指出改动的具体条件及前后值', /热阻率/.test(await difference.innerText()), await difference.innerText());
+    await capture('07-input-differences');
+    const results = page.getByRole('tab', { name: /差异|结果/ });
+    if (await results.count()) await results.first().click();
+    await expect(page.getByRole('table', { name: '方法结果差异', exact: true })).toBeVisible();
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: '导出对比 CSV', exact: true }).click();
+    const file = await pending;
+    await file.saveAs(path.join(out, 'comparison-' + tag + '.csv'));
+    expect(await fs.readFile(path.join(out, 'comparison-' + tag + '.csv'), 'utf8')).toMatch(/单位/);
+  });
+  await step('08-calculation-book-download', async () => {
+    await page.goto(resultUrl);
+    await command().getByRole('button', { name: '生成计算书', exact: true }).click();
+    await expect(page.getByRole('button', { name: '下载 PDF', exact: true })).toBeEnabled({ timeout: 90000 });
+    const pending = page.waitForEvent('download');
+    await page.getByRole('button', { name: '下载 PDF', exact: true }).click();
+    const file = await pending, target = path.join(out, 'calculation-book-' + tag + '.pdf');
+    await file.saveAs(target);
+    expect((await fs.readFile(target)).subarray(0, 5).toString()).toBe('%PDF-');
+    const deliveryId = new URL(page.url()).searchParams.get('delivery');
+    expect(deliveryId).toBeTruthy();
+    const delivery = await api(`/api/workspaces/${wid}/deliveries/${deliveryId}`);
+    check('计算书引用本次保存运行', JSON.stringify(delivery).includes(second.id), { run: second.id, delivery: deliveryId });
+  });
+});
