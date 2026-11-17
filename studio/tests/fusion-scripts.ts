@@ -142,9 +142,25 @@ export function installTypeWorkflow(faux: Faux, input: { workspace: string; type
       method: { ...entry.method, capability: capability.id }, parameters: { cable_type_id: cable }, basis_request_id: basis });
   };
   const afterBasis: Reply = context => { basis = receipt(context).basis_request_id; assert.ok(basis); return advance(faux, state, afterMethods, 'method_list', {}); };
-  const afterChange: Reply = context => { receipt(context); return advance(faux, state, afterBasis, 'propose_type_basis', { type_id: state.typeId }); };
+  const afterChange: Reply = context => {
+    const accepted = receipt(context);
+    assert.equal(accepted.type_id, state.typeId);
+    return advance(faux, state, context => {
+      const saved = data(context);
+      assert.equal(saved.workspace_revision, accepted.workspace_revision);
+      assert.equal(saved.freshness, 'current');
+      for (const field of fields) {
+        const value = saved.fields.find((item: any) => item.path === field.path);
+        assert.ok(value && ['m', 'mm'].includes(value.unit), 'the accepted thickness must be read back with its declared length unit');
+        const expected = value.unit === 'm' ? input.thicknessMm / 1000 : input.thicknessMm;
+        assert.ok(Math.abs(value.value - expected) < 1e-12, 'the saved thickness must match the accepted proposal');
+      }
+      return advance(faux, state, afterBasis, 'propose_type_basis', { type_id: state.typeId });
+    }, 'workspace_read', { workspace_id: state.typeId, paths: fields.map(field => field.path) });
+  };
   const collect: Reply = context => {
     const result = data(context);
+    assert.equal(result.view, 'input', 'editing reads saved input pages, not unrelated calculation or standard evidence');
     fields.push(...result.items.filter((item: any) => item.section === 'structure' && /\/layers\/insulation\/thickness$/.test(item.path)));
     if (result.next_page) return advance(faux, state, collect, 'type_read', result.next_page);
     assert.ok(fields.length, 'the type must expose insulation thickness with stable field paths');
@@ -153,7 +169,7 @@ export function installTypeWorkflow(faux: Faux, input: { workspace: string; type
     return advance(faux, state, afterChange, 'propose_type_changes', { type_id: state.typeId, reason: '按本轮明确要求调整绝缘厚度',
       changes: fields.map(field => ({ path: field.path, value: input.thicknessMm, unit: 'mm' })) });
   };
-  const readType = () => advance(faux, state, collect, 'type_read', { type_id: state.typeId, view: 'structure', limit: 20 });
+  const readType = () => advance(faux, state, collect, 'type_read', { type_id: state.typeId, view: 'input', limit: 20 });
   const afterCreate: Reply = context => { state.typeId = receipt(context).type_id; assert.ok(state.typeId); return readType(); };
   faux.setResponses([() => advance(faux, state, () => {
     if (state.typeId) return readType();

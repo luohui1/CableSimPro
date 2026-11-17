@@ -212,6 +212,66 @@ test('create a type, revise its insulation, run standard checks and save its int
   assert.equal(type.domain.cable_types[0].cores[0].layers.find((layer: any) => layer.role === 'insulation').thickness, 0.0046);
 });
 
+test('an existing type with saved calculation evidence completes input paging, revision checks and specification within the ordinary budget', { timeout: 120_000 }, async t => {
+  const source = manifest.types.find((item: any) => item.name.startsWith('YJV22') && !item.teaching);
+  assert.ok(source?.workspace, 'use the same saved release type as the browser walk');
+  const beforeType = await api(`/api/workspaces/${source.workspace}`);
+  const evidence = await api(`/api/types/${source.workspace}/display-runs?after=0&limit=5`);
+  assert.ok(evidence.items.length > 0, 'this regression must retain the existing saved calculations, not replace the type with an empty draft');
+  const state = installTypeWorkflow(faux, { workspace: source.workspace, typeId: source.workspace, thicknessMm: 4.7 });
+  const accepted: string[] = [];
+  let linkedChanges: Proposal['changes'] = [];
+  const { session } = await sidecar.agent.send(undefined, '把已有 YJV22 三芯型号的绝缘厚度改为4.7 mm，按新修订核对后出内部规格书');
+  const view = await acceptEach(session, async proposal => {
+    accepted.push(proposal.operation);
+    if (proposal.operation === 'propose_type_changes') {
+      const waiting = await api(`/api/workspaces/${source.workspace}`);
+      assert.equal(waiting.revision, beforeType.revision);
+      assert.deepEqual(waiting.domain, beforeType.domain, 'input paging never writes the proposed thickness');
+      const cable = beforeType.domain.cable_types[0];
+      const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
+      const requested = cable.cores.map((core: any) => {
+        const path = `/cable_types/${escape(cable.id)}/cores/${escape(core.id)}/layers/insulation/thickness`;
+        const change = proposal.changes.find(change => change.field === path);
+        assert.ok(change, 'every saved core insulation must be read before proposing the change');
+        assert.match(change.before, / mm$/);
+        assert.ok(Math.abs(Number.parseFloat(change.before) - core.layers.find((layer: any) => layer.role === 'insulation').thickness * 1000) < 1e-9);
+        assert.equal(change.after, '4.7 mm');
+        return path;
+      });
+      linkedChanges = proposal.changes.filter(change => !requested.includes(change.field));
+      assert.ok(linkedChanges.every(change => /\/cores\/[^/]+\/(x|z)$/.test(change.field)), 'the existing tangent-core editor exposes its dependent coordinate changes for review');
+    }
+  });
+  assert.equal(state.failure, undefined);
+  assert.equal(state.done, true);
+  assert.deepEqual(accepted, ['propose_type_changes', 'propose_type_basis', 'propose_study', 'propose_study_run', 'propose_type_specification']);
+  const completed = steps(view);
+  assert.ok(completed.every(step => step.status === 'done'));
+  const inputPages = completed.filter(step => step.tool === 'type_read').length;
+  assert.ok(inputPages > 1, 'the actual saved input exercises continuation pages');
+  assert.ok(completed.some(step => step.tool === 'workspace_read'), 'the accepted fields are read back at the adopted revision before the check');
+  const saved = await api(`/api/workspaces/${state.typeId}`);
+  for (const core of saved.domain.cable_types[0].cores) {
+    assert.equal(core.layers.find((layer: any) => layer.role === 'insulation').thickness, 0.0047);
+  }
+  for (const change of linkedChanges) {
+    const tokens = change.field.split('/').slice(1).map(token => token.replaceAll('~1', '/').replaceAll('~0', '~'));
+    const core = saved.domain.cable_types[0].cores.find((item: any) => item.id === tokens[3]);
+    assert.match(change.after, / mm$/);
+    assert.ok(Math.abs(Number.parseFloat(change.after) - core[tokens.at(-1)!] * 1000) < 1e-9, 'reviewed dependent coordinates must match the actual saved type');
+  }
+  const run = await api(`/api/workspaces/${state.typeId}/studies/${state.study}/runs/${state.run}`);
+  assert.equal(run.status, 'succeeded');
+  assert.equal(run.integrity, 'verified');
+  const response = await fetch(url + state.file!);
+  assert.ok(response.ok);
+  assert.equal(response.headers.get('content-type')?.split(';')[0], 'application/pdf');
+  assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  t.diagnostic(JSON.stringify({ existingSavedRuns: evidence.items.length, inputPages,
+    toolSteps: completed.length, approvals: accepted.length, linkedChanges, type: state.typeId, run: state.run }));
+});
+
 test('rejecting or stopping a proposed write leaves the real study list unchanged', { timeout: 60_000 }, async () => {
   faux.setResponses([fauxAssistantMessage([fauxText('这是一段独立的对话。')])]);
   const foreign = await sidecar.agent.send(undefined, '新开一段独立对话');
