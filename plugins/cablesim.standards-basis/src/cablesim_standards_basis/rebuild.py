@@ -62,6 +62,11 @@ def build(excerpts, verification):
                                      'methods': evidence['methods'], 'note': checked.get('note', '')},
                 }
                 records.append(record)
+                # Official previews are image pages, not downloaded PDFs. Keep
+                # their source URL/format and scope-page evidence in each receipt.
+                for key in ('source_format', 'source_url', 'context_sources'):
+                    if key in table:
+                        record[key] = deepcopy(table[key])
                 if 'value_details' in definition:
                     record['value_details']=deepcopy(definition['value_details'])
                 elif isinstance(value,str) and value in table.get('value_details',{}):
@@ -90,7 +95,7 @@ def expected_files(directory=ROOT):
              'Nielsen et al.':'thermal-capacity','Huang and Niu':'thermal-capacity-model',
              'Qi et al.':'pipe-capacity','Deng et al.':'borehole-capacity','Hopmans et al.':'soil-capacity',
              'Youn et al.':'semiconducting-capacity','Sah et al.':'backfill-reference',
-             'IEC 60949':'short-circuit'}
+             'IEC 60949':'short-circuit','GB/T 18890.2':'extra-high'}
     compiled = {}
     for standard, suffix in names.items():
         selected = [r for r in basis['records'] if r['standard']==standard]

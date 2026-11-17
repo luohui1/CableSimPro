@@ -66,7 +66,7 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
     with TestClient(app) as client:
         methods = client.get('/api/methods'); assert methods.status_code==200
         pin = next(m['method'] for m in methods.json() if m['method']['plugin_id']=='cablesim.standards-basis')
-        assert pin['version']=='0.7.0'
+        assert pin['version']=='0.8.0'
         receipts=[]
         for standard,edition,locator,quantity,conditions,value,printed,pdf in cases:
             query={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
@@ -75,7 +75,7 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
                               json={'release_digest':pin['release_digest'],'input':query})
             assert reply.status_code==200,reply.text
             envelope=reply.json(); answer=envelope['artifacts']['x-cablesim.standards-basis']
-            assert envelope['plugin_version']=='0.7.0' and len(envelope['request_sha256'])==64
+            assert envelope['plugin_version']=='0.8.0' and len(envelope['request_sha256'])==64
             assert answer['status']=='resolved' and len(answer['records'])==1, (query,answer)
             record=answer['records'][0]
             assert (record['value'],record['printed_page'],record['pdf_page'])==(value,printed,pdf)

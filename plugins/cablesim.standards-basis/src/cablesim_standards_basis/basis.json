@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-basis/1",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "rights": {
     "status": "not_assessed",
     "use": "用户持有标准的受控结构化摘录；不包含标准全文；不宣称许可已评估或合规批准"
@@ -272,6 +272,58 @@
         ],
         "not_base_reprint": true
       }
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-06.png",
+      "sha256": "899a91fd0b1812272858b4d33e5cf298583d7518cb5dbeb865bfe55724b342c6",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 2,
+      "preview_page": 6,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-08.png",
+      "sha256": "4b281a1b4a8484990d6026cb5a98f3313eec8766368f5b10070fac15cc56ee02",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 4,
+      "preview_page": 8,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-09.png",
+      "sha256": "d2590b0f121ff8eedd5a42664d533ca42c4937e7d68be46829573c3939364207",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 5,
+      "preview_page": 9,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "file": "gbt18890-2-2015-page-13.png",
+      "sha256": "675b7fb0b185ceb3005c6a490d83779bd8f6ba17016b5700bf5c99e69c76f4b1",
+      "format": "official_preview_image",
+      "url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+      "preview_url": "https://openstd.samr.gov.cn/bzgk/std/showGb?type=online&hcno=E44671E017681637FEDBF910B16C9652&request_locale=zh_CN",
+      "printed_page": 9,
+      "preview_page": 13,
+      "retrieved": "2026-11-17",
+      "rights": "official_public_preview_numeric_excerpt_only; source images not redistributed"
     }
   ],
   "condition_fields": {
@@ -13598,6 +13650,82 @@
       "record_ids": [
         "mv-short-circuit-temperature-duration/r1/conductor_short_circuit_temperature_duration_max"
       ]
+    },
+    {
+      "id": "ehv-表2",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.1.2",
+      "table": "表 2",
+      "title": "铜导体结构和直流电阻",
+      "quantities": [
+        {
+          "key": "wire_count_min",
+          "name": "铜导体最少单线数量",
+          "dimension": "count",
+          "unit": "count"
+        },
+        {
+          "key": "resistance_20_max",
+          "name": "20 °C 导体最大直流电阻",
+          "dimension": "resistance_per_length",
+          "unit": "ohm/km"
+        }
+      ],
+      "row_count": 12,
+      "column_count": 2,
+      "record_count": 24,
+      "record_ids": [
+        "ehv-表2/r1/wire_count",
+        "ehv-表2/r1/r20",
+        "ehv-表2/r2/wire_count",
+        "ehv-表2/r2/r20",
+        "ehv-表2/r3/wire_count",
+        "ehv-表2/r3/r20",
+        "ehv-表2/r4/wire_count",
+        "ehv-表2/r4/r20",
+        "ehv-表2/r5/wire_count",
+        "ehv-表2/r5/r20",
+        "ehv-表2/r6/wire_count",
+        "ehv-表2/r6/r20",
+        "ehv-表2/r7/wire_count",
+        "ehv-表2/r7/r20",
+        "ehv-表2/r8/wire_count",
+        "ehv-表2/r8/r20",
+        "ehv-表2/r9/wire_count",
+        "ehv-表2/r9/r20",
+        "ehv-表2/r10/wire_count",
+        "ehv-表2/r10/r20",
+        "ehv-表2/r11/wire_count",
+        "ehv-表2/r11/r20",
+        "ehv-表2/r12/wire_count",
+        "ehv-表2/r12/r20"
+      ]
+    },
+    {
+      "id": "ehv-表3",
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "clause": "6.2.2",
+      "table": "表 3",
+      "title": "XLPE 绝缘标称厚度",
+      "quantities": [
+        {
+          "key": "insulation_nominal",
+          "name": "绝缘标称厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 4,
+      "column_count": 1,
+      "record_count": 4,
+      "record_ids": [
+        "ehv-表3/r1/thickness",
+        "ehv-表3/r2/thickness",
+        "ehv-表3/r3/thickness",
+        "ehv-表3/r4/thickness"
+      ]
     }
   ],
   "not_covered": [
@@ -13841,6 +13969,29 @@
       "edition": "1985 / 1989",
       "items": "完整热容原表及110kV暂态方法输入",
       "reason": "仅本地基础预览/修订单可核验；未取得完整Annex E Table E.1/E.2及完整方法/例题输入，不以短路标准冒充暂态原表。"
+    },
+    {
+      "standard": "GB/T 18890.2",
+      "edition": "2015",
+      "locators": [
+        "6.1.2 导体形状与圆整度",
+        "表 4 及护层条款",
+        "8.2、表 6–8 试验判据与完整程序",
+        "附录 A/B"
+      ],
+      "reason": "此次仅放行逐格核验的表 2 与表 3。其余结构、材料试验、尺寸程序和成品试验未绑定执行；尺寸与电阻通过不能代替完整产品认证。"
+    },
+    {
+      "standard": "GB/T 18890.1",
+      "edition": "2015",
+      "locators": [
+        "10.6.2 绝缘最小厚度与偏心率",
+        "第 9 章例行试验",
+        "第 10 章抽样试验",
+        "第 12 章型式试验",
+        "第 13 章预鉴定试验"
+      ],
+      "reason": "GB/T 18890.2—2015 6.2.2 与 8.2（正文第 5、9 页）明确引用；尚未取得并逐项核验 Part 1 判据，不以 110 kV 或 GB/T 12706 方法代替。"
     }
   ],
   "record_files": [
@@ -14300,6 +14451,15 @@
         "sc-touching-wire-area",
         "sc-tubular-area",
         "sc-wire-braid-area"
+      ]
+    },
+    {
+      "name": "records-extra-high.json",
+      "sha256": "e6d5d3c85f1a297be33144e4b9008ec75e06b106820b1e43438dc60285ffc251",
+      "size_bytes": 77007,
+      "table_ids": [
+        "ehv-表2",
+        "ehv-表3"
       ]
     }
   ]

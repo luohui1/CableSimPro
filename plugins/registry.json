@@ -51,15 +51,15 @@
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.6.1",
+      "version": "1.7.0",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "1f66664cfb287807f984c1c74c9df210bfb19689efcaf94e43022b6fbbe60c43"
+      "release_digest": "0a5712bb4a192efe1ebe24f7c96c3102d99004c2a442835d347e3abcd915ebfa"
     },
     {
       "plugin_id": "cablesim.standards-basis",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "manifest": "plugins/cablesim.standards-basis/plugin.json",
-      "release_digest": "93be894ea9e0b384ec267252db36bb9fe91d29a645975a3a3ea8dcfddf3e317f"
+      "release_digest": "6dd2bfdd504728f9a01adec343e53477b2d7ebbb46958a6bec48d043b344bc65"
     },
     {
       "plugin_id": "cablesim.thermal-network",
@@ -69,9 +69,9 @@
     },
     {
       "plugin_id": "cablesim.type-electrical",
-      "version": "1.1.1",
+      "version": "1.2.2",
       "manifest": "plugins/cablesim.type-electrical/plugin.json",
-      "release_digest": "e0105ae162d735c36bb2fb2a4a83cf3d19a120ecba37f20cf9a9ce1d33440fb2"
+      "release_digest": "1642ffcdaeff027eca8e27e107b28632cd1146667595d9a72d1b8651621d362a"
     }
   ]
 }

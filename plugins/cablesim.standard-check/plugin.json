@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.5.1",
+      "method_version": "1.7.0",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,7 +227,7 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.5.1",
+      "method_version": "1.7.0",
       "analysis": "geometry_proposal",
       "solver": "local",
       "input_schema": "cablesim.cable-design-request/2",
@@ -441,7 +441,8 @@
                 "18000/30000",
                 "21000/35000",
                 "26000/35000",
-                "64000/110000"
+                "64000/110000",
+                "127000/220000"
               ]
             },
             "conductor": {
@@ -753,13 +754,13 @@
     },
     {
       "path": "src/cablesim_standard_check/basis-records.json",
-      "sha256": "4537e7421bac984b1e573da5d56a39935a2c34d9e0cfdc2f73319a30a3063912",
-      "size_bytes": 433105
+      "sha256": "dbe9f4c8148dbde85eb932452c504f2dd454eacc683f5d3373e6ffb6fbe04694",
+      "size_bytes": 435767
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "be2959e2e1e49dd1b8f96d5b94c4d33d7ed403afe7238cbbcea29d65af289416",
-      "size_bytes": 12650
+      "sha256": "bfb71e8dbeee94ca54ffd33d17592369122556d6ed4ca7b58f5ed09cea3331ee",
+      "size_bytes": 13064
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -773,13 +774,18 @@
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
-      "sha256": "c334665b7e09f8ab5b5e1ec417555d2a810d65e1dc873d632835f9a8695d0284",
-      "size_bytes": 20369
+      "sha256": "299d664b299f983892e5245d3f145cb3efd02631b712ecad49b0b223c73b155e",
+      "size_bytes": 26472
+    },
+    {
+      "path": "src/cablesim_standard_check/extra_high.py",
+      "sha256": "32d6f6e87ce7f62a6c21d2354165abc6372854c7dea7a2b477ed1b84fc1a6876",
+      "size_bytes": 5445
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "73aa16d7997b409c43c32553a6c961d56e6d32178fbb25ef2384af5ff0f77f33",
-      "size_bytes": 61731
+      "sha256": "1da410fdb8e90612f241a3d4490c0a8493ce9e0b947c916841de79f9946c94ea",
+      "size_bytes": 62303
     },
     {
       "path": "src/cablesim_standard_check/manufacturing.py",
@@ -788,13 +794,13 @@
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",
-      "sha256": "6f485e2ac33f970f6b5660eff208a9629c4d94381cf14112c09c426b8df24f7f",
-      "size_bytes": 15614
+      "sha256": "118b239d35cd5ebcd9d1d8206b4165c40d85a82acedf85e9dd5a204ecb9b2d71",
+      "size_bytes": 16424
     },
     {
       "path": "src/cablesim_standard_check/sources.json",
-      "sha256": "229b09e8921bb3605c3230e9ed48974a7d98ebb5a4a7a3c1a4007128ad1921ff",
-      "size_bytes": 1607
+      "sha256": "71c5e0d51244a83aac53e3dbc61d14f974fb72b02a9ab34ff2a630a323b4a79a",
+      "size_bytes": 3701
     },
     {
       "path": "src/host-dependencies.json",

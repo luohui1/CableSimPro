@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.6.0'
+VERSION = '1.7.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -72,6 +72,8 @@ def prepare(document, parameters):
         raise ValueError('四芯标准核对当前只覆盖 GB/T 12706.1 的低压绝缘线芯；其他电压未覆盖。')
     if family == 'hv' and len(cores) != 1:
         raise ValueError(root + '.construction：GB/T 11017.2 的本实现只支持单芯 64/110 kV。')
+    if family == 'ehv' and len(cores) != 1:
+        raise ValueError(root + '.construction：GB/T 18890.2 的本实现只支持单芯 127/220 kV。')
     materials = {m['id']: m for m in document.get('materials', [])}
     for i, core in enumerate(cores):
         c, p = core['conductor'], root + f'.cores.{i}.conductor'
@@ -958,7 +960,7 @@ class _Check:
             'label': cable['label'],
             'method_version': VERSION,
             'input_sha256': sha256(json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()).hexdigest(),
-            'sources': [SOURCES[k] for k in (family, 'conductor')],
+            'sources': [SOURCES[k] for k in ((family, 'ehv-scope', 'ehv-coverings', 'ehv-tests') if family == 'ehv' else (family, 'conductor'))],
             'rows': rows,
             'not_applicable': self.not_applicable,
             'fictitious_diameter_trace': trace,
@@ -977,6 +979,13 @@ class _Check:
 
 def check(document, parameters):
     report = _Check(document, parameters)
+    if report.family == 'ehv':
+        from cablesim_standard_check.extra_high import populate
+        from cablesim_standard_check.basis import apply, digest
+        populate(report)
+        apply(report, parameters)
+        return {**report.result(), 'basis_auxiliary_queries': {},
+                'basis_cable_sha256': digest(report.cable)}
     cable, root = report.cable, report.root
     family, trace = report.family, report.trace
     core_diameters = [report.core(core, i) for i, core in enumerate(cable['cores'])]

@@ -33,5 +33,45 @@
     "sha256": "b9a118e1282b4eeee6ec6ae4653e8c80e0a42beee0df5bf84360c4876a856939",
     "page_offset": 3,
     "status": "original-verified"
+  },
+  "ehv": {
+    "standard": "GB/T 18890.2—2015",
+    "file_name": "gbt18890-2-2015-page-09.png",
+    "sha256": "d2590b0f121ff8eedd5a42664d533ca42c4937e7d68be46829573c3939364207",
+    "page_offset": 4,
+    "status": "original-verified",
+    "source_format": "official_preview_image",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+  },
+  "ehv-scope": {
+    "standard": "GB/T 18890.2—2015",
+    "file_name": "gbt18890-2-2015-page-08.png",
+    "sha256": "4b281a1b4a8484990d6026cb5a98f3313eec8766368f5b10070fac15cc56ee02",
+    "page_offset": 4,
+    "status": "original-verified",
+    "source_format": "official_preview_image",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+  },
+  "ehv-coverings": {
+    "standard": "GB/T 18890.2—2015",
+    "file_name": "gbt18890-2-2015-page-12.png",
+    "sha256": "54dcdae0bd1374affddd1b8ff5a64d6d77809e0080e68c4f9eff042e9f318291",
+    "page_offset": 4,
+    "status": "original-verified",
+    "source_format": "official_preview_image",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
+  },
+  "ehv-tests": {
+    "standard": "GB/T 18890.2—2015",
+    "file_name": "gbt18890-2-2015-page-13.png",
+    "sha256": "675b7fb0b185ceb3005c6a490d83779bd8f6ba17016b5700bf5c99e69c76f4b1",
+    "page_offset": 4,
+    "status": "original-verified",
+    "source_format": "official_preview_image",
+    "source_url": "https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=E44671E017681637FEDBF910B16C9652",
+    "scope": "仅表 2/3 数值已编制；其余来源用于显式标识尚未覆盖的要求，不作为合格判据。"
   }
 }

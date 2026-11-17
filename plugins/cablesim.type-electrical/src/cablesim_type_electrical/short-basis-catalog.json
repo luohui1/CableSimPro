@@ -12,7 +12,7 @@
       }
     },
     "digest": "d1b54789c98e691005e9b8214ef011aa6aac57fd86551da4bcfd91b3a493ac95",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r1/beta": {
     "query": {
@@ -27,7 +27,7 @@
       }
     },
     "digest": "9afc78594f92d0dcc28adce0a4162c7d55066d9e84b92539a79a6ba1411f3d1b",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r1/sigma_c": {
     "query": {
@@ -42,7 +42,7 @@
       }
     },
     "digest": "400fc617be0c2e1c329c5c493110e1f7679cb38f6fa0a3822809f92a8b0d57af",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r2/K": {
     "query": {
@@ -57,7 +57,7 @@
       }
     },
     "digest": "22e5b56d880ed7c7126eae05c994824940beb272c72e135de607439abc979157",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r2/beta": {
     "query": {
@@ -72,7 +72,7 @@
       }
     },
     "digest": "6a126b7545371b4a975358579c9d4c9cd54b6cb13c92336fca9004cfe70fe325",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r2/sigma_c": {
     "query": {
@@ -87,7 +87,7 @@
       }
     },
     "digest": "f088ed30c7351d6197510e33e216bb35708459a0c1a01217bda720c3b0fd24b5",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r3/K": {
     "query": {
@@ -102,7 +102,7 @@
       }
     },
     "digest": "131995a7b1468aaa89b99505cce46c55339435002ee31b33e38bf3e62a0ae4b9",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r3/beta": {
     "query": {
@@ -117,7 +117,7 @@
       }
     },
     "digest": "a7ef97792cbe7044049049dd36dbee0f1e662657cdad3d8fdd1c32a64cbdff27",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r3/sigma_c": {
     "query": {
@@ -132,7 +132,7 @@
       }
     },
     "digest": "46b890943cd19bea007cb966b1a6d47d2f816cd8084a068241872907051c5114",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r4/K": {
     "query": {
@@ -147,7 +147,7 @@
       }
     },
     "digest": "45eaf06ee36bd735864a7f7a5299a927fc1d1fa10f1add7ae26c15d56f55b539",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r4/beta": {
     "query": {
@@ -162,7 +162,7 @@
       }
     },
     "digest": "73799ce4f4e7f76e9ada1bd1c3efd3d0179bf94cfd80455f96a04936e9ca41b8",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r4/sigma_c": {
     "query": {
@@ -177,7 +177,7 @@
       }
     },
     "digest": "81ecf16a0fb93cf35170d4954f8e88227a39be875c433b65d8c44abffa56727f",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r5/K": {
     "query": {
@@ -192,7 +192,7 @@
       }
     },
     "digest": "26abeda6ca67601bb4f9c7ec5b0dd89b15bddfa6bed31a0d702eb5beface845e",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r5/beta": {
     "query": {
@@ -207,7 +207,7 @@
       }
     },
     "digest": "7ba29763c0843414469cef222c52f746735ceba8145824a939d52cfc435f35e9",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r5/sigma_c": {
     "query": {
@@ -222,7 +222,7 @@
       }
     },
     "digest": "d945425e6943a3edb27d1e531acee1702441a648e9f2027267d6f00ca07796af",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r6/K": {
     "query": {
@@ -237,7 +237,7 @@
       }
     },
     "digest": "cb2f90c014fc0a2f3d9e169b05edd3fccbc7b248c8a63007ab43320e07bc9113",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r6/beta": {
     "query": {
@@ -252,7 +252,7 @@
       }
     },
     "digest": "1a8eb96d89a766772b80e4305551f8f646af0f32149a28966ff139cb36ffffb2",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-material-constants/r6/sigma_c": {
     "query": {
@@ -267,7 +267,7 @@
       }
     },
     "digest": "fd1cbf34127cdd4098fa989cb340c3ac068857977d5bbee7d855a46e6a1f7a35",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-simplified-constants/r3/cu_X": {
     "query": {
@@ -283,7 +283,7 @@
       }
     },
     "digest": "b153a4b8b37f88e0110f68a1de323c6fe59881c9150d223b1c4ecf16b0b9fa47",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-simplified-constants/r3/cu_Y": {
     "query": {
@@ -299,7 +299,7 @@
       }
     },
     "digest": "633184866f5b0e8b0e9715cc4b0f79968594f2f8456106df43064932a0cbc90f",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-simplified-constants/r3/al_X": {
     "query": {
@@ -315,7 +315,7 @@
       }
     },
     "digest": "df484d73c3072f645611c79bf3fbfb718314299f946cc0e190888e947beda82f",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-simplified-constants/r3/al_Y": {
     "query": {
@@ -331,7 +331,7 @@
       }
     },
     "digest": "7775890806c57fed822a6dbd0bf683c812e28af86142c60fa3934d14a764ae3b",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-conductor-simplified/r1/non_adiabatic_conductor_simplified_formula": {
     "query": {
@@ -345,7 +345,7 @@
       }
     },
     "digest": "02511a115a1adc021232b8cd424fb11af582066dfbee7875319ea28d62955f71",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-adiabatic-current/r1/adiabatic_short_circuit_formula": {
     "query": {
@@ -357,7 +357,7 @@
       "conditions": {}
     },
     "digest": "ba51bf08680c92b055719d7103cb9a7632827046157e2fc6a6add5defa4afa1a",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-conductor-general/r1/non_adiabatic_conductor_formula": {
     "query": {
@@ -371,7 +371,7 @@
       }
     },
     "digest": "95828ccdcc2aecd1726b16ad8032a41b3affbaa6e9efffc1ada0f2eb1aa8a9fb",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-screen-general/r1/non_adiabatic_screen_formula": {
     "query": {
@@ -385,7 +385,7 @@
       }
     },
     "digest": "20d39fbeda672c445779cd2be819571ae2f60c7c0bf2eff505b9a9aba146f3ef",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-tubular-area/r1/short_circuit_geometrical_area_formula": {
     "query": {
@@ -399,7 +399,7 @@
       }
     },
     "digest": "7c85db7eca33244e42e32fd554ff594d7351a94934914bcfd81241f083077ecc",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-longitudinal-tape-area/r1/short_circuit_geometrical_area_formula": {
     "query": {
@@ -413,7 +413,7 @@
       }
     },
     "digest": "f7d908d1194ec5b7ea2e6f9baaa2c085bbe391b1ee01b8ac6a54e143709dc6f5",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-helical-tape-area/r1/short_circuit_geometrical_area_formula": {
     "query": {
@@ -427,7 +427,7 @@
       }
     },
     "digest": "d4aaf78db986ed91ca765524c0d8d55a0c3a405698ae65479efe42633fbc2ee1",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   },
   "sc-parallel-metal-current/r1/parallel_metal_short_circuit_rule": {
     "query": {
@@ -439,6 +439,6 @@
       "conditions": {}
     },
     "digest": "a0863e1eeff7018ac0bf140863425803085978cc78c8e0af5ffaeeb55174663c",
-    "plugin_version": "0.7.0"
+    "plugin_version": "0.8.0"
   }
 }
