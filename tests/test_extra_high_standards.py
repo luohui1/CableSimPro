@@ -27,6 +27,33 @@ INSULATION = [27, 27, 26, 25, 24, 24, 24, 24, 24, 24, 24, 24]
 LEAD = [2.7, 2.7, 2.8, 2.8, 2.8, 2.9, 3.0, 3.1, 3.1, 3.2, 3.3, 3.4]
 ALUMINIUM = [2.4, 2.4, 2.4, 2.4, 2.6, 2.6, 2.6, 2.6, 2.8, 2.8, 2.8, 2.8]
 COVERINGS_SHA256 = '54dcdae0bd1374affddd1b8ff5a64d6d77809e0080e68c4f9eff042e9f318291'
+MANUFACTURING_LIMITS = [
+    ('aluminium-sheath-purity', 'metallic_sheath', 'aluminium_sheath_purity', .995,
+     'ehv-rule-6.6.1-purity/r1/value', 99.5, '%'),
+    ('aluminium-strip-elongation', 'metallic_sheath', 'aluminium_strip_elongation', .16,
+     'ehv-rule-6.6.1-elongation/r1/value', 16.0, '%'),
+    ('oversheath-semiconductor-ratio', 'oversheath', 'oversheath_semiconductor_ratio', .20,
+     'ehv-rule-6.7.3-ratio/r1/value', .20, '1'),
+]
+
+
+def manufacturing_field(role, name):
+    return '/cable_types/cable_type~1example/common_layers/' + role + '/engineering/' + name
+
+
+def manufacturing_input(document, role, name, value, unit='1'):
+    document['provenance'][manufacturing_field(role, name)] = {
+        'kind': 'user' if isinstance(value, bool) else 'measurement', 'reviewed': False,
+        'reference': json.dumps({'schema': 'cablesim.manufacturing-input/1', 'unit': unit,
+            'value': value, 'reference': '独立边界测试输入；不是厂家实测、材料认证或标准值填充'})}
+
+
+def manufacturing_design(values=(.997, .18, .15)):
+    document = design()
+    for (_, role, name, *_), value in zip(MANUFACTURING_LIMITS, values):
+        manufacturing_input(document, role, name, value)
+    manufacturing_input(document, 'oversheath', 'bonded_extruded_oversheath_layer', True)
+    return document
 
 
 def request(area=2200, quantity='insulation_nominal', **conditions):
@@ -188,7 +215,7 @@ def test_real_requirement_basis_and_executor_use_220kv_tables_without_pass_claim
             result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
                 {'case_id': 'extra-high', 'input': document, 'parameters': parameters}])
             assert result.cases[0].status == 'succeeded', result.cases[0].error
-            assert result.plugin_version == result.method_version == '1.8.2'
+            assert result.plugin_version == result.method_version == '1.8.3'
             return result.cases[0].artifacts['x-cablesim.standard-check']
 
         checked = execute(document, parameters)
@@ -231,6 +258,162 @@ def test_missing_220kv_input_is_named_without_inventing_a_standard_or_class():
     checked = plugin.check(document, {'cable_type_id': document['cable_types'][0]['id']})
     assert item(checked, 'conductor-wire-count')['actual'] is None
     assert document['cable_types'][0]['cores'][0]['conductor']['conductor_class'] is None
+
+
+def test_live_220kv_manufacturing_limits_use_exact_records_and_independent_inputs(tmp_path):
+    app = create_app(tmp_path / 'manufacturing.sqlite')
+    with TestClient(app) as client:
+        model = next(m for m in system_models() if m['id'] == 'system.cu-xlpe-al-240')
+        created = client.post('/api/design/type-workspaces', json={
+            'model_id': model['id'], 'content_sha256': model['content_sha256']})
+        assert created.status_code == 201, created.text
+        workspace = created.json()
+        document = manufacturing_design()
+        saved = client.put(f"/api/workspaces/{workspace['id']}/domain", json={
+            'expected_revision': workspace['revision'], 'document': document})
+        assert saved.status_code == 200, saved.text
+        answer = client.post(f"/api/design/type-workspaces/{workspace['id']}/requirements/basis", json={
+            'request_id': str(uuid4()), 'expected_revision': saved.json()['revision']})
+        assert answer.status_code == 200, answer.text
+        parameters = {'cable_type_id': document['cable_types'][0]['id'], **answer.json()['parameters']}
+        assert len(parameters['basis_references']) == 11
+        missing = deepcopy(document)
+        for _, role, name, *_ in MANUFACTURING_LIMITS:
+            missing['provenance'].pop(manufacturing_field(role, name))
+        cases = [('above', document), ('boundary', manufacturing_design((.995, .16, .20))),
+                 ('failed', manufacturing_design((.994, .159, .201))), ('missing', missing)]
+        for key, role, name, limit, *_ in MANUFACTURING_LIMITS:
+            borrowed = deepcopy(document)
+            path = manufacturing_field(role, name)
+            receipt = json.loads(borrowed['provenance'][path]['reference'])
+            receipt.update(value=limit, reference='GB/T18890.2—2015标准限值，不是制造测量记录')
+            borrowed['provenance'][path].update(kind='standard', reference=json.dumps(receipt))
+            cases.append(('standard-source-' + key, borrowed))
+        borrowed = deepcopy(document)
+        path = manufacturing_field('oversheath', 'bonded_extruded_oversheath_layer')
+        borrowed['provenance'][path]['kind'] = 'standard'
+        cases.append(('standard-construction', borrowed))
+        result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
+            {'case_id': name, 'input': value, 'parameters': parameters} for name, value in cases])
+        assert result.plugin_version == result.method_version == '1.8.3'
+        assert len(result.cases) == len(cases)
+        outputs = {output.case_id: output for output in result.cases}
+        for case_name, inputs in cases[:4]:
+            output = outputs[case_name]
+            assert output.status == 'succeeded', output.error
+            checked = output.artifacts['x-cablesim.standard-check']
+            for key, role, name, limit, record_id, original_value, original_unit in MANUFACTURING_LIMITS:
+                row = item(checked, key)
+                if case_name == 'missing':
+                    assert row['verdict'] == 'missing' and row['actual'] is None and row['limit'] is None
+                    assert manufacturing_field(role, name) in {spec['field'] for spec in row['basis_missing_fields']}
+                    continue
+                assert row['verdict'] == ('failed' if case_name == 'failed' else 'passed')
+                assert row['limit'] == pytest.approx(limit) and row['unit'] == '1'
+                assert row['basis'] == 'measurement'
+                reference = row['basis_reference']
+                assert reference['record_id'] == record_id
+                assert reference['record']['value'] == original_value
+                assert reference['record']['quantity']['unit'] == original_unit
+                assert reference['plugin_version'] == '0.9.0'
+                assert reference['record']['verification']['status'] == 'verified'
+                actual_source = inputs['provenance'][manufacturing_field(role, name)]
+                assert row['engineering_sources'][manufacturing_field(role, name)] == actual_source
+                assert row['actual'] == json.loads(actual_source['reference'])['value']
+                assert row['input_source']['reviewed'] is False
+            assert item(checked, 'ehv-coverings')['verdict'] == 'uncovered'
+            assert 'GB/T3880.1' in item(checked, 'ehv-coverings')['reason']
+            assert item(checked, 'ehv-type-tests')['verdict'] == 'uncovered'
+            assert checked['conclusion'] == ('not_satisfied' if case_name == 'failed' else 'incomplete')
+        for case_name, _ in cases[4:]:
+            output = outputs[case_name]
+            assert output.status == 'not_applicable' and not output.artifacts
+            assert output.error['code'] == 'STANDARD_INPUT_INVALID'
+            assert '标准来源不能' in output.error['message']
+        from cablesim_standard_check.basis import BasisIntegrityError, digest
+        passed = plugin.check(document, parameters)
+        for key, *_ in MANUFACTURING_LIMITS:
+            changed = deepcopy(parameters)
+            reference = changed['basis_references'][item(passed, key)['id']]
+            reference['record']['value'] = 0
+            reference['record_sha256'] = digest({k: v for k, v in reference['record'].items()
+                                                if k not in ('record_sha256', 'citation')})
+            with pytest.raises(BasisIntegrityError, match='封签'):
+                plugin.check(document, changed)
+
+
+@pytest.mark.parametrize('change,keys,verdict', [
+    ('material_missing', [0, 1], 'missing'), ('lead', [0, 1], 'uncovered'),
+    ('form_missing', [0, 1], 'missing'), ('smooth', [0, 1], 'uncovered'),
+    ('construction_missing', [2], 'missing'), ('other_construction', [2], 'uncovered'),
+    ('outer_missing', [2], 'missing'),
+    ('compound_missing', [2], 'missing'), ('other_compound', [2], 'uncovered'),
+    ('insulation', [0, 1, 2], 'uncovered'), ('conductor', [0, 1, 2], 'uncovered'),
+    ('area', [0, 1, 2], 'uncovered'),
+])
+def test_220kv_manufacturing_scope_never_infers_missing_conditions(change, keys, verdict):
+    from cablesim_standard_check.basis import digest
+    document = manufacturing_design()
+    cable = document['cable_types'][0]
+    sheath = next(layer for layer in cable['common_layers'] if layer['role'] == 'metallic_sheath')
+    material = next(value for value in document['materials'] if value['id'] == sheath['material'])
+    if change in ('material_missing', 'lead'):
+        material['standard_kind'] = None if change == 'material_missing' else 'lead'
+    elif change in ('form_missing', 'smooth'):
+        sheath['form'] = None if change == 'form_missing' else 'smooth'
+    elif change == 'construction_missing':
+        document['provenance'].pop(manufacturing_field('oversheath', 'bonded_extruded_oversheath_layer'))
+    elif change == 'other_construction':
+        manufacturing_input(document, 'oversheath', 'bonded_extruded_oversheath_layer', False)
+    elif change == 'outer_missing':
+        cable['common_layers'] = [layer for layer in cable['common_layers'] if layer['role'] != 'oversheath']
+    elif change == 'compound_missing':
+        document['provenance'].pop(manufacturing_field('oversheath', 'sheath_compound'))
+    elif change == 'other_compound':
+        manufacturing_input(document, 'oversheath', 'sheath_compound', 'ST1')
+    elif change == 'insulation':
+        next(value for value in document['materials'] if value['id'] == 'material/xlpe')['standard_kind'] = 'EPR'
+    elif change == 'conductor':
+        document['materials'][0]['standard_kind'] = 'aluminium'
+    else:
+        cable['cores'][0]['conductor']['nominal_area'] = 1100e-6
+    checked = plugin.check(document, {'cable_type_id': cable['id'],
+        'basis_cable_sha256': digest(cable), 'basis_references': {}})
+    for index in keys:
+        row = item(checked, MANUFACTURING_LIMITS[index][0])
+        assert row['verdict'] == verdict and row['limit'] is None
+        if change == 'area':
+            assert library_module.BasisLibrary().query(row['basis_query'])['status'] == 'not_covered'
+        else:
+            assert row['basis_query'] is None
+
+
+def test_220kv_manufacturing_queries_cover_st2_and_alloy_without_claiming_full_compliance():
+    document = manufacturing_design()
+    next(value for value in document['materials'] if value['id'] == 'material/al')['standard_kind'] = 'aluminium_alloy'
+    manufacturing_input(document, 'oversheath', 'sheath_compound', 'ST2')
+    checked = plugin.check(document, {'cable_type_id': document['cable_types'][0]['id']})
+    for key, _, _, _, record_id, *_ in MANUFACTURING_LIMITS:
+        row = item(checked, key)
+        answer = library_module.BasisLibrary().query(row['basis_query'])
+        assert answer['status'] == 'resolved' and answer['records'][0]['id'] == record_id
+        assert row['limit'] is None  # A query alone is not an installed receipt or a verdict.
+
+
+@pytest.mark.parametrize('index,value,unit,reference', [
+    (0, 99.5, '1', '百分数未换算'), (0, True, '1', '布尔值不是纯度'),
+    (1, 16, '%', '来源单位仍为百分数'), (2, 1.01, '1', '厚度比超过整体'),
+    (2, .15, '1', ''),
+])
+def test_220kv_manufacturing_requires_finite_si_values_and_a_source(index, value, unit, reference):
+    document = manufacturing_design()
+    _, role, name, *_ = MANUFACTURING_LIMITS[index]
+    path = manufacturing_field(role, name)
+    receipt = json.loads(document['provenance'][path]['reference'])
+    receipt.update(value=value, unit=unit, reference=reference)
+    document['provenance'][path]['reference'] = json.dumps(receipt)
+    with pytest.raises(ValueError, match='单位和出处|适用范围'):
+        plugin.check(document, {'cable_type_id': document['cable_types'][0]['id']})
 
 
 def test_live_220kv_standard_proposal_reuses_table3_with_stated_diameter(tmp_path):

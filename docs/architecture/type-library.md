@@ -64,6 +64,19 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 全新发布种子的电缆厂示例复用原有电气及短路通道。即使规格书生成被其他真实缺项阻断，也保存能够得到的电气结果与短路缺项诊断，并保留普通运行的输入、输出、工件摘要和方法版本。没有故障持续时间或初末温度时，不生成短路容量；有保存的诊断运行不代表规格书齐全或产品已批准。
 
+### 220 kV 制造数据与固定限值
+
+标准核对方法 `1.8.3` 继续通过原有要求依据接口消费封签的 GB/T 18890.2—2015 记录。三项共用范围为 127/220 kV、裸铜导体、XLPE，截面仅为表列 400、500、630、800、1000、1200、1400、1600、1800、2000、2200、2500 mm²；不插值或套用其他电压。制造输入沿 `engineering_inputs` 给出的稳定来源路径保存，形如 `/cable_types/{escaped_id}/common_layers/{role}/engineering/{field}`；层在线芯内时使用对应 `cores/{escaped_core_id}/layers/{role}` 路径。
+
+| 字段 | 层与数据性质 | 单位及适用条件 |
+| --- | --- | --- |
+| `aluminium_sheath_purity` | `metallic_sheath` 的铝纯度实测质量分数 | SI `1`，显示 `%`、比例乘 100；须明确 `standard_kind=aluminium/aluminium_alloy` 且 `form=corrugated`，与封签的 99.5% 下限比较。 |
+| `aluminium_strip_elongation` | `metallic_sheath` 的焊接铝带伸长率实测 | SI `1`，显示 `%`、比例乘 100；同皱纹铝/铝合金套条件，与封签的 16% 下限比较。 |
+| `oversheath_semiconductor_ratio` | `oversheath` 的挤包半导电层实测厚度 / 外护套实测总厚度 | SI `1`，显示 `%`、比例乘 100；须有该外护套层、明确 `sheath_compound=ST2/ST7`，且下述构造声明为真，才与封签的 0.20 上限比较。 |
+| `bonded_extruded_oversheath_layer` | `oversheath` 的制造构造声明 | 布尔值，单位 `1`；明确半导电层为挤包、与外护套牢固粘结且计入总厚度，不能由普通层厚或材料名称推断。 |
+
+每项使用已有来源格式：`provenance[path].reference` 中保存 JSON `{schema:"cablesim.manufacturing-input/1",unit:"1",value:...,reference:"制造/测量记录的实际出处"}`，来源与原值进入 `engineering_sources`。纯度与伸长率的标准记录仍保留原 `%` 值，比较时显式换算为 SI 比例；三项制造数值及新增构造声明明确拒绝 `kind=standard` 的来源，标准值不能当制造输入。缺条件、实测或出处不比较，已知其他材料/构造保留未覆盖。三项通过仍不等于完整 GB/T 3880.1 材料符合性或 GB/T 18890.1 的例行、抽样、型式与预鉴定认证，原有完整符合性缺口继续显示。
+
 ## 两台机器之间的数据搬运
 
 型号使用 `/api/type-library/exchange/export`（`{series_ids,format:json|xlsx}`）；材料与已保存工程输入使用 `/api/library/exchange/export`（`{asset_ids,workspace_ids,format}`）。每组接口都有 multipart `/preview` 和 `/import`：提交 `file`、预览的 `reviewed_sha256`、`confirmed:true`、`request_id` 及人工头。

@@ -1266,6 +1266,24 @@
         "clause": "6.7.2",
         "printed_page": 8
       }
+    },
+    "aluminium-sheath-purity": {
+      "ehv": {
+        "clause": "6.6.1",
+        "printed_page": 7
+      }
+    },
+    "aluminium-strip-elongation": {
+      "ehv": {
+        "clause": "6.6.1",
+        "printed_page": 7
+      }
+    },
+    "oversheath-semiconductor-ratio": {
+      "ehv": {
+        "clause": "6.7.3",
+        "printed_page": 9
+      }
     }
   },
   "armour": {

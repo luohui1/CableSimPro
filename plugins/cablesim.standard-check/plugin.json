@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.8.2",
+      "method_version": "1.8.3",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,7 +227,7 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.8.2",
+      "method_version": "1.8.3",
       "analysis": "geometry_proposal",
       "solver": "local",
       "input_schema": "cablesim.cable-design-request/2",
@@ -759,8 +759,8 @@
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "ba4ba70184ed073e9966dd69b2f2803007f803b811a94bf7722a137c019e87ce",
-      "size_bytes": 15498
+      "sha256": "4210047aa8b5aea567d127b6fffbeee8009dac53e6beed650ad198990bbcb4d1",
+      "size_bytes": 15512
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -774,17 +774,17 @@
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
-      "sha256": "834f72a9201ef7d47c490ad8f97b058fecad860c760eab1004d1d2853bb4283b",
-      "size_bytes": 27382
+      "sha256": "e1b65188f45f6fc2dc498cdebefa7881a80f26b0214150b3df0f33886132c272",
+      "size_bytes": 27740
     },
     {
       "path": "src/cablesim_standard_check/extra_high.py",
-      "sha256": "b4fa43e1ca26543635c303c952269417cabda8b55b41fd9561b2804ecfb9e097",
-      "size_bytes": 13612
+      "sha256": "323484c534d6c48054508e5e2a3d256a7a46b756579e9262dbdf07e64c1d762a",
+      "size_bytes": 18162
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "2e52b7c179f33f109dc3ab69444c510e03d62e3d6ae75909cff3608a345c6ec9",
+      "sha256": "d1e4849a7ce4d73a84fb500296bb39ee1eaa8d24e361c80da857c1ad1cc139b3",
       "size_bytes": 65157
     },
     {

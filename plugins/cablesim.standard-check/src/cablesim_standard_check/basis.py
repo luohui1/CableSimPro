@@ -93,7 +93,7 @@ def criterion(reference, unit, inputs):
             x=inputs.get('t_n_mm') if value.get('x') in ('nominal_thickness','t_n','nominal_lining_thickness') else inputs.get('d_mm') if value.get('x')=='diameter' else None
             if value.get('kind')=='affine' and x is not None and {'a','b'}<=value.keys(): value=max(value.get('floor',-math.inf),value['a']*x+value['b'])
             else: return None,comparison,'依据已核验；此公式的参数或计算分支本轮未覆盖。'
-    scale={('mm','mm'):1,('m','mm'):1000,('ohm/km','Ω/km'):1,('ohm/m','Ω/km'):1000,('1','1'):1,('count','1'):1}.get((record['quantity']['unit'],unit))
+    scale={('mm','mm'):1,('m','mm'):1000,('ohm/km','Ω/km'):1,('ohm/m','Ω/km'):1000,('1','1'):1,('%','1'):.01,('count','1'):1}.get((record['quantity']['unit'],unit))
     if scale is None: return None,comparison,'依据与实际值单位不兼容，本项未比较。'
     if not isinstance(value,(int,float)) or isinstance(value,bool) or not math.isfinite(value): raise ValueError('basis_references：判据不是有限数值。')
     return value*scale,comparison,None

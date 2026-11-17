@@ -8,6 +8,23 @@ import math
 from .manufacturing import field, read
 
 
+def manufacturing_value(checker, spec):
+    source = checker.document.get('provenance', {}).get(spec['field'])
+    if source and source.get('kind') == 'standard':
+        raise ValueError(spec['label'] + '：标准来源不能作为制造实测或本电缆构造声明，请提供独立制造/测量记录。')
+    return read(checker, spec)
+
+
+def measured_ratio(checker, row, name, label, **bounds):
+    spec = field(checker, row, name, label, unit='1', min=0,
+                 display_unit='%', scale=100, **bounds)
+    value = manufacturing_value(checker, spec)
+    row.setdefault('engineering_inputs', []).append(spec)
+    row['actual'] = row['actual_unrounded'] = value
+    if value is None:
+        row['basis_missing_fields'].append(spec)
+
+
 def populate(checker):
     cable, root = checker.cable, checker.root
     core = cable['cores'][0]
@@ -49,6 +66,11 @@ def populate(checker):
         actual=metallic['minimum_thickness'] * 1000 if metallic.get('minimum_thickness') is not None else None,
         basis='measurement', source='ehv-coverings', uncovered=True,
         reason='缺少GB/T18890.1—2015的10.7.1/10.7.2完整判据；标称厚度不代替最薄点要求。')
+    for key, title in [('aluminium-sheath-purity', '皱纹铝套铝纯度（质量分数）'),
+                       ('aluminium-strip-elongation', '焊接铝带伸长率')]:
+        checker.row(key, title, mp + '.material', unit='1', basis='measurement', source='ehv-metal',
+            reason='需皱纹铝或铝合金套的独立制造实测记录与出处；标准下限不作为材料输入。',
+            target_override=None if metallic else {'scope': 'common', 'core_id': None, 'role': 'metallic_sheath'})
     outer, op = checker.find_layer(pairs, 'oversheath')
     for key, title, name in [('oversheath-nominal', '外护套标称总厚度', 'thickness'),
                              ('oversheath-minimum', '外护套最薄点', 'minimum_thickness'),
@@ -62,6 +84,10 @@ def populate(checker):
             checker.rows.pop()
             checker.not_applicable.append({**row, 'verdict': 'not_applicable',
                 'reason': 'GB/T18890.2—2015 6.7.2明确：皱纹金属套外护套无平均厚度要求；最薄点要求仍适用。'})
+    checker.row('oversheath-semiconductor-ratio', '计入外护套的挤包半导电层实测厚度比',
+        op + '.material', unit='1', comparison='<=', basis='measurement', source='ehv-tests',
+        reason='需明确挤包半导电层与外护套牢固粘结且计入总厚度，并录入有来源的实测厚度比。',
+        target_override=None if outer else {'scope': 'common', 'core_id': None, 'role': 'oversheath'})
     metal_screen, msp = checker.find_layer(pairs, 'metallic_screen')
     if metal_screen.get('form') == 'wires':
         d, diameter, n = (metal_screen.get(key) for key in ('wire_diameter', 'screen_inner_diameter', 'wire_count'))
@@ -78,7 +104,7 @@ def populate(checker):
         ('ehv-construction', '导体结构与圆整度', path + '.form',
          '表2–4与明确制造数值已编制；6.1.2的结构与圆整度尚未绑定核对。'),
         ('ehv-coverings', '金属套与外护套要求', root + '.common_layers',
-         '标称套厚与外护套厚度按已核验记录核对；金属套材料证明、半导电导电层和完整产品试验仍需独立核验。'),
+         '已收录的套厚、铝纯度、焊接铝带伸长率及半导电层厚度比逐项核对；GB/T3880.1材料完整符合性、导电层其余要求及完整产品试验仍需独立核验。'),
         ('ehv-routine-tests', '例行试验要求', root + '.rating.u',
          '缺少 GB/T 18890.1—2015 第 9 章的完整判据与试验数据。'),
         ('ehv-sample-tests', '抽样试验要求', root + '.rating.u',
@@ -115,9 +141,12 @@ def queries(checker):
         'conductor-screen-minimum': ('6.3.2', 'conductor_screen_min'),
         'insulation-screen-minimum': ('6.3.3', 'insulation_screen_min'),
         'sheath-nominal': ('表 4', 'metal_sheath_nominal'),
+        'aluminium-sheath-purity': ('6.6.1', 'aluminium_sheath_purity_min'),
+        'aluminium-strip-elongation': ('6.6.1', 'aluminium_strip_elongation_min'),
         'oversheath-nominal': ('6.7.2', 'oversheath_nominal'),
         'oversheath-minimum': ('6.7.2', 'nonmetal_sheath_min'),
         'oversheath-mean': ('6.7.2', 'oversheath_mean_min'),
+        'oversheath-semiconductor-ratio': ('6.7.3', 'oversheath_semiconductor_ratio_max'),
         'screen-wire-diameter': ('6.5.2', 'screen_wire_nominal_min'),
         'screen-wire-gap': ('6.5.2', 'screen_wire_gap_max'),
     }
@@ -167,7 +196,28 @@ def queries(checker):
             else:
                 row['reason'] = '表4只绑定铅套和皱纹铝套；需明确套形，不能套用于平铝套或铜套。'
                 continue
+        elif key in ('aluminium-sheath-purity', 'aluminium-strip-elongation'):
+            sheath_kind = checker.materials.get(metallic.get('material'), {}).get('standard_kind')
+            form = metallic.get('form')
+            if sheath_kind is None:
+                row['basis_missing_fields'].append({'field': mp + '.material', 'label': '金属套材料标准类别'})
+            elif sheath_kind not in ('aluminium', 'aluminium_alloy'):
+                row['reason'] = '6.6.1的铝纯度与焊接铝带伸长率只绑定皱纹铝或铝合金套；当前金属材料不适用。'
+                continue
+            if form is None:
+                row['basis_missing_fields'].append({'field': mp + '.form', 'label': '金属套构造（皱纹铝套）'})
+            elif form != 'corrugated':
+                row['reason'] = '6.6.1的本项固定记录仅用于皱纹铝套，不能套用于平铝套或其他构造。'
+                continue
+            if sheath_kind in ('aluminium', 'aluminium_alloy') and form == 'corrugated':
+                selected['sheath_material'] = 'corrugated_aluminium'
+            if key == 'aluminium-sheath-purity':
+                measured_ratio(checker, row, 'aluminium_sheath_purity', '皱纹铝套铝纯度实测（质量分数）', max=1)
+            else:
+                measured_ratio(checker, row, 'aluminium_strip_elongation', '焊接铝带伸长率实测')
         elif key.startswith('oversheath-'):
+            if key == 'oversheath-semiconductor-ratio' and not outer:
+                row['basis_missing_fields'].append({'field': op, 'label': '外护套层结构'})
             compound = field(checker, row, 'sheath_compound', '外护套混合料牌号（ST2或ST7）', kind='text')
             value = read(checker, compound)
             row['engineering_inputs'] = [compound]
@@ -177,7 +227,21 @@ def queries(checker):
                 row['reason'] = '外护套混合料不是明确的ST2或ST7，不能用通用聚合物名称代替。'
                 continue
             selected['sheath_compound'] = value
-            if key == 'oversheath-mean':
+            if key == 'oversheath-semiconductor-ratio':
+                construction = field(checker, row, 'bonded_extruded_oversheath_layer',
+                    '挤包半导电层与外护套牢固粘结且计入总厚度', kind='boolean')
+                declared = manufacturing_value(checker, construction)
+                row['engineering_inputs'].append(construction)
+                if declared is None:
+                    row['basis_missing_fields'].append(construction)
+                elif declared is False:
+                    row['reason'] = '6.7.3的20%判据仅用于牢固粘结且计入总厚度的挤包半导电层；其他构造不套用。'
+                    continue
+                else:
+                    selected['screen_construction'] = 'bonded_extruded_oversheath_layer'
+                measured_ratio(checker, row, 'oversheath_semiconductor_ratio',
+                    '挤包半导电层厚度 / 外护套总厚度（实测）', max=1)
+            elif key == 'oversheath-mean':
                 if metallic.get('form') != 'smooth':
                     row['basis_missing_fields'].append({'field': mp + '.form', 'label': '外护套内金属套构造'})
                 selected['metal_sheath_form'] = 'smooth'
