@@ -76,20 +76,27 @@ test('未采用的空闲预载拒绝后，主动预载或首次打开均可重�
   }
 });
 
-test('渲染已采用的拒绝原样抛给边界，重复渲染不循环加载', async () => {
+test('已采用的拒绝原样抛出，重复渲染不重试，显式预载才能恢复', async () => {
   const failure = Error('visible import fault');
   let reject, loads = 0;
   const pending = new Promise((_, fail) => { reject = fail; });
-  const view = preloadable(() => { loads++; return pending; });
+  const view = preloadable(() => ++loads === 1 ? pending : Promise.resolve({ default: Page }));
   assert.match(render(view.Component), /<span>WAIT<\/span>/);
   const adopted = view.preload();
   reject(failure);
   await assert.rejects(adopted, error => error === failure);
   for (let count = 0; count < 3; count++) {
-    assert.equal(view.preload(), adopted);
     assert.throws(() => renderWithoutBoundary(view.Component), error => error === failure);
   }
   assert.equal(loads, 1);
+  const retried = view.preload();
+  assert.notEqual(retried, adopted);
+  assert.equal(view.preload(), retried);
+  await retried;
+  const html = render(view.Component);
+  assert.match(html, /<p>Saved inputs<\/p>/);
+  assert.doesNotMatch(html, /<span>WAIT<\/span>/);
+  assert.equal(loads, 2);
 });
 
 test('同步加载异常成为真实拒绝，采用后不被吞掉或自动重试', async () => {
@@ -100,6 +107,6 @@ test('同步加载异常成为真实拒绝，采用后不被吞掉或自动重�
   assert.match(render(view.Component), /<span>WAIT<\/span>/);
   await assert.rejects(pending, error => error === failure);
   assert.throws(() => renderWithoutBoundary(view.Component), error => error === failure);
-  assert.equal(view.preload(), pending);
+  assert.throws(() => renderWithoutBoundary(view.Component), error => error === failure);
   assert.equal(loads, 1);
 });
