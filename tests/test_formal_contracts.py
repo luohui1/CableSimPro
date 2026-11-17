@@ -107,3 +107,43 @@ def test_verbatim_formula_text_cannot_change_a_saved_number():
     with pytest.raises(HTTPException) as error:
         validate_model_refs(model)
     assert '原文与完整来源不一致' in error.value.detail['message']
+
+
+def test_body_rejects_the_actual_frozen_publisher_id_outside_the_builtin_namespace():
+    # Identifier policy only: this serialization fixture is not a saved
+    # engineering result and is never returned by an execution endpoint.
+    model = reference_model()
+    payload = {'snapshot': {'method_manifests': {
+        'frozen-method': {'id': 'manufacturer.thermal', 'name': '制造商热计算方法'}}}}
+    model['sources']['method-record'] = {'kind': 'run', 'payload': payload,
+                                       'payload_digest': jsonsha(payload)}
+    paragraph = {'text': 'Manufacturer.Thermal 的保存原文', 'source_ref': None, 'verbatim': False}
+    model['sections'][0]['paragraphs'] = [paragraph]
+    with pytest.raises(HTTPException) as error:
+        validate_model_refs(model)
+    assert '正文' in error.value.detail['message']
+    model['sections'][0]['paragraphs'] = []
+    model['sections'][1]['paragraphs'] = [paragraph]
+    validate_model_refs(model)
+
+
+def test_stored_text_with_another_publisher_is_preserved_in_trace_without_rewriting():
+    # Text/provenance behavior only; no synthetic engineering quantities or
+    # successful execution record is supplied to an application API.
+    from backend.kernel.formal_sources import _Model, _stored_text
+
+    model = _Model(request())
+    model.names['manufacturer.thermal'] = '制造商热计算方法'
+    output = {'summary': 'Manufacturer.Thermal 的保存结论原文',
+              'limitations': ['manufacturer.thermal 的保存适用范围原文']}
+    payload = {'title': 'Manufacturer.Thermal 保存记录', 'output': output}
+    source = model.source('run:text-policy', 'serialization-test', payload)
+    label = model.body_literal(source, '/title')
+    section = model.section('body', '保存文本')
+    _stored_text(model, section, {'id': 'text-policy', 'output': output})
+    assert label['value'] == '制造商热计算方法 保存记录'
+    assert section['paragraphs'] == []
+    assert [item['text'] for item in model.deferred] == [
+        payload['title'], output['summary'], output['limitations'][0]]
+    assert all(item['verbatim'] and resolve_pointer(payload, item['source_ref']['pointer']) == item['text']
+               for item in model.deferred)

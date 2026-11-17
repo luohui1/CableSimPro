@@ -30,6 +30,7 @@ MAX_SOURCE_BYTES = 32 * 1024 * 1024
 MAX_ROWS = 6000
 Digest = Annotated[str, StringConstraints(pattern=r'^[0-9a-f]{64}$')]
 DocumentKind = Literal['specification', 'calculation', 'rating_table', 'research_report']
+_BUILTIN_METHOD_ID = re.compile(r'\b(?:x-)?cablesim\.[a-zA-Z0-9_.-]+', re.IGNORECASE)
 
 
 def fail(code: str, message: str, status: int = 422) -> None:
@@ -55,6 +56,30 @@ def raw_text(value: Any) -> str:
 
 def is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def contains_plugin_identifier(text: str, identifiers=()) -> bool:
+    """Include actual frozen publishers, not only first-party ID prefixes."""
+    folded = text.casefold()
+    return bool(_BUILTIN_METHOD_ID.search(text) or any(identifier.casefold() in folded for identifier in identifiers if identifier))
+
+
+def frozen_plugin_identifiers(model: dict) -> set[str]:
+    identifiers = set()
+    for source in model['sources'].values():
+        if source.get('kind') != 'run':
+            continue
+        payload = source['payload']
+        if not isinstance(payload, dict) or not isinstance(payload.get('snapshot', {}), dict):
+            raise ValueError('保存运行的冻结快照不是完整对象。')
+        manifests = payload.get('snapshot', {}).get('method_manifests', {})
+        if not isinstance(manifests, dict):
+            raise ValueError('保存运行的冻结方法清单不是完整对象。')
+        for manifest in manifests.values():
+            identifier = manifest.get('id') if isinstance(manifest, dict) else None
+            if isinstance(identifier, str) and identifier:
+                identifiers.add(identifier)
+    return identifiers
 
 
 def decode_logo(value: str | None) -> bytes | None:
@@ -277,7 +302,8 @@ def validate_model_refs(model: dict) -> None:
             if not item.get('evidence_ref') and any(item.get(key) for key in ('name', 'date')):
                 raise ValueError('签栏没有真实记录依据。')
             body_text.extend(str(item.get(key) or '') for key in ('label', 'name', 'date'))
-        if any(re.search(r'\b(?:x-)?cablesim\.[a-zA-Z0-9_.-]+', text) for text in body_text):
+        identifiers = frozen_plugin_identifiers(model)
+        if any(contains_plugin_identifier(text, identifiers) for text in body_text):
             raise ValueError('正文含有原始方法标识，须使用保存的方法名称或放入追溯章节。')
         if 'source_digest' in model and model['source_digest'] != jsonsha(model['sources']):
             raise ValueError('来源集合摘要不一致。')
