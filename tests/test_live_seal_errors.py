@@ -1,5 +1,6 @@
 """Source drift after startup produces actionable 409s, not server errors."""
 from pathlib import Path
+import json
 import shutil
 import pytest
 from fastapi.testclient import TestClient
@@ -14,9 +15,17 @@ from backend.plugin_host.registry import Registry
 def test_input_contracts_refuse_live_source_or_manifest_drift(tmp_path,monkeypatch,fault,code):
     root=Path(__file__).resolve().parents[1];package=tmp_path/'plugins/cablesim.iec60287'
     shutil.copytree(root/'plugins/cablesim.iec60287',package,ignore=shutil.ignore_patterns('__pycache__','tests'))
+    # The isolated installation must initially satisfy the same sealed shared
+    # dependency closure as the real one. Otherwise startup can fail for a
+    # missing SDK before the intended live-file fault is introduced.
+    for record in json.loads((package/'src/host-dependencies.json').read_text(encoding='utf-8')):
+        target=tmp_path/record['path'];target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(root/record['path'],target)
     registry=Registry(tmp_path/'plugins');app=create_app(tmp_path/'library.sqlite')
     app.state.research.executor=Executor(registry=registry)
     with TestClient(app) as client:
+        healthy=client.get('/api/input-contracts')
+        assert healthy.status_code==200,healthy.text
         source=package/'src/cablesim_iec60287/inputs.py'
         if fault=='source':source.write_bytes(source.read_bytes()+b'\n# changed\n')
         elif fault=='missing':source.unlink()
@@ -24,6 +33,9 @@ def test_input_contracts_refuse_live_source_or_manifest_drift(tmp_path,monkeypat
         else:
             from backend.plugin_host.registry import Plugin
             monkeypatch.setattr(Plugin,'verify',lambda self:(_ for _ in ()).throw(OSError('file changing')))
+            # A Python method replacement is not a filesystem notification;
+            # request a fresh verification for this simulated I/O failure.
+            monkeypatch.setattr(app.state.research.catalog_read_responses,'generation',lambda _:None)
         response=client.get('/api/input-contracts')
         assert response.status_code==409,response.text
         assert response.json()['detail']['code']==code
