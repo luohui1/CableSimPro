@@ -2,7 +2,7 @@
 // as run_demo; the test never opens a developer database and never runs native finite-element solvers.
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -11,9 +11,10 @@ import { fileURLToPath } from 'node:url';
 import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import type { ChatView, Proposal } from '../shared/types.ts';
-import { gbRequest, installConditionWorkflow, installGbWorkflow, installImportRefusal, installMissingData, installRatingTableWorkflow,
+import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
   installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState, type GbFixture } from './fusion-scripts.ts';
 import { scriptedModel, steps, toolText } from './support.ts';
+import { importInventory, installMissingStructureSource, installStructureImport, manufacturerWorkbook } from './fusion-import-scripts.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const home = mkdtempSync(join(tmpdir(), 'cablesim-fusion-integration-'));
@@ -436,13 +437,87 @@ test('rejecting or stopping a proposed write leaves the real study list unchange
   }
 });
 
-test('missing input and the unavailable manufacturer structure-table API are explicit refusals with no writes', async () => {
+test('a real attached manufacturer table becomes reviewed drafts and ordinary check runs through four separate acceptances', { timeout: 180_000 }, async () => {
+  const file = manufacturerWorkbook(REPO);
+  const database = join(home, 'engineering.sqlite');
+  const before_ = importInventory(REPO, database);
+  const state = installStructureImport(faux, { workspace: fixture.workspace, seriesName: 'Agent 验收 · 人民电器三芯结构表' });
+  const { session } = await sidecar.agent.send(undefined, '将附上的人民电器结构表导入型号库并核对，记录关联当前城南工程；每次写入先给我审阅。',
+    { workspace_id: fixture.workspace, label: '城南工程' }, [{ filename: file.filename, content_base64: file.content_base64 }]);
+  const accepted: string[] = [];
+  const view = await acceptEach(session, async proposal => {
+    const counts = importInventory(REPO, database);
+    const phase = accepted.length;
+    assert.equal(counts.type_table_uploads, before_.type_table_uploads + (phase >= 1 ? 1 : 0), 'no platform upload before its acceptance');
+    assert.equal(counts.type_table_previews, before_.type_table_previews + (phase >= 2 ? 1 : 0), 'no saved preview before its acceptance');
+    assert.equal(counts.type_series, before_.type_series + (phase >= 3 ? 1 : 0), 'no imported series before its acceptance');
+    assert.equal(counts.type_series_specs, before_.type_series_specs + (phase >= 3 ? 11 : 0));
+    assert.equal(counts.domain_cable_models, before_.domain_cable_models + (phase >= 3 ? 11 : 0));
+    assert.equal(counts.study_runs, before_.study_runs, 'no standard check runs before the fourth acceptance');
+    if (proposal.operation === 'propose_structure_import') {
+      const review = JSON.stringify(proposal.changes);
+      assert.ok(review.includes(state.preview!.preview_digest), 'review is tied to the actual immutable preview');
+      assert.ok(review.includes(file.filename), 'the source file remains visible in the import proposal');
+    }
+    accepted.push(proposal.operation);
+  });
+  assert.equal(state.failure, undefined);
+  assert.equal(state.done, true);
+  assert.deepEqual(accepted, ['propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check']);
+  assert.ok(view.items.some(item => item.role === 'user' && item.attachments?.some(item => item.file === file.filename)), 'the user sees the real attachment');
+  assert.equal(state.imported!.created, 11);
+  const cards = steps(view).map(step => step.card);
+  const previewCard = cards.find(card => card?.kind === 'structure_preview');
+  assert.ok(previewCard?.kind === 'structure_preview');
+  assert.equal(previewCard.view.rows.length, 11);
+  assert.equal(previewCard.view.sha256, state.attachment!.sha256);
+  assert.equal(previewCard.view.preview_digest, state.preview!.preview_digest);
+  const importCard = cards.find(card => card?.kind === 'structure_import');
+  assert.ok(importCard?.kind === 'structure_import');
+  assert.deepEqual(importCard.view.specs.map(spec => spec.workspace_id), state.imported!.specs.map((spec: any) => spec.workspace_id));
+  const checkCard = cards.find(card => card?.kind === 'structure_check');
+  assert.ok(checkCard?.kind === 'structure_check');
+  assert.equal(checkCard.view.items.length, 11);
+  assert.deepEqual(checkCard.view.items.map(item => [item.run_id, item.input_digest, item.output_digest]),
+    state.checked!.items.map((item: any) => [item.run_id, item.input_digest, item.output_digest]));
+  const series = await api(`/api/type-library/series/${state.imported!.series_id}`);
+  assert.equal(series.specs.length, 11);
+  for (const item of state.checked!.items) {
+    const run = await api(`/api/workspaces/${item.workspace_id}/studies/${item.study_id}/runs/${item.run_id}?view=full`);
+    assert.equal(run.status, 'succeeded');
+    assert.equal(run.integrity, 'verified');
+    assert.equal(run.input_digest, item.input_digest);
+    assert.equal(run.output_digest, item.output_digest);
+    assert.equal(run.snapshot.definition.method.plugin_id, 'cablesim.standard-check');
+  }
+  const after_ = importInventory(REPO, database);
+  assert.equal(after_.study_runs, before_.study_runs + 11);
+  // A restart must retain the accepted imported type scopes and source metadata without retaining the workbook bytes in pi.
+  await sidecar.close();
+  sidecar = createSidecar({ backendUrl: url, token: TOKEN, home: join(home, 'sidecar'), port: 8111, runtime });
+  const recovered = await sidecar.agent.view(session);
+  assert.ok(recovered.items.some(item => item.role === 'user' && item.attachments?.some(item => item.file === file.filename)));
+  assert.ok(state.typeId, 'the completed import has a real type workspace');
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('type_read', { type_id: state.typeId, view: 'input', limit: 20 })], { stopReason: 'toolUse' }),
+    context => { assert.equal((context.messages.at(-1) as { isError?: boolean }).isError, false, toolText(context)); return fauxAssistantMessage([fauxText('已读回刚才导入的型号草稿。')]); },
+  ]);
+  await sidecar.agent.send(session, '读取刚才导入的第一个型号', { workspace_id: fixture.workspace, label: '城南工程' });
+  await sidecar.agent.idle(session);
+  assert.deepEqual(importInventory(REPO, database), after_, 'reading after restart must not repeat any import or check');
+  for (const entry of readdirSync(join(home, 'sidecar'), { recursive: true })) {
+    if (String(entry).endsWith('.jsonl')) assert.ok(!readFileSync(join(home, 'sidecar', String(entry)), 'utf8').includes(file.content_base64), 'raw file bytes stay out of pi history');
+  }
+});
+
+test('missing engineering input or a filename without an actual attachment is refused with no writes', async () => {
   const before_ = (await api<any[]>(`/api/workspaces/${fixture.workspace}/studies`)).length;
   const typesBefore = (await api('/api/index/objects?kind=type&limit=1')).total;
-  for (const install of [() => installMissingData(faux, { workspace: fixture.workspace }), () => installImportRefusal(faux)]) {
+  const importsBefore = importInventory(REPO, join(home, 'engineering.sqlite'));
+  for (const install of [() => installMissingData(faux, { workspace: fixture.workspace }), () => installMissingStructureSource(faux, fixture.workspace)]) {
     const state = install();
     const { session } = await sidecar.agent.send(undefined, '请完成任务，缺数据时明确拒绝');
-    // Missing input deliberately omits a source/method; the structure-table path is absent, not a mocked successful import.
+    // An installed importer is not evidence that a source exists: the second script deliberately supplies an unbound identity.
     await sidecar.agent.idle(session);
     const view = await sidecar.agent.view(session);
     assert.equal(state.failure, undefined);
@@ -452,4 +527,5 @@ test('missing input and the unavailable manufacturer structure-table API are exp
   }
   assert.equal((await api<any[]>(`/api/workspaces/${fixture.workspace}/studies`)).length, before_);
   assert.equal((await api('/api/index/objects?kind=type&limit=1')).total, typesBefore);
+  assert.deepEqual(importInventory(REPO, join(home, 'engineering.sqlite')), importsBefore);
 });

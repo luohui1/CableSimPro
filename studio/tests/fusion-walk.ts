@@ -5,17 +5,18 @@
 // PLAYWRIGHT_EXECUTABLE_PATH can select a system Chromium when the Playwright browser download is unavailable.
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type Frame, type Locator, type Page } from 'playwright';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
-import { gbRequest, installConditionWorkflow, installGbWorkflow, installImportRefusal, installMissingData, installRatingTableWorkflow,
+import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
   installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState } from './fusion-scripts.ts';
 import { probe } from './layout-probe.ts';
 import { scriptedModel } from './support.ts';
+import { importInventory, installMissingStructureSource, installStructureImport, manufacturerWorkbook } from './fusion-import-scripts.ts';
 
 const repo = resolve(import.meta.dirname, '..', '..');
 const out = resolve(process.argv[2] ?? join(repo, '.tmp', 'fusion-walk'));
@@ -35,6 +36,7 @@ const browserErrors: Record<string, unknown>[] = [];
 const leakLocations = new Set<string>();
 const checks: { id: string; status: '通过' | '未通过' | '云端无法验证'; evidence: unknown }[] = [];
 const screenshots: Record<string, unknown>[] = [];
+const completedImports = new Set<number>();
 let stage = 'startup';
 let browser: Browser | undefined;
 let sidecar: Sidecar | undefined;
@@ -47,6 +49,21 @@ function clean(value: string, where: string): string {
     if (safe.includes(secret)) { leakLocations.add(where); safe = safe.replaceAll(secret, '[redacted]'); }
   }
   return safe;
+}
+function recordedRequestBody(url: string, body: string): string {
+  const safe = clean(body, 'browser/request-body');
+  if (!url.includes('/api/chat/messages') || !safe) return safe;
+  try {
+    const message = JSON.parse(safe);
+    if (!Array.isArray(message.attachments)) return safe;
+    message.attachments = message.attachments.map((item: Record<string, unknown>) => {
+      if (typeof item.content_base64 !== 'string') return item;
+      const { content_base64, ...metadata } = item;
+      return { ...metadata, content_base64: '[original attachment bytes omitted]', encodedLength: content_base64.length,
+        sha256: createHash('sha256').update(Buffer.from(content_base64, 'base64')).digest('hex') };
+    });
+    return JSON.stringify(message);
+  } catch { return '[attachment request scanned; unparseable body omitted]'; }
 }
 function record(id: string, passed: boolean, evidence: unknown): void {
   checks.push({ id, status: passed ? '通过' : '未通过', evidence });
@@ -116,7 +133,7 @@ async function observe(page: Page): Promise<() => Promise<void>> {
     track((async () => {
       const headers = await request.allHeaders().catch(() => request.headers());
       network.push({ stage: at, type: 'request', method: request.method(), url: clean(request.url(), 'browser/request-url'),
-        headers: clean(JSON.stringify(headers), 'browser/request-headers'), body: clean(request.postData() || '', 'browser/request-body') });
+        headers: clean(JSON.stringify(headers), 'browser/request-headers'), body: recordedRequestBody(request.url(), request.postData() || '') });
     })());
   });
   page.on('requestfailed', request => {
@@ -181,6 +198,21 @@ async function pending(frame: Frame, title?: string): Promise<Locator> {
   const button = card.getByRole('button', { name: '接受', exact: true });
   await until(async () => await button.count() > 0 && await button.isEnabled({ timeout: 500 }).catch(() => false), '可审阅的提案', 90_000);
   return card;
+}
+async function pendingOperation(frame: Frame, operation: string): Promise<Locator> {
+  let title = '';
+  await until(async () => {
+    const review = await frame.evaluate(async () => {
+      const session = location.hash.split('/')[2];
+      if (!session) return undefined;
+      const response = await fetch('/agent-sidecar/api/chat/sessions/' + session);
+      return (await response.json()).waiting?.at(-1);
+    });
+    if (review?.operation !== operation) return false;
+    title = review.title;
+    return true;
+  }, operation + ' 的实际待审状态', 90_000);
+  return pending(frame, title);
 }
 async function expandProposal(card: Locator): Promise<void> {
   const trigger = card.getByRole('button', { name: /^完整改动/ });
@@ -624,13 +656,101 @@ try {
       await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
       frame = await agentFrame(page);
 
-      stage = 'import-unavailable';
+      stage = 'import-missing-source';
       await newChat(frame);
-      const imported = installImportRefusal(model.faux);
+      const withoutSource = importInventory(repo, database);
+      const missingSource = installMissingStructureSource(model.faux, source.workspace);
       await speak(frame, '导入厂家结构表.xlsx，先预览和映射列，再让我确认。');
-      await waitFlow(imported, '导入能力缺口如实说明');
+      await waitFlow(missingSource, '只有文件名时拒绝导入');
       await frame.locator('[data-card="refusal"]').waitFor();
-      await shot(page, frame, 'import-unavailable');
+      record(`${viewport.width}/import-requires-original-source`, JSON.stringify(importInventory(repo, database)) === JSON.stringify(withoutSource),
+        { pendingProposals: await frame.locator('[data-card="proposal"][data-phase="pending"]').count(), businessWrites: 0 });
+      await shot(page, frame, 'import-missing-source');
+
+      stage = 'structure-import';
+      await newChat(frame);
+      const beforeImport = importInventory(repo, database);
+      const workbook = manufacturerWorkbook(repo);
+      const imported = installStructureImport(model.faux, { workspace: source.workspace, seriesName: `Agent 验收 · ${viewport.width} 人民电器原表` });
+      const choosingFile = page.waitForEvent('filechooser');
+      await frame.getByRole('button', { name: '附上结构表', exact: true }).click();
+      await (await choosingFile).setFiles({ name: workbook.filename,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: workbook.buffer });
+      await frame.getByText(workbook.filename, { exact: true }).waitFor();
+      await speak(frame, '把附上的人民电器原始结构表导入型号库并核对，关联城南工程；保留来源和缺项，每次写入先给我审阅。');
+      const operations = ['propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check'];
+      for (const [phase, operation] of operations.entries()) {
+        const proposal = await pendingOperation(frame, operation);
+        const actual = importInventory(repo, database);
+        const expected = { ...beforeImport,
+          type_table_uploads: beforeImport.type_table_uploads + (phase >= 1 ? 1 : 0),
+          type_table_previews: beforeImport.type_table_previews + (phase >= 2 ? 1 : 0),
+          type_series: beforeImport.type_series + (phase >= 3 ? 1 : 0),
+          type_series_specs: beforeImport.type_series_specs + (phase >= 3 ? 11 : 0),
+          domain_cable_models: beforeImport.domain_cable_models + (phase >= 3 ? 11 : 0) };
+        record(`${viewport.width}/unapproved-${operation}`, JSON.stringify(actual) === JSON.stringify(expected), { operation, before: beforeImport, actual, expected });
+        if (phase === 0) {
+          await proposal.scrollIntoViewIfNeeded();
+          await shot(page, frame, 'import-upload-proposal', { file: workbook.filename, sha256: imported.attachment!.sha256 });
+        } else if (phase === 1) {
+          await expandProposal(proposal);
+          const review = await proposal.innerText();
+          record(`${viewport.width}/import-mapping-review`, review.includes(workbook.filename) && review.includes(imported.upload!.sha256),
+            { file: workbook.filename, sha256: imported.upload!.sha256, operation });
+          await shot(page, frame, 'import-mapping-proposal', { file: workbook.filename });
+        } else if (phase === 2) {
+          const preview = frame.locator('[data-card="structure-preview"]').last();
+          await preview.waitFor();
+          record(`${viewport.width}/saved-import-preview`, await preview.locator('[data-structure-row]').count() === 11
+            && imported.preview!.valid_count === 11 && imported.preview!.error_count === 0,
+          { rows: 11, valid: imported.preview!.valid_count, errors: imported.preview!.error_count, missing: imported.preview!.incomplete_count,
+            sourceSha256: imported.preview!.sha256, previewDigest: imported.preview!.preview_digest });
+          await preview.evaluate(element => element.scrollIntoView({ block: 'start' }));
+          await shot(page, frame, 'import-saved-preview', { previewDigest: imported.preview!.preview_digest });
+          const firstRow = preview.locator('[data-structure-row]').first();
+          const firstToggle = firstRow.getByRole('button', { name: /^第 \d+ 行 ·/ });
+          await firstToggle.click();
+          await until(async () => await firstToggle.getAttribute('aria-expanded') === 'true' && firstRow.locator('[data-structure-field]').first().evaluate(element => {
+            const panel = element.closest<HTMLElement>('[data-slot="collapsible-content"]');
+            return Boolean(panel && panel.clientHeight >= panel.scrollHeight - 1 && !panel.hasAttribute('data-starting-style')
+              && panel.getAnimations({ subtree: true }).every(animation => !animation.pending && animation.playState !== 'running'));
+          }).catch(() => false), '原字段、单位与来源实际展开');
+          const firstFact = imported.preview!.preview.rows[0].values[0];
+          const sourceText = await firstRow.innerText();
+          record(`${viewport.width}/import-source-and-units-visible`, sourceText.includes(firstFact.label) && sourceText.includes(workbook.filename)
+            && sourceText.includes('保存值'), { row: imported.preview!.preview.rows[0].row_number, fullFields: imported.preview!.preview.rows[0].values.length });
+          await firstRow.evaluate(element => element.scrollIntoView({ block: 'start' }));
+          await shot(page, frame, 'import-source-fields');
+          await firstToggle.click();
+          await expandProposal(proposal);
+          const review = await proposal.innerText();
+          record(`${viewport.width}/import-fixed-digest-review`, review.includes(imported.preview!.preview_digest) && review.includes(workbook.filename),
+            { previewDigest: imported.preview!.preview_digest, allRowsPreserved: true });
+          await shot(page, frame, 'import-draft-proposal', { rows: 11, previewDigest: imported.preview!.preview_digest });
+        }
+        await proposal.getByRole('button', { name: '接受', exact: true }).click();
+      }
+      await waitFlow(imported, '原件导入并逐项真实核对');
+      const checked = frame.locator('[data-card="structure-check"]').last();
+      await checked.waitFor();
+      const afterImport = importInventory(repo, database);
+      record(`${viewport.width}/import-four-approvals-and-real-runs`, imported.imported!.created === 11 && imported.checked!.items.length === 11
+        && afterImport.study_runs === beforeImport.study_runs + 11 && await checked.locator('[data-check-spec]').count() === 11,
+      { acceptedOperations: operations, before: beforeImport, after: afterImport, series: imported.imported!.series_id });
+      for (const item of imported.checked!.items) {
+        const run = await json(backendUrl, `/api/workspaces/${item.workspace_id}/studies/${item.study_id}/runs/${item.run_id}?view=full`);
+        assert.ok(run.status === 'succeeded' && run.integrity === 'verified' && run.input_digest === item.input_digest
+          && run.output_digest === item.output_digest && run.snapshot.definition.method.plugin_id === 'cablesim.standard-check', '核对卡必须来自真实固定输入的保存运行');
+      }
+      await checked.evaluate(element => element.scrollIntoView({ block: 'start' }));
+      await shot(page, frame, 'import-checked', { series: imported.imported!.series_id, runs: imported.checked!.items.map((item: any) => item.run_id) });
+      const firstSpec = imported.imported!.specs[0];
+      await checked.getByRole('button', { name: '在工作台打开 · ' + firstSpec.name, exact: true }).click();
+      await page.waitForURL(url => url.pathname.includes(firstSpec.workspace_id));
+      await until(() => page.locator('body').innerText().then(text => text.includes(firstSpec.name) && text.includes('草稿')), '真实导入型号的旧工作台');
+      record(`${viewport.width}/import-old-workbench`, true, { type: firstSpec.workspace_id, name: firstSpec.name, url: page.url(), state: 'draft' });
+      await shot(page, undefined, 'imported-type-workbench', { workspace: firstSpec.workspace_id, name: firstSpec.name });
+      completedImports.add(viewport.width);
     } catch (error) {
       const visibleFrame = page.frames().find(item => item.url().includes('/agent-app/fusion.html'));
       await shot(page, visibleFrame, `${stage}-failed`, { error: clean(error instanceof Error ? error.message : String(error), 'browser/scenario-failure') }).catch(() => undefined);
@@ -661,7 +781,9 @@ try {
   checks.push({ id: 'walk-completion', status: '未通过', evidence: failure });
 } finally {
   // Capability limits remain visible even when an earlier browser scenario fails.
-  checks.push({ id: 'manufacturer-structure-import', status: '未通过', evidence: 'T3 Excel/CSV 结构表上传、列映射预览与固定摘要批量草稿提交接口尚未接入；已有 PDF 提取审阅流程不能替代此验收。' });
+  checks.push({ id: 'manufacturer-structure-import', status: completedImports.size === 2 ? '通过' : '未通过',
+    evidence: { completedViewports: [...completedImports], requiredViewports: [1366, 1920],
+      workflow: '原始XLSX附件→原件上传提案→列映射预览提案→固定摘要草稿入库提案→逐项核对提案→真实保存运行与旧型号工作台；四次接受前检查真实数据库无提前写入。' } });
   checks.push({ id: 'real-model-six-phrases', status: '云端无法验证', evidence: configuredRealModel
     ? '检测到真实模型配置；本脚本只验脚本化模型，请另附真实模型六句话走查证据。'
     : '三项 CABLE_STUDIO_MODEL_* 环境配置不齐全；本轮未调用真实模型，也没有把脚本化模型结果标成真实模型验收。' });
@@ -689,4 +811,4 @@ try {
 }
 console.log(`走查证据：${out}`);
 if (failure || leakLocations.size) { console.error(failure || '密钥泄漏检查失败，详见验收记录中的匹配位置。'); process.exitCode = 1; }
-else console.log(`脚本化模型真实平台走查完成：${screenshots.length} 张截图；待操作者逐张检查。真实模型和导入接口的限制已单列。`);
+else console.log(`脚本化模型真实平台走查完成：${screenshots.length} 张截图；待操作者逐张检查。真实模型与结构表实际完成状态已单列。`);

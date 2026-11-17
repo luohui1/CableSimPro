@@ -398,17 +398,6 @@ export function installGbWorkflow(faux: Faux, input: GbFixture & { baselineRevie
   return state;
 }
 
-export function installImportRefusal(faux: Faux): FlowState {
-  const state: FlowState = { done: false };
-  faux.setResponses([() => advance(faux, state, () => advance(faux, state, context => {
-    assert.equal((context.messages.at(-1) as { isError?: boolean }).isError, true);
-    assert.match(toolText(context), /尚未接入|未接入|缺少.*接口/);
-    state.done = true;
-    return text('厂家 Excel/CSV 结构表导入接口尚未接入，文件没有写入型号库。\n请在资源库查看已有资料导入入口；结构表预览、列映射和批量草稿提交需要数据接口接入后继续。');
-  }, 'structure_import_inspect', { filename: '厂家结构表.xlsx' }), 'read', { path: 'cable-import-check' })]);
-  return state;
-}
-
 export function installMissingData(faux: Faux, input: { workspace: string; study?: string }): FlowState {
   const state: FlowState = { done: false };
   faux.setResponses([() => advance(faux, state, context => {
