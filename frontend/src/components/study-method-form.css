@@ -29,5 +29,26 @@
 .study-method-workspace { padding: var(--space-3); }
 .study-method-workspace > h3 { font-size: var(--text-body); margin: 0 0 var(--space-2); }
 .study-method-workspace .study-method-config { max-width: 100%; }
-.study-method-config :is(.select-trigger,.parameter-structured-label) { white-space: normal; height: auto; min-height: var(--control-standard); overflow-wrap: anywhere; }
+.study-method-config .select-trigger { white-space: nowrap; height: var(--control-standard); min-height: var(--control-standard); }
+.study-method-config .parameter-structured-label { white-space: normal; overflow-wrap: anywhere; }
 .study-inspector .study-method-config .select-trigger { height: var(--control-compact); min-height: var(--control-compact); }
+.study-method-workspace .parameter-group .parameter-fields,.type-method-fields .parameter-group .parameter-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,calc(var(--space-12) * 9)),1fr)); }
+.create-study-form .parameter-group .parameter-fields { grid-template-columns: minmax(0,1fr); }
+.structured-table :is(.cell-number input,.cell-text,.cell-select) { height: var(--control-compact); }
+.structured-table .structured-add { height: var(--control-standard); }
+.parameter-source { width: 100%; min-width: 0; padding-block: var(--space-1); }
+.parameter-source summary { cursor: pointer; color: var(--text-secondary); padding-block: var(--space-1); }
+.parameter-source textarea { min-height: calc(var(--space-12) * 2); resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
+.parameter-source > .text-field { margin-block: var(--space-2); }
+.structured-table:has(.parameter-source) { width: 100%; }
+.structured-table:has(.parameter-source) table { width: 100%; }
+.parameter-object-list { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; min-width: 0; }
+.parameter-object-item { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-3); min-width: 0; }
+.parameter-object-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.parameter-object-heading h4 { margin: 0; font-size: var(--text-body); }
+.parameter-map-add,.parameter-tuple { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); }
+.parameter-map-add input,.parameter-tuple input { height: var(--control-standard); }
+.add-study-method { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.parameter-group .parameter-range-hint { grid-column: 1 / -1 !important; margin: 0; color: var(--text-secondary); font-size: var(--text-note); line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.parameter-group [data-number-wide="true"] > [data-slot="field"] { grid-template-columns: minmax(0,1fr); }
+.parameter-group [data-number-wide="true"] > [data-slot="field"] > * { grid-column: 1 / -1; }
