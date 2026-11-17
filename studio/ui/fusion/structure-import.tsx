@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CardAction, CardFrame } from '@/kit/chat/cards';
 import { Disclosure } from '@/kit/disclosure';
+import { importFieldSource, importSiValue } from './import-facts';
 import { useOpen } from './open';
 
 const PREVIEW_STATUS: Record<string, string> = { ready: '可保存 · 待核对', incomplete: '缺项草稿', error: '错误行' };
@@ -16,13 +17,21 @@ function SavedDetails({ value }: { value: unknown }) {
   return <pre className="m-0 whitespace-pre-wrap break-all p-3 text-xs text-ink-2">{JSON.stringify(value, null, 2)}</pre>;
 }
 
-function Source({ value }: { value: Record<string, unknown> }) {
-  const location = [value.file, value.sheet, value.row === undefined ? undefined : `第 ${value.row} 行`, value.column === undefined || value.column === null ? undefined : `${value.column} 列`]
-    .filter(item => item !== undefined && item !== null && item !== '').map(text).join(' · ');
-  return <>
-    <span className="block break-words text-xs text-ink-2">{location || '此字段未声明文件位置'}</span>
-    <span className="block text-xs text-ink-2">{value.reviewed === true ? '来源已核对' : '来源待核对'}</span>
-  </>;
+export function ImportFieldSource({ value }: { value: Record<string, unknown> }) {
+  const source = importFieldSource(value);
+  return <div data-source-origin={source.origin} className="space-y-1 text-xs text-ink-2">
+    <span className="block font-medium">{source.label}</span>
+    {source.location && <span data-source-location className="block break-words">{source.location}</span>}
+    {source.reference !== undefined && <div data-source-reference>
+      {typeof source.reference === 'string' ? <span className="block whitespace-pre-wrap break-words">{source.reference}</span>
+        : source.referenceLines.length ? <>
+          {source.referenceLines.map((line, index) => <span key={index} className="block break-words">{line}</span>)}
+          <Disclosure title="完整查询依据"><SavedDetails value={source.reference} /></Disclosure>
+        </> : <SavedDetails value={source.reference} />}
+    </div>}
+    {source.missing && <span className="block break-words text-attention-ink">{source.missing}</span>}
+    <span className="block">{source.reviewed ? '来源已核对' : '来源待核对'}</span>
+  </div>;
 }
 
 function PreviewRow({ row }: { row: StructurePreviewRow }) {
@@ -34,14 +43,14 @@ function PreviewRow({ row }: { row: StructurePreviewRow }) {
           {issue.column !== undefined && issue.column !== '' ? `${issue.column} 列 · ` : ''}{issue.field ? `${issue.field}：` : ''}{issue.message}
         </li>)}</ul>}
         <Table>
-          <TableHeader><TableRow><TableHead>原字段</TableHead><TableHead numeric>原表值与单位</TableHead><TableHead>来源</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>字段</TableHead><TableHead numeric>值与单位</TableHead><TableHead>字段依据</TableHead></TableRow></TableHeader>
           <TableBody>{row.values.map((fact, index) => <TableRow key={`${fact.key}/${index}`} data-structure-field={fact.key}>
             <TableCell className="whitespace-normal">{fact.label}</TableCell>
             <TableCell numeric className="whitespace-normal">
-              <span>{text(fact.display_value === undefined ? fact.value : fact.display_value)} {fact.display_unit ?? fact.unit}</span>
-              {fact.display_unit && fact.display_unit !== fact.unit && <span className="mt-1 block text-xs text-ink-2">保存值 {text(fact.value)} {fact.unit}</span>}
+              <span>{fact.display_value === undefined ? importSiValue(fact.value) : text(fact.display_value)} {fact.display_unit ?? fact.unit}</span>
+              {fact.display_unit && fact.display_unit !== fact.unit && <span className="mt-1 block text-xs text-ink-2" title={text(fact.value)}>保存值 {importSiValue(fact.value)} {fact.unit}</span>}
             </TableCell>
-            <TableCell className="max-w-xs whitespace-normal"><Source value={fact.source} /></TableCell>
+            <TableCell className="max-w-xs whitespace-normal"><ImportFieldSource value={fact.source} /></TableCell>
           </TableRow>)}</TableBody>
         </Table>
         <Disclosure title="完整字段来源与建模记录">

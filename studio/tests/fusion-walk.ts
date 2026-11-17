@@ -119,6 +119,53 @@ async function json<T = any>(base: string, path: string, body?: unknown, method:
   return JSON.parse(text) as T;
 }
 
+/** Observe the browser's completed read, so a heading cannot stand in for its still-loading child data. */
+async function browserJson(page: Page, path: string, search: Record<string, string> = {}): Promise<any> {
+  const response = await page.waitForResponse(async value => {
+    const url = new URL(value.url());
+    return value.request().method() === 'GET' && url.pathname === path
+      && Object.entries(search).every(([key, expected]) => url.searchParams.get(key) === expected)
+      && await value.finished() === null;
+  }, { timeout: 60_000 });
+  assert.equal(response.status(), 200, '浏览器读取必须成功：' + path);
+  return response.json();
+}
+
+async function conversationListReady(page: Page, frame: Frame, sessions: { id: string; title: string }[]): Promise<void> {
+  assert.ok(Array.isArray(sessions), '会话目录必须是已完成读取的真实列表');
+  const list = frame.getByRole('navigation', { name: '对话', exact: true });
+  const expected = sessions.map(item => item.title || '新对话').sort();
+  await list.waitFor();
+  await until(async () => !await list.getByRole('status', { name: '正在载入对话', exact: true }).isVisible()
+    && JSON.stringify(await list.locator('li button').evaluateAll(items => items.map(item => item.getAttribute('title')).sort())) === JSON.stringify(expected)
+    && (expected.length > 0 || await list.getByText('还没有对话。交办第一件事后，它会出现在这里。', { exact: true }).isVisible()),
+  '真实会话目录已结束加载并渲染全部条目');
+  record(`${page.viewportSize()!.width}/conversation-list-ready`, true, { count: sessions.length, sessions: sessions.map(item => item.id), loading: false });
+}
+
+async function navigationReady(page: Page, spaces: Record<string, any>[], types: Record<string, any>[], studies: Record<string, any>, inbox: Record<string, any>): Promise<void> {
+  assert.ok(Array.isArray(spaces) && Array.isArray(types) && Array.isArray(studies.items));
+  assert.equal(studies.items.length, studies.total, '此验收库的侧栏研究索引应完整读取');
+  const typeIds = new Set(types.map(item => item.id));
+  const projects = spaces.filter(item => !typeIds.has(item.id)).slice(0, 3);
+  const expected = [...projects.map(item => ({ id: item.id, title: item.name,
+    count: String(studies.items.filter((study: any) => study.parent?.id === item.id).length) })),
+  ...types.slice(0, 3).map(item => ({ id: item.id, title: item.name, count: null }))].sort((a, b) => a.id.localeCompare(b.id));
+  const todo = inbox.counts.review + inbox.counts.stale + inbox.counts.missing;
+  const nav = page.locator('.workbench-sidebar').getByRole('navigation', { name: '对象', exact: true });
+  await until(async () => {
+    const actual = await nav.locator('a.tree-object').evaluateAll(items => items.map(item => {
+      const url = new URL(item.getAttribute('href')!, window.location.href);
+      return { id: url.pathname.startsWith('/types/') ? url.pathname.split('/')[2] : url.searchParams.get('workspace'),
+        title: item.getAttribute('title'), count: item.querySelector('.tree-count')?.textContent ?? null };
+    }).sort((a, b) => (a.id || '').localeCompare(b.id || '')));
+    const badge = nav.locator('a[href^="/inbox"] .sidebar-count');
+    return JSON.stringify(actual) === JSON.stringify(expected) && !await nav.getByText('读取中', { exact: true }).isVisible()
+      && (todo ? await badge.textContent() === String(todo) : await badge.count() === 0);
+  }, '旧主导航的工程、型号、研究数和待办数已按真实响应渲染');
+  record(`${page.viewportSize()!.width}/sidecar-down-navigation-ready`, true, { objects: expected, todo });
+}
+
 /** Records browser traffic, including the SSE data that a response.body() cannot read until the connection is closed. */
 async function observe(page: Page): Promise<() => Promise<void>> {
   const pending = new Set<Promise<unknown>>();
@@ -299,6 +346,32 @@ async function savedDrawing(page: Page, backendUrl: string, workspace: string, s
   '保存工况的敷设截面和全部电缆绘制完成');
   record(`${page.viewportSize()!.width}/drawing-${run}`, true, { run, caseId, cableIds, state: await drawing.getAttribute('data-laying-section-state') });
 }
+async function savedTypeDrawing(page: Page, backendUrl: string, workspace: string): Promise<void> {
+  const saved = await json(backendUrl, `/api/types/${workspace}/workspace`);
+  assert.equal(saved.id, workspace);
+  assert.equal(saved.domain.cable_types.length, 1, '导入验收型号应有一个明确的保存结构');
+  const cable = saved.domain.cable_types[0];
+  const expected = [...cable.cores.flatMap((core: any) => [`${core.id}/conductor`, ...core.layers.map((layer: any) => `${core.id}/${layer.role}`)]),
+    ...cable.common_layers.map((layer: any) => `common/${layer.role}`)].sort();
+  assert.ok(expected.length > 0 && new Set(expected).size === expected.length, '保存结构必须有明确且不重复的层身份');
+  const drawing = page.locator('.workbench-canvas [data-cable-section-state="success"][aria-busy="false"]');
+  const svg = drawing.locator('svg[data-drawing-canvas="cable"]');
+  const table = page.getByRole('table', { name: '型号分层', exact: true });
+  await until(async () => {
+    if (await drawing.count() !== 1 || !await svg.isVisible() || !await table.isVisible()) return false;
+    const geometry = await svg.locator('.drawing-ring[data-layer-id]').evaluateAll(items => items.map(item => {
+      const box = (item as SVGGraphicsElement).getBBox();
+      return { id: item.getAttribute('data-layer-id'), drawn: Boolean(item.getAttribute('d')?.trim())
+        && Number.isFinite(box.width) && Number.isFinite(box.height) && box.width > 0 && box.height > 0 };
+    }));
+    const actual = [...new Set(geometry.map(item => item.id))].sort();
+    const rows = await table.locator('tbody tr.data-row').evaluateAll(items => items.map(item => item.id.replace(/^row-型号分层-/, '')).sort());
+    return geometry.every(item => item.drawn) && JSON.stringify(actual) === JSON.stringify(expected)
+      && JSON.stringify(rows) === JSON.stringify(expected);
+  }, '保存型号的实际截面几何和全部分层表行已完成渲染');
+  record(`${page.viewportSize()!.width}/imported-type-structure-ready`, true,
+    { workspace, revision: saved.revision, cable: cable.id, coreCount: cable.cores.length, layerIds: expected, renderedTableRows: await table.locator('tbody tr.data-row').count() });
+}
 async function shot(page: Page, frame: Frame | undefined, name: string, detail: Record<string, unknown> = {}): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
   if (frame) await frame.evaluate(() => document.fonts.ready);
@@ -378,9 +451,11 @@ try {
     const flush = await observe(page);
     try {
       stage = 'empty';
-      await page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' });
+      const [sessions] = await Promise.all([browserJson(page, '/agent-sidecar/api/chat/sessions'),
+        page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' })]);
       let frame = await agentFrame(page);
       await frame.getByRole('heading', { name: '今天要完成哪项工作？' }).waitFor();
+      await conversationListReady(page, frame, sessions);
       await shot(page, frame, 'empty');
 
       stage = 'saved-result';
@@ -748,11 +823,73 @@ try {
               && panel.getAnimations({ subtree: true }).every(animation => !animation.pending && animation.playState !== 'running'));
           }).catch(() => false), '原字段、单位与来源实际展开');
           const firstFact = imported.preview!.preview.rows[0].values[0];
+          const savedFacts = imported.preview!.preview.rows[0].values as Record<string, any>[];
+          assert.equal(await firstRow.locator('[data-structure-field]').count(), savedFacts.length, '已保存预览的字段不能被展示层删减');
+          const sourceLabels: Record<string, string> = { table: '原表抄录', series: '显式声明 / 引用补入', standard: '标准查询' };
+          for (const fact of savedFacts) {
+            assert.match(fact.key, /^[a-z0-9_]+$/);
+            const field = firstRow.locator(`[data-structure-field="${fact.key}"]`);
+            const origin = fact.source.origin;
+            assert.ok(sourceLabels[origin], '本原件字段必须保留已保存的明确来源类型');
+            const source = field.locator('[data-source-origin]');
+            assert.equal(await source.getAttribute('data-source-origin'), origin, fact.label + '来源类型与保存值一致');
+            assert.ok((await source.innerText()).includes(sourceLabels[origin]));
+            if (origin === 'table') {
+              const location = await source.locator('[data-source-location]').innerText();
+              for (const part of [fact.source.file, fact.source.sheet, `第 ${fact.source.row} 行`, `${fact.source.column} 列`]) {
+                assert.ok(location.includes(part), fact.label + '必须保留原表实际位置');
+              }
+            } else {
+              assert.equal(await source.locator('[data-source-location]').count(), 0, fact.label + '不能把关联工作簿位置显示为取值来源');
+              if (origin === 'series') {
+                assert.equal(typeof fact.source.reference, 'string');
+                assert.equal(await source.locator('[data-source-reference]').textContent(), fact.source.reference, fact.label + '必须完整显示已保存的补入依据');
+              }
+            }
+          }
+          const standardFact = savedFacts.find(fact => fact.key === 'r20');
+          assert.ok(standardFact && standardFact.source.origin === 'standard');
+          const standardRecord = standardFact.source.reference.record;
+          assert.ok(standardRecord.citation && standardRecord.quantity.name);
+          assert.equal(standardRecord.semantic, 'standard_limit');
+          assert.equal(standardRecord.criterion, 'maximum');
+          const standardField = firstRow.locator('[data-structure-field="r20"]');
+          const standardSource = standardField.locator('[data-source-origin="standard"]');
+          const standardText = await standardSource.innerText();
+          for (const value of ['标准查询', '标准上限（非厂家实测）', standardRecord.citation, standardRecord.quantity.name]) {
+            assert.ok(standardText.includes(value), 'R20必须显示其真实标准记录与上限口径');
+          }
+          const standardToggle = standardSource.getByRole('button', { name: '完整查询依据', exact: true });
+          await standardToggle.click();
+          const savedReference = standardSource.locator('[data-source-reference] pre');
+          await until(async () => await standardToggle.getAttribute('aria-expanded') === 'true' && savedReference.evaluate(element => {
+            const panel = element.closest<HTMLElement>('[data-slot="collapsible-content"]');
+            return Boolean(panel && panel.clientHeight >= panel.scrollHeight - 1 && !panel.hasAttribute('data-starting-style')
+              && panel.getAnimations({ subtree: true }).every(animation => !animation.pending && animation.playState !== 'running'));
+          }).catch(() => false), '完整标准查询依据实际展开');
+          assert.deepEqual(JSON.parse(await savedReference.innerText()), standardFact.source.reference, '完整标准查询依据必须逐值保留保存记录');
+          await standardToggle.click();
+          await until(async () => await standardToggle.getAttribute('aria-expanded') === 'false' && !await savedReference.isVisible()
+            && firstRow.evaluate(element => element.getAnimations({ subtree: true }).every(animation => !animation.pending && animation.playState !== 'running')),
+          '完整查询依据已按实际控件收起');
           const sourceText = await firstRow.innerText();
           record(`${viewport.width}/import-source-and-units-visible`, sourceText.includes(firstFact.label) && sourceText.includes(workbook.filename)
-            && sourceText.includes('保存值'), { row: imported.preview!.preview.rows[0].row_number, fullFields: imported.preview!.preview.rows[0].values.length });
+            && sourceText.includes('保存值'), { row: imported.preview!.preview.rows[0].row_number, fullFields: savedFacts.length,
+              sources: savedFacts.map(fact => ({ key: fact.key, origin: fact.source.origin, referencePreserved: fact.source.reference !== null && fact.source.reference !== undefined })),
+              standardReferenceMatchesSaved: true });
           await firstRow.evaluate(element => element.scrollIntoView({ block: 'start' }));
           await shot(page, frame, 'import-source-fields');
+          await standardField.evaluate(element => element.scrollIntoView({ block: 'center' }));
+          await until(() => standardField.evaluate(element => {
+            const box = element.getBoundingClientRect();
+            const viewport = element.closest('.overflow-y-auto')?.getBoundingClientRect();
+            const composer = document.querySelector('[aria-label="给 Agent 的消息"]')?.closest('form')?.getBoundingClientRect();
+            return Boolean(viewport && composer && box.height > 0 && box.top >= viewport.top
+              && box.bottom <= Math.min(viewport.bottom, composer.top));
+          }), 'R20来源分类、标准上限与完整citation在实际视口内');
+          record(`${viewport.width}/import-standard-source-visible`, true, { field: standardFact.key, citation: standardRecord.citation,
+            quantity: standardRecord.quantity.name, semantic: standardRecord.semantic, criterion: standardRecord.criterion });
+          await shot(page, frame, 'import-standard-source', { field: standardFact.key, citation: standardRecord.citation });
           await firstToggle.click();
           await expandProposal(proposal);
           const review = await proposal.innerText();
@@ -782,6 +919,7 @@ try {
       await checked.getByRole('button', { name: '在工作台打开 · ' + firstSpec.name, exact: true }).click();
       await page.waitForURL(url => url.pathname.includes(firstSpec.workspace_id));
       await until(() => page.locator('body').innerText().then(text => text.includes(firstSpec.name) && text.includes('草稿')), '真实导入型号的旧工作台');
+      await savedTypeDrawing(page, backendUrl, firstSpec.workspace_id);
       record(`${viewport.width}/import-old-workbench`, true, { type: firstSpec.workspace_id, name: firstSpec.name, url: page.url(), state: 'draft' });
       await shot(page, undefined, 'imported-type-workbench', { workspace: firstSpec.workspace_id, name: firstSpec.name });
       completedImports.add(viewport.width);
@@ -801,8 +939,13 @@ try {
     const page = await context.newPage();
     const flush = await observe(page);
     try {
-      await page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' });
+      const [spaces, types, studies, inbox] = await Promise.all([
+        browserJson(page, '/api/workspaces'), browserJson(page, '/api/design/type-workspaces'),
+        browserJson(page, '/api/index/objects', { kind: 'study', offset: '0' }), browserJson(page, '/api/index/inbox'),
+        page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' }),
+      ]);
       await page.getByRole('heading', { name: 'Agent 对话服务未连接' }).waitFor();
+      await navigationReady(page, spaces, types, studies, inbox);
       await shot(page, undefined, 'sidecar-down');
       record(`${viewport.width}/sidecar-down-explanation`, await page.getByRole('button', { name: '重试', exact: true }).isVisible(),
         { actualServiceStopped: true, visible: await page.locator('.agent-page').innerText() });
