@@ -400,7 +400,15 @@ function GenericCreateStudyDialog({
       };
     },
     onSuccess: async ({ wid, sid, module }) => {
-      await queries.invalidateQueries({ queryKey: ["study-index"] });
+      // This path creates a project as well as its first study. Refresh the
+      // real project index before navigating so the current project and its
+      // study count appear together in the persistent sidebar.
+      await Promise.all([
+        queries.invalidateQueries({ queryKey: ["workspace-index"], exact: true }),
+        queries.invalidateQueries({ queryKey: ["study-index"] }),
+        // The picker closes below; let its next opening read the new project.
+        queries.invalidateQueries({ queryKey: ["workspaces"], exact: true, refetchType: "none" }),
+      ]);
       allocated.current = null;
       installedTemplate.current = "";
       onOpenChange(false);
