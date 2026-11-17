@@ -40,10 +40,10 @@ export const api = {
   chats: () => request<ChatSummary[]>('/api/chat/sessions'),
   chat: (id: string) => request<ChatView>(`/api/chat/sessions/${id}`),
   /** Starts a conversation (no session yet), adds to one, or steers an agent that is busy. */
-  send: (text: string, session?: string, attachments?: ChatAttachment[]) =>
-    post<{ session: string; accepted: 'started' | 'steered' }>('/api/chat/messages', { session, text, attachments }),
+  send: (text: string, session?: string, attachments?: ChatAttachment[], context?: { workspace_id: string; study_id?: string; label?: string }) =>
+    post<{ session: string; accepted: 'started' | 'steered' }>('/api/chat/messages', { session, text, attachments, context }),
   stop: (session: string) => post(`/api/chat/sessions/${session}/stop`),
-  decide: (proposal: string, accept: boolean, note?: string) => post<Proposal>(`/api/proposals/${proposal}/decision`, { accept, note }),
+  decide: (proposal: string, accept: boolean, note?: string, session?: string) => post<Proposal>(`/api/proposals/${proposal}/decision`, { accept, note, session }),
   /** A structure table, kept on the host; the agent reads it by the identifier it gets back. */
   upload: async (file: File) => {
     const reply = await request<{ upload: string; file: string; size: number }>(`/api/uploads?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });

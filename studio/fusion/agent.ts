@@ -1,21 +1,37 @@
 // The Agent of the fused product: pi's session layer with every built-in tool switched off. The tools it has are the old platform's
-// read-only tools, which run on the platform inside a session and turn of its own; what it writes is the conversation file under
-// <home>/agent, so conversations survive a restart. This is a trimmed copy of Cable Studio's host/agent.ts (no operations, no review
-// gate, no skills yet); when the two products are one, the two are to become one.
+// tools, which run on the platform inside a session and turn of its own. Business changes remain backend proposals until a human
+// accepts them. The sidecar owns conversation files and waiting promises, never a second engineering store or approval tool.
 import { randomBytes } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AgentSession, ExtensionFactory, SessionManager } from '@earendil-works/pi-coding-agent';
-import type { AgentStatus, ChatSummary, ChatView, StudioEvent } from '../shared/types.ts';
-import { noPaths, type ModelConfig } from '../host/agent.ts';
+import type { AgentStatus, ChatSummary, ChatView, Proposal, StudioEvent } from '../shared/types.ts';
+import { failureText, scrubValue, skillReader } from '../host/agent-tools.ts';
 import { chatMessages, plainText, titleOf, type PiMessage } from '../host/chat-view.ts';
 import { StudioError } from '../host/core.ts';
-import type { Backend, BackendTool } from './backend.ts';
+import { type Backend, type BackendTool, type WorkbenchContext } from './backend.ts';
 import { targetFor } from './cards.ts';
 import { agentStatus, NOT_CONFIGURED, resolveModel } from './model.ts';
-import { pi } from './pi.ts';
+import { noPaths, pi, type ModelConfig } from './pi.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
-import { backendTools, ScopeBook } from './tools.ts';
+import { backendTools, ScopeBook, type Entry, type ReviewCall, type ReviewDecision } from './tools.ts';
+
+const SKILLS = resolve(dirname(fileURLToPath(import.meta.url)), '../skills');
+const PROPOSAL_ENTRY = 'cablesim.fusion.proposal';
+const CONTEXT_ENTRY = 'cablesim.fusion.context';
+interface RecordedProposal { proposal: Proposal; scope: Entry }
+interface Waiting extends RecordedProposal {
+  live: Live;
+  settle(decision: ReviewDecision): void;
+  deciding?: Promise<Proposal>;
+}
+
+/** The review shows backend values in their declared display units, including missing values. */
+function valueText(value: unknown, unit?: string | null): string {
+  const text = value === null || value === undefined ? '—' : typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : JSON.stringify(value);
+  return unit && unit !== '1' && text !== '—' ? `${text} ${unit}` : text;
+}
 
 interface Live {
   id: string;
@@ -32,6 +48,7 @@ interface Live {
   revision: number;
   /** The platform sessions of the question being answered. */
   scopes?: ScopeBook;
+  context?: WorkbenchContext;
   unsubscribe(): void;
 }
 
@@ -39,7 +56,7 @@ export interface FusionOptions {
   home: string;
   backend: Backend;
   emit(event: StudioEvent): void;
-  /** A model given by the caller (tests); otherwise the platform's, or the environment's. */
+  /** A scripted model given by tests; production model resolution and credentials stay on the platform. */
   runtime?: ModelConfig;
 }
 
@@ -51,6 +68,8 @@ export class FusionAgent {
   #opening = new Map<string, Promise<Live>>();
   #catalog?: Promise<BackendTool[]>;
   #titles = new Map<string, string>();
+  #waiting = new Map<string, Waiting>();
+  #skillTitles = new Map<string, string>();
   readonly #epoch = randomBytes(4).toString('hex');
   readonly home: string;
   #cwd: string;
@@ -66,6 +85,11 @@ export class FusionAgent {
     this.#cwd = join(root, 'workspace');
     this.#agentDir = join(root, 'pi');
     this.#sessions = join(root, 'sessions');
+    if (existsSync(SKILLS)) for (const name of readdirSync(SKILLS)) {
+      const file = join(SKILLS, name, 'SKILL.md');
+      const description = existsSync(file) ? /^description:\s*(.+)$/m.exec(readFileSync(file, 'utf-8'))?.[1] : undefined;
+      if (description) this.#skillTitles.set(name, description.replace(/^['"]|['"]$/g, '').split('：')[0]);
+    }
     // Start loading the session layer in the background so the conversation list is ready when the page asks for it.
     void pi().catch(() => undefined);
   }
@@ -89,16 +113,37 @@ export class FusionAgent {
     }
   }
 
-  #describe = (tool: string, args: Record<string, unknown>) => ({ label: this.#titles.get(tool) ?? tool, target: targetFor(tool, args) });
+  #describe = (tool: string, args: Record<string, unknown>) => {
+    if (tool === 'read') {
+      const path = String(args.path ?? '').replace(/\\/g, '/');
+      const name = this.#skillTitles.get(path) ?? this.#skillTitles.get(basename(dirname(path)));
+      return { label: '读取技能', ...(name ? { target: `技能「${name}」` } : {}) };
+    }
+    return { label: this.#titles.get(tool) ?? tool, target: targetFor(tool, args) };
+  };
 
-  #viewOf(id: string, messages: readonly PiMessage[], live?: Live): ChatView {
+  #recorded(manager?: SessionManager): Map<string, RecordedProposal> {
+    const records = new Map<string, RecordedProposal>();
+    for (const entry of manager?.getEntries() ?? []) {
+      if (entry.type === 'custom' && entry.customType === PROPOSAL_ENTRY) {
+        const data = entry.data as RecordedProposal;
+        if (data?.proposal?.id && data?.scope?.session) records.set(data.proposal.id, data);
+      }
+    }
+    return records;
+  }
+
+  #viewOf(id: string, messages: readonly PiMessage[], live?: Live, manager = live?.manager): ChatView {
+    const proposals = new Map([...this.#recorded(manager).values()].map(item => [item.proposal.step_id, item.proposal]));
+    const waiting = [...this.#waiting.values()].filter(item => item.live.id === id).map(item => item.proposal);
+    for (const proposal of waiting) proposals.set(proposal.step_id, proposal);
     const items = chatMessages({ messages, partial: live?.partial, queued: live?.queued ?? [], running: live?.running ?? false,
-      proposals: new Map(), describe: this.#describe, error: live?.error });
+      proposals, describe: this.#describe, error: live?.error });
     const first = messages.find(message => message.role === 'user');
     const last = messages.at(-1);
     return { id, title: first ? titleOf(plainText(first)) : '新对话', created: new Date(first?.timestamp ?? Date.now()).toISOString(),
       updated: new Date(last?.timestamp ?? Date.now()).toISOString(), message_count: items.length, running: live?.running ?? false, revision: live?.revision ?? 0,
-      epoch: this.#epoch, items, waiting: [] };
+      epoch: this.#epoch, items, waiting };
   }
 
   #changed(live: Live, now = false): void {
@@ -147,7 +192,83 @@ export class FusionAgent {
     const file = SessionManager.findById(this.#cwd, id, this.#sessions);
     if (!file) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '没有这个对话。' }, 404);
     const manager = SessionManager.open(file, this.#sessions, this.#cwd);
-    return this.#viewOf(id, manager.buildSessionContext().messages as PiMessage[]);
+    await this.#recover(manager);
+    return this.#viewOf(id, manager.buildSessionContext().messages as PiMessage[], undefined, manager);
+  }
+
+  /** Reconcile a crashed waiting step before it can be used again. A known receipt is never executed a second time. */
+  async #recover(manager: SessionManager): Promise<void> {
+    const messages = manager.buildSessionContext().messages as PiMessage[];
+    for (const recorded of this.#recorded(manager).values()) {
+      if (recorded.proposal.status !== 'pending') continue;
+      const state = await this.#backend.proposal(recorded.proposal.id, recorded.scope.session);
+      const decision = state.status === 'pending' ? await this.#backend.decide(recorded.proposal.id, false) : state;
+      const accepted = decision.status === 'approved';
+      const failed = decision.receipt?.status === 'failed' || Boolean(decision.receipt?.error);
+      const proposal: Proposal = { ...recorded.proposal, status: accepted ? 'accepted' : 'rejected',
+        note: accepted ? '服务重启后已核对平台回执；没有重复执行。' : '对话服务重启，未接受的改动已终止；请重新提出。' };
+      manager.appendCustomEntry(PROPOSAL_ENTRY, { ...recorded, proposal });
+      if (!messages.some(message => message.role === 'toolResult' && message.toolCallId === proposal.step_id)) {
+        manager.appendMessage({ role: 'toolResult', toolCallId: proposal.step_id, toolName: proposal.operation,
+          content: [{ type: 'text', text: JSON.stringify({ status: accepted && !failed ? 'ok' : 'error', summary: failed ? '已接受，但平台未完成执行；请按保存诊断继续。' : proposal.note, data: { receipt: decision.receipt ?? {} } }) }],
+          isError: !accepted || failed, timestamp: Date.now() });
+      }
+    }
+  }
+
+  #review(live: Live, call: ReviewCall): Promise<ReviewDecision> {
+    const proposal: Proposal = scrubValue({
+      id: call.proposal.id, session_id: live.id, step_id: call.id, project_id: call.workspace,
+      operation: call.tool.name, title: call.proposal.title,
+      changes: call.proposal.changes.map(change => ({ part: '平台改动', field: change.path, label: change.label,
+        before: valueText(change.before, change.unit), after: valueText(change.after, change.unit) })),
+      checks: call.proposal.checks, status: 'pending',
+    }, [this.home]);
+    return new Promise<ReviewDecision>(settle => {
+      const waiting: Waiting = { proposal, scope: { ...call.scope }, live, settle: decision => {
+        call.signal?.removeEventListener('abort', abort);
+        this.#waiting.delete(proposal.id);
+        settle(decision);
+      } };
+      const abort = () => { void this.decide(proposal.id, false, '任务已停止', live.id).catch(error => {
+        // Never infer acceptance from a lost response. The persisted pending entry is reconciled on reopen.
+        waiting.settle({ accepted: false, error: '任务已停止；未能核对待审状态，未继续执行。' });
+        live.error = failureText(error, [this.home]);
+      }); };
+      this.#waiting.set(proposal.id, waiting);
+      live.manager.appendCustomEntry(PROPOSAL_ENTRY, { proposal, scope: waiting.scope });
+      this.#emit({ type: 'proposal', proposal });
+      this.#changed(live, true);
+      if (call.signal?.aborted) abort();
+      else call.signal?.addEventListener('abort', abort, { once: true });
+    });
+  }
+
+  /** This is called only by the human decision route. The model has no tool that can invoke it. */
+  async decide(id: string, accept: boolean, note: string | undefined, conversation: string): Promise<Proposal> {
+    const waiting = this.#waiting.get(id);
+    if (!waiting || waiting.live.id !== conversation) throw new StudioError({ code: 'PROPOSAL_UNKNOWN', message: '这项改动不属于当前对话，或已经处理。' }, 404);
+    if (waiting.deciding) return waiting.deciding;
+    const perform = async (): Promise<Proposal> => {
+      let decision;
+      try {
+        decision = await this.#backend.decide(id, accept);
+      } catch (error) {
+        // The request may have been accepted before its response was lost. Check the saved decision, never retry a business write.
+        const known = await this.#backend.proposal(id, waiting.scope.session).catch(() => undefined);
+        if (known && known.status !== 'pending') decision = known;
+        else throw error;
+      }
+      const accepted = decision.status === 'approved';
+      waiting.proposal = { ...waiting.proposal, status: accepted ? 'accepted' : 'rejected', ...(note ? { note } : {}) };
+      waiting.live.manager.appendCustomEntry(PROPOSAL_ENTRY, { proposal: waiting.proposal, scope: waiting.scope });
+      waiting.settle({ accepted, receipt: decision.receipt, note });
+      this.#emit({ type: 'proposal', proposal: waiting.proposal });
+      this.#changed(waiting.live, true);
+      return waiting.proposal;
+    };
+    waiting.deciding = perform().finally(() => { waiting.deciding = undefined; });
+    return waiting.deciding;
   }
 
   // ---- running ----
@@ -194,17 +315,22 @@ export class FusionAgent {
     } else {
       manager = SessionManager.create(this.#cwd, this.#sessions);
     }
+    await this.#recover(manager);
     const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, revision: 0, unsubscribe: () => undefined };
+    for (const entry of manager.getEntries()) if (entry.type === 'custom' && entry.customType === CONTEXT_ENTRY) live.context = entry.data as WorkbenchContext;
     const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: true, maxRetries: 2 }, enableInstallTelemetry: false });
     const names = new Set(catalog.map(tool => tool.name));
+    names.add('read');
     const loader = new DefaultResourceLoader({
       cwd: this.#cwd, agentDir: this.#agentDir, settingsManager,
       // Nothing is discovered: not the repository's AGENTS.md or CLAUDE.md, not a user's own extensions, skills, themes or prompts.
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-      extensionFactories: [this.#guard(() => names)], systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
+      additionalSkillPaths: [SKILLS], extensionFactories: [this.#guard(() => names)], systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
     });
     await loader.reload();
-    const tools = backendTools(this.#backend, catalog, () => (live.scopes ??= new ScopeBook(this.#backend, '')), [this.home]);
+    const { skills } = loader.getSkills();
+    const tools = [...backendTools(this.#backend, catalog, () => (live.scopes ??= new ScopeBook(this.#backend, '继续当前任务', live.context)), [this.home], call => this.#review(live, call)),
+      skillReader(skills, path => readFileSync(path, 'utf-8'))];
     const { session } = await createAgentSession({
       cwd: this.#cwd, agentDir: this.#agentDir, modelRuntime: config.models, model: config.model, thinkingLevel: config.thinking,
       settingsManager, resourceLoader: loader, tools: tools.map(tool => tool.name), customTools: tools, sessionManager: manager,
@@ -229,9 +355,18 @@ export class FusionAgent {
   }
 
   /** Starts a conversation or, when one is given, adds to it. While the agent is busy a new message steers it after its current step. */
-  async send(id: string | undefined, text: string): Promise<{ session: string; accepted: 'started' | 'steered' }> {
+  async send(id: string | undefined, text: string, context?: WorkbenchContext): Promise<{ session: string; accepted: 'started' | 'steered' }> {
     const live = await this.#conversation(id);
-    const message = text.trim();
+    if (context) {
+      if (live.context && (live.context.workspace_id !== context.workspace_id || live.context.study_id !== context.study_id)) {
+        throw new StudioError({ code: 'CONTEXT_CONFLICT', message: '此对话已绑定另一项工作；请新开对话后继续。' }, 409);
+      }
+      if (!live.context) {
+        live.context = context;
+        live.manager.appendCustomEntry(CONTEXT_ENTRY, context);
+      }
+    }
+    const message = text.trim() + (live.context ? `\n[当前工作台对象：${JSON.stringify(live.context)}。先用工具核对对象；仅可向此对象提出改动。]` : '');
     if (live.running) {
       await live.session.prompt(message, { streamingBehavior: 'steer', expandPromptTemplates: false });
       this.#changed(live, true);
@@ -240,15 +375,15 @@ export class FusionAgent {
     live.running = true;
     live.error = undefined;
     // A question gets sessions of its own on the platform, so the project's revision is the one in force when it was asked.
-    live.scopes = new ScopeBook(this.#backend, message.slice(0, 8000));
+    live.scopes = new ScopeBook(this.#backend, message.slice(0, 8000), live.context);
     live.run = live.session.prompt(message, { expandPromptTemplates: false }).catch(error => {
-      live.error = error instanceof Error ? error.message : String(error);
-    }).finally(() => {
+      live.error = failureText(error, [this.home]);
+    }).finally(async () => {
       live.running = false;
       live.partial = undefined;
       const scopes = live.scopes;
       live.scopes = undefined;
-      void scopes?.close();
+      await scopes?.close();
       this.#changed(live, true);
     });
     this.#changed(live, true);
@@ -261,7 +396,15 @@ export class FusionAgent {
     if (!live?.running) return;
     live.session.clearQueue();
     live.queued = [];
-    await live.session.abort();
+    const aborted = live.session.abort();
+    await Promise.allSettled([...this.#waiting.values()].filter(waiting => waiting.live.id === id).map(async waiting => {
+      try { await this.decide(waiting.proposal.id, false, '任务已停止', id); }
+      catch (error) {
+        waiting.settle({ accepted: false, error: '任务已停止；未能核对待审状态，未继续执行。' });
+        live.error = failureText(error, [this.home]);
+      }
+    }));
+    await aborted;
   }
 
   /** Resolves when the conversation has nothing in flight (used by tests). */
@@ -277,6 +420,7 @@ export class FusionAgent {
   }
 
   async close(): Promise<void> {
+    await Promise.allSettled([...this.#live.values()].filter(live => live.running).map(live => this.stop(live.id)));
     for (const live of this.#live.values()) {
       if (live.timer) clearTimeout(live.timer);
       live.unsubscribe();

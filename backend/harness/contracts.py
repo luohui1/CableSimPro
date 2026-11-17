@@ -149,13 +149,15 @@ class Proposal(StrictModel):
     changes: list[ProposalChange]
     checks: list[str]
     status: Literal['pending','approved','rejected'] = 'pending'
-    kind: Literal['domain','parameters','study','type','draft_workflow'] | None = None
+    kind: Literal['domain','parameters','study','type','draft_workflow','external_action'] | None = None
+    action: str | None = None
     type_id: UUID | None = None
     base_revision: int | None = None
 
 
 class ProposalDecision(StrictModel):
     status: Literal['approved','rejected']
+    receipt: dict[str,JsonValue] = Field(default_factory=dict)
 
 
 class AuditEvent(StrictModel):
@@ -230,7 +232,8 @@ class ProposalCreated(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
-    kind: Literal['domain','parameters','study','type','draft_workflow'] | None = None
+    kind: Literal['domain','parameters','study','type','draft_workflow','external_action'] | None = None
+    action: str | None = None
     type_id: UUID | None = None
     base_revision: int | None = None
 

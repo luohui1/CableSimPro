@@ -13,7 +13,8 @@ def remember_secret(value):
 
 
 def redact(value):
-    keys = {key for key in (os.environ.get('CABLESIM_LLM_API_KEY',''),*_secrets) if key}
+    keys = {key for key in (os.environ.get('CABLESIM_LLM_API_KEY',''),
+        os.environ.get('CABLE_STUDIO_MODEL_API_KEY',''),os.environ.get('CABLESIM_AGENT_SIDECAR_TOKEN',''),*_secrets) if key}
     if isinstance(value,str):
         text = value
         for key in keys:

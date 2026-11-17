@@ -20,6 +20,8 @@ export function remember(_tool: string, result: ToolResult): void {
   for (const row of data.workspaces ?? []) take(row?.id, row?.name);
   for (const row of [...(data.uses ?? []), ...(data.used_by ?? [])]) take(row?.target?.id, row?.target?.name);
   take(data.model?.id, data.model?.payload?.name);
+  take(data.object?.id, data.object?.name);
+  take(data.receipt?.study_id ?? data.receipt?.type_id, data.receipt?.title);
 }
 
 const quoted = (kind: string, id: unknown) => { const name = nameOf(id); return name ? `${kind}「${name}」` : undefined; };
@@ -59,20 +61,6 @@ interface Domain {
 const IEC = 'cablesim.iec60287';
 const STEADY = 'steady-rating';
 const KELVIN = 273.15;
-
-/** The rule of Cable Studio's methods.py, from the saved input alone: the method is validated against public whole-chain examples for a
- *  single circuit of single-core cables with smooth metal sheaths, buried or in a duct; anything else has only hand and self-consistency
- *  checks. It says nothing about the quality of the cable data. */
-export function tierOf(document: Domain, parameters: Record<string, unknown> | null | undefined): SavedRunView['tier'] {
-  const cable = document.cable_types?.[0];
-  const section = document.sections?.[0];
-  if (!cable || !section) return 'reference';
-  const layers = [...(cable.cores ?? []).flatMap(core => core.layers ?? []), ...(cable.common_layers ?? [])];
-  const corrugated = layers.some(layer => layer.role === 'metallic_sheath' && layer.form === 'corrugated');
-  const weak = cable.construction !== 'single_core' || (document.circuits?.length ?? 0) > 1 || Boolean(section.backfill) || corrugated
-    || Boolean(parameters && 'per_cable_losses' in parameters);
-  return weak ? 'reference' : 'deliverable';
-}
 
 async function savedRun(backend: Backend, workspace: string, result: ToolResult, signal?: AbortSignal): Promise<{ card: CardRef; notes: string[] } | undefined> {
   const data = result.data;
@@ -115,7 +103,9 @@ async function savedRun(backend: Backend, workspace: string, result: ToolResult,
   const celsius = conductor?.display_unit === '°C' && typeof conductor.display_value === 'number' ? conductor.display_value : null;
   const view: SavedRunView = {
     title: `${studyName} · 第 ${summary.sequence} 条记录`,
-    tier: tierOf(document, input.parameters), method: `${method.name} ${method.method.version}`,
+    // The platform's saved evidence has no engineering confidence classification. Geometry and today's installed method are not
+    // evidence that this historic result is deliverable. Keep it explicitly reference-only until the saved contract supplies a tier.
+    tier: 'reference', tier_note: '保存记录未声明工程可信分档，按参考结果展示；不据结构推定可交付。', method: `${method.name} ${String(data.method.version)}`,
     current: fixed(ampacity.display_value), basis, freshness: summary.freshness,
     limiting: {
       name, conductor: celsius, limit: celsius !== null && typeof temperatureMargin === 'number' ? Math.round((celsius + temperatureMargin) * 10) / 10 : null,
@@ -125,7 +115,7 @@ async function savedRun(backend: Backend, workspace: string, result: ToolResult,
   };
   return {
     card: { kind: 'saved_run', href: href('study', study, { workspace, run }), view },
-    notes: [text || `允许电流 ${view.current} A`, ...(summary.freshness === 'current' ? [] : ['这条记录已不是当前输入下的结果'])],
+    notes: [text || `允许电流 ${view.current} A`, view.tier_note!, ...(summary.freshness === 'current' ? [] : ['这条记录已不是当前输入下的结果'])],
   };
 }
 
@@ -135,6 +125,21 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
   const shown: Shown = target ? { target } : {};
   const study = typeof args.study_id === 'string' ? args.study_id : undefined;
   try {
+    const receipt = result.data.receipt;
+    if (receipt && ['delivery', 'specification'].includes(receipt.kind) && typeof receipt.download_url === 'string'
+      && /^\/(?!\/)/.test(receipt.download_url) && typeof receipt.href === 'string' && /^\/(?!\/)/.test(receipt.href)) {
+      return { ...shown, card: { kind: 'saved_file', title: receipt.title ?? '已保存文件', document_kind: receipt.kind === 'delivery' ? '计算书' : '规格书',
+        format: receipt.media_type === 'application/pdf' ? 'pdf' : 'html',
+        href: receipt.kind === 'delivery' ? href('delivery', receipt.delivery_id, { workspace }) : href('type', receipt.workspace_id), download_url: receipt.download_url,
+        ...(typeof receipt.preview_url === 'string' && /^\/(?!\/)/.test(receipt.preview_url) ? { preview_url: receipt.preview_url } : {}) },
+        notes: ['文件来自平台保存的输入与证据；生成文件没有重算或发布型号。'] };
+    }
+    if (receipt?.kind === 'run' && workspace && receipt.result && receipt.status === 'succeeded') {
+      const saved = await savedRun(backend, workspace, { ...result, data: receipt.result }, signal);
+      if (saved) return { ...shown, ...saved };
+    }
+    if (receipt?.kind === 'study' && receipt.study_id) return { ...shown, card: { kind: 'open', label: receipt.title ?? '研究', href: href('study', receipt.study_id, { workspace }) } };
+    if (receipt?.kind === 'type' && receipt.type_id) return { ...shown, card: { kind: 'open', label: receipt.title ?? '型号设计', href: href('type', receipt.type_id) } };
     if (tool === 'run_read' && workspace) {
       const saved = await savedRun(backend, workspace, result, signal);
       if (saved) return { ...shown, ...saved };
@@ -143,7 +148,18 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
       return { ...shown, card: { kind: 'open', label: nameOf(study) ?? '研究', href: href('study', study, { workspace }) } };
     }
     if (tool === 'project_digest' && workspace) return { ...shown, card: { kind: 'open', label: nameOf(workspace) ?? '工程', href: href('project', workspace) } };
-    if (tool === 'type_read' && typeof args.type_id === 'string') return { ...shown, card: { kind: 'open', label: nameOf(args.type_id) ?? '型号设计', href: href('type', args.type_id) } };
+    if (tool === 'type_read' && typeof args.type_id === 'string') {
+      const data = result.data;
+      const fields = (data.items ?? []).filter((item: any) => item.section === 'structure' && (typeof item.value === 'number' || item.material?.name))
+        .map((item: any) => ({ label: item.label, value: item.material?.name ?? compact(item.value), unit: item.unit && item.unit !== '1' ? item.unit : null,
+          source: item.source?.provenance?.reviewed ? '来源已人工核对' : '保存的设计输入，来源待核对' }));
+      if (fields.length) return { ...shown, card: { kind: 'saved_type', href: href('type', args.type_id), view: {
+        title: data.object?.name ?? nameOf(args.type_id) ?? '型号设计', fields,
+        checks: (data.items ?? []).filter((item: any) => item.section === 'checks' && typeof item.message === 'string').map((item: any) => item.message),
+        complete: !data.next_page, source: '数值来自已保存的型号输入；结构核对、人工审核和发布分别记录。',
+      } } };
+      return { ...shown, card: { kind: 'open', label: nameOf(args.type_id) ?? '型号设计', href: href('type', args.type_id) } };
+    }
     if (tool === 'cable_model_read' && typeof args.model_id === 'string') return { ...shown, card: { kind: 'open', label: nameOf(args.model_id) ?? '电缆型号版本', href: href('cable_version', args.model_id) } };
   } catch {
     // The page shows the step without the card; nothing is made up in its place.

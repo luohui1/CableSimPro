@@ -98,7 +98,14 @@ class ModelSettings:
 
     @staticmethod
     def environment():
-        return {name: os.environ.get('CABLESIM_LLM_' + name.upper(), '').strip() for name in ('base_url', 'model', 'api_key')}
+        original = {name: os.environ.get('CABLESIM_LLM_' + name.upper(), '').strip() for name in ('base_url', 'model', 'api_key')}
+        fallback = {name: os.environ.get('CABLE_STUDIO_MODEL_' + suffix, '').strip()
+                    for name, suffix in (('base_url', 'BASE_URL'), ('model', 'ID'), ('api_key', 'API_KEY'))}
+        # Keep endpoint, model and credential together. Never combine the key of
+        # one provider with the address of another partially configured provider.
+        result = original if all(original.values()) else fallback if all(fallback.values()) else original if any(original.values()) else fallback
+        remember_secret(result['api_key'])
+        return result
 
     def resolve(self):
         """The connection the provider uses: saved settings first, then the host environment."""

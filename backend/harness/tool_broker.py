@@ -24,7 +24,7 @@ from .project_digest import project_digest, study_baseline
 from .fem import comparisons, propose as propose_fem
 from .resilience import retry
 from .object_index import read as read_index
-from .session_scope import require_tool,is_type
+from .session_scope import require_tool,is_type,TYPE_TOOLS
 
 
 def failure(code,message,path=None,actions=None):
@@ -194,8 +194,15 @@ class ToolBroker:
                 'message':'输入路径不存在。可用顶层路径：'+', '.join(roots)+'；最接近路径：'+', '.join(closest),
                 'next_actions':['使用 '+candidate+'，或 workspace_read 不带 paths 读取稳定字段路径。' for candidate in closest]}) from None
 
+    def require_scope(self,task,name):
+        external=False
+        if is_type(task) and name not in TYPE_TOOLS and hasattr(self.tasks,'db'):
+            with self.tasks.db() as db:
+                external=bool(db.execute("SELECT 1 FROM agent_events WHERE task_id=? AND type='external.session.opened' LIMIT 1",(task['id'],)).fetchone())
+        require_tool(task,name,external=external)
+
     def identity(self,task,node,tool):
-        require_tool(task,node['tool'])
+        self.require_scope(task,node['tool'])
         args=node['arguments'];identity=deepcopy(node['input_identity'])
         if tool and (tool.method or tool.name in ('study_read','run_list','run_read','study_baseline','sensitivity_inputs','propose_method_parameters','study_preflight','study_preview')):
             sid=self.study_id(task,args) if args.get('run_id') else args.get('study_id') or task['study_id']
@@ -233,7 +240,7 @@ class ToolBroker:
 
     def execute(self,task,node,tool):
         try:
-            require_tool(task,node['tool'])
+            self.require_scope(task,node['tool'])
             if tool is None:return failure('TOOL_NOT_ALLOWED','此工具未注册；模型不能调用批准、发布或任意命令。')
             errors=sorted(Draft202012Validator(tool.model()['function']['parameters']).iter_errors(node['arguments']),key=lambda item:str(list(item.path)))
             if errors:
@@ -264,6 +271,8 @@ class ToolBroker:
 
     def dispatch(self,task,args,tool,identity):
         wid=task['workspace_id'];name=tool.name
+        from .external_actions import SCOPES, ExternalActions
+        if name in SCOPES:return ExternalActions(self).dispatch(task,name,args)
         if name in ('draft_read','draft_update','draft_geometry','simulation_prepare','draft_propose'):
             from .drafts import Drafts
             operation={'draft_read':'read','draft_update':'update','draft_geometry':'geometry',

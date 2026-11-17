@@ -42,7 +42,7 @@ export function StepGroup({ indices }: { indices: readonly number[] }) {
   if (!steps.length) return null;
   const repeated = repeatedOpens(parts);
   return <>
-    <StepTrace steps={steps.map(toStep)} defaultOpen={steps.some(step => step.status === 'running')} />
+    <StepTrace steps={steps.map(toStep)} defaultOpen={steps.some(step => step.status === 'running' || step.status === 'waiting_review')} />
     {steps.map(step => <StepCards key={step.id} step={repeated.has(step.id) ? { ...step, card: undefined } : step} />)}
   </>;
 }

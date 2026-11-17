@@ -296,6 +296,8 @@ export interface Proposal {
   operation: string;
   title: string;
   changes: Change[];
+  /** The platform's checks, scope and effects; accepting a change never certifies an engineering result. */
+  checks?: string[];
   preview?: Preview | null;
   issue?: Issue | null;
   status: 'pending' | 'accepted' | 'rejected';
@@ -319,7 +321,9 @@ export type CardRef =
   /** A GB 50217 correction kept on a project. */
   | { kind: 'correction'; project: string; correction: string; href: string }
   /** A saved run of the old platform's studies, as the agent read it (the fused product's Agent page). */
-  | { kind: 'saved_run'; href: string; view: SavedRunView };
+  | { kind: 'saved_run'; href: string; view: SavedRunView }
+  | { kind: 'saved_type'; href: string; view: import('./fusion-types.ts').SavedTypeView }
+  | { kind: 'saved_file'; title: string; document_kind: '计算书' | '规格书'; format: 'pdf' | 'html'; href: string; download_url: string; preview_url?: string };
 
 export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';
 export interface ChatStep {

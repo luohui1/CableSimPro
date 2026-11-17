@@ -5,6 +5,8 @@ export interface SavedRunView {
   title: string;
   /** How far the method is validated for the configuration that was actually computed. */
   tier: 'deliverable' | 'reference';
+  /** Kept visible when this saved platform record did not carry an engineering confidence classification. */
+  tier_note?: string;
   /** The method's name and version, never its plugin identifier: IEC 60287 载流量 1.2.0. */
   method: string;
   /** The allowed current, formatted: 748.3. */
@@ -24,4 +26,13 @@ export interface SavedRunView {
     load: string | null;
     margin: string | null;
   };
+}
+
+/** A bounded slice of the platform's saved type facts; absent fields are never filled from model text. */
+export interface SavedTypeView {
+  title: string;
+  fields: { label: string; value: string; unit: string | null; source: string }[];
+  checks: string[];
+  complete: boolean;
+  source: string;
 }

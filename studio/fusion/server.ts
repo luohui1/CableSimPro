@@ -2,14 +2,16 @@
 // holds the model key. It speaks the same small protocol as Cable Studio's host (status, conversations, messages, events), so the
 // conversation page is the same page, and it listens on the loopback only: the browser reaches it through the platform, never directly.
 import { EventEmitter } from 'node:events';
+import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StudioEvent } from '../shared/types.ts';
-import type { ModelConfig } from '../host/agent.ts';
+import type { ModelConfig } from './pi.ts';
+import { failureText } from '../host/agent-tools.ts';
 import { StudioError } from '../host/core.ts';
 import { FusionAgent } from './agent.ts';
-import { Backend } from './backend.ts';
+import { Backend, BackendError, type WorkbenchContext } from './backend.ts';
 import { TOKEN_VARIABLE } from './model.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -47,6 +49,11 @@ export function createSidecar(options: { backendUrl: string; token: string; home
     const method = request.method ?? 'GET';
     // A page from another site must not reach this through a name that points at the loopback, nor drive it.
     if (!hosts.has(String(request.headers.host))) throw new StudioError({ code: 'HOST_REFUSED', message: '只接受本机地址。' }, 403);
+    const received = Buffer.from(String(request.headers.authorization ?? ''));
+    const expected = Buffer.from('Bearer ' + options.token);
+    if (!options.token || received.length !== expected.length || !timingSafeEqual(received, expected)) {
+      throw new StudioError({ code: 'SIDECAR_AUTH_REQUIRED', message: '请通过 CableSimPro 的 Agent 页面访问对话服务。' }, 401);
+    }
     if (method === 'POST') {
       const origin = request.headers.origin;
       if (origin && new URL(origin).host !== request.headers.host) throw new StudioError({ code: 'ORIGIN_REFUSED', message: '拒绝来自其他站点的请求。' }, 403);
@@ -68,10 +75,30 @@ export function createSidecar(options: { backendUrl: string; token: string; home
       if (method === 'POST' && id === 'messages') {
         const message = await body(request);
         if (typeof message.text !== 'string' || !message.text.trim()) throw new StudioError({ code: 'INPUT_INVALID', message: '请写下要交办的事。', path: '/text' });
+        if (message.text.length > 8000) throw new StudioError({ code: 'INPUT_INVALID', message: '消息过长，请把任务拆成两段。', path: '/text' });
         if (message.session !== undefined && typeof message.session !== 'string') throw new StudioError({ code: 'INPUT_INVALID', message: '对话标识不对。', path: '/session' });
-        return send(response, 200, await agent.send(message.session, message.text));
+        let context: WorkbenchContext | undefined;
+        if (message.context !== undefined) {
+          const value = message.context;
+          const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (!value || typeof value !== 'object' || Array.isArray(value) || !uuid.test(String(value.workspace_id ?? ''))
+            || (value.study_id !== undefined && !uuid.test(String(value.study_id)))
+            || (value.label !== undefined && (typeof value.label !== 'string' || value.label.length > 300))) {
+            throw new StudioError({ code: 'INPUT_INVALID', message: '当前工作台对象不完整；请重新打开目标页面。' }, 422);
+          }
+          context = { workspace_id: value.workspace_id, ...(value.study_id ? { study_id: value.study_id } : {}), ...(value.label ? { label: value.label } : {}) };
+        }
+        return send(response, 200, await agent.send(message.session, message.text, context));
       }
       if (method === 'POST' && id === 'sessions' && section && item === 'stop') { await agent.stop(section); return send(response, 200, { stopped: true }); }
+    }
+    if (head === 'proposals' && id && section === 'decision' && method === 'POST') {
+      const decision = await body(request);
+      if (typeof decision.accept !== 'boolean' || (decision.note !== undefined && (typeof decision.note !== 'string' || decision.note.length > 2000))
+        || typeof decision.session !== 'string' || !decision.session) {
+        throw new StudioError({ code: 'INPUT_INVALID', message: '请选择接受或拒绝，并填写有效的说明。' }, 422);
+      }
+      return send(response, 200, await agent.decide(id, decision.accept, decision.note, decision.session));
     }
     throw new StudioError({ code: 'NOT_FOUND', message: '没有这个接口。' }, 404);
   }
@@ -82,8 +109,9 @@ export function createSidecar(options: { backendUrl: string; token: string; home
     api(request, response, url.pathname.slice(5).split('/').filter(Boolean)).catch(error => {
       if (response.headersSent) return response.end();
       if (error instanceof StudioError) return send(response, error.status, { error: error.issue() });
-      console.error(error instanceof Error ? error.message : error);
-      send(response, 500, { error: { code: 'INTERNAL', message: '边车出了意外：' + (error instanceof Error ? error.message : String(error)) } });
+      if (error instanceof BackendError) return send(response, error.status || 503, { error: { code: error.code, message: failureText(error, [options.home]) } });
+      // Do not print arbitrary upstream errors or echo them to the browser: they can contain private URLs or credentials.
+      send(response, 500, { error: { code: 'INTERNAL', message: '对话服务未能完成请求，请重试；已保存的工程数据保持原状。' } });
     });
   });
 

@@ -1,4 +1,4 @@
-// The old platform as the sidecar sees it: the read-only tools it offers, the session and turn each question runs in, and which
+// The platform as the sidecar sees it: its tools, proposals, the session and turn each question runs in, and which
 // model it holds. Every call carries the shared token; the model key is never on this side (model requests go to the platform's
 // own proxy, which adds it).
 import type { Schema } from '@earendil-works/pi-schema';
@@ -15,6 +15,16 @@ export type Scope = 'global' | 'workspace' | 'type';
 export interface BackendTool { name: string; title: string; kind: string; scope: Scope; description: string; parameters: Schema }
 export interface Opened { session: string; turn: string; context: { kind: 'project' | 'type'; id: string } }
 export interface BackendModel { configured: boolean; source: string; model: string | null; provider: string | null }
+export interface BackendProposal {
+  id: string;
+  title: string;
+  changes: { path: string; label: string; before: unknown; after: unknown; unit?: string | null }[];
+  checks: string[];
+  status?: 'pending' | 'approved' | 'rejected';
+}
+export interface DecisionReceipt { status: 'approved' | 'rejected'; receipt?: Record<string, any> }
+export interface ProposalState { proposal: BackendProposal; status: 'pending' | 'approved' | 'rejected'; receipt?: Record<string, any>; session?: string }
+export interface WorkbenchContext { workspace_id: string; study_id?: string; label?: string }
 
 export class BackendError extends Error {
   code: string;
@@ -63,10 +73,14 @@ export class Backend {
 
   tools = () => this.#send<BackendTool[]>('/api/agent/external/tools');
   model = () => this.#send<BackendModel>('/internal/agent/model');
-  open = (workspace_id: string, message: string) => this.#send<Opened>('/api/agent/external/sessions', { body: { workspace_id, message } });
+  open = (workspace_id: string, message: string, study_id?: string) => this.#send<Opened>('/api/agent/external/sessions', { body: { workspace_id, message, ...(study_id ? { study_id } : {}) } });
+  resume = (session: string, message: string) => this.#send<Opened>(`/api/agent/external/sessions/${encodeURIComponent(session)}/resume`, { body: { message } });
   finish = (session: string, turn: string) => this.#send<{ finished: boolean }>(`/api/agent/external/sessions/${session}/turns/${turn}/finish`, { body: {} });
-  call = (body: { tool: string; arguments: Record<string, unknown>; session?: string; turn?: string }, signal?: AbortSignal) =>
+  call = (body: { tool: string; arguments: Record<string, unknown>; session?: string; turn?: string; discovery?: string }, signal?: AbortSignal) =>
     this.#send<ToolResult>('/api/agent/external/calls', { body, signal });
+  /** Only the human decision HTTP handler calls this; it is never an Agent tool. */
+  decide = (proposal: string, accept: boolean) => this.#send<DecisionReceipt>(`/api/agent/proposals/${encodeURIComponent(proposal)}/${accept ? 'approve' : 'reject'}`, { body: {} });
+  proposal = (proposal: string, session: string) => this.#send<ProposalState>(`/api/agent/external/proposals/${encodeURIComponent(proposal)}?session=${encodeURIComponent(session)}`);
   /** A read of the platform's own public API (what a card shows), which needs no token. */
   read = <T>(path: string, signal?: AbortSignal) => this.#send<T>(path, { signal, token: false });
 }

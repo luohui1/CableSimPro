@@ -1,4 +1,4 @@
-"""The read-only tool host an external agent kernel uses: what it offers, what it refuses, how a call is scoped and audited,
+"""The reviewed tool host an external agent kernel uses: what it offers, what it refuses, how a call is scoped and audited,
 and that the model key stays in this process."""
 import json
 import threading
@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.harness.external import READ_TOOLS
+from backend.harness.external import READ_TOOLS, TOOL_SCOPES
 from backend.main import create_app
 from test_research import study
 
@@ -28,6 +28,8 @@ def app_client(directory):
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv('CABLESIM_AGENT_SIDECAR_TOKEN', TOKEN)
     monkeypatch.setenv('NO_PROXY', '127.0.0.1,localhost,::1')
+    for name in ('ALL_PROXY', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
+        monkeypatch.delenv(name, raising=False)
     with app_client(tmp_path) as c:
         yield c
 
@@ -61,19 +63,19 @@ def test_nothing_is_open_without_the_token(client, tmp_path, monkeypatch):
         assert page.status_code == 503 and page.json()['error']['code'] == 'AGENT_SIDECAR_DISABLED'
 
 
-def test_the_catalogue_offers_only_tools_that_read(client):
+def test_the_catalogue_offers_only_reads_and_reviewed_proposals(client):
     rows = client.get('/api/agent/external/tools', headers=AUTH).json()
-    assert {row['name'] for row in rows} == set(READ_TOOLS)
-    assert all(row['kind'] == 'read' for row in rows)
+    assert {row['name'] for row in rows} == set(TOOL_SCOPES)
+    assert all(row['kind'] in ('read', 'propose') for row in rows)
     assert all(row['parameters']['type'] == 'object' and row['parameters']['additionalProperties'] is False for row in rows)
     registry = client.app.state.harness.registry.hosts
     assert {tool.name for tool in registry if tool.kind != 'read'}.isdisjoint(READ_TOOLS)
     assert {row['name']: row['scope'] for row in rows}['run_read'] == 'workspace'
 
 
-@pytest.mark.parametrize('tool', ['propose_domain_changes', 'study_preflight', 'study_preview', 'draft_update', 'platform_prepare',
-                                  'recipe_execute', 'platform_read', 'plugin_query', 'no_such_tool'])
-def test_a_tool_that_proposes_or_runs_is_refused(client, tool):
+@pytest.mark.parametrize('tool', ['approve', 'study_preflight', 'study_preview', 'draft_update', 'platform_prepare',
+                                  'recipe_execute', 'platform_read', 'publish', 'no_such_tool'])
+def test_an_unreviewed_write_or_arbitrary_tool_is_refused(client, tool):
     response = call(client, tool)
     assert response.status_code == 403 and response.json()['detail']['code'] == 'TOOL_NOT_ALLOWED'
 
@@ -149,6 +151,8 @@ def test_the_model_proxy_adds_the_key_and_the_caller_never_sees_it(client, monke
 def test_the_model_proxy_says_so_when_no_model_is_configured(client, monkeypatch):
     for name in ('BASE_URL', 'MODEL', 'API_KEY'):
         monkeypatch.delenv('CABLESIM_LLM_' + name, raising=False)
+    for name in ('BASE_URL', 'ID', 'API_KEY'):
+        monkeypatch.delenv('CABLE_STUDIO_MODEL_' + name, raising=False)
     assert client.get('/internal/agent/model', headers=AUTH).json()['configured'] is False
     reply = client.post('/internal/llm/v1/chat/completions', headers=AUTH, json={'messages': []})
     assert reply.status_code == 409 and '模型未配置' in reply.json()['error']['message']
@@ -173,9 +177,10 @@ def test_the_page_route_passes_through_and_says_why_when_nothing_answers(client,
         # The route reads its address when the app is built, so a second app picks up the live fake.
         with app_client(tmp_path / 'second') as live:
             reply = live.post('/agent-sidecar/api/chat/messages', json={'text': '你好'}, headers={'Authorization': 'Bearer browser-never-sends-this'})
+            assert live.get('/agent-sidecar/api/arbitrary').status_code == 404
         assert reply.status_code == 200 and reply.json() == {'session': 's1'}
         headers, body = Sidecar.got[0]
-        assert json.loads(body) == {'text': '你好'} and 'Authorization' not in headers
+        assert json.loads(body) == {'text': '你好'} and {key.lower(): value for key, value in headers.items()}['authorization'] == 'Bearer ' + TOKEN
     finally:
         server.shutdown()
     monkeypatch.setenv('CABLESIM_AGENT_SIDECAR_URL', 'http://127.0.0.1:9')

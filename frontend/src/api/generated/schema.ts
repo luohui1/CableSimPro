@@ -2110,6 +2110,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/types/{wid}/release-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Declare Scope */
+        post: operations["declare_scope_api_types__wid__release_scope_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/types/{wid}/short-circuit-basis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Short Circuit Basis */
+        post: operations["short_circuit_basis_api_types__wid__short_circuit_basis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/types/creation-options": {
         parameters: {
             query?: never;
@@ -2221,6 +2255,23 @@ export interface paths {
         };
         /** Resources */
         get: operations["resources_api_types__wid__resources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/types/{wid}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Type Workspace */
+        get: operations["type_workspace_api_types__wid__workspace_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3137,23 +3188,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/__e2e/close-previews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Close Previews */
-        post: operations["close_previews___e2e_close_previews_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3241,6 +3275,20 @@ export interface components {
              */
             fixed_currents_a?: {
                 [key: string]: number;
+            };
+        };
+        /** AnalysisBasis */
+        AnalysisBasis: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
             };
         };
         /** ApiError */
@@ -6890,7 +6938,9 @@ export interface components {
              */
             status?: "pending" | "approved" | "rejected";
             /** Kind */
-            kind?: ("domain" | "parameters" | "study" | "type" | "draft_workflow") | null;
+            kind?: ("domain" | "parameters" | "study" | "type" | "draft_workflow" | "external_action") | null;
+            /** Action */
+            action?: string | null;
             /** Type Id */
             type_id?: string | null;
             /** Base Revision */
@@ -6914,6 +6964,10 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "rejected";
+            /** Receipt */
+            receipt?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
         };
         /** ProposalRequest */
         ProposalRequest: {
@@ -7397,6 +7451,13 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** ReleaseExclusion */
+        ReleaseExclusion: {
+            /** Check Id */
+            check_id: string;
+            /** Reason */
+            reason: string;
+        };
         /** ReleasePin */
         ReleasePin: {
             /**
@@ -7414,6 +7475,25 @@ export interface components {
              * @description Used sealed manifest SHA256.
              */
             release_digest: string;
+        };
+        /** ReleaseScope */
+        ReleaseScope: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Specification Digest */
+            specification_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /** Exclusions */
+            exclusions: components["schemas"]["ReleaseExclusion"][];
         };
         /** RemoteExecution */
         RemoteExecution: {
@@ -15706,6 +15786,78 @@ export interface operations {
             };
         };
     };
+    declare_scope_api_types__wid__release_scope_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseScope"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    short_circuit_basis_api_types__wid__short_circuit_basis_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisBasis"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     creation_options_api_types_creation_options_get: {
         parameters: {
             query?: never;
@@ -15881,6 +16033,37 @@ export interface operations {
         };
     };
     resources_api_types__wid__resources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    type_workspace_api_types__wid__workspace_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16365,6 +16548,7 @@ export interface operations {
                 after?: number;
                 limit?: number;
                 recent?: boolean;
+                module?: ("structure" | "requirements" | "standard-check" | "electrical" | "short-circuit" | "rating-table" | "comparison" | "specification") | null;
             };
             header?: never;
             path: {
@@ -17750,26 +17934,6 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
-                };
-            };
-        };
-    };
-    close_previews___e2e_close_previews_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };

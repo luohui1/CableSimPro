@@ -9,7 +9,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
-import { Backend } from '../fusion/backend.ts';
+import { Backend, type ToolResult } from '../fusion/backend.ts';
+import { describeResult } from '../fusion/cards.ts';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import { backendTools, ScopeBook } from '../fusion/tools.ts';
 import { lastText, scriptedModel, steps, toolText } from './support.ts';
@@ -46,7 +47,7 @@ before(async () => {
       if (path.endsWith('/finish')) { seen.finished.push(path.split('/').slice(-4).join('/')); return reply({ finished: true }); }
       if (path === '/api/agent/external/calls') {
         // The platform's request model forbids any other field (pydantic StrictModel): a call with one is refused, as here.
-        if (Object.keys(body).some(key => !['tool', 'arguments', 'session', 'turn'].includes(key))) return reply({ detail: [{ msg: 'Extra inputs are not permitted' }] }, 422);
+        if (Object.keys(body).some(key => !['tool', 'arguments', 'session', 'turn', 'discovery'].includes(key))) return reply({ detail: [{ msg: 'Extra inputs are not permitted' }] }, 422);
         seen.calls.push(body);
         if (body.tool === 'object_find') return reply(ok({ items: [{ id: 'st-1', name: STUDY, parent: { kind: 'project', id: 'w-1', name: '城南线路 · 110 kV 直埋单回' } }] }));
         if (body.arguments.run_id === 'r-bad') return reply({ status: 'error', summary: '没有取得结果。', data: {}, diagnostics: [{ code: 'RUN_NOT_FOUND', message: '本工程中没有此保存运行。' }], next_actions: [] });
@@ -82,13 +83,14 @@ test('a question about a study reaches the platform through a session of its own
   await waitFor(() => seen.finished.length > 0);
 
   // The model has the platform's tools and nothing built in; a project's tools ask for the project, the global one does not.
-  assert.deepEqual([...sidecar.agent.inspect(session).tools].sort(), ['object_find', 'run_read']);
+  assert.deepEqual([...sidecar.agent.inspect(session).tools].sort(), ['object_find', 'read', 'run_read']);
   const defined = backendTools(new Backend(platformUrl, TOKEN), CATALOG as never, () => new ScopeBook(new Backend(platformUrl, TOKEN), ''), []);
   const schema = (name: string) => defined.find(tool => tool.name === name)!.parameters as unknown as { properties: Record<string, unknown>; required?: string[] };
   assert.ok('workspace_id' in schema('run_read').properties && schema('run_read').required?.[0] === 'workspace_id');
   assert.ok(!('workspace_id' in schema('object_find').properties));
   for (const leak of ['开发约定', 'AGENTS.md', 'CLAUDE.md', '<cwd>']) assert.ok(!sent.includes(leak), `the request does not carry ${leak}`);
-  assert.ok(sent.includes('只能读'));
+  assert.ok(sent.includes('每一个业务写入都是提案'));
+  assert.ok(sent.includes('<name>ampacity-rating</name>') && sent.includes('<name>cable-import-check</name>'));
 
   // What the platform was asked: the global lookup outside any session, then one session for the project named, opened with the
   // question as it was asked, and the call inside it without the project id the platform's contract does not know; then the turn ended.
@@ -137,4 +139,32 @@ test('without the platform the Agent says so, not that no model is configured', 
   } finally {
     await lonely.close();
   }
+});
+
+test('a historical result card retains the saved method version and never infers engineering confidence from geometry', async () => {
+  class HistoricalBackend extends Backend {
+    read = async <T>(path: string): Promise<T> => {
+      if (path.includes('/runs?')) return { items: [{ id: 'saved-run', sequence: 2, freshness: 'historical', headline: '允许电流 612.3 A（连续额定）受限于电缆 A' }], next_cursor: null } as T;
+      if (path.endsWith('/input')) return { input: { cable_types: [{ construction: 'single_core', cores: [{ layers: [{ role: 'conductor', form: 'round' }] }] }],
+        sections: [{ medium: { surface_temperature: 298.15 } }], load_cases: [{ currents: { circuit: 500 } }] } } as T;
+      if (path.startsWith('/api/index/objects')) return { items: [{ id: 'saved-study', name: '历史校核' }] } as T;
+      if (path.startsWith('/api/methods')) return [{ method: { plugin_id: 'cablesim.iec60287', version: '9.0.0' }, name: 'IEC 60287 稳态载流量' }] as T;
+      throw new Error('Unexpected card read: ' + path);
+    };
+  }
+  const backend = new HistoricalBackend('http://127.0.0.1:9', 'unused');
+  const result = ok({ run_id: 'saved-run', study_id: 'saved-study', status: 'succeeded',
+    method: { plugin_id: 'cablesim.iec60287', capability: 'steady-rating', version: '1.2.3' },
+    headlines: [{ key: 'ampacity', entity: 'circuit', display_value: 612.3456, display_unit: 'A' },
+      { key: 'conductor_temperature', entity: 'cable', condition: 'operating', display_value: 78.2, display_unit: '°C' }],
+    cases: [{ case_id: 'case', factors: [{ key: 'limiting_cable', entity: 'cable' }, { key: 'temperature_margin', entity: 'cable', value: 11.8 }, { key: 'current_margin', value: 112.3456 }] }],
+  }) as ToolResult;
+  const shown = await describeResult(backend, 'run_read', { study_id: 'saved-study' }, result, 'workspace');
+  assert.equal(shown.card?.kind, 'saved_run');
+  if (shown.card?.kind !== 'saved_run') return;
+  assert.equal(shown.card.view.current, '612.3', 'display rounding comes from the saved platform number');
+  assert.equal(shown.card.view.method, 'IEC 60287 稳态载流量 1.2.3', 'upgrading an installed plugin cannot relabel a historical result');
+  assert.equal(shown.card.view.tier, 'reference');
+  assert.match(shown.card.view.tier_note!, /保存记录未声明/);
+  assert.equal(shown.card.view.freshness, 'historical');
 });

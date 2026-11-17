@@ -4,11 +4,13 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useExternalStoreRuntime, type AppendMessage, type ThreadMessageLike } from '@assistant-ui/react';
 import { useMutation } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import type { ChatMessage, ChatStep } from '@shared/types';
 import { reportFailure } from '@/components/notice';
 import { api } from '@/state/api';
-import { chatQuery, queryClient, useChat, useChats } from '@/state/queries';
+import { chatQuery, queryClient, useChat, useChats, useStatus } from '@/state/queries';
 import { ALL_STARTERS } from './starters';
+import { MESSAGE_SOURCE } from './open';
 
 const stepFailed = (step: ChatStep) => step.status === 'failed' || step.status === 'rejected';
 
@@ -34,9 +36,16 @@ export function useAgentRuntime(sessionId: string | undefined) {
   const navigate = useNavigate();
   const chats = useChats();
   const view = useChat(sessionId);
+  const status = useStatus();
+  const query = new URLSearchParams(window.location.search);
+  const workspace = query.get('workspace');
+  const context = workspace ? { workspace_id: workspace, study_id: query.get('study') || undefined, label: query.get('context') || undefined } : undefined;
+  useEffect(() => {
+    window.parent.postMessage({ source: MESSAGE_SOURCE, type: 'session', session: sessionId || null }, window.location.origin);
+  }, [sessionId]);
 
   const send = useMutation({
-    mutationFn: async (text: string) => api.send(text, sessionId),
+    mutationFn: async (text: string) => api.send(text, sessionId, undefined, context),
     onSuccess: async reply => {
       if (reply.session === sessionId) return;
       // A new conversation: load it once so its first message is on the page when the address changes.
@@ -53,7 +62,7 @@ export function useAgentRuntime(sessionId: string | undefined) {
     isRunning: Boolean(view.data?.running) || send.isPending,
     isLoading: Boolean(sessionId) && view.isPending,
     // The first message of a new conversation is on its way; a second one sent now would start another conversation.
-    isSendDisabled: !sessionId && send.isPending,
+    isSendDisabled: status.data?.agent.configured !== true || (!sessionId && send.isPending),
     suggestions: ALL_STARTERS.map(task => ({ title: task.title, label: task.result, prompt: task.prompt })),
     onNew: async message => {
       const text = textOf(message);

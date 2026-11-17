@@ -20,14 +20,14 @@ import { StepGroup } from './steps';
 const isNewChatView = (state: AssistantState) => state.thread.messages.length === 0 && (!state.thread.isLoading || state.threads.isLoading);
 const isHistoryLoadingView = (state: AssistantState) => state.thread.messages.length === 0 && state.thread.isLoading && !state.threads.isLoading;
 
-export function Thread({ notice }: { notice?: ReactNode }) {
+export function Thread({ notice, compact = false }: { notice?: ReactNode; compact?: boolean }) {
   const empty = useAuiState(isNewChatView);
   return <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
     {empty
       ? <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
-        <AgentEmpty title="想看哪项结果？" lead="读工程里已保存的研究结论、运行记录和库里的电缆型号——你问，我只读、不改，每个数都来自保存的记录。" notice={notice}
+        <AgentEmpty title={compact ? '当前对象交给 Agent' : '今天要完成哪项工作？'} lead="读取研究与型号，提出改动、运行并交付。每一步写操作先由你接受，结果来自工作台同一份记录。" notice={notice}
           composer={<Composer />}
-          groups={STARTERS.map(group => ({ label: group.label, icon: group.icon,
+          groups={compact ? [] : STARTERS.map(group => ({ label: group.label, icon: group.icon,
             tasks: <Starters first={ALL_STARTERS.indexOf(group.tasks[0])} count={group.tasks.length} /> }))} />
       </div>
       : <>
@@ -47,7 +47,7 @@ export function Thread({ notice }: { notice?: ReactNode }) {
               className="absolute -top-12 left-1/2 z-10 -translate-x-1/2 rounded-full shadow-menu disabled:invisible xl:top-auto xl:bottom-1 xl:left-full xl:ml-3 xl:translate-x-0" />}>
               <Icon name="action/arrow-down" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer placeholder="接着问，或追问这条结果" />
+            <Composer placeholder="接着问，或交办下一步" />
           </ThreadColumn>
         </div>
       </>}
@@ -78,7 +78,7 @@ function Starter() {
   return <SuggestionPrimitive.Trigger send render={<TaskStarter icon={task.icon} title={task.title} result={task.result} />} />;
 }
 
-function Composer({ placeholder = '问一项研究的结论，或一款电缆的结构' }: { placeholder?: string }) {
+function Composer({ placeholder = '问研究结论，或描述要完成的任务' }: { placeholder?: string }) {
   return <ComposerPrimitive.Root>
     <ComposerFrame>
       <ComposerPrimitive.Input className={composerInputClass} placeholder={placeholder} rows={1} autoFocus enterKeyHint="send" aria-label="给 Agent 的消息" />

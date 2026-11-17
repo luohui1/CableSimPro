@@ -380,6 +380,12 @@ export const endpoints = {
     "get",
     "post"
   ],
+  "/api/types/{wid}/release-scope": [
+    "post"
+  ],
+  "/api/types/{wid}/short-circuit-basis": [
+    "post"
+  ],
   "/api/types/creation-options": [
     "get"
   ],
@@ -399,6 +405,9 @@ export const endpoints = {
     "get"
   ],
   "/api/types/{wid}/resources": [
+    "get"
+  ],
+  "/api/types/{wid}/workspace": [
     "get"
   ],
   "/api/types/{wid}/resources/bind": [
@@ -566,8 +575,5 @@ export const endpoints = {
   ],
   "/": [
     "get"
-  ],
-  "/__e2e/close-previews": [
-    "post"
   ]
 } as const;
