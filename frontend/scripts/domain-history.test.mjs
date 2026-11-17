@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from 'node:fs';
-import { declaredParameterDefaults, parameterErrors, parameterReferences, setParameterValue } from '../src/lib/study-parameter-form.ts';
+import { clearParameterDrafts, declaredParameterDefaults, parameterErrors, parameterReferences, reindexParameterDrafts, setParameterValue } from '../src/lib/study-parameter-form.ts';
 import { missingInputDestination } from "../src/lib/missing-input.ts";
 import { countInputChanges } from "../src/lib/input-changes.ts";
 import {
@@ -41,6 +41,73 @@ test('创建表单只引用当前真实工程里的截面、负荷和对象',()=
   assert.deepEqual(refs.duct,[{value:'duct',label:'名称 duct'}]);
   assert.deepEqual(refs.material,[]);
 });
+
+test('真实可空损耗温度表重置后不被隐藏数字或JSON草稿复活', () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL('../../plugins/cablesim.simulation/plugin.json', import.meta.url), 'utf8'));
+  const schema = manifest.capabilities.find(cap => cap.id === 'sheath-losses').parameter_schema;
+  const module = 'sheath-losses', path = '/temperature_table';
+  const entries = [
+    { module, path, kind: 'json', text: '{' },
+    { module, path: path + '/maximum_validation_absolute_error', kind: 'number', text: 'invalid' },
+    { module, path: path + '/resistivity_laws/region~1a/reference_temperature_k', kind: 'number', text: '321.1234567890123' },
+    { module, path: '/temperature_table_notes/value', kind: 'number', text: '7' },
+    { module: 'other-method', path: path + '/maximum_validation_absolute_error', kind: 'number', text: 'invalid elsewhere' },
+  ];
+  const fields = Object.fromEntries(entries.map(field => [field.module + field.path, field]));
+  const cleaned = clearParameterDrafts(fields, module, path);
+  assert.deepEqual(Object.values(cleaned), entries.slice(3));
+  for (const replacement of [null, undefined]) {
+    const values = setParameterValue({ temperature_table: { maximum_validation_absolute_error: 0.01 } }, path, replacement);
+    assert.equal(values.temperature_table, replacement);
+    assert.equal(Object.values(cleaned).some(field => field.module === module && (field.path === path || field.path.startsWith(path + '/'))), false);
+  }
+  assert.deepEqual(parameterErrors(schema.properties.temperature_table, null, schema, path), {});
+  assert.equal(fields[module + path].text, '{');
+});
+
+test('清理按精确表单命名空间和转义指针边界保留兄弟与其他对照', () => {
+  const namespace = 'method-compare-crosscheck-0';
+  const make = (path, crosscheck = 0) => ({ module: 'method-compare', crosscheck, path, kind: 'number', text: 'invalid' });
+  const fields = {
+    [namespace + '/laws/region~1a/source']: make('/laws/region~1a/source'),
+    [namespace + '/laws/region~1ab/source']: make('/laws/region~1ab/source'),
+    [namespace + '/laws/region/a/source']: make('/laws/region/a/source'),
+    [namespace + '/laws/region~01a/source']: make('/laws/region~01a/source'),
+    ['method-compare-crosscheck-1/laws/region~1a/source']: make('/laws/region~1a/source', 1),
+    [namespace + '/rows/1/value']: make('/rows/1/value'),
+    [namespace + '/rows/10/value']: make('/rows/10/value'),
+  };
+  const cleaned = clearParameterDrafts(clearParameterDrafts(fields, namespace, '/laws/region~1a'), namespace, '/rows/1');
+  assert.equal(Object.keys(cleaned).length, 5);
+  for (const [key, field] of Object.entries(fields)) if (key !== namespace + '/laws/region~1a/source' && key !== namespace + '/rows/1/value') assert.equal(cleaned[key], field);
+});
+
+test('删数组前行移走幸存草稿的路径与数值元数据，不串行或吞掉非法文本', () => {
+  const namespace = 'method-compare-crosscheck-0', path = '/temperature_table/axes';
+  const make = (index, text) => ({ module: 'method-compare', crosscheck: 0, path: `${path}/${index}/regions`, kind: 'json', text });
+  const removed = make(0, '[invalid removed]'), retained = make(1, '["region/a"'), last = make(2, '["region/b"]');
+  const quantity = { module: 'method-compare', crosscheck: 0, path: `${path}/1/nested~1value`, kind: 'number', text: '1.2345678901234567', spec: { path: `${path}/1/nested~1value`, scale: 1000, offset: 0, required: true } };
+  const other = { ...retained, crosscheck: 1 }, sibling = { ...retained, path: '/temperature_table/axes_extra/1/regions' };
+  const fields = {
+    [namespace + removed.path]: removed, [namespace + retained.path]: retained, [namespace + last.path]: last,
+    [namespace + quantity.path]: quantity, ['method-compare-crosscheck-1' + other.path]: other, [namespace + sibling.path]: sibling,
+  };
+  const changed = reindexParameterDrafts(fields, namespace, path, [1, 2]);
+  assert.equal(changed[namespace + path + '/0/regions'].text, retained.text);
+  assert.equal(changed[namespace + path + '/1/regions'].text, last.text);
+  assert.equal(changed[namespace + path + '/2/regions'], undefined);
+  assert.equal(changed[namespace + path + '/0/nested~1value'].text, quantity.text);
+  assert.deepEqual(changed[namespace + path + '/0/nested~1value'].spec, { ...quantity.spec, path: path + '/0/nested~1value' });
+  assert.equal(changed['method-compare-crosscheck-1' + other.path], other);
+  assert.equal(changed[namespace + sibling.path], sibling);
+  assert.equal(changed[namespace + path + '/0/regions'].crosscheck, 0);
+  assert.equal(fields[namespace + retained.path], retained);
+  const appended = reindexParameterDrafts(changed, namespace, path, [0, 1, -1]);
+  assert.deepEqual(appended, changed);
+  const empty = reindexParameterDrafts(changed, namespace, path, []);
+  assert.deepEqual(empty, { ['method-compare-crosscheck-1' + other.path]: other, [namespace + sibling.path]: sibling });
+});
+
 test('未保存计数合并数值与来源，按稳定对象身份处理新增和删除', () => {
   const before = {layers: [{id: 'a', thickness: 1}, {id: 'b', thickness: 2}], provenance: {}};
   const changed = {layers: [{id: 'a', thickness: 3}, {id: 'b', thickness: 4}], provenance: {'/layers': {kind: 'user'}}};

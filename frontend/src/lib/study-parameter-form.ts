@@ -51,6 +51,40 @@ export function setParameterValue(values: ObjectValue, path: string, value: unkn
   return result;
 }
 
+type LocatedParameterDraft = { path: string; spec?: { path: string } };
+const withinParameterPath = (candidate: string, path: string) => candidate === path || candidate.startsWith(path + '/');
+
+/** The storage key keeps the form namespace even when a crosscheck rewrites
+ * draft.module for the host. Reset only this exact form and pointer subtree. */
+export function clearParameterDrafts<T extends LocatedParameterDraft>(fields: Record<string, T>, namespace: string, path: string): Record<string, T> {
+  return Object.fromEntries(Object.entries(fields).filter(([key, field]) => key !== namespace + field.path || !withinParameterPath(field.path, path)));
+}
+
+/** After an array edit, each new row identifies its previous position (-1 for a
+ * new row). Removed drafts disappear; surviving text and metadata move together.
+ * JSON-pointer tokens in the remaining suffix are copied without decoding. */
+export function reindexParameterDrafts<T extends LocatedParameterDraft>(fields: Record<string, T>, namespace: string, path: string, previousIndices: number[]): Record<string, T> {
+  const result = clearParameterDrafts(fields, namespace, path);
+  const nextIndices = new Map(previousIndices.flatMap((previous, next) => previous >= 0 ? [[previous, next] as const] : []));
+  for (const [key, field] of Object.entries(fields)) {
+    if (key !== namespace + field.path || !field.path.startsWith(path + '/')) continue;
+    const relative = field.path.slice(path.length + 1), slash = relative.indexOf('/');
+    const position = slash < 0 ? relative : relative.slice(0, slash);
+    if (!/^(0|[1-9]\d*)$/.test(position)) continue;
+    const previous = Number(position), next = nextIndices.get(previous);
+    if (next === undefined) continue;
+    if (next === previous) { result[key] = field; continue; }
+    const oldRow = path + '/' + position, newRow = path + '/' + next;
+    const relocated = newRow + field.path.slice(oldRow.length);
+    result[namespace + relocated] = {
+      ...field,
+      path: relocated,
+      ...(field.spec && withinParameterPath(field.spec.path, oldRow) ? { spec: { ...field.spec, path: newRow + field.spec.path.slice(oldRow.length) } } : {}),
+    };
+  }
+  return result;
+}
+
 /** Local field feedback supplements, and never replaces, the host's validation. */
 export function parameterErrors(schema: unknown, value: unknown, root: unknown = schema, path = '', required = true): Record<string, string> {
   const field = parameterSchema(schema, root), errors: Record<string, string> = {};

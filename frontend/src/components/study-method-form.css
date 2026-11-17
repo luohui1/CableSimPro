@@ -35,7 +35,7 @@
 .study-method-workspace .parameter-group .parameter-fields,.type-method-fields .parameter-group .parameter-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,calc(var(--space-12) * 9)),1fr)); }
 .create-study-form .parameter-group .parameter-fields { grid-template-columns: minmax(0,1fr); }
 .structured-table :is(.cell-number input,.cell-text,.cell-select) { height: var(--control-compact); }
-.structured-table .structured-add { height: var(--control-standard); }
+.structured-table select.structured-add { height: var(--control-standard); }
 .parameter-source { width: 100%; min-width: 0; padding-block: var(--space-1); }
 .parameter-source summary { cursor: pointer; color: var(--text-secondary); padding-block: var(--space-1); }
 .parameter-source textarea { min-height: calc(var(--space-12) * 2); resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
