@@ -1,7 +1,49 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { walkthrough } from './verify-workbench-support.mjs';
+import { waitForPageReady } from './page-readiness.mjs';
+
+// Chromium's native PDF viewer has no DOM paint signal. Read its unmodified
+// screenshot: a blob URL or a loaded iframe can still be an entirely dark shell.
+// Pillow is already pinned by the same backend environment as isolated-e2e.
+async function pdfPaperPaint(png) {
+  const source = `import io,json,sys
+from PIL import Image
+im=Image.open(io.BytesIO(sys.stdin.buffer.read())).convert('L')
+w,h=im.size
+p=im.load()
+# Exclude the native toolbar, thumbnail rail and right scrollbar. Require both
+# a substantial paper surface and text-like ink surrounded by that paper.
+x0,x1=int(w*.45),w-24
+y0,y1=64,h-12
+white=ink=rows=total=0
+for y in range(y0+4,y1-4,2):
+    line=0
+    for x in range(x0+4,x1-4,2):
+        total+=1
+        if p[x,y]>235: white+=1
+        elif p[x,y]<150 and sum(p[x+dx,y+dy]>235 for dx,dy in ((-3,0),(3,0),(0,-3),(0,3),(-3,-3),(3,-3),(-3,3),(3,3)))>=6:
+            ink+=1; line+=1
+    if line>=2: rows+=1
+print(json.dumps({'width':w,'height':h,'whiteFraction':white/max(total,1),'inkPixels':ink,'inkRows':rows,'painted':white/max(total,1)>=.3 and ink>=100 and rows>=10}))`;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.env.E2E_PYTHON || process.env.PYTHON || 'python', ['-c', source], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const output = [], errors = [];
+    child.stdout.on('data', value => output.push(value));
+    child.stderr.on('data', value => errors.push(value));
+    child.on('error', reject);
+    child.stdin.on('error', reject);
+    child.on('close', code => {
+      if (code !== 0) return reject(Error('PDF 预览像素读取失败：' + Buffer.concat(errors).toString().slice(0, 2000)));
+      try { resolve(JSON.parse(Buffer.concat(output).toString())); }
+      catch (error) { reject(error); }
+    });
+    child.stdin.end(png);
+  });
+}
 
 // Read the real download, including escaped quotes and multiline source cells.
 function csvRows(text) {
@@ -472,7 +514,8 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await page.getByRole('button', { name: '下载 PDF', exact: true }).click();
     const file = await pending, target = path.join(out, 'calculation-book-' + tag + '.pdf');
     await file.saveAs(target);
-    expect((await fs.readFile(target)).subarray(0, 5).toString()).toBe('%PDF-');
+    const pdf = await fs.readFile(target), pdfSha256 = createHash('sha256').update(pdf).digest('hex');
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     await page.waitForURL(next => !!next.searchParams.get('delivery'));
     const deliveryId = new URL(page.url()).searchParams.get('delivery');
     expect(deliveryId).toBeTruthy();
@@ -481,6 +524,41 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     check('计算书引用本次保存运行及准确输入输出摘要', !!source
       && source.input_digest === second.input_digest && source.output_digest === second.output_digest,
       { run: second.id, delivery: deliveryId, source });
+    if (report.phase === 'after') {
+      const frame = page.locator('iframe[title="计算书预览"]');
+      await expect(frame).toBeVisible();
+      await expect(frame).toHaveAttribute('src', /^blob:/);
+      const binding = await frame.evaluate(async node => {
+        const bytes = await (await fetch(node.src)).arrayBuffer();
+        const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
+        return { src: node.src, bytes: bytes.byteLength, sha256, signature: new TextDecoder().decode(bytes.slice(0, 5)) };
+      });
+      expect(binding).toMatchObject({ bytes: pdf.length, sha256: pdfSha256, signature: '%PDF-' });
+      const started = Date.now(), attempts = [];
+      let pixels, screenshot;
+      try {
+        await expect.poll(async () => {
+          screenshot = await frame.screenshot({ animations: 'disabled' });
+          pixels = await pdfPaperPaint(screenshot);
+          attempts.push({ elapsedMs: Date.now() - started, ...pixels });
+          return pixels.painted;
+        }, { timeout: 30000, intervals: [100, 250, 500], message: '真实计算书预览必须绘出纸面与文字，黑色外壳不算完成' }).toBe(true);
+      } finally {
+        if (screenshot) await fs.writeFile(path.join(out, 'calculation-book-preview-' + tag + '.png'), screenshot);
+        (report.pdfPreviews ||= []).push({ ...size, run: second.id, delivery: deliveryId, download: path.basename(target),
+          preview: 'calculation-book-preview-' + tag + '.png', binding, attempts });
+      }
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      expect(await frame.getAttribute('src')).toBe(binding.src);
+      expect(new URL(page.url()).searchParams.get('delivery')).toBe(deliveryId);
+      const finalScreenshot = await frame.screenshot({ animations: 'disabled' });
+      const finalPixels = await pdfPaperPaint(finalScreenshot);
+      await fs.writeFile(path.join(out, 'calculation-book-preview-' + tag + '.png'), finalScreenshot);
+      Object.assign(report.pdfPreviews.at(-1), { finalPixels,
+        screenshotSha256: createHash('sha256').update(finalScreenshot).digest('hex') });
+      check('计算书预览与原始下载字节一致且已绘出实际纸面文字', finalPixels.painted,
+        { run: second.id, delivery: deliveryId, pdfSha256, preview: binding, pixels: finalPixels });
+    }
   });
   await independent('09-create-type-from-research', async () => {
     const sidebar = page.locator('.workbench-sidebar');
@@ -759,7 +837,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       return { workspace: { id: workspace.id, revision: workspace.revision, domain: workspace.domain },
         study: { id: study.id, revision: study.revision, definition: study.definition },
         runs: runs.items.map(item => ({ id: item.id, sequence: item.sequence, status: item.status })),
-        run: { id: run.id, workspace: run.workspace, study: run.study, status: run.status, integrity: run.integrity,
+        run: { id: run.id, workspace: run.workspace, study: run.study, sequence: run.sequence, status: run.status, integrity: run.integrity,
           input_digest: run.input_digest, output_digest: run.output_digest, snapshot: run.snapshot, output: run.output } };
     }
     const before = await readSource(), writesStart = report.writes.length;
@@ -777,11 +855,60 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       + new URLSearchParams({ workspace: selection.workspace, theme: 'light', inspector: 'input', ...(fixed ? { run: before.run.id } : {}) });
     const workbench = page.locator('.study-workbench');
     const canvas = workbench.locator('.workbench-canvas');
+    const candidateEvidence = [];
+    async function savedSelectionReady(label) {
+      const table = page.getByRole('table', { name: '真实选型候选', exact: true });
+      await expect(table).toBeVisible();
+      const assessments = before.run.output.assessment;
+      expect(Array.isArray(assessments) && assessments.length > 0, '候选来自所选保存运行的实际判定').toBe(true);
+      const collapsed = table.locator('button[aria-expanded="false"]');
+      while (await collapsed.count()) await collapsed.first().click();
+      await expect(table.locator('tbody tr.data-row')).toHaveCount(assessments.length);
+      const rows = [];
+      for (const assessment of assessments) {
+        const index = /^case-(\d+)$/.exec(assessment.case_id);
+        expect(index, '候选工况必须指向真实保存快照').toBeTruthy();
+        const payload = before.run.snapshot.candidate_snapshots[Number(index[1])]?.payload;
+        expect(payload).toBeTruthy();
+        const name = payload.name || payload.cable_type?.label;
+        const row = table.locator('[id="row-真实选型候选-' + assessment.case_id + '"]');
+        await expect(row).toHaveAttribute('aria-label', '选择 ' + name);
+        const cells = await row.locator('td').allTextContents();
+        expect(cells).toHaveLength(6);
+        expect(cells[0].trim()).toBe(name);
+        for (const [column, actual, precision] of [
+          [1, (payload.cable_type?.cores?.[0]?.conductor?.nominal_area ?? payload.specification?.area_m2) * 1e6, 0],
+          [2, assessment.value, 1], [3, assessment.margin, 1],
+        ]) {
+          const text = cells[column].split('（')[0].replace(/\s/g, '').replace(/−/g, '-');
+          if (typeof actual !== 'number' || !Number.isFinite(actual)) expect(text).toBe('—');
+          else expect(Number(text)).toBe(Number(actual.toFixed(precision)));
+        }
+        if (assessment.unit !== undefined) expect(assessment.unit).toBe('A');
+        const verdict = { satisfied: '满足', not_satisfied: '不满足', not_applicable: '不适用', failed: '失败' }[assessment.status];
+        expect(verdict, '未知候选判定不得作为就绪结果').toBeTruthy();
+        expect(cells[4].trim()).toBe(verdict);
+        rows.push({ caseId: assessment.case_id, name, current: assessment.value, margin: assessment.margin, status: assessment.status, cells });
+      }
+      const links = await page.locator('[aria-label="本次计算工况"] a').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, href: node.href })));
+      expect(links.length).toBeGreaterThan(0);
+      for (const link of links) {
+        const location = new URL(link.href);
+        expect(location.pathname.startsWith(`/studies/${selection.id}/`)).toBe(true);
+        expect(location.searchParams.get('workspace')).toBe(selection.workspace);
+        expect(location.searchParams.get('run')).toBe(before.run.id);
+        expect(location.searchParams.get('theme')).toBe('light');
+      }
+      const state = await waitForPageReady(page, { includeCanvas: false });
+      expect(state.errors, '加载结束还必须没有结果错误').toEqual([]);
+      candidateEvidence.push({ label, url: page.url(), ...source, rows, links });
+    }
 
     await page.goto(target('selection', 'results'));
     await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
     await expect(workbench).toHaveAttribute('data-analysis', 'selection');
     await expect(canvas).toHaveCount(0);
+    await savedSelectionReady('selection-entry');
     await capture('11-selection-default-canvas-collapsed');
     for (const keyboard of [false, true]) {
       const modelLink = page.locator('.project-explorer a.explorer-item[href*="view=section"]').first();
@@ -795,6 +922,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
       await expect(workbench).not.toHaveAttribute('data-dock', 'max');
       await expect(page.getByRole('group', { name: '模型视图', exact: true }).getByRole('button', { name: '敷设截面', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await savedSelectionReady(keyboard ? 'model-keyboard' : 'model-mouse');
       await capture(keyboard ? '11-model-link-keyboard-reopens-canvas' : '11-model-link-mouse-opens-canvas');
       await clickCommand('收起布置图');
       await page.waitForURL(next => !next.searchParams.get('view'));
@@ -858,25 +986,73 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         await page.waitForURL(next => next.pathname === `/studies/${selection.id}/selection/results`
           && next.searchParams.get('workspace') === selection.workspace && next.searchParams.get('theme') === 'light'
           && (next.searchParams.get('run') || '') === (fixed ? before.run.id : ''));
+        await savedSelectionReady(`${fixed ? 'saved' : 'current'}-${tab}-return`);
       }
     }
+    let savedCad;
     for (const [tab, view, drawing] of [['section', 'section', 'laying-section'], ['three-dimensional', 'three', 'laying-cad']]) {
       await page.goto(target('section', tab, true));
       await page.waitForURL(next => next.pathname === `/studies/${selection.id}/selection/results`
         && next.searchParams.get('view') === view && next.searchParams.get('run') === before.run.id
         && next.searchParams.get('workspace') === selection.workspace && next.searchParams.get('theme') === 'light');
+      // The template canvas may mount before the run and then be replaced by
+      // its hydrated saved candidate. Wait for that actual result first.
+      await savedSelectionReady('saved-alias-' + view);
       await expect(canvas.locator(`[data-drawing-mount="${drawing}"]`)).toBeVisible();
       await expect(workbench).not.toHaveAttribute('data-dock', 'max');
-      if (view === 'three') await expect(canvas.locator('.cad-viewport')).toHaveAttribute('data-cad-ready', 'true', { timeout: 60000 });
-      else await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+      if (view === 'three') {
+        const cad = canvas.locator('.cad-viewport'), thermal = cad.locator('.cad-thermal-overlay');
+        await expect(cad).toHaveAttribute('data-cad-ready', 'true', { timeout: 60000 });
+        await expect(cad).toHaveAttribute('aria-busy', 'false');
+        await expect(cad).toHaveAttribute('data-cad-result-state', /^(success|historical)$/);
+        await expect(thermal).toHaveAttribute('data-run-id', before.run.id);
+        const caseId = await thermal.getAttribute('data-case-id');
+        expect(before.run.output.assessment.some(item => item.case_id === caseId)).toBe(true);
+        expect(before.run.output.cases.some(item => item.case_id === caseId)).toBe(true);
+        const slice = cad.locator('.cad-temperature-host');
+        if (await slice.count()) {
+          await expect(slice.locator('canvas')).toHaveAttribute('data-cad-field-ready', 'true', { timeout: 60000 });
+        }
+        await expect(cad.locator('.cad-result-status')).toContainText(/保存运行|历史运行/);
+        await expect(cad.locator('.cad-result-status')).toHaveAttribute('title', new RegExp(`运行 ${before.run.sequence} .*工况 ${caseId}$`));
+        const renderer = cad.locator('.cad-canvas-host canvas');
+        await expect(renderer).toHaveAttribute('data-webgl-renderer', /.+/);
+        await expect.poll(async () => Number(await renderer.getAttribute('data-webgl-colors'))).toBeGreaterThan(8);
+        const viewport = await cad.elementHandle(), location = page.url();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        expect(page.url()).toBe(location);
+        expect(await viewport.evaluate(node => node.isConnected && node === document.querySelector('.workbench-canvas .cad-viewport')
+          && node.dataset.cadReady === 'true' && node.getAttribute('aria-busy') === 'false')).toBe(true);
+        await expect(cad.locator('.cad-state-overlay,.cad-error-bar,.cad-slice-error')).toHaveCount(0);
+        const imageDownload = page.waitForEvent('download');
+        await cad.getByRole('button', { name: '导出 PNG', exact: true }).click();
+        const png = await imageDownload, imagePath = path.join(out, 'selection-saved-three-' + tag + '.png');
+        await png.saveAs(imagePath);
+        const bytes = await fs.readFile(imagePath);
+        expect(bytes.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+        await expect(cad.locator('.cad-slice-error')).toHaveCount(0);
+        await expect(thermal).toHaveAttribute('data-run-id', before.run.id);
+        await expect(thermal).toHaveAttribute('data-case-id', caseId);
+        savedCad = { ...source, caseId, url: page.url(), image: path.basename(imagePath), bytes: bytes.length,
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+          viewport: await cad.evaluate(node => ({ state: node.dataset.cadState, resultState: node.dataset.cadResultState,
+            ready: node.dataset.cadReady, firstDisplayMs: Number(node.dataset.cadFirstDisplayMs), busy: node.getAttribute('aria-busy') })),
+          renderer: await renderer.evaluate(node => ({ renderer: node.dataset.webglRenderer, colors: Number(node.dataset.webglColors), size: node.dataset.webglSize })),
+          status: await cad.locator('.cad-result-status').getAttribute('title') };
+        // The product's existing export rejects dirty/provisional images and a
+        // field runId different from the selected saved run; do not bypass it.
+        check('固定三维已绘制所选保存运行工况，真实导出保留运行绑定', true, savedCad);
+      } else await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
       await expect(page.getByRole('group', { name: '模型视图', exact: true })
         .getByRole('button', { name: view === 'three' ? '三维' : '敷设截面', exact: true })).toHaveAttribute('aria-pressed', 'true');
       await capture(`11-saved-section-alias-${view}`);
     }
     check('坐标和介质表分别读取当前输入与固定运行输入，固定输入只读且可键鼠返回', true, { ...source, tables: tableEvidence });
     check('旧截面与三维入口保留固定运行并打开正确模型视图', true, source);
+    check('选型正文和工况链接均来自同一真实保存运行，不把读取外壳当结果', candidateEvidence.length === 9,
+      { ...source, pages: candidateEvidence });
     check('模型入口与坐标介质回归不写工程、研究、运行或启动计算', isDeepStrictEqual(await readSource(), before)
       && report.writes.length === writesStart, { ...source, writes: report.writes.slice(writesStart) });
-    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence });
+    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence, candidates: candidateEvidence, savedCad });
   });
 });
