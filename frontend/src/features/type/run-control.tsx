@@ -13,6 +13,7 @@ import { missingTypeInputs } from './missing';
 import { useTypeCommand } from './command-slot';
 import { displayName, displayText } from '@/lib/display-names';
 import { MethodErrorDetail, methodErrorText, methodDiagnostic, isStructureSourceError } from './method-error';
+import { savedRunFailureReason } from './saved-run-failure';
 
 function preflightReason(value:string) {
   if(value.includes('波纹层需专用轮廓'))return '波纹金属护套：实际波纹实体与用料尚未覆盖；三维可按等效厚度显示。';
@@ -57,7 +58,7 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
       if (!next) throw new ApiError(502, '运行查询未返回记录'); run = next;
     }
     await queries.invalidateQueries({ queryKey: ['type-evidence', state.workspace!.id] });
-    if (!['succeeded', 'partial'].includes(run.status)) throw new ApiError(422, text(optionalRecord(run.error).message) || '本次运行未取得有效结果');
+    if (!['succeeded', 'partial'].includes(run.status)) throw new ApiError(422, savedRunFailureReason(run));
     if (run.integrity !== 'verified') throw new ApiError(409, '本次运行完整性未通过，未采用结果');
     await queries.invalidateQueries({ queryKey: ['type-studies', state.workspace!.id] });
     await Promise.all(['type-specification', 'type-comparison'].map(key => queries.invalidateQueries({ queryKey: [key, state.workspace!.id] })));
@@ -79,7 +80,10 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
       if (!run) throw new ApiError(502, '运行响应未返回身份'); await finished(run, active.study);
     } catch (error) {
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) { attempt.current = null; sessionStorage.removeItem(key); }
-      if (mounted.current) setError(methodDiagnostic(error));
+      // Preflight was a read-only check, not a successful calculation. On any
+      // failed or interrupted execution, close its stale confirmation dialog
+      // so the exact failure and the explicit same-request retry are visible.
+      if (mounted.current) { setError(methodDiagnostic(error)); setOpen(false); }
     } finally { pending.current = false; running(false); }
   }
   async function prepare() {
