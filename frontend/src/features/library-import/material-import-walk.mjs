@@ -388,7 +388,10 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await expect(shortDetails.locator('code')).toBeInViewport({ ratio: 1 }); await shot('短路温限完整出处与原文下载');
     await shortDetails.locator('summary').click();
     const modellingDetails = page.locator('details').filter({ has: page.locator('summary', { hasText: /^计算参数与来源$/ }) });
-    await modellingDetails.locator('summary').click(); await expect(modellingDetails).toHaveJSProperty('open', true);
+    await expect(modellingDetails).toHaveCount(1);
+    const modellingSummary = modellingDetails.locator(':scope > summary');
+    await expect(modellingSummary).toHaveCount(1); await expect(modellingSummary).toHaveText('计算参数与来源');
+    await modellingSummary.click(); await expect(modellingDetails).toHaveJSProperty('open', true);
     const addReferences = modellingDetails.getByRole('button', { name: '补充尚未声明的参考参数', exact: true });
     await addReferences.click();
     await expect(modellingDetails).toContainText('只补充未声明项目，已有数值与出处全部保留');
