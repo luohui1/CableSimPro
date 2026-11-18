@@ -1,0 +1,39 @@
+{
+  "$comment": "中文搜索抽检（scripts/check-search.mjs）。checks：每个常用词的期望页面必须出现在前 top 条结果中；ui：在搜索框里实际输入，结果列表必须出现期望标题。新增页面或改动标题后同步更新。",
+  "top": 5,
+  "checks": [
+    { "query": "载流量", "expect": "guide/ampacity-study/" },
+    { "query": "热阻率", "expect": "methods/iec-60287/" },
+    { "query": "规格书", "expect": "guide/type-design/" },
+    { "query": "导入结构表", "expect": "guide/type-library/" },
+    { "query": "GB 50217", "expect": "methods/gb-50217/" },
+    { "query": "IEC 60287", "expect": "methods/iec-60287/" },
+    { "query": "计算书", "expect": "guide/deliverables/" },
+    { "query": "直埋", "expect": "quickstart/research/" },
+    { "query": "标准核对", "expect": "methods/standard-check/" },
+    { "query": "短路容量", "expect": "guide/type-design/" },
+    { "query": "有限元", "expect": "methods/fem/" },
+    { "query": "热网络", "expect": "methods/thermal-network/" },
+    { "query": "离线安装", "expect": "install/" },
+    { "query": "内网部署", "expect": "install/intranet/" },
+    { "query": "备份恢复", "expect": "install/upgrade-restore/" },
+    { "query": "release.toml", "expect": "install/configuration/" },
+    { "query": "Slurm", "expect": "install/hpc/" },
+    { "query": "Agent", "expect": "guide/agent/" },
+    { "query": "接入模型", "expect": "install/model/" },
+    { "query": "插件清单", "expect": "develop/plugin-manifest/" },
+    { "query": "已知限制", "expect": "releases/limitations/" },
+    { "query": "运行对比", "expect": "guide/ampacity-study/" },
+    { "query": "型号库", "expect": "guide/type-library/" },
+    { "query": "验证等级", "expect": "methods/catalog/" },
+    { "query": "镜像法", "expect": "methods/iec-60287/" },
+    { "query": "温度校正系数", "expect": "methods/gb-50217/" },
+    { "query": "收敛", "expect": "methods/fem/" },
+    { "query": "Nginx", "expect": "install/docs-site/" }
+  ],
+  "ui": [
+    { "query": "载流量", "title": "载流量研究" },
+    { "query": "导入结构表", "title": "型号库与结构表导入" },
+    { "query": "GB 50217", "title": "GB 50217 载流量校正" }
+  ]
+}

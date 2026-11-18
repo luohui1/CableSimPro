@@ -1,0 +1,116 @@
+---
+// 按插件清单逐项列出计算能力：说明、验证等级、适用范围与限制、可调参数。内容全部取自 plugin.json。
+import { manifestUrl, plugin, solverLabel, sourceUrl, validationLevel } from './plugin-data';
+
+interface Props {
+  id: string;
+  /** 只列出这些能力；省略时列出全部 */
+  only?: string[];
+}
+
+const { id, only } = Astro.props;
+const item = plugin(id);
+const capabilities = item.capabilities.filter((c) => !only || only.includes(c.id));
+const range = (p: { minimum?: number | null; maximum?: number | null }) =>
+  p.minimum != null && p.maximum != null
+    ? `${p.minimum} – ${p.maximum}`
+    : p.minimum != null
+      ? `≥ ${p.minimum}`
+      : p.maximum != null
+        ? `≤ ${p.maximum}`
+        : '';
+---
+
+<div class="plugin-methods not-content-heading">
+  <p>
+    以下内容取自插件清单 <a href={manifestUrl(item)}><code>{item.manifest}</code></a>（{item.name}，版本 {item.version}）。
+  </p>
+  {
+    capabilities.map((c) => (
+      <details class="capability" open={capabilities.length === 1}>
+        <summary>
+          <strong>{c.title}</strong>
+          <span class="meta">
+            {c.id} · 方法版本 {c.method_version} · {validationLevel(c)} · {solverLabel(c)}
+          </span>
+        </summary>
+        {c.description && <p>{c.description}</p>}
+        {c.validation.cases.length ? (
+          <>
+            <p>验证用例：</p>
+            <ul>
+              {c.validation.cases.map((entry) => (
+                <li>
+                  {entry.path ? (
+                    <a href={sourceUrl(entry.path)}>
+                      <code>{entry.text}</code>
+                    </a>
+                  ) : (
+                    entry.text
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p>验证用例：清单未声明。</p>
+        )}
+        {c.limitations.length > 0 && (
+          <>
+            <p>适用范围与限制：</p>
+            <ul>
+              {c.limitations.map((text: string) => (
+                <li>{text}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        {c.parameters.length > 0 && (
+          <table>
+            <thead>
+              <tr>
+                <th>参数</th>
+                <th>单位</th>
+                <th>范围</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.parameters.map((p) => (
+                <tr>
+                  <td>
+                    {p.title ?? p.key}
+                    {p.required && '（必填）'}
+                  </td>
+                  <td>{p.unit?.display && p.unit.display !== '1' ? p.unit.display : '—'}</td>
+                  <td>{range(p) || '—'}</td>
+                  <td>{p.description ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </details>
+    ))
+  }
+</div>
+
+<style>
+  .capability {
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin-block: 0.75rem;
+  }
+  .capability summary {
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    align-items: baseline;
+  }
+  .capability .meta {
+    color: var(--sl-color-gray-2);
+    font-size: var(--sl-text-sm);
+  }
+</style>
