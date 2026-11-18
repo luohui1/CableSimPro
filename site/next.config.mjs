@@ -10,6 +10,8 @@ const config = {
   output: 'export',
   trailingSlash: true,
   basePath: base || undefined,
+  // 浏览器里的搜索要自己拼出索引文件地址，把子路径也带给客户端
+  env: { NEXT_PUBLIC_DOCS_BASE: base },
   images: { unoptimized: true },
   reactStrictMode: true,
 };

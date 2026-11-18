@@ -8,7 +8,8 @@
   "scripts": {
     "content": "node scripts/prepare-content.mjs",
     "dev": "next dev",
-    "build": "next build && node scripts/flatten-prefetch.mjs",
+    "build": "next build && node scripts/flatten-prefetch.mjs && node scripts/check-internal.mjs",
+    "check:internal": "node scripts/check-internal.mjs",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {

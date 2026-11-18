@@ -18,7 +18,8 @@ import { translations } from '@/lib/translations';
 
 // 静态站点：搜索索引在构建时生成，查询在浏览器中完成，离线可用。
 function StaticSearchDialog(props: SharedProps) {
-  const search = useStaticSearch();
+  // 站点部署在子路径下时，索引文件也在子路径下
+  const search = useStaticSearch({ from: `${process.env.NEXT_PUBLIC_DOCS_BASE ?? ''}/api/search` });
   return (
     <SearchDialog {...search} {...props}>
       <SearchDialogOverlay />
