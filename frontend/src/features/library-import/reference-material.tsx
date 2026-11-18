@@ -21,6 +21,7 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const noticeElement = useRef<HTMLParagraphElement>(null);
+  const previewTrigger = useRef<HTMLButtonElement | null>(null);
   const focusResultAfterClose = useRef(false);
   const [requiredRevision, setRequiredRevision] = useState<number | null>(null);
   const workspaces = useQuery({ queryKey: ['library-reference-type-targets'], queryFn: ({ signal }) => referenceRequest<{ id: string; name: string; revision: number }[]>('/api/design/type-workspaces', { signal }) });
@@ -33,8 +34,11 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
   const awaitingRevision = requiredRevision !== null && (resources.data?.revision ?? 0) < requiredRevision;
   useEffect(() => { setPreview(null); setBinding(null); }, [workspaceId, materialId, property, resources.data?.revision]);
   const reset = () => { setPreview(null); setBinding(null); setError(''); setNotice(''); };
-  async function read(bindingOnly: boolean) {
+  async function read(bindingOnly: boolean, trigger: HTMLButtonElement) {
     if (!resources.data || !target || awaitingRevision) return;
+    // Loading disables the trigger before the async preview opens its dialog.
+    // Capture the clicked element now, while it still owns keyboard focus.
+    previewTrigger.current = trigger;
     setBusy(true); setError(''); setNotice('');
     try {
       if (bindingOnly) setBinding(await referencePost<BindingPreview>(`/api/types/${encodeURIComponent(workspaceId)}/resources/material-preview`, {
@@ -63,10 +67,16 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
     void client.invalidateQueries({ queryKey: ['type-library'] });
   }
   function closeAutoFocus(event: Event) {
-    if (!focusResultAfterClose.current) return;
+    const showResult = focusResultAfterClose.current;
+    const trigger = previewTrigger.current;
+    if (!showResult && !trigger?.isConnected) return;
     focusResultAfterClose.current = false;
     event.preventDefault();
     requestAnimationFrame(() => {
+      if (!showResult) {
+        if (trigger?.isConnected && !trigger.disabled) trigger.focus({ preventScroll: true });
+        return;
+      }
       const result = noticeElement.current;
       if (!result) return;
       result.focus({ preventScroll: true });
@@ -87,10 +97,10 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
     {resources.error && <ErrorState description={message(resources.error)} action={<Button onClick={() => void resources.refetch()}>重新读取材料</Button>} />}
     {target && <>
       <p>当前来源：{target.binding ? `${target.binding.name} · ${target.binding.version}` : '尚未绑定'}。{target.reason}</p>
-      <div><Button loading={busy} disabled={!resources.data || awaitingRevision} onClick={() => void read(true)}>预览来源绑定</Button></div>
+      <div><Button loading={busy} disabled={!resources.data || awaitingRevision} onClick={event => void read(true, event.currentTarget)}>预览来源绑定</Button></div>
       <Select label="待核对材料物性" value={property} disabled={busy || !bound || awaitingRevision} options={[{ value: '', label: bound ? '请选择一项物性' : '请先人工确认来源绑定' }, ...properties.map(item => ({ value: item.parameter, label: parameterNames[item.parameter] ?? item.parameter }))]}
         onChange={next => { setProperty(next); reset(); }} />
-      <div><Button variant="primary" loading={busy || awaitingRevision} disabled={!bound || !property} onClick={() => void read(false)}>预览这一项物性</Button></div>
+      <div><Button variant="primary" loading={busy || awaitingRevision} disabled={!bound || !property} onClick={event => void read(false, event.currentTarget)}>预览这一项物性</Button></div>
     </>}
     {awaitingRevision && <p role="status">正在读取采用后的输入修订 {requiredRevision}，读取完成后可继续核对下一项。</p>}
     {notice && <p ref={noticeElement} role="status" tabIndex={-1}>{notice}</p>}{error && <p role="alert">{error}</p>}
