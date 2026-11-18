@@ -162,6 +162,40 @@ jobs:
           .venv/bin/python frontend/scripts/seed-engineering-demo.py --release --database .data/release/engineering.sqlite
           cd frontend
           if [ ! -x /usr/bin/google-chrome ]; then npx playwright install --with-deps chromium; fi
+      - name: Walk Agent conversations and proposal review at both screen sizes
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        working-directory: frontend
+        env:
+          WORKBENCH_PHASE: after
+        run: npm run test:workbench-agent 2>&1 | tee ../.data/workbench-walk/logs/agent.log
+      - name: Preserve existing Agent approval and failure-recovery interactions
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        working-directory: frontend
+        env:
+          PUBLIC_MODE: agent-decisions
+        run: npm run test:public-workflows 2>&1 | tee ../.data/workbench-walk/logs/agent-decisions.log
+      - name: Cable Studio types, build and real-flow tests
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
+        id: studio-checks
+        working-directory: studio
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm test
+      - name: Walk Studio Agent interactions with the scripted model
+        if: ${{ !cancelled() && steps.studio-checks.outcome == 'success' && steps.workbench-environment.outcome == 'success' }}
+        working-directory: studio
+        run: npm run walk:agent -- ../.data/workbench-walk/after/studio-agent 2>&1 | tee ../.data/workbench-walk/logs/studio-agent.log
+      - name: Upload Studio Agent interaction evidence
+        if: ${{ always() && matrix.os == 'ubuntu-latest' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-agent-walk
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .data/workbench-walk/after/studio-agent/
+            .data/workbench-walk/logs/studio-agent.log
       - name: Walk ampacity research at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
@@ -207,18 +241,6 @@ jobs:
         env:
           WORKBENCH_PHASE: after
         run: npm run test:workbench-simulation 2>&1 | tee ../.data/workbench-walk/logs/simulation.log
-      - name: Walk Agent conversations and proposal review at both screen sizes
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
-        working-directory: frontend
-        env:
-          WORKBENCH_PHASE: after
-        run: npm run test:workbench-agent 2>&1 | tee ../.data/workbench-walk/logs/agent.log
-      - name: Preserve existing Agent approval and failure-recovery interactions
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
-        working-directory: frontend
-        env:
-          PUBLIC_MODE: agent-decisions
-        run: npm run test:public-workflows 2>&1 | tee ../.data/workbench-walk/logs/agent-decisions.log
       - name: Upload the four walkthroughs and Agent before the broader audits
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         uses: actions/upload-artifact@v4
@@ -285,28 +307,6 @@ jobs:
           path: |
             .data/fix-round/shared-shell/loading-path/trace/
             .data/workbench-walk/logs/loading-trace.log
-      - name: Cable Studio types, build and real-flow tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
-        id: studio-checks
-        working-directory: studio
-        run: |
-          npm ci --ignore-scripts
-          npm run build
-          npm test
-      - name: Walk Studio Agent interactions with the scripted model
-        if: ${{ !cancelled() && steps.studio-checks.outcome == 'success' && steps.workbench-environment.outcome == 'success' }}
-        working-directory: studio
-        run: npm run walk:agent -- ../.data/workbench-walk/after/studio-agent 2>&1 | tee ../.data/workbench-walk/logs/studio-agent.log
-      - name: Upload Studio Agent interaction evidence
-        if: ${{ always() && matrix.os == 'ubuntu-latest' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: studio-agent-walk
-          retention-days: 14
-          include-hidden-files: true
-          path: |
-            .data/workbench-walk/after/studio-agent/
-            .data/workbench-walk/logs/studio-agent.log
   native-plugins:
     name: Native plugins / Slurm dg83
     runs-on: [self-hosted, linux, cablesim-hpc]
