@@ -54,8 +54,10 @@ STATELESS_TASK = {'id': 'external-stateless', 'workspace_id': None, 'workspace_r
                   'context': {'kind': 'project'}}
 MAX_MODEL_REQUEST = 8 * 1024 * 1024
 MAX_FORWARD_BODY = 2 * 1024 * 1024
-DISABLED = 'Agent 的对话服务没有启用：需要设置边车令牌并启动它，方法见 studio/README.md 的“并入老版本的 Agent”一节。'
-UNREACHABLE = 'Agent 的对话服务没有运行，暂时不能使用。方法见 studio/README.md 的“并入老版本的 Agent”一节。'
+DISABLED = ('Agent 的对话服务没有启用。安装包请检查 release.toml 的 [agent]（enabled = true）后重新启动；'
+            '开发环境需要设置边车令牌并启动它，方法见 studio/README.md 的“并入老版本的 Agent”一节。')
+UNREACHABLE = ('Agent 的对话服务没有运行，暂时不能使用。安装包请重新启动，并查看启动窗口里的边车输出；'
+               '开发环境方法见 studio/README.md 的“并入老版本的 Agent”一节。')
 LOGGER = logging.getLogger(__name__)
 
 

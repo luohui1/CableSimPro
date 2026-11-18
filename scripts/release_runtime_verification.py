@@ -36,6 +36,15 @@ def base_python(root: Path) -> Path:
     return root / relative
 
 
+def bundled_node(root: Path) -> Path:
+    """The Node.js the release declares for its Agent sidecar; the acceptance PATH never holds another."""
+    metadata = json.loads((root / "runtime/node-runtime.json").read_text("utf-8"))
+    relative = "runtime/node/" + ("node.exe" if os.name == "nt" else "bin/node")
+    if metadata.get("format") != "cablesim.node-runtime/1" or metadata.get("executable") != relative:
+        raise RuntimeError("Release does not declare its expected bundled Node.js")
+    return root / relative
+
+
 def bundled_base_is_local(root: Path, reported: str, metadata: dict) -> bool:
     """A venv can report bin/python while the locked launcher is bin/python3.12.
 
