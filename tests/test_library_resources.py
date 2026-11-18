@@ -34,7 +34,7 @@ def test_xlpe_value_cites_exact_real_source_and_sealed_method(client):
     assert (row['printed_page'], row['pdf_page']) == (33, 89)
     assert row['source_sha256'] == 'a273d784ccf13b73915557c22ce3642c6c1bef94be6034ebd8237e8a7d997f52'
     assert row['verification']['status'] == 'verified'
-    assert row['method_version'] == result['method']['method_version'] == '0.9.0'
+    assert row['method_version'] == result['method']['method_version'] == '0.9.1'
     assert row['trust']['grade'] == 'reference' and row['selectable']
     assert len(row['record_sha256']) == len(result['artifact_sha256']) == 64
     selected = client.post('/api/library/resources/select', json=selection(result, row))

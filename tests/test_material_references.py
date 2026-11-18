@@ -138,7 +138,7 @@ def test_real_copper_references_publish_adopt_and_preserve_history(client):
         assert evidence['receipt']['quantity'] == evidence['quantity']
         assert source['kind'] == kind and source['reviewed'] is False
         assert evidence['receipt']['record']['limitations']
-        assert evidence['receipt']['method']['method_version'] == '0.9.0'
+        assert evidence['receipt']['method']['method_version'] == '0.9.1'
         assert evidence['receipt']['trust']['grade'] == 'reference'
         assert evidence['receipt']['approval'] == 'not_granted'
     asset = transition(client, transition(client, asset, 'review'), 'publish')

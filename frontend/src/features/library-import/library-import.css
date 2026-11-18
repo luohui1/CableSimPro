@@ -38,6 +38,14 @@
 .library-import-confirm { display: flex; align-items: flex-start; gap: var(--space-3); line-height: 1.6; }
 .library-import-confirm > [role="checkbox"] { margin-top: var(--space-1); }
 .library-import-issues { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.library-import-common { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-surface); }
+.library-import-common h3 { font-size: var(--text-body); font-weight: var(--weight-strong); margin: 0; line-height: 1.5; }
+.library-import-common-item { display: flex; flex-direction: column; gap: var(--space-2); }
+.library-import-common-item + .library-import-common-item { border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.library-import-common-scope { font-weight: var(--weight-strong); }
+.library-import-explanation { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.library-import-explanation summary { cursor: pointer; }
+.library-import-explanation ul { margin: var(--space-2) 0 0; padding-left: var(--space-6); list-style: disc; display: flex; flex-direction: column; gap: var(--space-1); }
 .library-import-error { white-space: pre-wrap; overflow-wrap: anywhere; }
 .library-import-series-heading, .library-import-series-toolbar, .library-import-selection { display: flex; gap: var(--space-4); align-items: center; justify-content: space-between; }
 .library-import-series-toolbar { align-items: flex-end; }

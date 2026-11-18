@@ -67,7 +67,9 @@ def test_transport_identity_rejects_changed_values_and_provenance(references, ch
     elif change == 'string': ref['record']['value'] = str(ref['record']['value'])
     elif change == 'unit': ref['record']['quantity']['unit'] = 'J/(kg·K)'
     elif change == 'source': ref['record']['source_sha256'] = '0'*64
-    elif change == 'version': ref['plugin_version'] = '0.9.1'
+    elif change == 'version':
+        assert ref['plugin_version'] != '0.9.0'
+        ref['plugin_version'] = '0.9.0'
     elif change == 'digest': ref['record_sha256'] = '0'*64
     elif change == 'wrapper_source': ref['source_sha256'] = '0'*64
     elif change == 'wrapper_page': ref['pdf_page'] += 1

@@ -21,9 +21,9 @@
     },
     {
       "plugin_id": "cablesim.gb50217-correction",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "manifest": "plugins/cablesim.gb50217-correction/plugin.json",
-      "release_digest": "9645277740c6f0c36c7016eae414f8a540cfcce14d6d5b36fe51ce28e2292994"
+      "release_digest": "c55bc389790c07a6cbd69f20f602b9d42149db32bdeda79c27b3d4f83f09fe58"
     },
     {
       "plugin_id": "cablesim.hybrid-rating",
@@ -39,9 +39,9 @@
     },
     {
       "plugin_id": "cablesim.native-reference",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "manifest": "plugins/cablesim.native-reference/plugin.json",
-      "release_digest": "3ea8a3e17e4f90579eac954f3ed970ab7840d0d805a1b9efc32523960c0fd501"
+      "release_digest": "c61688e691a9ed5eaaa3a219efd0acb1a42fd48c181090ac4b516c32222678c0"
     },
     {
       "plugin_id": "cablesim.simulation",
@@ -51,15 +51,15 @@
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.8.4",
+      "version": "1.8.5",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "f257b2a3225e5cf385a8b160a7050fb15efb5cc263750bb7d473fcb275ade24a"
+      "release_digest": "5555b13df459a78ec9136e28699fc42b0e9ca23e8b0192d55c960fd4218832f3"
     },
     {
       "plugin_id": "cablesim.standards-basis",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "manifest": "plugins/cablesim.standards-basis/plugin.json",
-      "release_digest": "9fb57e256841d6dadba0d1144147f614ccef35ff96f7cd43fe90ac60279a866a"
+      "release_digest": "1babba59486ce48b4581ee0d1b4058cff93b58b6ab7230b4794c81f85f6be743"
     },
     {
       "plugin_id": "cablesim.thermal-network",
@@ -69,9 +69,9 @@
     },
     {
       "plugin_id": "cablesim.type-electrical",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "manifest": "plugins/cablesim.type-electrical/plugin.json",
-      "release_digest": "f481987e351e62733dbd1932c3cb6edb7f62b23d5deb78fa66dfd0fcfe7d35b6"
+      "release_digest": "c7229dc327ec5c2fbd5981f76263b6337a8acccc3099c224e7487670426e94aa"
     }
   ]
 }

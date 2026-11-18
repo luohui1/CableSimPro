@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium, expect as baseExpect } from '@playwright/test';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
-import { classifyExchangeRefusals, importResourceExchange, multipartEvidence, saveRawResponse } from './resource-exchange-walk.mjs';
+import { classifyExchangeRefusals, importResourceExchange, multipartEvidence, observeExchangeUploads, saveRawResponse } from './resource-exchange-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1' || !process.env.E2E_EXCHANGE_TASKS || !process.env.LIBRARY_IMPORT_EVIDENCE) throw new Error('交换走查须由结构表隔离验收启动。');
 const base = process.env.FRONTEND_URL;
@@ -29,25 +29,8 @@ try { browser = await chromium.launch({ executablePath, headless: true, args: ['
 catch (error) { report.failures.push({ phase: '浏览器启动', message: String(error) }); await saveReport(); throw error; }
 for (const task of tasks) {
   const context = await browser.newContext({ viewport: task.viewport, acceptDownloads: true, locale: 'zh-CN' });
-  // Capture the actual FormData passed to fetch before Chromium hands it to the
-  // network stack. CDP can omit multipart postDataBuffer for file uploads.
-  await context.addInitScript(() => {
-    const original = window.fetch;
-    window.__cablesimFormRequests = [];
-    window.fetch = function (input, init) {
-      if (init?.body instanceof FormData) {
-        const fields = {}; let file;
-        for (const [key, value] of init.body.entries()) {
-          if (value instanceof File) file = { name: value.name, size: value.size };
-          else fields[key] = String(value);
-        }
-        const url = typeof input === 'string' ? input : input.url;
-        window.__cablesimFormRequests.push({ pathname: new URL(url, location.href).pathname, fields, file });
-      }
-      return original.apply(this, arguments);
-    };
-  });
   const page = await context.newPage();
+  const uploadObserver = await observeExchangeUploads(page);
   const width = task.viewport.width;
   page.on('pageerror', error => report.errors.push({ viewport: width, kind: 'page', message: error.message }));
   page.on('console', entry => { if (entry.type() === 'error') report.errors.push({ viewport: width, kind: 'console', location: entry.location(), message: entry.text() }); });
@@ -72,18 +55,21 @@ for (const task of tasks) {
   }
   try {
     if (task.kind === 'resources') {
-      await importResourceExchange({ page, base, task, out, root, expect, capture, report, requestIdentity });
+      await importResourceExchange({ page, base, task, out, root, expect, capture, report, requestIdentity, uploadObserver });
     } else {
     await page.goto(base + '/resources/cables/structure-import');
     await page.getByRole('tab', { name: '数据交换', exact: true }).click();
     await capture('新库选择交换文件');
+    const previewAction = await uploadObserver.begin('/api/type-library/exchange/preview', 'series-preview');
     const [previewResponse] = await Promise.all([
       page.waitForResponse(response => response.url().endsWith('/api/type-library/exchange/preview') && response.request().method() === 'POST'),
       Promise.resolve().then(() => page.getByLabel('型号交换文件', { exact: true }).setInputFiles(task.file)),
     ]);
     assert.equal(previewResponse.status(), 200, await previewResponse.text());
     const preview = await previewResponse.json();
-    const previewEvidence = await multipartEvidence(previewResponse, task.file, page);
+    const previewObservation = await uploadObserver.finish(previewAction, previewResponse);
+    const previewEvidence = await multipartEvidence(previewResponse, task.file, previewObservation);
+    assert.deepEqual(previewEvidence.form, {}, '预览上传不应夹带确认字段');
     assert.equal(previewEvidence.file.sha256, preview.file_sha256);
     const previewRaw = await saveRawResponse(previewResponse, path.join(out, `exchange-${width}-series-preview-raw.json`));
     await fs.writeFile(path.join(out, `exchange-${width}-series-preview.json`), JSON.stringify({ ...previewEvidence, response: preview, raw_response: previewRaw }, null, 2));
@@ -92,13 +78,16 @@ for (const task of tasks) {
     await capture('新库交换内容预览');
     await expect(page.getByRole('button', { name: '确认导入型号交换文件', exact: true })).toBeDisabled();
     await page.getByRole('checkbox', { name: '确认交换文件来源', exact: true }).check();
+    const importAction = await uploadObserver.begin('/api/type-library/exchange/import', 'series-import');
     const [response] = await Promise.all([
       page.waitForResponse(response => response.url().endsWith('/api/type-library/exchange/import') && response.request().method() === 'POST', { timeout: 180000 }),
       Promise.resolve().then(() => page.getByRole('button', { name: '确认导入型号交换文件', exact: true }).click()),
     ]);
     assert.equal(response.ok(), true, await response.text());
     const receipt = await response.json();
-    const importEvidence = await multipartEvidence(response, task.file, page);
+    const importObservation = await uploadObserver.finish(importAction, response);
+    const importEvidence = await multipartEvidence(response, task.file, importObservation);
+    assert.deepEqual(Object.keys(importEvidence.form).sort(), ['confirmed', 'request_id', 'reviewed_sha256']);
     assert.equal(importEvidence.request_headers['x-cablesim-actor'], 'human');
     assert.equal(importEvidence.form.confirmed, 'true');
     assert.equal(importEvidence.form.reviewed_sha256, preview.file_sha256);
@@ -125,7 +114,19 @@ for (const task of tasks) {
     await expect(page.getByRole('table', { name: '系列规格', exact: true })).toBeVisible();
     await capture('新库恢复系列与逐项来源');
     await page.getByRole('tab', { name: '数据交换', exact: true }).click();
-    await page.getByLabel('型号交换文件', { exact: true }).setInputFiles(task.file);
+    const conflictAction = await uploadObserver.begin('/api/type-library/exchange/preview', 'series-same-name-refusal');
+    const [conflictPreviewResponse] = await Promise.all([
+      page.waitForResponse(value => value.url().endsWith('/api/type-library/exchange/preview') && value.request().method() === 'POST'),
+      Promise.resolve().then(() => page.getByLabel('型号交换文件', { exact: true }).setInputFiles(task.file)),
+    ]);
+    assert.equal(conflictPreviewResponse.status(), 200, await conflictPreviewResponse.text());
+    const conflictObservation = await uploadObserver.finish(conflictAction, conflictPreviewResponse);
+    const conflictEvidence = await multipartEvidence(conflictPreviewResponse, task.file, conflictObservation);
+    const conflictPreview = await conflictPreviewResponse.json();
+    assert.deepEqual(conflictEvidence.form, {});
+    assert.equal(conflictPreview.file_sha256, preview.file_sha256);
+    const conflictPreviewRaw = await saveRawResponse(conflictPreviewResponse, path.join(out, `exchange-${width}-series-conflict-preview-raw.json`));
+    await fs.writeFile(path.join(out, `exchange-${width}-series-conflict-preview.json`), JSON.stringify({ ...conflictEvidence, response: conflictPreview, raw_response: conflictPreviewRaw }, null, 2));
     await expect(page.getByRole('table', { name: '型号交换预览', exact: true })).toContainText('目标库存在同名系列，整包不入库');
     await expect(page.getByRole('button', { name: '确认导入型号交换文件', exact: true })).toHaveCount(0);
     await capture('同名系列整包拒绝');
@@ -144,6 +145,10 @@ for (const task of tasks) {
     await fs.writeFile(path.join(out, `exchange-${width}-failure.txt`), await page.locator('body').innerText().catch(() => '页面已关闭'));
     console.error(error);
   } finally {
+    try { await uploadObserver.assertComplete(); }
+    catch (error) { report.failures.push({ viewport: width, phase: '真实FormData与网络请求观测完整性', message: String(error) }); }
+    try { await fs.writeFile(path.join(out, `exchange-${width}-${task.kind === 'resources' ? 'resources' : 'series'}-upload-observations.json`), JSON.stringify(await uploadObserver.snapshot(), null, 2)); }
+    catch (error) { report.failures.push({ viewport: width, phase: '保存实际上传观测', message: String(error) }); }
     try { await context.close(); }
     catch (error) { report.failures.push({ viewport: width, phase: '浏览器上下文关闭', message: String(error) }); }
     await saveReport();

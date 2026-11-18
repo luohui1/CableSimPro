@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT=Path(__file__).resolve().parents[1]
 DATA=ROOT/'plugins/cablesim.standards-basis/src/cablesim_standards_basis'
 
@@ -11,6 +13,79 @@ def load(filename):
     spec=importlib.util.spec_from_file_location(filename.stem,filename)
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     return module
+
+
+def test_verification_release_summary_matches_existing_complete_matrices():
+    """Audit stored evidence without claiming a new original-page reading."""
+    excerpts = json.loads((DATA/'excerpts.json').read_text('utf-8'))
+    evidence = json.loads((DATA/'verification.json').read_text('utf-8'))
+    built = load(DATA/'rebuild.py').build(excerpts, evidence)
+    assert excerpts['version'] == evidence['version'] == built['version'] == '0.9.1'
+    expected = {'lv-表17': 220, 'lv-表18': 133, 'mv-表19': 250}
+    for table_id, count in expected.items():
+        rows = [r for r in built['records'] if r['verification']['evidence_id'] == table_id]
+        assert len(rows) == count
+        assert all(r['verification']['status'] == 'verified' for r in rows)
+        assert {method['id'] for method in evidence['tables'][table_id]['methods']} == {
+            'independent-pdf-visual', 'primary-pdf-visual'}
+    assert len(built['records']) == 4406
+    blocked = [r for r in built['records'] if r['verification']['status'] == 'blocked']
+    assert len(blocked) == 10
+    assert {r['verification']['evidence_id'] for r in blocked} == {'mv-表18'}
+    pending = evidence['not_released']
+    assert [(r['standard'], r['edition'], r['locator']) for r in pending] == [
+        ('IEC 60287-2-1', '2023', 'Table 2')]
+    assert '560' in pending[0]['reason'] and '3,2-' in pending[0]['reason']
+    assert not any(t['standard'] == 'IEC 60287-2-1' and t['table'] == 'Table 2'
+                   for t in built['tables'])
+
+
+@pytest.mark.parametrize('table_id', ['lv-表17', 'lv-表18', 'mv-表19'])
+def test_verification_summary_rejects_reintroduced_stale_unreleased_table(table_id):
+    excerpts = json.loads((DATA/'excerpts.json').read_text('utf-8'))
+    evidence = json.loads((DATA/'verification.json').read_text('utf-8'))
+    table = next(t for t in excerpts['tables'] if t['id'] == table_id)
+    # Reintroduce the actual historical defect without altering either route.
+    evidence['not_released'].append({
+        'standard': table['standard'], 'edition': table['edition'],
+        'locator': table['locator'], 'reason': '尚无完整一致第二路矩阵。'})
+    with pytest.raises(ValueError, match='未发布摘要与已完整核验的表冲突：' + table_id):
+        load(DATA/'rebuild.py').build(excerpts, evidence)
+
+
+@pytest.mark.parametrize('mutation', ['missing', 'spurious', 'duplicate'])
+def test_verification_summary_rejects_inaccurate_unresolved_index(mutation):
+    excerpts = json.loads((DATA/'excerpts.json').read_text('utf-8'))
+    evidence = json.loads((DATA/'verification.json').read_text('utf-8'))
+    if mutation == 'missing':
+        evidence['unresolved'] = []
+    elif mutation == 'spurious':
+        evidence['unresolved'].append({'table_id': 'lv-表17', 'reason': '错误的未解决摘要'})
+    else:
+        evidence['unresolved'].append(dict(evidence['unresolved'][0]))
+    with pytest.raises(ValueError, match='未解决摘要与实际 blocked 表不一致'):
+        load(DATA/'rebuild.py').build(excerpts, evidence)
+
+
+@pytest.mark.parametrize('source', ['excerpts', 'verification'])
+def test_verification_summary_rejects_mixed_authoring_versions(source):
+    excerpts = json.loads((DATA/'excerpts.json').read_text('utf-8'))
+    evidence = json.loads((DATA/'verification.json').read_text('utf-8'))
+    (excerpts if source == 'excerpts' else evidence)['version'] = '0.9.0'
+    with pytest.raises(ValueError, match='编制与核验版本不一致'):
+        load(DATA/'rebuild.py').build(excerpts, evidence)
+
+
+@pytest.mark.parametrize('mutation', ['missing', 'extra'])
+def test_verification_summary_rejects_incomplete_table_identity(mutation):
+    excerpts = json.loads((DATA/'excerpts.json').read_text('utf-8'))
+    evidence = json.loads((DATA/'verification.json').read_text('utf-8'))
+    if mutation == 'missing':
+        del evidence['tables']['lv-表17']
+    else:
+        evidence['tables']['unpublished-alias'] = evidence['tables']['lv-表17']
+    with pytest.raises(ValueError, match='编制与核验表索引不一致'):
+        load(DATA/'rebuild.py').build(excerpts, evidence)
 
 
 def test_second_batch_independent_page_values_and_full_shapes():

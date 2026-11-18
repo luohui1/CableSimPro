@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { catalogueComparison, confidenceText, displayLibraryText, methodText, sourceLocationText, type CatalogueComparisonReport, type ReferenceAssumption } from './api';
+import { catalogueComparison, confidenceText, displayLibraryText, methodText, sourceLocationText, type CatalogueComparisonReport, type CatalogueComparisonRow, type CatalogueMetric, type ReferenceAssumption } from './api';
 import { LibraryDialog } from './dialog';
 import { PublishedGuidance } from './published-guidance';
 
@@ -25,6 +25,37 @@ const ASSUMPTION_VALUES = new Map([
   ['standard_limit', '标准电阻上限'], ['exact', '精确形式'], ['ignored', '忽略'],
   ["the difference between the catalogue's overall diameter and the listed layers (screens and tapes) is lumped into the insulation screen", '将样本总外径与已列各层（屏蔽和包带）的尺寸差额归入绝缘屏蔽层。'],
 ]);
+
+const explanationKey = (metric: CatalogueMetric) => JSON.stringify([metric.reason, (metric.missing_fields || []).map(field => [field.field, field.label, field.reason]), metric.method ?? null, metric.tier ?? null]);
+
+/** Explanations that two or more rows repeat word for word, in table order, so each is written once. */
+function sharedExplanations(rows: CatalogueComparisonRow[], key: string) {
+  const groups = new Map<string, { metric: CatalogueMetric; rows: CatalogueComparisonRow[] }>();
+  for (const row of rows) {
+    const id = explanationKey(row.metrics[key]);
+    const group = groups.get(id);
+    if (group) group.rows.push(row); else groups.set(id, { metric: row.metrics[key], rows: [row] });
+  }
+  return [...groups].filter(([, group]) => group.rows.length > 1).map(([id, group]) => ({ id, ...group }));
+}
+
+function scopeText(rows: CatalogueComparisonRow[], total: number) {
+  if (rows.length === total) return `适用于全部 ${total} 个规格`;
+  return `适用于${[...new Set(rows.map(row => row.sheet))].join('、')}中的 ${rows.length} 个规格`;
+}
+
+function Explanation({ metric }: { metric: CatalogueMetric }) {
+  const missing = metric.missing_fields || [];
+  const method = [metric.method ? methodText(metric.method) : '', metric.tier ? `方法覆盖分档：${confidenceText(metric.tier)}` : ''].filter(Boolean).join('；');
+  return <div className="library-import-explanation">
+    {metric.reason && <p>{displayLibraryText(metric.reason)}</p>}
+    {!!missing.length && <details>
+      <summary>各项缺失原因（{missing.length} 项）</summary>
+      <ul>{missing.map(field => <li key={field.field}>{field.label}：{displayLibraryText(field.reason)}</li>)}</ul>
+    </details>}
+    {method && <p>{method}</p>}
+  </div>;
+}
 
 function AssumptionValue({ assumption }: { assumption: ReferenceAssumption }) {
   if (typeof assumption.value === 'number') return <span>{String(assumption.value)}</span>;
@@ -66,7 +97,6 @@ export function CatalogueComparison() {
   const url = text(source.url);
   const isReference = mode === 'reference' && !!report?.reference_calculation;
   const shown = isReference ? report!.reference_calculation! : report;
-  const originals = new Map(report?.rows.map(row => [row.key, row]));
   return <section className="library-import-stack" aria-label="公开样本偏差对照">
     <h2>公开样本偏差对照</h2>
     <p className="muted">逐规格保留厂家原表值、独立结果、偏差与缺项原因。厂家未公布的工况与构造不补入假设；研究参考情景须另行查看、人工确认后运行。</p>
@@ -78,7 +108,7 @@ export function CatalogueComparison() {
     {error && !scenarioOpen && <p className="field-error" role="alert">{error}</p>}
     {report && shown && <>
       <p className="library-import-source" aria-label="厂家样本来源">来源：{text(source.title) || '厂家公开手册'}{text(source.location) && `；${sourceLocationText(text(source.location))}`}{/^https?:\/\//.test(url) && <> · <a className="object-link" href={url} target="_blank" rel="noreferrer">查看公开原文</a></>}</p>
-      <p aria-label="厂家独立核验总览">厂家独立核验：{report.summary.specifications} 个规格；载流量可对照 {report.summary.ampacity_compared} 个，拒算 {report.summary.ampacity_refused} 个；四项独立核验全部通过 {report.summary.four_metric_passed} 个。</p>
+      <p aria-label="厂家独立核验总览">厂家独立核验：{report.summary.specifications} 个规格；载流量可对照 {report.summary.ampacity_compared} 个，拒算 {report.summary.ampacity_refused} 个；四项独立核验全部通过 {report.summary.four_metric_passed} 个。可信分档：参考，未人工审核。</p>
       <p className="muted">{displayLibraryText(report.scope)}</p>
       <PublishedGuidance value={report.published_guidance} />
       <div className="library-import-series-actions">
@@ -90,29 +120,38 @@ export function CatalogueComparison() {
       </div>}
       {isReference && <div className="library-import-stack" aria-label="研究参考情景说明">
         <h2>研究参考情景结果</h2>
-        <p>研究假设经本次确认后执行，不是厂家工况，也不计入厂家独立核验通过数。厂家缺项与拒算原因继续逐规格保留。</p>
+        <p>研究假设经本次确认后执行，不是厂家工况，也不计入厂家独立核验通过数。厂家缺项与拒算原因不变，可切换到“厂家数据与缺项”逐项查看。</p>
         <p>{shown.summary.specifications} 个规格；参考情景得到载流量 {shown.summary.ampacity_compared} 个，方法拒绝 {shown.summary.ampacity_refused} 个。与样本值的参考差异：平均绝对相对差异 {percent(shown.summary.ampacity_mean_absolute_relative_difference)}，最大 {percent(shown.summary.ampacity_max_absolute_relative_difference)}。</p>
         <p className="muted">{displayLibraryText(shown.scope)} {methodText(report.reference_calculation!.method)}；可信分档：参考，尚未人工审核结果。</p>
       </div>}
       <Tabs value={metric} onValueChange={setMetric}>
         <TabsList aria-label="对照指标">{METRICS.map(item => <TabsTrigger key={item.key} value={item.key}>{item.label}</TabsTrigger>)}</TabsList>
-        {METRICS.map(item => <TabsContent key={item.key} value={item.key} className="library-import-stack">
-          <DataTable label={`${isReference ? '研究情景' : ''}${item.label}逐规格对照`} showGroups={false} groups={[{ id: 'comparison', label: item.label, rows: shown.rows.map(row => ({ ...row, id: row.key, metric: row.metrics[item.key], manufacturer: originals.get(row.key)!.metrics[item.key] })) }]} rowLabel={row => `${row.designation} ${row.area_mm2} mm²`} columns={[
-            { id: 'spec', label: '规格', wrap: true, render: row => <div>{displayLibraryText(row.designation.replaceAll('/', ' / '))} · {row.area_mm2} mm²<br /><span className="muted">{row.sheet}</span></div> },
-            { id: 'published', label: '厂家样本值', unit: item.unit, numeric: true, render: row => row.metric.published === null ? '原表未给出' : number(row.metric.published, item.key === 'r20' ? 6 : 3) },
-            { id: 'computed', label: isReference ? '研究情景结果或回读' : '独立结果或输入回读', unit: item.unit, numeric: true, render: row => row.metric.value === null ? '未给出结果' : number(row.metric.value, item.key === 'r20' ? 6 : 3) },
-            { id: 'difference', label: isReference ? '与样本值的参考差异' : '偏差', wrap: true, numeric: true, render: row => row.metric.status === 'declared_input' ? '不作独立偏差' : row.metric.difference === null ? '不可对照' : `${number(row.metric.difference, item.key === 'r20' ? 6 : 3)} ${item.unit}（${percent(row.metric.relative_difference)}）` },
-            { id: 'status', label: '判定', wrap: true, render: row => isReference && row.metric.status === 'compared' ? '研究参考值，非厂家核验' : STATUS[row.metric.status] },
-            { id: 'reason', label: '原因、方法与可信分档', wrap: true, render: row => <div className="library-import-issues">
-              <span>{displayLibraryText(row.metric.reason)}</span>
-              {row.metric.missing_fields?.map(field => <span key={field.field}>{field.label}：{displayLibraryText(field.reason)}</span>)}
-              {!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}
-              {isReference && <span>厂家核验仍为{STATUS[row.manufacturer.status]}：{displayLibraryText(row.manufacturer.reason)}</span>}
-              <span className="muted">{isReference ? '本次研究情景：参考' : '厂家公开资料核验：参考，未人工审核'}</span>
-              {!!row.metric.tier && <span className="muted">方法覆盖分档：{confidenceText(row.metric.tier)}</span>}
-            </div> },
-          ]} />
-        </TabsContent>)}
+        {METRICS.map(item => {
+          // Rows of one original table share their refusal reasons; write each once above the table.
+          const shared = sharedExplanations(shown.rows, item.key);
+          const sharedIndex = new Map(shared.map((group, index) => [group.id, index]));
+          const ownReasons = shown.rows.some(row => !sharedIndex.has(explanationKey(row.metrics[item.key])));
+          return <TabsContent key={item.key} value={item.key} className="library-import-stack">
+            {!!shared.length && <section className="library-import-common" aria-label={`${item.label}共同说明`}>
+              <h3>{isReference ? '研究情景共同说明' : '共同说明'}</h3>
+              {shared.map((group, index) => <div key={group.id} className="library-import-common-item">
+                <p className="library-import-common-scope">{shared.length > 1 ? `说明 ${index + 1}：` : ''}{scopeText(group.rows, shown.rows.length)}</p>
+                <Explanation metric={group.metric} />
+              </div>)}
+            </section>}
+            <DataTable label={`${isReference ? '研究情景' : ''}${item.label}逐规格对照`} showGroups={false} groups={[{ id: 'comparison', label: item.label, rows: shown.rows.map(row => ({ ...row, id: row.key, metric: row.metrics[item.key] })) }]} rowLabel={row => `${row.designation} ${row.area_mm2} mm²`} columns={[
+              { id: 'spec', label: '规格', wrap: true, render: row => <div>{displayLibraryText(row.designation.replaceAll('/', ' / '))} · {row.area_mm2} mm²<br /><span className="muted">{row.sheet}</span></div> },
+              { id: 'published', label: '厂家样本值', unit: item.unit, numeric: true, render: row => row.metric.published === null ? '原表未给出' : number(row.metric.published, item.key === 'r20' ? 6 : 3) },
+              { id: 'computed', label: isReference ? '研究情景结果或回读' : '独立结果或输入回读', unit: item.unit, numeric: true, render: row => row.metric.value === null ? '未给出结果' : number(row.metric.value, item.key === 'r20' ? 6 : 3) },
+              { id: 'difference', label: isReference ? '与样本值的参考差异' : '偏差', wrap: true, numeric: true, render: row => row.metric.status === 'declared_input' ? '不作独立偏差' : row.metric.difference === null ? '不可对照' : `${number(row.metric.difference, item.key === 'r20' ? 6 : 3)} ${item.unit}（${percent(row.metric.relative_difference)}）` },
+              { id: 'status', label: '判定', wrap: true, render: row => isReference && row.metric.status === 'compared' ? '研究参考值，非厂家核验' : STATUS[row.metric.status] },
+              ...(ownReasons ? [{ id: 'reason', label: '原因、方法与可信分档', wrap: true, render: (row: CatalogueComparisonRow & { metric: CatalogueMetric }) => {
+                const index = sharedIndex.get(explanationKey(row.metric));
+                return index === undefined ? <Explanation metric={row.metric} /> : shared.length > 1 ? `见上方说明 ${index + 1}` : '见上方共同说明';
+              } }] : []),
+            ]} />
+          </TabsContent>;
+        })}
       </Tabs>
       <LibraryDialog open={scenarioOpen} onOpenChange={open => { if (!busy) setScenarioOpen(open); }} busy={!!busy} title="研究参考情景与完整假设" initialFocus="preserve"
         description="以下是研究用声明，包含厂家未提供的信息。确认仅允许执行本次参考情景，不会补齐厂家资料或批准核验结果。"

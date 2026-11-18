@@ -31,52 +31,171 @@ export function safeRequestHeaders(request) {
   return Object.fromEntries(['content-type', 'x-cablesim-actor'].filter(key => headers[key] !== undefined).map(key => [key, headers[key]]));
 }
 
-/** Retain the reviewed form fields, not the binary body or unrelated headers. */
-export async function multipartEvidence(response, filename, page) {
+/** Chromium may omit an entire File multipart body from CDP. Observe the exact
+ * FormData handed to native fetch without changing or delaying that request. */
+export async function observeExchangeUploads(page) {
+  const key = '__cableSimExchangeUploadObservation';
+  const endpoint = /^\/api\/(?:type-library|library)\/exchange\/(?:preview|import)$/;
+  await page.addInitScript(({ key }) => {
+    const state = { document_id: crypto.randomUUID(), active: null, sequence: 0, records: [], errors: [] };
+    Object.defineProperty(globalThis, key, { value: state });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = function (...args) {
+      // Forward the original objects immediately. In particular, do not await a
+      // File read/hash, build a replacement Request, or add observation headers.
+      const result = Reflect.apply(originalFetch, this, args);
+      try {
+        const [input, init] = args;
+        const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+        if (url.origin !== location.origin || !/^\/api\/(?:type-library|library)\/exchange\/(?:preview|import)$/.test(url.pathname)) return result;
+        const record = { document_id: state.document_id, sequence: ++state.sequence, action_id: state.active?.id ?? null,
+          url: url.href, method: String(init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
+          status: 'pending', consumed: false, fields: [], error: null };
+        state.records.push(record);
+        if (!(init?.body instanceof FormData)) throw Error('Exchange fetch did not supply an inspectable FormData object.');
+        // File objects are immutable. Keep their actual names and bytes, and
+        // retain ordered entries so duplicate names cannot become invisible.
+        const entries = [...init.body.entries()];
+        const files = [];
+        for (const [name, value] of entries) {
+          if (typeof value === 'string') record.fields.push({ name, kind: 'text', value });
+          else if (value instanceof File) {
+            const field = { name, kind: 'file', filename: value.name, size: value.size, type: value.type,
+              last_modified: value.lastModified, sha256: null };
+            record.fields.push(field); files.push({ value, field });
+          } else throw Error('Unsupported exchange FormData entry.');
+        }
+        void Promise.all(files.map(async ({ value, field }) => {
+          const bytes = await value.arrayBuffer();
+          if (bytes.byteLength !== field.size) throw Error('Observed File byte length changed.');
+          field.sha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(value => value.toString(16).padStart(2, '0')).join('');
+        })).then(() => { record.status = 'complete'; }, error => { record.status = 'failed'; record.error = String(error); });
+      } catch (error) {
+        state.errors.push(String(error));
+        const pending = state.records.at(-1);
+        if (pending?.status === 'pending') { pending.status = 'failed'; pending.error = String(error); }
+      }
+      return result;
+    };
+  }, { key });
+  const requests = [], records = [], byRequest = new WeakMap();
+  let active = null, sequence = 0;
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.origin !== new URL(page.url()).origin || !endpoint.test(url.pathname)) return;
+    const item = { sequence: requests.length + 1, action_id: active?.id ?? null, method: request.method(), url: request.url(), consumed: false };
+    requests.push(item); byRequest.set(request, item);
+  });
+  return {
+    async begin(pathname, label) {
+      assert.equal(active, null, '前一交换动作观测尚未收齐');
+      assert.ok(endpoint.test(pathname));
+      assert.ok(requests.every(item => item.consumed), '存在未归属当前UI动作的交换请求');
+      const action = { id: String(++sequence), endpoint: pathname, method: 'POST', label };
+      await page.evaluate(({ key, action }) => {
+        const state = globalThis[key];
+        if (!state || state.active || state.errors.length || state.records.some(item => !item.consumed)) throw Error('Previous exchange observation is missing, incomplete, or ambiguous.');
+        state.active = action;
+      }, { key, action });
+      active = action;
+      return action;
+    },
+    async finish(action, response) {
+      assert.equal(active, action, '交换响应必须归属当前单次UI动作');
+      const request = response.request(), actual = byRequest.get(request);
+      assert.ok(actual, '未观察到该响应对应的真实浏览器请求');
+      assert.equal(actual.action_id, action.id);
+      assert.equal(request.redirectedFrom(), null, '交换上传不应重定向到另一请求');
+      assert.equal(actual.method, action.method); assert.equal(new URL(actual.url).pathname, action.endpoint);
+      assert.equal(requests.filter(item => item.action_id === action.id).length, 1, '单次UI动作出现多个交换请求，不能猜配回执');
+      await page.waitForFunction(({ key, id }) => {
+        const state = globalThis[key], items = state?.records.filter(item => item.action_id === id) ?? [];
+        return state?.active?.id === id && items.length > 0 && items.every(item => item.status !== 'pending');
+      }, { key, id: action.id }, { timeout: 30000 });
+      const observed = await page.evaluate(({ key, id }) => {
+        const state = globalThis[key];
+        return { errors: state.errors, items: state.records.filter(item => item.action_id === id) };
+      }, { key, id: action.id });
+      assert.deepEqual(observed.errors, []); assert.equal(observed.items.length, 1, '实际fetch观测不唯一');
+      const record = observed.items[0];
+      assert.equal(record.status, 'complete', record.error ?? '真实File摘要尚未完成');
+      assert.equal(record.url, actual.url); assert.equal(record.method, actual.method); assert.equal(record.action_id, actual.action_id);
+      assert.equal(actual.sequence, records.length + 1, '真实网络请求顺序有遗漏');
+      assert.equal(record.sequence, records.filter(item => item.document_id === record.document_id).length + 1, '当前文档fetch观测顺序有遗漏');
+      await page.evaluate(({ key, id }) => {
+        const state = globalThis[key];
+        if (state.active?.id !== id) throw Error('Exchange action changed before evidence collection.');
+        state.records.filter(item => item.action_id === id).forEach(item => { item.consumed = true; });
+        state.active = null;
+      }, { key, id: action.id });
+      actual.consumed = true; active = null;
+      const complete = { ...record, consumed: true, action: { ...action }, network_sequence: actual.sequence, source: 'browser_native_fetch_form_data' };
+      records.push(complete);
+      return complete;
+    },
+    async snapshot() {
+      return { requests, records, browser: await page.evaluate(key => globalThis[key], key) };
+    },
+    async assertComplete() {
+      assert.equal(active, null, '有交换UI动作未完成观测');
+      assert.ok(requests.every(item => item.consumed && item.action_id), '存在遗漏或无法归属的交换请求');
+      assert.equal(requests.length, records.length, '真实请求与FormData观测数量不一致');
+      const state = await page.evaluate(key => globalThis[key], key);
+      assert.ok(state); assert.deepEqual(state.errors, []);
+      assert.equal(state.active, null);
+      assert.ok(state.records.every(item => item.status === 'complete' && item.consumed), '当前页面有丢失或失败的FormData观测');
+    },
+  };
+}
+
+/** Retain actual FormData fields and safe headers; CDP availability is explicit. */
+export async function multipartEvidence(response, filename, observation) {
   const request = response.request(), headers = safeRequestHeaders(request);
   const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(headers['content-type'] ?? '');
   assert.ok(boundary, '真实上传请求须是 multipart/form-data');
-  const raw = request.postDataBuffer();
-  if (!raw) {
-    // The browser's real fetch invocation is captured before sending; do not
-    // fabricate request fields from the expected preview or response.
-    assert.ok(page, 'Chromium未提供上传正文时必须读取真实页面表单');
-    const observed = await page.evaluate(pathname =>
-      window.__cablesimFormRequests?.filter(item => item.pathname === pathname).at(-1) ?? null,
-      new URL(request.url()).pathname);
-    assert.ok(observed, '须保留真实上传请求的表单字段');
-    const bytes = await fs.readFile(filename);
-    assert.equal(observed.file?.name, path.basename(filename));
-    assert.equal(observed.file?.size, bytes.length);
-    return { method: request.method(), url: request.url(), request_headers: headers,
-      form: Object.fromEntries(Object.entries(observed.fields).filter(([key]) => ['reviewed_sha256', 'confirmed', 'request_id'].includes(key))),
-      file: { name: observed.file.name, size: bytes.length, sha256: hash(bytes), full_file_body_observed: false },
-      form_observed_in_browser_fetch: true, status: response.status() };
-  }
-  const separator = Buffer.from('--' + (boundary[1] ?? boundary[2]));
-  const fields = {};
-  let uploadedName, fileBody;
-  for (let start = raw.indexOf(separator); start >= 0;) {
-    const end = raw.indexOf(separator, start + separator.length);
-    if (end < 0) break;
-    const part = raw.subarray(start + separator.length, end), divide = part.indexOf('\r\n\r\n');
-    if (divide >= 0) {
-      const heading = part.subarray(0, divide).toString('utf8');
-      const name = /(?:^|;)\s*name="([^"]+)"/m.exec(heading)?.[1];
-      const value = part.subarray(divide + 4, part.length - 2);
-      if (name === 'file') { uploadedName = /filename="([^"]*)"/.exec(heading)?.[1]; fileBody = value; }
-      else if (['reviewed_sha256', 'confirmed', 'request_id'].includes(name)) fields[name] = value.toString('utf8');
-    }
-    start = end;
-  }
+  assert.equal(observation?.source, 'browser_native_fetch_form_data', '必须保存真实fetch的FormData观测');
+  assert.equal(observation.status, 'complete'); assert.equal(observation.url, request.url()); assert.equal(observation.method, request.method());
+  assert.equal(new Set(observation.fields.map(item => item.name)).size, observation.fields.length, '重复表单字段存在歧义');
+  const observedFiles = observation.fields.filter(item => item.kind === 'file');
+  assert.equal(observedFiles.length, 1); assert.equal(observedFiles[0].name, 'file');
+  const file = observedFiles[0], fields = Object.fromEntries(observation.fields.filter(item => item.kind === 'text').map(item => [item.name, item.value]));
   const bytes = await fs.readFile(filename);
-  assert.equal(uploadedName, path.basename(filename));
-  // Chromium may omit multipart file bytes from its protocol. The downloaded
-  // file digest, server-verified bundle digest and exact fresh data remain checked.
+  assert.equal(file.filename, path.basename(filename)); assert.equal(file.size, bytes.length); assert.equal(file.sha256, hash(bytes));
+  const raw = request.postDataBuffer();
+  let uploadedName, fileBody, cdp;
+  if (raw === null) cdp = { availability: 'unavailable', reason: 'Playwright Request.postDataBuffer() returned null for this multipart upload.' };
+  else {
+    const separator = Buffer.from('--' + (boundary[1] ?? boundary[2])), parsed = {};
+    for (let start = raw.indexOf(separator); start >= 0;) {
+      const end = raw.indexOf(separator, start + separator.length);
+      if (end < 0) break;
+      const part = raw.subarray(start + separator.length, end), divide = part.indexOf('\r\n\r\n');
+      if (divide >= 0) {
+        const heading = part.subarray(0, divide).toString('utf8');
+        const name = /(?:^|;)\s*name="([^"]+)"/m.exec(heading)?.[1];
+        const value = part.subarray(divide + 4, part.length - 2);
+        assert.ok(name, 'CDP正文包含无名称的表单字段');
+        if (name === 'file') {
+          assert.equal(fileBody, undefined, 'CDP正文重复文件字段');
+          uploadedName = /filename="([^"]*)"/.exec(heading)?.[1]; fileBody = value;
+        } else {
+          assert.ok(!Object.hasOwn(parsed, name), 'CDP正文重复字段'); parsed[name] = value.toString('utf8');
+        }
+      }
+      start = end;
+    }
+    assert.deepEqual(parsed, fields, 'CDP实际字符串字段必须与原FormData完全一致');
+    if (fileBody !== undefined) {
+      assert.equal(uploadedName, file.filename);
+      assert.ok(fileBody.length === 0 || fileBody.length === bytes.length, 'CDP文件正文截断，不能当作完整或缺失');
+    }
+    cdp = { availability: 'available', body_size: raw.length, body_sha256: hash(raw), file_metadata_available: fileBody !== undefined };
+  }
   const fullFileBodyObserved = fileBody?.length === bytes.length;
   if (fullFileBodyObserved) assert.equal(hash(fileBody), hash(bytes));
   return { method: request.method(), url: request.url(), request_headers: headers, form: fields,
-    file: { name: uploadedName, size: bytes.length, sha256: hash(bytes), full_file_body_observed: fullFileBodyObserved }, status: response.status() };
+    file: { name: file.filename, size: file.size, sha256: file.sha256, full_file_body_observed: fullFileBodyObserved },
+    form_data_observation: observation, cdp_body: cdp, status: response.status() };
 }
 
 function parseDownloaded(filename, root) {
@@ -283,7 +402,7 @@ async function inspectImported(page, expect, capture, asset) {
 }
 
 /** All exchange exports, uploads and confirmations are visible browser actions. */
-export async function importResourceExchange({ page, base, task, out, root, expect, capture, report, requestIdentity }) {
+export async function importResourceExchange({ page, base, task, out, root, expect, capture, report, requestIdentity, uploadObserver }) {
   const { viewport } = task, prefix = `${viewport.width}-resource-exchange`;
   const get = endpoint => readSaved(page, base, endpoint);
   const readInventory = async () => ({ assets: await get('/api/foundation/assets?limit=100'), projects: await get('/api/workspaces') });
@@ -293,13 +412,16 @@ export async function importResourceExchange({ page, base, task, out, root, expe
   await openExchange(page, expect, base, '导入交换文件');
   await capture('新机选择资料与工程交换文件');
   async function previewFile(file, name, status = 200) {
+    const action = await uploadObserver.begin('/api/library/exchange/preview', name);
     const [response] = await Promise.all([
       page.waitForResponse(value => new URL(value.url()).pathname === '/api/library/exchange/preview' && value.request().method() === 'POST', { timeout: 180000 }),
       Promise.resolve().then(() => page.getByLabel('资料与工程交换文件', { exact: true }).setInputFiles(file)),
     ]);
     assert.equal(response.status(), status, await response.text());
     const raw = await saveRawResponse(response, path.join(out, prefix + '-' + name + '-raw.json'));
-    const body = await response.json(), evidence = { ...await multipartEvidence(response, file, page), response: body, raw_response: raw };
+    const observation = await uploadObserver.finish(action, response);
+    const body = await response.json(), evidence = { ...await multipartEvidence(response, file, observation), response: body, raw_response: raw };
+    assert.deepEqual(evidence.form, {}, '预览上传不应夹带确认字段');
     await write(out, prefix + '-' + name, evidence);
     return { response, body, evidence };
   }
@@ -308,12 +430,15 @@ export async function importResourceExchange({ page, base, task, out, root, expe
     await expect(button).toBeDisabled();
     await page.getByRole('checkbox', { name: '确认资料与工程交换范围', exact: true }).check();
     await button.scrollIntoViewIfNeeded(); await capture(`${name}人工确认资料与工程范围`);
+    const action = await uploadObserver.begin('/api/library/exchange/import', name);
     const [response] = await Promise.all([
       page.waitForResponse(value => new URL(value.url()).pathname === '/api/library/exchange/import' && value.request().method() === 'POST', { timeout: 180000 }),
       Promise.resolve().then(() => button.click()),
     ]);
     assert.equal(response.status(), 201, await response.text());
-    const receipt = await response.json(), evidence = await multipartEvidence(response, file, page);
+    const observation = await uploadObserver.finish(action, response);
+    const receipt = await response.json(), evidence = await multipartEvidence(response, file, observation);
+    assert.deepEqual(Object.keys(evidence.form).sort(), ['confirmed', 'request_id', 'reviewed_sha256']);
     assert.equal(evidence.request_headers['x-cablesim-actor'], 'human');
     assert.equal(evidence.form.confirmed, 'true'); assert.equal(evidence.form.reviewed_sha256, preview.sha256);
     assert.equal(receipt.request_id, evidence.form.request_id); assert.equal(receipt.sha256, preview.sha256);
