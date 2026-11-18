@@ -12,13 +12,30 @@ concurrency:
   cancel-in-progress: true
 jobs:
   hygiene:
-    name: Hygiene and plugin catalog checks (${{ matrix.os }})
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # Full performance and two-size text/regularity traverse all saved types.
+    # Isolate their wall-clock budgets from the four business walkthroughs.
     timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            task: walks
+            name: Hygiene and plugin catalog checks (ubuntu-latest)
+            evidence: workbench-evidence
+          - os: windows-latest
+            task: checks
+            name: Hygiene and plugin catalog checks (windows-latest)
+          - os: ubuntu-latest
+            task: performance
+            name: Workbench performance audit (ubuntu-latest)
+            evidence: workbench-performance-evidence
+          - os: ubuntu-latest
+            task: regularity
+            name: Workbench text and regularity audit (ubuntu-latest)
+            evidence: workbench-text-regularity
     defaults:
       run:
         shell: bash
@@ -163,14 +180,14 @@ jobs:
           cd frontend
           if [ ! -x /usr/bin/google-chrome ]; then npx playwright install --with-deps chromium; fi
       - name: Generate API types from the isolated formal host
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         id: workbench-openapi
         working-directory: frontend
         env:
           E2E_PYTHON: ${{ github.workspace }}/.venv/bin/python
         run: node scripts/isolated-e2e.mjs generate-api.mjs
       - name: Preserve formally generated API types for review
-        if: ${{ !cancelled() && steps.workbench-openapi.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-openapi.outcome == 'success' && matrix.task == 'walks' }}
         uses: actions/upload-artifact@v4
         with:
           name: workbench-openapi
@@ -182,13 +199,13 @@ jobs:
             frontend/src/api/generated/endpoints.ts
             .data/frontend-integration/openapi.json
       - name: Walk ampacity research at both screen sizes
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         working-directory: frontend
         env:
           WORKBENCH_PHASE: after
         run: npm run test:workbench-research 2>&1 | tee ../.data/workbench-walk/logs/research.log
       - name: Preserve the research walkthrough before continuing
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         uses: actions/upload-artifact@v4
         with:
           name: workbench-research
@@ -198,13 +215,13 @@ jobs:
             .data/workbench-walk/after/research/
             .data/workbench-walk/logs/research.log
       - name: Walk type design at both screen sizes
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         working-directory: frontend
         env:
           WORKBENCH_PHASE: after
         run: npm run test:workbench-types 2>&1 | tee ../.data/workbench-walk/logs/types.log
       - name: Preserve the type walkthrough before continuing
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         uses: actions/upload-artifact@v4
         with:
           name: workbench-types
@@ -215,19 +232,19 @@ jobs:
             .data/workbench-walk/after/types/
             .data/workbench-walk/logs/types.log
       - name: Walk resources at both screen sizes
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         working-directory: frontend
         env:
           WORKBENCH_PHASE: after
         run: npm run test:workbench-resources 2>&1 | tee ../.data/workbench-walk/logs/resources.log
       - name: Walk simulation preflight without submitting a solver
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         working-directory: frontend
         env:
           WORKBENCH_PHASE: after
         run: npm run test:workbench-simulation 2>&1 | tee ../.data/workbench-walk/logs/simulation.log
-      - name: Upload the four walkthroughs before the broader audits
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+      - name: Upload the completed four-workflow walkthrough evidence
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         uses: actions/upload-artifact@v4
         with:
           name: workbench-walk
@@ -235,13 +252,13 @@ jobs:
           include-hidden-files: true
           path: .data/workbench-walk/
       - name: Audit rendering performance in an independent browser session
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'performance' }}
         working-directory: frontend
         env:
           PERFORMANCE_PASS: after
         run: npm run test:performance 2>&1 | tee ../.data/workbench-walk/logs/performance.log
-      - name: Upload the completed performance audit before the full text traversal
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+      - name: Upload the complete performance audit and checkpoints
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'performance' }}
         uses: actions/upload-artifact@v4
         with:
           name: workbench-performance
@@ -251,18 +268,18 @@ jobs:
             .data/fix-round/shared-shell/performance/
             .data/workbench-walk/logs/performance.log
       - name: Audit visible text and interface regularity on the same full walkthrough
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'regularity' }}
         working-directory: frontend
         env:
           REGULARITY_WITH_VISIBLE: '1'
           VISIBLE_TEXT_PASS: after
           REGULARITY_PASS: after
         run: npm run test:regularity 2>&1 | tee ../.data/workbench-walk/logs/visible-text-and-regularity.log
-      - name: Upload workbench screenshots, real request records and audits
+      - name: Upload this task's screenshots, requests and audit evidence
         if: ${{ always() && matrix.os == 'ubuntu-latest' }}
         uses: actions/upload-artifact@v4
         with:
-          name: workbench-evidence
+          name: ${{ matrix.evidence }}
           retention-days: 14
           include-hidden-files: true
           path: |
@@ -271,7 +288,7 @@ jobs:
             .data/fix-round/shared-shell/regularity/
             .data/fix-round/shared-shell/performance/
       - name: Diagnose representative saved pages after the complete audits
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'performance' }}
         working-directory: frontend
         env:
           LOADING_TRACE_AUDIT: ${{ github.workspace }}/.data/fix-round/shared-shell/performance/after/audit.json
@@ -279,7 +296,7 @@ jobs:
           LOADING_SERVER_TRACE: ${{ runner.temp }}/workbench-loading-trace-server.jsonl
         run: npm run test:loading-trace 2>&1 | tee ../.data/workbench-walk/logs/loading-trace.log
       - name: Upload diagnostic traces separately from performance budgets
-        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'performance' }}
         uses: actions/upload-artifact@v4
         with:
           name: workbench-loading-trace
@@ -290,7 +307,7 @@ jobs:
             .data/fix-round/shared-shell/loading-path/trace/
             .data/workbench-walk/logs/loading-trace.log
       - name: Cable Studio types, build and real-flow tests
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.task == 'walks' }}
         working-directory: studio
         run: |
           npm ci --ignore-scripts
