@@ -122,24 +122,31 @@ def test_case_names_are_chinese_and_never_leak_layout_ids():
     assert engineering_text('338.6719999639408 K') == '原始说明见追溯记录'
 
 
-def test_legacy_soil_name_is_chinese_in_body_but_exact_in_source_and_trace():
+@pytest.mark.parametrize('column,original,display', [
+    ('material', '敷设介质 · v0 soil热阻率 · 采用值', '敷设介质 · 旧版土壤材料热阻率 · 采用值'),
+    ('context', '可用；design', '可用；设计值'),
+    ('context', '可用；derived', '可用；推导值'),
+    ('context', 'measurement', '实测值'),
+    ('context', 'manufacturer_limit', '厂家声明上限'),
+    ('context', 'unknown', '未明确'),
+])
+def test_body_names_are_chinese_but_exact_in_source_and_trace(column, original, display):
     model = reference_model()
-    original = '敷设介质 · v0 soil热阻率 · 采用值'
     source = model['sources']['record']
     source['payload']['material'] = original
     from backend.kernel.formal_contracts import jsonsha
     source['payload_digest'] = jsonsha(source['payload'])
     reference = {'source_id': 'record', 'pointer': '/material'}
-    model['tables']['values']['columns'].append({'key': 'material', 'label': '材料', 'role': 'text'})
+    model['tables']['values']['columns'].append({'key': column, 'label': '说明', 'role': 'text'})
     cell = {'value': original, 'raw_text': original, 'value_ref': reference,
             'unit': None, 'unit_ref': None}
-    model['tables']['values']['rows'][0]['cells']['material'] = cell
+    model['tables']['values']['rows'][0]['cells'][column] = cell
     saved_sources = canonical_bytes(model['sources'])
 
     apply_presentation(model)
     validate_model_refs(model)
 
-    assert cell['display_text'] == '敷设介质 · 旧版土壤材料热阻率 · 采用值'
+    assert cell['display_text'] == display
     assert cell['value'] == cell['raw_text'] == original
     assert canonical_bytes(model['sources']) == saved_sources
     row = next(row for row in model['tables']['presentation:prose']['rows']
@@ -150,6 +157,7 @@ def test_legacy_soil_name_is_chinese_in_body_but_exact_in_source_and_trace():
     # replacement inside an unrelated ASCII identifier.
     assert engineering_text('v0 soil') == '旧版土壤材料'
     assert engineering_text('v0 soils / legacy-v0 soil') == 'v0 soils / legacy-v0 soil'
+    assert engineering_text('design / derived') == 'design / derived'
 
 
 def matrix_input():
