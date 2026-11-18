@@ -16,12 +16,14 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.release_support import FORMAT, MANIFEST, ROOT, digest, target, utf8_output
+from scripts import release_agent
 from scripts import release_native
+from scripts import release_node_runtime
 from scripts import release_python_runtime
 
 SOURCE_ROOTS = {"backend", "cablesim_sdk", "plugin-spec", "plugins"}
 SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh",
-           "release_python_runtime.py", "python_runtime.lock.json")
+           "release_python_runtime.py", "python_runtime.lock.json", "release_node_runtime.py", "node_runtime.lock.json")
 SEED_SCRIPTS = ("seed-engineering-demo.py", "engineering_resources.py")
 
 
@@ -110,7 +112,7 @@ def payload_files(root: Path, *, platform_name: str) -> dict:
     return dict(sorted(result.items()))
 
 
-def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> dict:
+def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT, agent_dist: Path | None = None) -> dict:
     if sys.version_info[:2] != (3, 12) or target()["pointer_bits"] != 64 or sys.platform not in {"linux", "win32"}:
         raise RuntimeError("发行构建使用 Windows/Linux 的 64 位 CPython 3.12。")
     if (not (frontend / "index.html").is_file() or not any(frontend.rglob("*.js"))
@@ -135,10 +137,14 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
         shutil.copytree(wheels, staged / "wheelhouse")
         runtime = release_python_runtime.bundle_runtime(staged, cache=root / ".data/python-downloads")
         native = release_native.bundle_native_runtime(staged)
+        node = release_node_runtime.bundle_runtime(staged, cache=root / ".data/node-downloads")
+        agent = release_agent.bundle_agent(root, staged, ui=(agent_dist or root / "studio/dist-fusion").resolve(),
+                                           node=release_node_runtime.runtime_path(staged))
         subprocess.run([sys.executable, str(root / "scripts/third_party_notices.py"),
                         "--wheelhouse", str(staged / "wheelhouse"),
                         "--output", str(staged / "THIRD_PARTY_NOTICES.txt"),
-                        "--node-modules", str(root / "frontend/node_modules")], check=True)
+                        "--node-modules", str(root / "frontend/node_modules"),
+                        "--node-modules", str(staged / "agent/node_modules")], check=True)
         if native:
             with (staged / "THIRD_PARTY_NOTICES.txt").open("a", encoding="utf-8") as notices:
                 notices.write("\nLinux GLVND/X11 runtime libraries\n")
@@ -155,6 +161,9 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
                         "--find-links", str(staged / "wheelhouse"), "-r", str(staged / "requirements.lock")],
                        env=release_python_runtime.clean_python_environment(), check=True)
         with (staged / "THIRD_PARTY_NOTICES.txt").open("a", encoding="utf-8") as notices:
+            notices.write("\nNode.js " + node["version"] + " / " + node["distribution"] + "\n")
+            notices.write(node["url"] + "\nSHA256 " + node["sha256"] + "\n")
+            notices.write("Licence and bundled third-party notices of the runtime: " + node["license_files"][0] + "\n")
             notices.write("\nCPython " + runtime["version"] + " / " + runtime["distribution"] + "\n")
             notices.write(runtime["url"] + "\nSHA256 " + runtime["sha256"] + "\n")
             notices.write("Original runtime and dependency notices (preserved verbatim):\n"
@@ -163,7 +172,7 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
         files = payload_files(staged, platform_name=sys.platform)
         value = {"format": FORMAT, "target": target(), "git_commit": commit,
                  "includes_prebuilt_frontend": True, "includes_geometry_dependencies": True,
-                 "python_runtime": runtime,
+                 "python_runtime": runtime, "node_runtime": node, "agent": agent,
                  "native_runtime": {"manifest": release_native.METADATA, "minimum_glibc": native["minimum_glibc"]}
                  if native else None, "files": files}
         value["build_id"] = sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -191,9 +200,12 @@ def main() -> int:
     parser.add_argument("--frontend-dist", type=Path, required=True, help="Verified Vite production output, including OCCT WASM")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--wheelhouse", type=Path, help="Reuse an already resolved platform wheel directory")
+    parser.add_argument("--agent-dist", type=Path, default=ROOT / "studio/dist-fusion",
+                        help="Built Agent chat page (in studio: npm run build:fusion)")
     args = parser.parse_args()
     if args.wheelhouse:
-        receipt = build(args.frontend_dist.resolve(), args.wheelhouse.resolve(), args.output.resolve())
+        receipt = build(args.frontend_dist.resolve(), args.wheelhouse.resolve(), args.output.resolve(),
+                        agent_dist=args.agent_dist)
     else:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(prefix="cablesim-wheels-", dir=args.output.parent) as scratch:
@@ -202,7 +214,7 @@ def main() -> int:
                             "--disable-pip-version-check", "--wheel-dir", str(wheels),
                             "-r", str(ROOT / "backend/requirements.txt"),
                             "-r", str(ROOT / "plugins/cablesim.cable-geometry/src/requirements.txt")], check=True)
-            receipt = build(args.frontend_dist.resolve(), wheels, args.output.resolve())
+            receipt = build(args.frontend_dist.resolve(), wheels, args.output.resolve(), agent_dist=args.agent_dist)
     print(json.dumps(receipt, ensure_ascii=False, indent=2), flush=True)
     return 0
 

@@ -97,7 +97,7 @@ def config(path: Path) -> dict:
     path = path.expanduser().resolve()
     with path.open("rb") as stream:
         value = tomllib.load(stream)
-    allowed = {"server", "storage", "initialization", "model", "processes"}
+    allowed = {"server", "storage", "initialization", "model", "processes", "agent"}
     if set(value) - allowed:
         raise RuntimeError("运行配置包含未知配置组。")
     defaults = {
@@ -106,6 +106,7 @@ def config(path: Path) -> dict:
         "storage": {"data_dir": "~/CableSimPro-data"},
         "initialization": {"seed_examples": True},
         "model": {"base_url": "", "model": "", "api_key_env": "CABLESIM_LLM_API_KEY"},
+        "agent": {"enabled": True, "port": 8111},
     }
     for section, fields in defaults.items():
         supplied = value.get(section, {})
@@ -122,7 +123,12 @@ def config(path: Path) -> dict:
             ipaddress.ip_address(server["host"])
     except (TypeError, ValueError):
         raise RuntimeError("监听 host 须为 IP 地址或 localhost。") from None
-    for field, setting in (("open_browser", server), ("seed_examples", value["initialization"])):
+    agent = value["agent"]
+    if type(agent["port"]) is not int or not 1 <= agent["port"] <= 65535:
+        raise RuntimeError("agent.port 应为 1–65535。")
+    if agent["port"] == server["port"]:
+        raise RuntimeError("agent.port 不能与 server.port 相同；边车只监听 127.0.0.1，请换一个端口。")
+    for field, setting in (("open_browser", server), ("seed_examples", value["initialization"]), ("enabled", agent)):
         if type(setting[field]) is not bool:
             raise RuntimeError(field + " 须为布尔值。")
     if (not isinstance(server["trusted_hosts"], list)
@@ -186,8 +192,8 @@ def windows_long_paths_enabled() -> bool | None:
         return None
 
 
-def windows_path_policy(app: Path, wheels: Path, *, long_paths_enabled: bool | None) -> dict:
-    """Check real wheel destinations before extracting into a default MAX_PATH system."""
+def windows_path_policy(app: Path, wheels: Path, *, long_paths_enabled: bool | None, payload=()) -> dict:
+    """Check real wheel destinations (and any named payload files) before extracting into a default MAX_PATH system."""
     prefix = app / ".venv"
     site = prefix / "Lib/site-packages"
     longest = str(prefix / "Scripts/python.exe")
@@ -210,6 +216,10 @@ def windows_path_policy(app: Path, wheels: Path, *, long_paths_enabled: bool | N
         for destination in candidates:
             if len(str(destination)) > len(longest):
                 longest = str(destination)
+    for name in payload:
+        destination = str(app / safe_relative(name))
+        if len(destination) > len(longest):
+            longest = destination
     # Leave room for pip's atomic replacement names as well as Windows' NUL.
     result = {"long_paths_enabled": long_paths_enabled, "longest_destination_characters": len(longest),
               "temporary_path_reserve_characters": 16, "legacy_path_limit_characters": 259}
@@ -220,6 +230,17 @@ def windows_path_policy(app: Path, wheels: Path, *, long_paths_enabled: bool | N
     return result
 
 
+def host_glibc() -> str:
+    try:
+        observed = os.confstr("CS_GNU_LIBC_VERSION") or ""
+    except (ValueError, OSError):
+        observed = ""
+    current = observed.split()[-1] if observed.startswith("glibc ") else ""
+    if not re.fullmatch(r"\d+\.\d+", current):
+        raise RuntimeError("此 Linux 发行包需要 glibc；当前系统无法核实兼容的 glibc 版本。")
+    return current
+
+
 def native_runtime_policy(root: Path) -> dict | None:
     path = root / "runtime/native-manifest.json"
     if sys.platform != "linux" or not path.is_file():
@@ -228,16 +249,36 @@ def native_runtime_policy(root: Path) -> dict | None:
     required = value.get("minimum_glibc", "")
     if value.get("format") != "cablesim.native-runtime/1" or not re.fullmatch(r"\d+\.\d+", required):
         raise RuntimeError("随包 Linux 原生运行库的版本清单不合法。")
-    try:
-        observed = os.confstr("CS_GNU_LIBC_VERSION") or ""
-    except (ValueError, OSError):
-        observed = ""
-    current = observed.split()[-1] if observed.startswith("glibc ") else ""
-    if not re.fullmatch(r"\d+\.\d+", current):
-        raise RuntimeError("此 Linux 发行包需要 glibc；当前系统无法核实兼容的 glibc 版本。")
+    current = host_glibc()
     if tuple(map(int, current.split("."))) < tuple(map(int, required.split("."))):
         raise RuntimeError(f"此发行包需要 glibc >= {required}，当前为 {current}；请使用面向当前系统构建的发行包。")
     return {"minimum_glibc": required, "current_glibc": current}
+
+
+def node_runtime_policy(root: Path) -> dict | None:
+    """The shipped Node.js asks the host for glibc too; check it as the native libraries are checked."""
+    path = root / "runtime/node-runtime.json"
+    if sys.platform != "linux" or not path.is_file():
+        return None
+    value = json.loads(path.read_text("utf-8"))
+    required = value.get("minimum_glibc", "")
+    if value.get("format") != "cablesim.node-runtime/1" or not re.fullmatch(r"\d+\.\d+", required):
+        raise RuntimeError("随包 Node.js 运行时的版本清单不合法。")
+    current = host_glibc()
+    if tuple(map(int, current.split("."))) < tuple(map(int, required.split("."))):
+        raise RuntimeError(f"随包 Node.js 需要 glibc >= {required}，当前为 {current}；请使用面向当前系统构建的发行包，或在 release.toml 的 [agent] 关闭 Agent。")
+    return {"minimum_glibc": required, "current_glibc": current}
+
+
+def agent_payload(app: Path) -> dict | None:
+    """The sidecar this installation ships, or None for a build without one. Existence is verified by the manifest."""
+    path = app / "agent/agent.json"
+    if not path.is_file():
+        return None
+    value = json.loads(path.read_text("utf-8"))
+    if value.get("format") != "cablesim.agent/1" or not (app / "agent" / value.get("entry", "")).is_file():
+        raise RuntimeError("随包 Agent 清单不合法或入口缺失。")
+    return value
 
 
 def environment(value: dict, app: Path) -> dict[str, str]:
@@ -246,18 +287,31 @@ def environment(value: dict, app: Path) -> dict[str, str]:
     trusted_hosts = list(value["server"]["trusted_hosts"])
     if value["server"]["host"] not in {"0.0.0.0", "::"}:
         trusted_hosts.append(value["server"]["host"])
+    model = value["model"]
+    # One model, one resolution (backend/harness/model_settings.py): what the settings page saved, else CABLESIM_LLM_*,
+    # else CABLE_STUDIO_MODEL_* (the demo launcher's variables, inherited unchanged). The source is chosen as a whole:
+    # a release.toml that names a base_url or a model names the connection, and the key is then only what api_key_env
+    # points at (no key means no model, never another source's key); a release.toml that names neither states nothing,
+    # so the environment's own CABLESIM_LLM_* trio stands instead of being blanked.
+    if model["base_url"] or model["model"]:
+        connection = {"CABLESIM_LLM_BASE_URL": model["base_url"], "CABLESIM_LLM_MODEL": model["model"],
+                      "CABLESIM_LLM_API_KEY": os.environ.get(model["api_key_env"], "")}
+    else:
+        connection = {name: os.environ.get(name, "")
+                      for name in ("CABLESIM_LLM_BASE_URL", "CABLESIM_LLM_MODEL", "CABLESIM_LLM_API_KEY")}
     env = {**os.environ, "CABLESIM_DB": str(directory / "engineering.sqlite"),
            "CABLESIM_DATASETS_DIR": str(directory / "datasets"),
            "CABLESIM_REPRODUCTION_LIBRARY": str(directory / "library"),
            "CABLESIM_ENGINEERING_EVIDENCE": str(directory / "engineering-evidence"),
            "CABLESIM_FRONTEND_DIST": str(app / "frontend/dist"),
            "CABLESIM_PLUGIN_PYTHON": str(python_path(app)),
-           "CABLESIM_TRUSTED_HOSTS": ",".join(trusted_hosts),
-           "CABLESIM_LLM_BASE_URL": value["model"]["base_url"],
-           "CABLESIM_LLM_MODEL": value["model"]["model"],
-           "CABLESIM_LLM_API_KEY": os.environ.get(value["model"]["api_key_env"], ""),
+           "CABLESIM_TRUSTED_HOSTS": ",".join(trusted_hosts), **connection,
            "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
            "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "NODE_ENV": "production"}
+    # The link to the Agent sidecar is made per launch by the launcher (run_release.agent_link) and nowhere else: a
+    # token or address left in a developer's shell must not reach the platform, least of all when the Agent is off.
+    for name in ("CABLESIM_AGENT_SIDECAR_TOKEN", "CABLESIM_AGENT_SIDECAR_URL", "CABLESIM_AGENT_UI"):
+        env.pop(name, None)
     libraries = app / "runtime/linux-libs"
     if sys.platform == "linux" and libraries.is_dir():
         previous = env.get("LD_LIBRARY_PATH", "")

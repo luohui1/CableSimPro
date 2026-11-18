@@ -163,7 +163,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            studio/package-lock.json
       - name: Install build and evidence inspection dependencies
         run: python -m pip install -r backend/requirements-dev.txt
       - name: Real HTTP requests, graceful stop and immediate same-port restart
@@ -261,11 +263,20 @@ jobs:
         with:
           path: .data/python-downloads
           key: release-python-${{ runner.os }}-${{ hashFiles('scripts/python_runtime.lock.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: .data/node-downloads
+          key: release-node-${{ runner.os }}-${{ hashFiles('scripts/node_runtime.lock.json') }}
       - name: Build the shipped frontend
         working-directory: frontend
         run: |
           npm ci --ignore-scripts
           npm run build:release -- --outDir ../.data/release/frontend --emptyOutDir
+      - name: Build the Agent conversation page shipped with the sidecar
+        working-directory: studio
+        run: |
+          npm ci --ignore-scripts
+          npm run build:fusion
       - name: Build a platform-specific offline release archive
         run: python scripts/build_release.py --frontend-dist .data/release/frontend --output artifacts/CableSimPro-${{ runner.os }}.zip
       - name: Prepare evidence tools using the actual bundled Python and shipped wheels

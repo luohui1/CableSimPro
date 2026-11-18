@@ -142,9 +142,12 @@ if (import.meta.main) {
     const status = await sidecar.agent.status();
     console.log(`Agent 边车  http://127.0.0.1:${port}/  老平台 ${backendUrl}`);
     console.log(`对话目录    ${home}`);
-    console.log(`Agent 模型  ${status.configured ? `${status.provider} · ${status.model}` : `未配置（${status.hint}）`}`);
+    // The release launcher starts the sidecar beside the platform, so the platform may not be answering yet: this is a status, not a verdict.
+    console.log(`Agent 模型  ${status.configured ? `${status.provider} · ${status.model}` : `暂未就绪（${status.hint}）`}`);
   });
   const shutdown = () => { sidecar.close().then(() => process.exit(0)); };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // The release launcher stops a Windows child with Ctrl+Break; without a handler Node would end at once and skip the close above.
+  process.on('SIGBREAK', shutdown);
 }

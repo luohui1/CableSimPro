@@ -31,13 +31,17 @@ from uuid import uuid4
 import zipfile
 
 if __package__:
+    from .verify_agent import verify_agent
     from .verify_formal_batch import verify_formal_batches
     from .verify_formal_delivery import verify_formal_exports
-    from .release_runtime_verification import assert_no_system_interpreters, base_python, public_command, runtime_identity
+    from .release_runtime_verification import (assert_no_system_interpreters, base_python, bundled_node,
+                                               public_command, runtime_identity)
 else:
+    from verify_agent import verify_agent
     from verify_formal_batch import verify_formal_batches
     from verify_formal_delivery import verify_formal_exports
-    from release_runtime_verification import assert_no_system_interpreters, base_python, public_command, runtime_identity
+    from release_runtime_verification import (assert_no_system_interpreters, base_python, bundled_node,
+                                              public_command, runtime_identity)
 
 
 PROBE_ADDRESSES = ("1.1.1.1", "8.8.8.8", "2606:4700:4700::1111")
@@ -222,10 +226,11 @@ os.execve(plugin_python, [plugin_python, '-I', '-c', """ + repr(probe) + """, pl
 
 @contextmanager
 def windows_firewall(temporary: Path, interpreter: Path, gate, *, additional_programs: tuple[Path, ...] = ()):
-    """Block only this gate's Python executables, preserving runner connectivity.
+    """Block only this gate's own executables, preserving runner connectivity.
 
-    The acceptance configuration has no companion programs. pip, the host and
-    all exercised method workers use the declared Python interpreter paths.
+    The acceptance configuration has no user-defined companion programs. pip, the host and all
+    exercised method workers use the declared Python interpreter paths; the Agent sidecar runs
+    on the release's bundled Node.js, which is blocked the same way.
     """
     require(os.name == "nt", "Windows 防火墙验收只能在 Windows 执行。")
     powershell = shutil.which("pwsh") or shutil.which("powershell")
@@ -348,6 +353,15 @@ def no_node_environment(directory: Path) -> dict[str, str]:
     for key in ("CABLESIM_DB", "CABLESIM_DATASETS_DIR", "CABLESIM_REPRODUCTION_LIBRARY",
                 "CABLESIM_FRONTEND_DIST", "CABLESIM_PLUGIN_PYTHON", "PYTHONPATH"):
         environment.pop(key, None)
+    # A developer's own model or Agent link variables must not leak into the isolated installation: the "no model
+    # configured" step would fail and a real provider key would sit in the platform for the whole gate.
+    for key in list(environment):
+        if (key.upper().startswith(("CABLESIM_LLM_", "CABLE_STUDIO_MODEL_", "CABLESIM_AGENT_"))
+                or key.upper() in {"DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"}):
+            environment.pop(key)
+    # The Agent check configures a model through the settings page: its key stays in process memory,
+    # never in the CI runner's credential store.
+    environment["CABLESIM_AGENT_KEY_STORE"] = "memory"
     require(shutil.which("node", path=environment["PATH"]) is None, "验收环境仍能找到 Node。")
     require(shutil.which("npm", path=environment["PATH"]) is None, "验收环境仍能找到 npm。")
     for key in list(environment):
@@ -735,13 +749,17 @@ def main() -> int:
             with socket.socket() as listener:
                 listener.bind(("127.0.0.1", 0))
                 port = listener.getsockname()[1]
+                with socket.socket() as second:
+                    second.bind(("127.0.0.1", 0))
+                    agent_port = second.getsockname()[1]
             gate.base_url = f"http://127.0.0.1:{port}"
             configuration = root / "acceptance.toml"
             configuration.write_text("[server]\nhost = \"127.0.0.1\"\nport = " + str(port)
                                      + "\nopen_browser = false\nstartup_timeout_seconds = " + str(min(args.timeout_seconds, 1800))
                                      + "\n[storage]\ndata_dir = "
                                      + json.dumps(str(temporary / "data"))
-                                     + "\n[initialization]\nseed_examples = true\n[model]\nbase_url = \"\"\nmodel = \"\"\napi_key_env = \"CABLESIM_LLM_API_KEY\"\n", encoding="utf-8")
+                                     + "\n[initialization]\nseed_examples = true\n[model]\nbase_url = \"\"\nmodel = \"\"\napi_key_env = \"CABLESIM_LLM_API_KEY\"\n"
+                                     + "[agent]\nenabled = true\nport = " + str(agent_port) + "\n", encoding="utf-8")
             release_spec = importlib.util.spec_from_file_location("cablesim_bundle_release_support", root / "scripts/release_support.py")
             release_support = importlib.util.module_from_spec(release_spec)
             release_spec.loader.exec_module(release_support)
@@ -753,10 +771,12 @@ def main() -> int:
                     default_app = release_support.installation(defaults["data_dir"], manifest["build_id"])
                     # This is a conservative path calculation, not a registry
                     # change or a claim that this runner disables long paths.
+                    sidecar_files = [name for name in manifest["files"] if name.startswith(("agent/", "runtime/node/"))]
+                    require(bool(sidecar_files), "发行清单没有 Agent 边车与 Node.js 文件。")
                     default_policy = release_support.windows_path_policy(default_app, root / "wheelhouse",
-                                                                          long_paths_enabled=False)
+                                                                          long_paths_enabled=False, payload=sidecar_files)
                     actual_policy = release_support.windows_path_policy(installed, root / "wheelhouse",
-                                                                         long_paths_enabled=False)
+                                                                         long_paths_enabled=False, payload=sidecar_files)
                     gate.artifact("windows-default-paths.json", {
                         "actual_registry_long_paths_enabled": release_support.windows_long_paths_enabled(),
                         "default_data_dir": str(defaults["data_dir"]), "default_path_policy": default_policy,
@@ -766,8 +786,10 @@ def main() -> int:
             # to its base interpreter, which must not bypass the firewall.
             source_python = base_python(root)
             installed_python = installed / source_python.relative_to(root)
+            source_node = bundled_node(root)
+            installed_node = installed / source_node.relative_to(root)
             guard = (windows_firewall(temporary, interpreter, gate,
-                                      additional_programs=(source_python, installed_python))
+                                      additional_programs=(source_python, installed_python, source_node, installed_node))
                      if args.require_offline == "windows-firewall" else nullcontext())
             with guard:
                 if args.require_offline:
@@ -794,6 +816,10 @@ def main() -> int:
                             if args.require_offline:
                                 gate.result["offline"]["installed_after_start_probes"] = installed_offline_probe(interpreter, environment)
                         gate.frontend_assets(manifest)
+                        gate.result["agent"] = verify_agent(gate, agent_port=agent_port, manifest=manifest,
+                                                            log=output / "startup.log", data_dir=temporary / "data")
+                        gate.result["agent"]["node"] = {"executable": str(installed_node), "system_node_on_path": False,
+                                                        "runtime": manifest["node_runtime"]["version"]}
                         if sys.platform == "linux":
                             with gate.step("实际 CAD 插件进程加载发行包私有图形运行库"):
                                 gate.artifact("native-runtime-manifest.json", json.loads(

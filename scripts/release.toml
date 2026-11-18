@@ -20,19 +20,32 @@ data_dir = "~/CableSimPro-data"
 seed_examples = true
 
 [model]
-# 默认不调用模型。内网服务可填写完整 API 基址和模型名。
-# 已有后端设置优先于本文件的初始连接值，密钥只从环境变量/系统凭据读取。
+# AI 模型只需配置一处，Agent 对话和其余 AI 功能共用同一份。生效顺序（高到低）：
+#   1. 应用里“设置 · AI 模型”保存的配置（密钥进系统凭据库，不写入数据库或文件）——最简单；
+#   2. 本节的 base_url / model，加环境变量 api_key_env 所指的密钥（也直接认 CABLESIM_LLM_* 环境变量）；
+#   3. 环境变量 CABLE_STUDIO_MODEL_BASE_URL / CABLE_STUDIO_MODEL_ID / CABLE_STUDIO_MODEL_API_KEY
+#      （与开发启动器同名同义，三项配齐才生效）。
+# base_url 与 model 都留空时，本节不指定任何连接，环境里的 CABLESIM_LLM_* 照常生效；只要写了其中一项，
+# 整个连接就以本节为准，密钥只取 api_key_env 所指的环境变量（没设就是没有密钥，不会借用别处的）。
+# 密钥只放环境变量或系统凭据库，不要写进本文件。默认不调用模型。内网服务可填写完整 API 基址和模型名。
 base_url = ""
 model = ""
 api_key_env = "CABLESIM_LLM_API_KEY"
 
+[agent]
+# Agent 对话由随包的 Node.js 边车提供，只监听 127.0.0.1，与本程序同时启动和退出；模型密钥只在本程序里，
+# 边车拿不到。边车没起来或没配模型时，Agent 页会说明原因，工作台其余功能不受影响。
+# enabled = false 完全不启动边车；port 是边车的本机端口，须不同于 [server] 的 port。
+enabled = true
+port = 8111
+
 # 可追加随应用启动的进程。command 为参数数组，直接执行，不经过 shell。
-# {python} 指发行环境解释器；{app_dir}、{data_dir} 为绝对目录。
+# {python}、{app_dir}、{data_dir} 分别为发行解释器、当前程序目录和数据目录（均为绝对路径）。
 # 相对 cwd 以此配置文件所在目录为基准；env 只放非敏感设置。
 # 必需进程退出会停止应用；所有进程在退出时一并终止。
 # [[processes]]
-# name = "agent-sidecar"
-# command = ["{python}", "{app_dir}/path/to/sidecar.py"]
+# name = "my-companion"
+# command = ["{python}", "{app_dir}/path/to/companion.py"]
 # cwd = "."
 # required = true
 # env = { HOST = "127.0.0.1" }
