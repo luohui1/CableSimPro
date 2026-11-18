@@ -1,8 +1,18 @@
 # 标准依据库
 
-`cablesim.standards-basis` 0.7.0 是离线、只读的数据插件。当前含 **301 个表或条款索引、4,342 条输出格记录**，其中4,332格已核验；GB/T12706.2表18的10格因电压轴歧义阻止resolve。本发行新增115条短路依据，Sah汇总7格仅修正暂缓项页码，数值未放行。标准值、文献直接值、文献派生参考值分别声明语义；宿主不内置算法。表格完整保留行轴、原空白和破折号，不将缺值变成零，也不插值。两条土壤混合公式由本插件执行，全部物性与现场参数必填，无默认土壤。
+`cablesim.standards-basis` 0.9.1 是离线、只读的数据插件。当前含 **316 个表或条款索引、4,406 条输出格记录**，其中4,396格已核验；GB/T12706.2表18的10格因电压轴歧义阻止resolve。本发行只修正核验状态摘要及其编制检查，未新增或改动数值记录。标准值、文献直接值、文献派生参考值分别声明语义；宿主不内置算法。表格完整保留行轴、原空白和破折号，不将缺值变成零，也不插值。两条土壤混合公式由本插件执行，全部物性与现场参数必填，无默认土壤。
 
 资源库“标准与规则”支持完整表格、选格详情、条件检索及复制引用。格内仅显示值，量名和单位集中在标题；选中后在下方查看完整条件、页码和两路核验，并复制固定引用。方向键移动选格，Enter复制，宽表在自身区域滚动且首列固定。破折号仅显示“—”，悬停解释原表不适用；原表空白与破折号保持区别。型号要求、标准核对、规格书的引用契约兼容上一发行；这些消费者由三维线程接入。源值核验通过不等于设计或试验合格，输出始终带 `approval=not_granted`。设计负责人已在正式应用挂载通用只读路由；本线程的浏览器回归继续使用真实路由与Executor组成的隔离应用，不写演示数据库。
+
+## 0.9.1 核验状态索引修正
+
+GB/T12706.1表17、表18及GB/T12706.2表19在0.4.0起已有完整PDF图像双路核验记录，共220、133、250格。此前`verification.json.not_released`仍保留0.3.0的未发布说明，与同文件的`methods/cells/comparison`及已发布记录矛盾。此版将这三条旧说明移入`resolved_extraction_issues`，保留原原因与对应核验表ID；所有两路值、23个记录分册、4,406条逐记录摘要和适用条件均保持原样。这是既有证据索引的纠正，不构成一次新的原页目视核验。
+
+IEC60287-2-1:2023 Table2按现有核验说明为28×20格。`hB/wB=3、LG/hB=3`的印刷格`3,2-`尚未确认，整表560格仍不发布；未发布摘要不再使用旧的29×20表述，也不宣称其余559格已在本轮重新核验。GB/T12706.2表18的电压轴歧义仍保留，10格继续`blocked`。
+
+重建器检查编制与核验版本、表ID集合、未解决摘要与实际blocked表，以及未发布摘要与完整verified表之间的一致性。该门禁不读取原件、不证明转录独立性，也不将完整值矩阵提升为工程或试验合格结论。
+
+固定消费者随发行显式更新：standard-check发行1.8.5、方法1.8.4；type-electrical发行1.2.5、方法1.2.4；gb50217-correction发行1.0.7、方法1.0.0。两份消费者锁与GB校正默认依据摘要固定到0.9.1，计算和判定方法不变。旧工程、已发布资料及历史回执不迁移；再用旧选择写入或计算时继续受现有发行变化门禁约束，须重新查询、预览或确认。
 
 ## 来源、存放与版本
 
@@ -14,7 +24,7 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `plugin.json` | v2 清单、0.7.0 发行、无网络、read_only能力和逐文件封签 |
+| `plugin.json` | v2 清单、0.9.1 发行、无网络、read_only能力和逐文件封签 |
 | `assets/icon.svg` | 插件图标 |
 | `src/cablesim_standards_basis/excerpts.json` | 审阅后的完整矩形输出格、完整行轴、条件与公式参数，作为编制输入 |
 | `verification.json` | 每格的 route_a / route_b、方法、源 SHA256、结果和已解决提取问题 |
@@ -657,15 +667,19 @@ python plugins/cablesim.standards-basis/validation/constants.py
 # 在frontend目录用vite build --outDir ../.data/standards-basis/frontend-acceptance --emptyOutDir准备独立验收构建
 node frontend/src/features/standards/tests/verify-browser.mjs
 python scripts/plugin_sdk.py seal plugins/cablesim.standards-basis/plugin.json --write
+python plugins/cablesim.standard-check/src/cablesim_standard_check/basis_catalog.py --write
+python plugins/cablesim.type-electrical/src/cablesim_type_electrical/basis_catalog.py --write
 python scripts/plugin_sdk.py seal plugins/cablesim.standard-check/plugin.json --write
+python scripts/plugin_sdk.py seal plugins/cablesim.type-electrical/plugin.json --write
 python scripts/plugin_sdk.py seal plugins/cablesim.gb50217-correction/plugin.json --write
+python scripts/plugin_sdk.py seal
 python scripts/plugin_sdk.py verify
 python scripts/seal_plugin_catalog.py
 ```
 
-数值修改先更新完整编制输入与独立核验矩阵，再`rebuild.py --write`；默认命令只检查，不改文件。新发行或版本更新按根AGENTS.md封签规则处理，不修改已发布版本。现行工具支持显式清单路径；本轮分别封签三个获授权插件，仅更新其清单及registry条目，其他漂移只提示。临时工作副本不入库。
+数值修改先更新完整编制输入与独立核验矩阵，再`rebuild.py --write`；默认命令只检查，不改文件。新发行或版本更新按根AGENTS.md封签规则处理，不修改已发布版本；先升版并运行全库只读seal，再按实际受影响范围定向写入。消费者编制器只读取已完成封签的依据发行；GB校正清单中的默认依据摘要和说明须显式更新后再封签。现行工具支持显式清单路径；0.9.1分别封签四个受影响插件，仅更新对应清单、依赖锁及registry条目，其他漂移只提示。临时工作副本不入库。
 
-相关测试覆盖人工页码数值锚点、完整矩阵尺寸、4,342条记录的条件查询/歧义拦截、出处与双路结果、确定性重建及封签、分册篡改、输入单位/缺条件、空格/多个选项/边界、不跨版本/合金派生、手算公式参数对拍，以及真实Executor进程和ASGI只读路由的缓存/并发/发行错误。土壤公式还检验干燥/饱和边界、含水率越界及缺参数；参数只是明确的手算示例，不是现场值。重建器统一UTF-8/LF字节；实际Git autocrlf检出测试核对封签、重建及读取一致性。本插件无原生求解器测试。
+相关测试覆盖人工页码数值锚点、完整矩阵尺寸、4,406条记录的条件查询/歧义拦截、出处与双路结果、确定性重建及封签、分册篡改、输入单位/缺条件、空格/多个选项/边界、不跨版本/合金派生、手算公式参数对拍，以及真实Executor进程和ASGI只读路由的缓存/并发/发行错误。土壤公式还检验干燥/饱和边界、含水率越界及缺参数；参数只是明确的手算示例，不是现场值。重建器统一UTF-8/LF字节；实际Git autocrlf检出测试核对封签、重建及读取一致性。本插件无原生求解器测试。
 
 浏览器脚本使用正式SPA构建、backend.main真实宿主与真实Executor，SQLite只读backup发布库到隔离副本，运行后关闭任务服务/浏览器；不写源演示库；验证标准/表切换、整表行数、原页悬停、240mm²/12/20kV/XLPE→5.5mm、选格详情/准确剪贴板引用、方向键/Enter、缺条件、历史、宽表首列固定及第三批公差显示。自动布局检查覆盖1366×768与1920×1080、深浅主题、空/加载/错误/成功/历史共20项，检查溢出、重叠、13px字号、对比度及主操作数量。结果保存在不入库的`.data/standards-basis/browser-checks.json`；本轮验收截图为`thermal-capacity.png`、`accessory-tests.png`；五态中的空/加载/错误通过明确的网络故障注入，其余流程使用真实响应。五类查询收据为`real-queries.json`。任务浏览器上下文和服务在finally关闭。
 
