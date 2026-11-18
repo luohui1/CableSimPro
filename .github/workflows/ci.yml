@@ -171,6 +171,18 @@ jobs:
           E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
           LIBRARY_IMPORT_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk
         run: npm run test:library-import 2>&1 | tee ../.tmp/library-import-walk/browser.log
+      - name: Preserve initial import evidence before production preparation
+        uses: actions/upload-artifact@v4
+        if: ${{ always() && runner.os == 'Linux' }}
+        with:
+          name: library-import-ui-verification
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .tmp/library-import-walk/
+            .tmp/library-release-acceptance/
+            .data/release/engineering.seed.json
+          if-no-files-found: error
       - name: Retain every public catalogue value and deviation
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         shell: bash
@@ -197,6 +209,17 @@ jobs:
         shell: bash
         run: |
           python scripts/verify_import_originals.py --output .tmp/catalogue-source-audit/imports 2>&1 | tee .tmp/catalogue-source-audit/imports.log
+      - name: Preserve original catalogue evidence before production preparation
+        uses: actions/upload-artifact@v4
+        if: ${{ always() && runner.os == 'Linux' }}
+        with:
+          name: catalogue-source-verification
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .tmp/catalogue-source-audit/
+            .tmp/library-import-walk/catalogues/
+          if-no-files-found: error
       - uses: actions/cache/restore@v4
         id: occt
         if: ${{ success() || (!cancelled() && runner.os == 'Linux') }}
@@ -207,10 +230,11 @@ jobs:
             frontend/src/features/cad/node_modules/.cache/cablesim-occt
           key: release-occt-${{ runner.os }}-${{ hashFiles('frontend/src/features/cad/native/**', 'frontend/src/features/cad/prepare-runtime.mjs', 'scripts/prepare_release_frontend.py', 'scripts/release_toolchains.json') }}
       - name: Prepare verified OCCT assets from pinned sources
+        id: verified_occt
         if: ${{ success() || (!cancelled() && runner.os == 'Linux') }}
         run: python scripts/prepare_release_frontend.py --jobs 4 --download-cache .data/occt-downloads
       - name: Preserve verified OCCT assets before installation checks
-        if: steps.occt.outputs.cache-hit != 'true'
+        if: ${{ !cancelled() && steps.occt.outputs.cache-hit != 'true' && steps.verified_occt.outcome == 'success' }}
         uses: actions/cache/save@v4
         with:
           path: |

@@ -22,7 +22,7 @@ const out = path.resolve(process.env.LIBRARY_IMPORT_EVIDENCE || path.join(root, 
 await fs.mkdir(out, { recursive: true });
 const expect = baseExpect.configure({ timeout: 30000 });
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [] };
+const report = { checks: [], screenshots: [], errors: [], requests: [], failed_requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [] };
 const saveReport = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
 await saveReport();
 let browser;
@@ -46,7 +46,16 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
   const page = await context.newPage();
   page.on('pageerror', error => report.errors.push({ viewport: viewport.width, kind: 'page', page: page.url(), time: new Date().toISOString(), message: error.message }));
   page.on('console', entry => { if (entry.type() === 'error') report.errors.push({ viewport: viewport.width, kind: 'console', page: page.url(), time: new Date().toISOString(), location: entry.location(), message: entry.text() }); });
-  page.on('requestfailed', request => { if (!request.failure()?.errorText.includes('ERR_ABORTED')) report.errors.push({ viewport: viewport.width, kind: 'request', url: request.url(), message: request.failure()?.errorText }); });
+  page.on('requestfailed', request => {
+    const failure = { viewport: viewport.width, kind: 'request', page: page.url(), time: new Date().toISOString(),
+      method: request.method(), url: request.url(), resource_type: request.resourceType(),
+      navigation: request.isNavigationRequest(), message: request.failure()?.errorText };
+    // Keep every failure, including browser cancellations, in the raw ledger.
+    // Retain the existing error gate separately so a cancelled navigation is
+    // available for inspection instead of disappearing from the evidence.
+    report.failed_requests.push(failure);
+    if (!failure.message?.includes('ERR_ABORTED')) report.errors.push(failure);
+  });
   page.on('response', response => {
     if (!response.url().includes('/api/')) return;
     report.requests.push({ viewport: viewport.width, method: response.request().method(), url: response.url(), status: response.status() });
