@@ -1450,6 +1450,55 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       await sidebar.getByRole('link', { name: '插件', exact: true }).click();
       const pluginList = page.getByRole('navigation', { name: '已安装插件', exact: true });
       await expect(pluginList).toBeVisible();
+
+      const installReason = '本版本暂不支持从文件安装插件；插件随软件发布，更新软件即可获得新版本';
+      const installHelp = page.getByRole('note', { name: `从文件安装不可用：${installReason}`, exact: true });
+      const installButton = installHelp.getByRole('button', { name: '从文件安装', exact: true });
+      const installTooltip = page.getByRole('tooltip');
+      await expect(installHelp).toBeVisible();
+      await expect(installHelp).toHaveAttribute('tabindex', '0');
+      await expect(installButton).toBeDisabled();
+      await installHelp.hover();
+      await expect(installTooltip).toHaveText(installReason);
+      await capture('plugin-install-disabled-mouse');
+      await page.mouse.move(0, 0);
+      await expect(installTooltip).toBeHidden();
+
+      // Start at the real navigation entry and Tab to the explanation.
+      // Do not focus the disabled button or the explanation directly.
+      const pluginNavigation = sidebar.getByRole('link', { name: '插件', exact: true });
+      await pluginNavigation.focus();
+      await expect(pluginNavigation).toBeFocused();
+      const installKeyboardPath = [];
+      for (let attempt = 0; attempt < 32; attempt += 1) {
+        await page.keyboard.press('Tab');
+        const focused = await page.evaluate(() => {
+          const node = document.activeElement;
+          return { tag: node?.tagName, role: node?.getAttribute('role'),
+            label: node?.getAttribute('aria-label'), text: node?.textContent?.trim().slice(0, 120) };
+        });
+        installKeyboardPath.push(focused);
+        if (await installHelp.evaluate(node => node === document.activeElement)) break;
+      }
+      await expect(installHelp).toBeFocused();
+      await expect(installTooltip).toHaveText(installReason);
+      const installFocus = await installHelp.evaluate(node => {
+        const style = getComputedStyle(node), rect = node.getBoundingClientRect();
+        return { focused: node === document.activeElement, outlineStyle: style.outlineStyle,
+          outlineWidth: parseFloat(style.outlineWidth), inViewport: rect.top >= 0 && rect.left >= 0
+            && rect.bottom <= innerHeight && rect.right <= innerWidth };
+      });
+      await check('插件文件安装禁用原因可由鼠标悬停和Tab键读取',
+        installFocus.focused && installFocus.inViewport && installFocus.outlineStyle !== 'none'
+          && installFocus.outlineWidth >= 1 && (await installButton.isDisabled()),
+        { reason: installReason, keyboardPath: installKeyboardPath, focus: installFocus,
+          scope: '只读取现有安装限制，不安装插件、不产生写入。' });
+      await capture('plugin-install-disabled-keyboard');
+      await page.keyboard.press('Escape');
+      await expect(installTooltip).toBeHidden();
+      await expect(installHelp).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(installHelp).not.toBeFocused();
       // The host returns the sealed, digest-qualified URL actually used by the
       // page. Corroborate it; never substitute SVG bytes or a fabricated image.
       const installed = await api('/api/methods');

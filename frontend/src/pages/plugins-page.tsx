@@ -104,6 +104,8 @@ function PluginFigure({ figure }: { figure: Row }) {
   </figure>;
 }
 
+const FILE_INSTALL_UNAVAILABLE_REASON = "本版本暂不支持从文件安装插件；插件随软件发布，更新软件即可获得新版本";
+
 /** 插件：左侧按领域分组的已安装插件，右侧逐项剖析选中插件（能力、验证、范围、运行策略、被谁使用）。 */
 export function PluginsPage() {
   const catalog = useQuery(pluginCatalogQuery());
@@ -116,7 +118,11 @@ export function PluginsPage() {
 
   return (
     <CatalogShell title="插件" status={<span className="muted">已安装 {rows.length} 个 · 计算方法全部来自插件</span>}
-      actions={<Tooltip content="本版本暂不支持从文件安装插件；插件随软件发布，更新软件即可获得新版本"><span><Button size="compact" disabled>从文件安装</Button></span></Tooltip>}>
+      actions={<Tooltip content={FILE_INSTALL_UNAVAILABLE_REASON}>
+        <span role="note" tabIndex={0} aria-label={`从文件安装不可用：${FILE_INSTALL_UNAVAILABLE_REASON}`}>
+          <Button size="compact" disabled>从文件安装</Button>
+        </span>
+      </Tooltip>}>
       <div data-page={pid ? "plugin-detail" : "plugins"} className="plugins-page">
         <QueryState query={catalog} empty={!rows.length && "尚无已安装插件"}>
           <nav className="plugin-list" aria-label="已安装插件">
