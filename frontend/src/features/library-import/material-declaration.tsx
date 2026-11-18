@@ -50,7 +50,7 @@ export function MaterialDeclarations({ value, onChange }: { value: Properties; o
     const problem = issue(row);
     if (problem) { inputs.current.get(row.id)?.reportValidity(); return; }
     const next = structuredClone(value ?? {});
-    without(next, row);
+    if (row.savedKey?.role !== row.role || row.savedKey.property !== row.property) without(next, row);
     next[row.role] = { ...next[row.role], [row.property]: { value: Number(row.number), unit: row.unit, reference: row.reference } };
     onChange(next);
     setRows(current => current.map(item => item.id === row.id ? { ...item, saved: true,
