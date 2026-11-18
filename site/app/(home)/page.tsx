@@ -1,226 +1,150 @@
-import { ArrowRight, Bot, Check, Cpu, Gauge, History, PencilRuler, ShieldCheck, UserCheck } from 'lucide-react';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { TraceBeam } from '@/components/landing/trace-beam';
-import { Glow } from '@/components/launchui/glow';
-import { Mockup, MockupFrame } from '@/components/launchui/mockup';
-import { AnimatedShinyText } from '@/components/magicui/animated-shiny-text';
-import { AuroraText } from '@/components/magicui/aurora-text';
-import { BentoCard, BentoGrid } from '@/components/magicui/bento-grid';
-import { BorderBeam } from '@/components/magicui/border-beam';
-import { AnimatedGridPattern } from '@/components/magicui/animated-grid-pattern';
-import { Marquee } from '@/components/magicui/marquee';
-import heroShot from '@/src/assets/screenshots/research/result-base.webp';
-import ratingShot from '@/src/assets/screenshots/research/result-changed.webp';
-import designShot from '@/src/assets/screenshots/factory/type-rating-table.webp';
+import { ScreenshotTabs } from '@/components/landing/screenshot-tabs';
+import { CornerMarks, Window } from '@/components/landing/window';
+import importMapping from '@/src/assets/screenshots/factory/import-mapping.webp';
+import specPdf from '@/src/assets/screenshots/factory/spec-pdf.webp';
+import typeRating from '@/src/assets/screenshots/factory/type-rating-table.webp';
+import compare from '@/src/assets/screenshots/research/compare.webp';
+import resultBase from '@/src/assets/screenshots/research/result-base.webp';
 
-// 插件清单（plugins/*/plugin.json）里实际引用的标准。
-const standards = [
-  'IEC 60287-1-1',
-  'IEC 60287-2-1',
-  'IEC 60287-3-3',
-  'IEC 60853-2',
-  'IEC 60949',
-  'CIGRE TB 880',
-  'GB 50217',
-  'GB/T 12706.2',
-  'GB/T 11017.1',
-  'GB/T 3956',
+const sections = [
+  { label: 'CableSimPro', href: '/docs/' },
+  { label: '电缆厂上手', href: '/docs/quickstart/factory/' },
+  { label: '研究院上手', href: '/docs/quickstart/research/' },
+  { label: 'IEC 60287', href: '/docs/methods/iec-60287/' },
 ];
 
-const agentSteps = ['读取工程与运行记录', '整理待办', '起草修改方案', '调用插件试算', '等你确认后保存'];
+const points = [
+  '导入厂家结构表，按产品标准核对尺寸与电阻。',
+  'IEC 60287 载流量、有限元仿真和规格书，在一个工程里完成。',
+  '缺数据就拒算，结果都追得到输入、方法和版本。',
+];
 
-const primaryButton =
-  'inline-flex items-center gap-2 rounded-full bg-fd-primary px-6 py-3 text-sm font-medium text-fd-primary-foreground transition hover:opacity-90';
-const secondaryButton =
-  'inline-flex items-center gap-2 rounded-full border bg-fd-card/80 px-6 py-3 text-sm font-medium backdrop-blur transition hover:bg-fd-accent';
+const shots = [
+  { label: '载流量研究', src: resultBase, alt: '载流量研究：敷设截面、工况输入与允许电流' },
+  { label: '结构表导入', src: importMapping, alt: '结构表导入：列映射' },
+  { label: '型号载流量表', src: typeRating, alt: '型号载流量表' },
+  { label: '规格书', src: specPdf, alt: '规格书 PDF 中的载流量表页' },
+  { label: '运行对比', src: compare, alt: '两次运行的对比' },
+];
 
-function Shot({ src, className }: { src: typeof heroShot; className?: string }) {
-  return (
-    <Image
-      src={src}
-      alt=""
-      className={`absolute max-w-none rounded-lg border shadow-xl transition-transform duration-500 ease-out group-hover:scale-[1.03] ${className ?? ''}`}
-    />
-  );
-}
+// 一个结果从输入到交付经过的环节，每一环都保存版本
+const chain = ['厂家结构表', '型号版本', '载流量研究', '运行快照', '计算书 / 规格书'];
 
 export default function HomePage() {
   return (
-    <main className="relative w-full overflow-x-clip">
+    <main className="w-full">
       {/* 首屏 */}
-      <section className="relative px-6 pt-12 sm:pt-16 [mask-image:linear-gradient(to_top,transparent,#000_22%)]">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_at_top,color-mix(in_oklab,var(--color-brand)_22%,transparent),transparent_65%)]" />
-        <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-7 text-center sm:gap-9">
-          <Link
-            href="/docs/"
-            className="animate-appear group rounded-full border border-black/5 bg-fd-secondary/80 text-sm opacity-0 transition hover:bg-fd-accent dark:border-white/10"
-          >
-            <AnimatedShinyText className="inline-flex items-center gap-1.5 px-4 py-1.5">
-              给电缆厂技术部和研究院
-              <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-            </AnimatedShinyText>
-          </Link>
-          <h1 className="animate-appear text-6xl font-semibold leading-[1.1] tracking-tight opacity-0 [animation-delay:100ms] sm:text-7xl md:text-8xl">
-            <span className="inline-block bg-linear-to-r from-fd-foreground to-fd-foreground bg-clip-text text-transparent dark:to-fd-muted-foreground">
-              电缆计算
-            </span>
+      <section className="mx-auto grid max-w-[1400px] items-center gap-14 px-6 pb-16 pt-16 md:pt-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12">
+        <div>
+          {/* 字号按各断点的栏宽取，第二行九个字始终一行放下 */}
+          <h1 className="text-[34px] font-normal leading-[1.25] tracking-[-0.01em] sm:text-5xl xl:text-[60px] 2xl:text-[68px]">
+            <span className="text-brand">电缆计算</span>，
             <br />
-            <AuroraText colors={['var(--aurora-1)', 'var(--aurora-2)', 'var(--aurora-3)', 'var(--aurora-2)']} speed={0.8}>
-              有据可查
-            </AuroraText>
+            <span className="whitespace-nowrap">每一步都有据可查。</span>
           </h1>
-          <p className="animate-appear max-w-xl text-lg text-balance text-fd-muted-foreground opacity-0 [animation-delay:250ms] sm:text-xl">
-            从结构表到规格书，每个结果都追得到输入、方法和版本。
-          </p>
-          <div className="animate-appear flex flex-wrap justify-center gap-3 opacity-0 [animation-delay:400ms]">
-            <Link href="/docs/quickstart/research/" className={primaryButton}>
-              快速上手
+          <div className="mt-10 flex flex-wrap items-center gap-3">
+            <Link
+              href="/docs/quickstart/factory/"
+              className="inline-flex items-center gap-2 border border-fd-foreground bg-brand px-5 py-2.5 text-[15px] font-medium text-white transition hover:brightness-110 dark:text-fd-background"
+            >
+              电缆厂上手
               <ArrowRight className="size-4" />
             </Link>
-            <Link href="/docs/methods/iec-60287/" className={secondaryButton}>
+            <Link
+              href="/docs/quickstart/research/"
+              className="inline-flex items-center border border-fd-foreground/70 bg-fd-card px-5 py-2.5 text-[15px] transition hover:bg-fd-accent"
+            >
+              研究院上手
+            </Link>
+            <Link
+              href="/docs/methods/iec-60287/"
+              className="inline-flex items-center gap-1 px-2 py-2.5 text-[15px] underline decoration-fd-foreground/30 underline-offset-[6px] transition hover:decoration-fd-foreground"
+            >
               方法与依据
+              <ArrowUpRight className="size-4" />
             </Link>
           </div>
-          <div className="relative mt-2 w-full max-w-5xl pt-6 sm:mt-4">
-            <MockupFrame className="animate-appear opacity-0 [animation-delay:700ms]">
-              <Mockup className="w-full rounded-xl border-0 bg-fd-background/90">
-                <Image src={heroShot} alt="载流量研究：敷设截面、工况输入与允许电流" className="w-full" priority />
-              </Mockup>
-              <BorderBeam size={220} duration={9} borderWidth={2} colorFrom="#E08A4C" colorTo="#00A6E4" />
-            </MockupFrame>
-            <Glow variant="top" className="animate-appear-zoom opacity-0 [animation-delay:1000ms]" />
-          </div>
+        </div>
+
+        <div className="relative mx-6 lg:mx-0 lg:mr-6">
+          <CornerMarks />
+          <Window title="直埋载流量 — CableSimPro">
+            <div className="relative">
+              <Image src={resultBase} alt="载流量研究：敷设截面、工况输入与允许电流" className="block w-full" priority />
+              {/* 标注截图里的允许电流（数值取自截图本身） */}
+              <span className="absolute left-[43.6%] top-[25.6%] h-[4.4%] w-[5.6%] border-[1.5px] border-brand" />
+              <span className="absolute left-[46.4%] top-[calc(-26px-14px)] h-[calc(25.6%+40px)] w-px bg-brand" />
+              <span className="absolute left-[46.4%] top-[calc(-26px-44px)] -translate-x-1/2 whitespace-nowrap bg-fd-foreground px-2.5 py-1 font-mono text-xs text-fd-background shadow-[3px_3px_0_0_var(--color-brand)]">
+                IEC 60287 · 允许电流 944.8 A
+              </span>
+            </div>
+          </Window>
         </div>
       </section>
 
-      <div className="mx-auto max-w-6xl px-6 pb-24">
-        {/* 依据标准 */}
-        <section className="mt-4">
-          <p className="text-center text-sm text-fd-muted-foreground">插件依据的标准</p>
-          <div className="relative mt-5">
-            <Marquee pauseOnHover className="[--duration:36s] [--gap:0.75rem]">
-              {standards.map((name) => (
+      {/* 刻度尺与分区导航 */}
+      <div className="ruler h-4 w-full border-b border-fd-foreground/60 text-fd-foreground/45" />
+      <nav className="flex items-center justify-between gap-3 border-b border-fd-foreground/60 px-3 py-1.5">
+        <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-xs text-fd-muted-foreground">
+          <span className="size-2 animate-pulse rounded-full bg-brand" />
+          就绪
+        </span>
+        <div className="flex min-w-0 overflow-x-auto whitespace-nowrap text-[13px]">
+          {sections.map((item, index) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className={
+                index === 0
+                  ? 'border border-fd-foreground/70 bg-brand-soft px-2.5 py-0.5'
+                  : 'border border-l-0 border-fd-foreground/70 px-2.5 py-0.5 transition-colors hover:bg-fd-accent'
+              }
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </nav>
+
+      {/* 是什么 */}
+      <section className="mx-auto max-w-[1400px] px-6 py-20 md:py-24">
+        <h2 className="text-3xl font-normal leading-snug tracking-[-0.01em] text-balance sm:text-[40px]">
+          CableSimPro 是给<span className="text-brand">电缆厂技术部</span>和<span className="text-brand">研究院</span>
+          用的电缆计算平台。
+        </h2>
+        <ul className="mt-8 space-y-3 text-[15px] text-fd-foreground/85">
+          {points.map((point) => (
+            <li key={point} className="flex items-start gap-3">
+              <span className="mt-[9px] size-1.5 shrink-0 rounded-full bg-brand" />
+              {point}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-14 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
+          <ScreenshotTabs shots={shots} />
+          <Window title="来源链" bodyClassName="flex flex-col items-center px-6 py-8">
+            {chain.map((step, index) => (
+              <div key={step} className="flex flex-col items-center">
+                {index > 0 && <span className="h-7 w-px bg-fd-foreground/60" />}
                 <span
-                  key={name}
-                  className="whitespace-nowrap rounded-full border bg-fd-card px-4 py-1.5 font-mono text-sm text-fd-foreground/80"
+                  className={
+                    index === 0
+                      ? 'border border-fd-foreground/70 bg-brand-soft px-4 py-1.5 font-mono text-sm'
+                      : 'border border-fd-foreground/70 bg-fd-background px-4 py-1.5 font-mono text-sm'
+                  }
                 >
-                  {name}
+                  {step}
                 </span>
-              ))}
-            </Marquee>
-            <div className="pointer-events-none absolute inset-y-0 left-0 w-1/6 bg-linear-to-r from-fd-background" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 w-1/6 bg-linear-to-l from-fd-background" />
-          </div>
-        </section>
-
-        {/* 核心能力 */}
-        <section className="mt-28">
-          <h2 className="text-center text-3xl font-semibold tracking-tight sm:text-4xl">核心能力</h2>
-          <BentoGrid className="mt-10 auto-rows-[24rem] lg:auto-rows-[22rem]">
-            <BentoCard
-              className="lg:col-span-2"
-              Icon={Gauge}
-              name="载流量计算"
-              description="IEC 60287 稳态与 GB 50217 校正，缺数据就拒算。"
-              href="/docs/methods/iec-60287/"
-              cta="看方法与依据"
-              background={
-                <div className="absolute inset-0 [mask-image:linear-gradient(to_bottom,#000_18%,transparent_45%)] lg:[mask-image:linear-gradient(to_bottom,#000_32%,transparent_60%)]">
-                  <Shot src={ratingShot} className="top-0 left-0 w-[215%] -translate-x-[34.5%] -translate-y-[12%]" />
-                </div>
-              }
-            />
-            <BentoCard
-              className="lg:col-span-1"
-              Icon={Cpu}
-              name="电缆仿真"
-              description="有限元温度场，超算上批量运行。"
-              background={
-                <AnimatedGridPattern
-                  numSquares={28}
-                  maxOpacity={0.35}
-                  duration={3}
-                  repeatDelay={1}
-                  className="inset-x-0 inset-y-[-30%] h-[160%] skew-y-12 text-[#1E88D6] [mask-image:radial-gradient(320px_circle_at_top,white,transparent)]"
-                />
-              }
-            />
-            <BentoCard
-              className="lg:col-span-1"
-              Icon={Bot}
-              name="Agent 协作"
-              description="读工程、起草方案，最终由人批准。"
-              background={
-                <div className="absolute inset-x-0 top-0 h-[50%] [mask-image:linear-gradient(to_bottom,transparent,#000_18%,#000_62%,transparent)] lg:h-[58%]">
-                  <Marquee vertical pauseOnHover repeat={3} className="h-full px-6 [--duration:16s] [--gap:0.6rem]">
-                    {agentSteps.map((step) => (
-                      <div
-                        key={step}
-                        className="flex items-center gap-3 rounded-xl border bg-fd-background px-4 py-2.5 text-sm shadow-sm"
-                      >
-                        <Check className="size-4 shrink-0 text-brand" />
-                        {step}
-                      </div>
-                    ))}
-                  </Marquee>
-                </div>
-              }
-            />
-            <BentoCard
-              className="lg:col-span-2"
-              Icon={PencilRuler}
-              name="电缆设计"
-              description="导入厂家结构表，核对标准，生成载流量表和规格书。"
-              href="/docs/quickstart/factory/"
-              cta="电缆厂快速上手"
-              background={
-                <div className="absolute inset-0 [mask-image:linear-gradient(to_bottom,#000_18%,transparent_45%)] lg:[mask-image:linear-gradient(to_bottom,#000_32%,transparent_60%)]">
-                  <Shot src={designShot} className="top-5 left-0 w-[160%] -translate-x-[15%]" />
-                </div>
-              }
-            />
-          </BentoGrid>
-        </section>
-
-        {/* 可追溯 */}
-        <section className="mt-28">
-          <h2 className="text-center text-3xl font-semibold tracking-tight sm:text-4xl">每个结果，都能追到源头</h2>
-          <div className="mt-10">
-            <TraceBeam />
-          </div>
-          <ul className="mt-6 flex flex-wrap justify-center gap-3 text-sm">
-            {[
-              { Icon: ShieldCheck, text: '缺数据就拒算' },
-              { Icon: History, text: '带输入快照与方法版本' },
-              { Icon: UserCheck, text: '签发由人确认' },
-            ].map(({ Icon, text }) => (
-              <li key={text} className="inline-flex items-center gap-2 rounded-full border bg-fd-card px-4 py-2">
-                <Icon className="size-4 text-brand" />
-                {text}
-              </li>
+              </div>
             ))}
-          </ul>
-        </section>
-
-        {/* 行动 */}
-        <section className="group relative mt-28 overflow-hidden rounded-3xl border bg-fd-card/40 px-6 py-20 text-center">
-          <h2 className="relative z-10 text-2xl font-semibold tracking-tight sm:text-4xl">从一条真实工作线开始</h2>
-          <div className="relative z-10 mt-8 flex flex-wrap justify-center gap-3">
-            <Link href="/docs/quickstart/factory/" className={primaryButton}>
-              电缆厂：结构表到规格书
-              <ArrowRight className="size-4" />
-            </Link>
-            <Link href="/docs/quickstart/research/" className={secondaryButton}>
-              研究院：工程到计算书
-            </Link>
-          </div>
-          <div className="absolute inset-0 translate-y-8 opacity-80 transition-all duration-500 ease-in-out group-hover:-translate-y-4 group-hover:opacity-100">
-            <Glow variant="bottom" />
-          </div>
-        </section>
-      </div>
+            <p className="mt-8 text-center text-sm text-fd-muted-foreground">每一环都保存版本，结果可以追回源头。</p>
+          </Window>
+        </div>
+      </section>
     </main>
   );
 }

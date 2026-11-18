@@ -1,6 +1,9 @@
-import '@fontsource-variable/inter';
+import '@fontsource-variable/noto-sans-sc';
 import 'katex/dist/katex.min.css';
 import './global.css';
+import { GeistMono } from 'geist/font/mono';
+import { GeistPixelSquare } from 'geist/font/pixel';
+import { GeistSans } from 'geist/font/sans';
 import type { Metadata } from 'next';
 import { Provider } from '@/components/provider';
 
@@ -11,7 +14,11 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html
+      lang="zh-CN"
+      className={`${GeistSans.variable} ${GeistMono.variable} ${GeistPixelSquare.variable}`}
+      suppressHydrationWarning
+    >
       <body className="flex min-h-screen flex-col">
         <Provider>{children}</Provider>
       </body>
