@@ -70,10 +70,10 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
       const result = noticeElement.current;
       if (!result) return;
       result.focus({ preventScroll: true });
-      result.scrollIntoView({ block: 'nearest' });
+      result.scrollIntoView({ block: 'center' });
     });
   }
-  return <section className="reference-section library-import-stack" aria-label="材料来源绑定与逐项采用">
+  return <section className="reference-section reference-material-workflow library-import-stack" aria-label="材料来源绑定与逐项采用">
     <h2>材料来源绑定与逐项采用</h2>
     <p className="muted">先将此固定参考版本绑定到目标材料，再逐项核对真实型号条件与数值差异。缺少材料类别、用途或适用温度事实时，保留拒绝原因。</p>
     <div className="library-import-fields library-import-fields-pair">

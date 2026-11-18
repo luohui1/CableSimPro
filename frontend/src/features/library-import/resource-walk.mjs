@@ -42,12 +42,20 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     const result = page.getByRole('status').filter({ hasText: text });
     // Assert the product's own focus/scroll before any capture or further click.
     // toBeVisible alone accepts text below the viewport and hid this defect.
-    await expect(result).toBeFocused();
-    await expect(result).toBeInViewport({ ratio: 1 });
-    const position = await result.boundingBox();
-    assert.ok(position);
-    audit.focus_outcomes.push({ name, text: await result.innerText(), position, viewport, focused: true });
-    await write('focus-outcomes', audit.focus_outcomes);
+    let passed = false;
+    try {
+      await expect(result).toBeFocused();
+      await expect(result).toBeInViewport({ ratio: 1 });
+      passed = true;
+    } finally {
+      const measured = await result.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return { text: element.textContent, focused: document.activeElement === element,
+          position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+      }).catch(error => ({ measurement_error: String(error) }));
+      audit.focus_outcomes.push({ name, viewport, passed, ...measured });
+      await write('focus-outcomes', audit.focus_outcomes);
+    }
   }
   async function supportingResponse(response, endpoint, method) {
     const body = await response.body();
