@@ -148,6 +148,16 @@ def test_wrapped_bedding_requires_explicit_padding_and_filling():
     assert item(result,'armour-padding-minimum')['verdict']=='passed'
     assert item(result,'armour-tape-nominal')['formula_inputs']['D_A_mm']==71.9
     assert item(result,'oversheath-nominal')['limit']==3.6
+    assert item(result,'oversheath-nominal')['source_status']=='original-verified'
+    # A different, already supported construction is not permission to ignore
+    # missing inputs. Keep the same real-table arithmetic only while its
+    # explicit copper-screen dimensions and overlap declaration are present.
+    for field in ('tape_width','tape_count','tape_application','overlap'):
+        missing=deepcopy(document)
+        for core in missing['cable_types'][0]['cores']:
+            next(layer for layer in core['layers'] if layer['role']=='metallic_screen').pop(field)
+        row=item(run(missing),'oversheath-nominal')
+        assert row['verdict']=='uncovered' and row['limit'] is None
     common[1].pop('padding_thickness')
     assert item(run(document),'armour-padding')['verdict']=='missing'
     assert item(run(document),'oversheath-nominal')['limit'] is None

@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.type-electrical",
-  "version": "1.1.1",
+  "version": "1.2.4",
   "name": "型号电气参数与短路容量",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "id": "electrical",
       "kind": "method",
       "title": "型号电气参数（IEC 60287 原文分支）",
-      "method_version": "1.2.1",
+      "method_version": "1.2.4",
       "analysis": "properties",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -777,7 +777,7 @@
       "id": "short-circuit",
       "kind": "method",
       "title": "组件绝热与非绝热短路容量（IEC 60949）",
-      "method_version": "1.2.1",
+      "method_version": "1.2.4",
       "analysis": "short_circuit",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -1602,8 +1602,13 @@
     },
     {
       "path": "src/cablesim_type_electrical/basis_catalog.py",
-      "sha256": "b6fbd44cc4db9f1d200c663913889107eb81702b2f627d5724ab3e69f2957899",
-      "size_bytes": 1907
+      "sha256": "0aaebfca16db479afefe975e400707906c5f0a9e15fde06e2b611a80e7495fae",
+      "size_bytes": 3608
+    },
+    {
+      "path": "src/cablesim_type_electrical/basis_identity.py",
+      "sha256": "2d58d3e4b03205e912965b1aa39dc2377a18ebc3a77ae22f38ff5b5b9d0a63a7",
+      "size_bytes": 1033
     },
     {
       "path": "src/cablesim_type_electrical/inputs.py",
@@ -1612,7 +1617,7 @@
     },
     {
       "path": "src/cablesim_type_electrical/main.py",
-      "sha256": "b79663681ff827a0b25277f7ff51b73bb9afdd39fec09b74c138ed5e3218d217",
+      "sha256": "3908eace9968860598718203f7a44f0184f6753efddda74582790d8e988c825f",
       "size_bytes": 38973
     },
     {
@@ -1627,13 +1632,13 @@
     },
     {
       "path": "src/cablesim_type_electrical/short-basis-catalog.json",
-      "sha256": "9b928833c8877fa0d8e158b10f306accd052df4e39b9d68e55d392baa62396eb",
-      "size_bytes": 14600
+      "sha256": "c0e3620f7607c73ba0ad4e0cc037f58a1f1cb97a27306c6f50bfab7a516a8617",
+      "size_bytes": 32114
     },
     {
       "path": "src/cablesim_type_electrical/short_basis.py",
-      "sha256": "760dc410075069188dfd4c1e38d0e3958dfadc204687fc93541d0ec4716cc0c0",
-      "size_bytes": 2978
+      "sha256": "bb4d61f3e5cf0e97a36b1dbd05f8ff3b0ac487513be04abd8b9771fb20bbf493",
+      "size_bytes": 4250
     },
     {
       "path": "src/cablesim_type_electrical/sources.json",
@@ -1642,7 +1647,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "8f2db3fa654a8621c12137f8edecf36d926da7308b7b34d5a034ed99d8b1c566",
+      "sha256": "a220a34d2e88212eda7c9c91d1e82bb6125303a1070a67f8db2b7f3ff71e7bb0",
       "size_bytes": 2111
     }
   ]

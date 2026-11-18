@@ -26,6 +26,14 @@ def stamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def confirm_reference_write(*releases: AssetRelease, actor: str | None,
+                            human_confirmed: bool) -> None:
+    if any(release.reference_evidence for release in releases) and (
+            actor != 'human' or human_confirmed is not True):
+        raise AssetError('HUMAN_REFERENCE_ASSET_REQUIRED',
+                         '含固定参考回执的资料写入须由人工明确确认；Agent 只能查看和预览。', 403)
+
+
 class AssetRepository:
     """Metadata definitions in the application's local DB, not a multiuser authority."""
 
@@ -105,8 +113,10 @@ class AssetRepository:
         self._event(db, self._load(db, rid), 'created', note)
         return rid
 
-    def create(self, release: AssetRelease, note: str = '导入 JSON 定义；创建本地草稿。') -> dict:
+    def create(self, release: AssetRelease, note: str = '导入 JSON 定义；创建本地草稿。', *,
+               actor: str | None = None, human_confirmed: bool = False) -> dict:
         with self.db(True) as db:
+            confirm_reference_write(release, actor=actor, human_confirmed=human_confirmed)
             rid = self._insert(db, release, note)
             return self._detail(db, self._load(db, rid))
 
@@ -177,9 +187,14 @@ class AssetRepository:
             return {'items':[self._summary(r) for r in rows], 'total':total,
                     'counts':counts, 'limit':limit, 'offset':offset, 'authority':'local_operator'}
 
-    def update(self, rid: str, revision: int, release: AssetRelease) -> dict:
+    def update(self, rid: str, revision: int, release: AssetRelease, *,
+               actor: str | None = None, human_confirmed: bool = False) -> dict:
         with self.db(True) as db:
             row=self._load(db,rid,revision)
+            previous = AssetRelease.model_validate_json(row['release_json'])
+            # Check both definitions under the same revision lock: removing the
+            # receipt must not turn this write into an unguarded legacy edit.
+            confirm_reference_write(previous, release, actor=actor, human_confirmed=human_confirmed)
             if row['status'] != 'draft':
                 raise AssetError('ASSET_CONTENT_LOCKED', '仅草稿可编辑；已发布版本请派生新版本。', 409)
             if (release.asset_id,release.version,release.kind)!=(row['asset_id'],row['version'],row['kind']):
@@ -194,19 +209,21 @@ class AssetRepository:
             return self._detail(db,row)
 
     def transition(self, rid: str, revision: int, digest: str, action: str,
-                   note: str, acknowledge_sources: bool = False) -> dict:
+                   note: str, acknowledge_sources: bool = False, *,
+                   actor: str | None = None, human_confirmed: bool = False) -> dict:
         edges={('draft','review'):'reviewed',('reviewed','publish'):'published',
                ('reviewed','return_to_draft'):'draft',('published','deprecate'):'deprecated'}
         if len(note.strip())<4 or len(note)>1000:
             raise AssetError('ASSET_REVIEW_NOTE_REQUIRED','请输入至少四个字符的核对说明。')
         with self.db(True) as db:
             row=self._load(db,rid,revision)
+            release=AssetRelease.model_validate_json(row['release_json'])
+            confirm_reference_write(release, actor=actor, human_confirmed=human_confirmed)
             if row['content_sha256']!=digest:
                 raise AssetError('ASSET_CONTENT_CHANGED','资产内容已变化，请重新审查。',409)
             state=edges.get((row['status'],action))
             if state is None:
                 raise AssetError('ASSET_INVALID_TRANSITION','当前状态不能执行此操作。',409)
-            release=AssetRelease.model_validate_json(row['release_json'])
             if content_hash(release)!=digest:
                 raise AssetError('ASSET_CONTENT_CORRUPT','存储内容与摘要不一致。',409)
             if action in ('review','publish'):
@@ -223,9 +240,12 @@ class AssetRepository:
             row=self._load(db,rid);self._event(db,row,action,note.strip())
             return self._detail(db,row)
 
-    def derive(self, rid: str, revision: int, digest: str, new_version: str) -> dict:
+    def derive(self, rid: str, revision: int, digest: str, new_version: str, *,
+               actor: str | None = None, human_confirmed: bool = False) -> dict:
         with self.db(True) as db:
             row=self._load(db,rid,revision)
+            release=AssetRelease.model_validate_json(row['release_json'])
+            confirm_reference_write(release, actor=actor, human_confirmed=human_confirmed)
             if row['content_sha256']!=digest:
                 raise AssetError('ASSET_CONTENT_CHANGED','资产内容已变化。',409)
             if row['status'] not in ('published','deprecated'):

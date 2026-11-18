@@ -38,7 +38,7 @@ FIELDS = {
     'armour_wire_count': ('钢丝根数', '根', 1, ['钢丝根数']),
     'oversheath_thickness': ('外护套标称厚度', 'mm', 1e-3, ['护套标称厚度', '外护套厚度', '护套厚度', '外护套', '护套']),
     'outer_diameter': ('电缆近似外径', 'mm', 1e-3, ['电缆近似外径', '近似外径', '电缆外径', '参考外径', '外径']),
-    'weight': ('电缆近似重量', 'kg/km', 1, ['近似重量', '参考重量', '重量']),
+    'weight': ('电缆重量', 'kg/km', 1, ['近似重量', '参考重量', '最大重量', '重量']),
 }
 # What a rating method needs beyond the structure. The reference values are those the repository's public
 # series declares, each with its origin; a factory replaces them with its own.
@@ -315,6 +315,9 @@ def _completed(series, parts, built):
         model = case['artifacts']['x-cablesim.engineering-model']
         cable = deepcopy(model['cable_type'])
         cable['id'] = 'cable_type/ct1'
+        # Um belongs to the source declaration, not dimension completion.
+        # Preserve an explicit value and retain an unknown as unknown.
+        cable['rating']['um'] = series.get('um_v')
         materials = deepcopy(model['materials'])
         if series.get('armour_material'):
             for material in materials:

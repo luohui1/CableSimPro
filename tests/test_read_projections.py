@@ -583,9 +583,11 @@ def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
     assert client.get(root + '/runs?view=summary').status_code == 200
 
 
-def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
-    """Windows reuses notified receipts; other platforms revalidate exact source bytes."""
+@pytest.mark.parametrize('notifications_available', [True, False], ids=['native-notifications', 'notifications-unavailable'])
+def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch, notifications_available):
+    """Native receipts are reused; unavailable notifications require exact source reads."""
     from backend.kernel import input_contracts
+    from backend.kernel.source_watch import SourceWatch
     from time import perf_counter
     from threading import Event
     from backend.kernel.research import Research
@@ -595,6 +597,10 @@ def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
         original(self, stop)
         warmed.set()
     monkeypatch.setattr(Research, 'warm_catalogs', warm)
+    if not notifications_available:
+        # An unavailable or lost notification stream has no trustworthy source
+        # generation. Exercise this fail-closed contract on every supported OS.
+        monkeypatch.setattr(SourceWatch, 'snapshot', lambda self: None)
     # Package publication in another thread must not masquerade as cache eviction.
     # Source invalidation itself is covered by the adjacent drift regression.
     root = Path(__file__).resolve().parents[1]
@@ -605,8 +611,7 @@ def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
     with TestClient(app) as client:
         assert warmed.wait(20), 'Managed catalogue warm-up did not complete'
         research = client.app.state.research
-        if os.name != 'nt':
-            # SourceWatch deliberately has no notification backend on Linux.
+        if not notifications_available:
             # A warm result is not a reusable receipt without a source generation.
             assert research.catalog_read_responses.generation(False) is None
             assert research.catalog_read_responses.get(('methods',), False) is None
@@ -636,6 +641,7 @@ def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
             assert changed.headers['X-CableSim-Read-Cache'] == 'miss'
             return
         assert research.catalog_read_responses.watch.healthy
+        assert research.catalog_read_responses.generation(False) is not None
         assert research.catalog_read_responses.get(('methods',), False)
         assert research.catalog_read_responses.get(('input-contracts',), False)
         before = research.catalog_read_responses.generation(False)
@@ -652,6 +658,7 @@ def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
             response = client.get(path)
             elapsed = perf_counter()-start
             assert response.status_code == 200, response.text
+            assert response.headers['X-CableSim-Read-Cache'] == 'hit'
             assert elapsed < .3, (path, elapsed)
 
 

@@ -6,10 +6,42 @@ from pathlib import Path
 
 RECORDS=json.loads((Path(__file__).parent/'basis-records.json').read_text('utf-8'))
 
+
+class BasisIntegrityError(ValueError):
+    """A supplied sealed reference is invalid, not missing engineering input."""
+
+
 def digest(value):
     return sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
+def same_query(ref, query):
+    # Canonical identity distinguishes the JSON values True/1 and False/0.
+    expected = digest(query)
+    return (isinstance(ref.get('query'), dict) and digest(ref['query']) == expected
+            and ref.get('query_sha256') == expected)
+
+
+def sealed_record(record):
+    """Verify signed content and its reconstructible display fields."""
+    bare = {key:value for key,value in record.items() if key not in ('record_sha256', 'citation')}
+    expected = RECORDS['records'].get(record.get('id'))
+    if (expected is None or digest(bare) != expected or record.get('record_sha256') != expected
+            or record.get('verification', {}).get('status') != 'verified'):
+        raise BasisIntegrityError('basis_references：封签依据记录摘要或核验状态不一致。')
+    # Reconstruct the data reader's display only after the underlying source
+    # fields have passed their individual sealed-record hash.
+    locator = record['table'] or '条款 ' + record['clause']
+    source = '官方预览' if record.get('source_format') == 'official_preview_image' else 'PDF'
+    citation = f"{record['standard']}—{record['edition']} {locator}，第 {record['printed_page']} 页（{source} 第 {record['pdf_page']} 页）"
+    if record.get('citation') != citation:
+        raise BasisIntegrityError('basis_references：封签依据的显示引文与标准、条款或页码不一致。')
+    return expected
+
+
 def queries(checker):
+    if checker.family == 'ehv':
+        from .extra_high import queries as extra_high_queries
+        return extra_high_queries(checker)
     from .manufacturing import plan as manufacturing_plan
     cable, family = checker.cable, checker.family
     hv = family == 'hv'
@@ -54,9 +86,9 @@ def queries(checker):
                 missing('/materials/'+escape(layer['material'])+'/standard_kind','金属材料标准类别')
             continue
         elif key=='oversheath-minimum' and not hv:
-            query.update(locator='17.5.3' if family!='mv1' else '15.5.3',quantity='nonmetal_sheath_min')
+            query.update(locator='17.5.3' if family!='mv1' else '16.5.3',quantity='nonmetal_sheath_min')
         elif key=='insulation-minimum' and not hv:
-            query.update(locator='17.5.2' if family!='mv1' else '15.5.2',quantity='insulation_min')
+            query.update(locator='17.5.2' if family!='mv1' else '16.5.2',quantity='insulation_min')
         elif key=='insulation-uniformity' and not hv and family!='mv1':
             query.update(locator='17.5.2',quantity='insulation_eccentricity_max')
         elif key in ('screen-tape-nominal','screen-tape-minimum','screen-overlap','screen-overlap-minimum') and not hv:
@@ -85,20 +117,38 @@ def criterion(reference, unit, inputs):
             x=inputs.get('t_n_mm') if value.get('x') in ('nominal_thickness','t_n','nominal_lining_thickness') else inputs.get('d_mm') if value.get('x')=='diameter' else None
             if value.get('kind')=='affine' and x is not None and {'a','b'}<=value.keys(): value=max(value.get('floor',-math.inf),value['a']*x+value['b'])
             else: return None,comparison,'依据已核验；此公式的参数或计算分支本轮未覆盖。'
-    scale={('mm','mm'):1,('m','mm'):1000,('ohm/km','Ω/km'):1,('ohm/m','Ω/km'):1000,('1','1'):1}.get((record['quantity']['unit'],unit))
+    scale={('mm','mm'):1,('m','mm'):1000,('ohm/km','Ω/km'):1,('ohm/m','Ω/km'):1000,('1','1'):1,('%','1'):.01,('count','1'):1}.get((record['quantity']['unit'],unit))
     if scale is None: return None,comparison,'依据与实际值单位不兼容，本项未比较。'
     if not isinstance(value,(int,float)) or isinstance(value,bool) or not math.isfinite(value): raise ValueError('basis_references：判据不是有限数值。')
     return value*scale,comparison,None
 
 def validate(ref,query):
-    if ref.get('schema')!='cablesim.standard-basis-ref/1' or ref.get('query')!=query: raise ValueError('basis_references：依据与当前型号条件不一致，请重新取依据。')
-    record=ref.get('record',{});bare={k:v for k,v in record.items() if k not in ('record_sha256','citation')}
+    try:
+        return _validate(ref,query)
+    except ValueError as error:
+        raise BasisIntegrityError(str(error)) from error
+    except (KeyError,TypeError,AttributeError) as error:
+        raise BasisIntegrityError('basis_references：封签依据结构不完整或非法。') from error
+
+
+def _validate(ref,query):
+    if ref.get('schema')!='cablesim.standard-basis-ref/1' or not same_query(ref,query): raise ValueError('basis_references：封签依据的查询身份与当前型号条件不一致，请重新取依据。')
+    record=ref.get('record',{})
     # Whole-library digests remain in the receipt for traceability. Adding an
     # unrelated table must not invalidate a pinned, individually sealed record.
     if ref.get('plugin_version')!=RECORDS['plugin_version'] or RECORDS['records'].get(record.get('id'))!=ref.get('record_sha256'):
         raise ValueError('basis_references：依据不属于此方法已封签的依据发行；请重新核对版本。')
-    if digest(bare)!=ref.get('record_sha256') or record.get('verification',{}).get('status')!='verified': raise ValueError('basis_references：依据记录摘要或核验状态不一致。')
+    sealed_record(record)
     if ref.get('query_sha256')!=digest(query) or (record.get('standard'),record.get('edition'))!=(query['standard'],query['edition']): raise ValueError('basis_references：固定标准版本或查询摘要不一致。')
+    if query.get('record_id') and record.get('id')!=query['record_id']:
+        raise ValueError('basis_references：固定记录标识与实际依据不一致，不能替换为同条款的其他规则。')
+    wrapper = {'plugin_id':'cablesim.standards-basis', 'record_id':record['id'],
+               'record_sha256':record['record_sha256'], 'standard':record['standard'],
+               'edition':record['edition'], 'locator':record['table'] or record['clause'],
+               'source_sha256':record['source_sha256'], 'printed_page':record['printed_page'],
+               'pdf_page':record['pdf_page']}
+    if digest({key:ref.get(key) for key in wrapper}) != digest(wrapper):
+        raise ValueError('basis_references：封签依据的来源外壳与记录身份、标准、条款或页码不一致。')
     if record.get('quantity',{}).get('key')!=query['quantity'] or query['locator'] not in (record.get('table'),record.get('clause')):
         raise ValueError('basis_references：依据的物理量或条款不一致。')
     for key,predicate in record.get('conditions',{}).items():
@@ -116,6 +166,31 @@ def validate(ref,query):
             raise ValueError('basis_references：依据行条件与当前型号不一致。')
     return record
 
+
+def validate_list(ref,query):
+    """Keep list receipts under the same hard integrity gate as single rows."""
+    try:
+        if ref.get('schema') != 'cablesim.standard-basis-list-ref/1' or not same_query(ref, query) or ref.get('plugin_version') != RECORDS['plugin_version']:
+            raise BasisIntegrityError('依据表封签发行与查询条件不一致，请重新取依据。')
+        if not isinstance(ref.get('records'),list) or not ref['records']:
+            raise BasisIntegrityError('依据表封签记录缺失；未收录的表须明确返回 uncovered。')
+        if set(query)!={'schema_version','operation','standard','edition','locator'} or query['operation']!='list':
+            raise BasisIntegrityError('依据表封签仅接受完整列出，不接受条件或记录筛选。')
+        key=json.dumps([query['standard'],query['edition'],query['locator']],ensure_ascii=False,separators=(',',':'))
+        expected=RECORDS['complete_lists'].get(key)
+        ids=[record['id'] for record in ref['records']]
+        if (expected is None or len(ids)!=len(set(ids)) or len(ids)!=expected['record_count']
+                or digest(sorted(ids))!=expected['record_ids_sha256']):
+            raise BasisIntegrityError('依据表封签成员集合不完整或不一致；禁止删档、重复或拼接其他表。')
+        for record in ref['records']:
+            sealed_record(record)
+        return ref['records']
+    except BasisIntegrityError:
+        raise
+    except (ValueError,KeyError,TypeError,AttributeError) as error:
+        raise BasisIntegrityError('依据表封签记录结构不完整或非法。') from error
+
+
 def apply(checker,parameters):
     from .manufacturing import execute
     plan=queries(checker)
@@ -131,7 +206,10 @@ def apply(checker,parameters):
         if row['basis_missing_fields']: continue
         ref=refs.get(row['id'])
         if not ref or row['id'] not in plan:
-            row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason='本库暂未收录 · 下一轮；保留此标准版本与要求。');continue
+            reason = row.get('basis_uncovered_reason') or '本库暂未收录 · 下一轮；保留此标准版本与要求。'
+            if checker.family == 'ehv':
+                reason = (row.get('reason') or reason) if row['id'] not in plan else '此电压、材料、截面与制造条件组合没有已固定依据；不插值、换版或套用 110 kV。'
+            row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason=reason);continue
         record=validate(ref,plan[row['id']])
         row.update(basis_reference=ref,citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'])
         if execute(checker,row,record): continue

@@ -53,8 +53,9 @@ async function finished(job: LibraryJob): Promise<LibraryJob> {
   throw new Error('计算没有在预期时间内结束');
 }
 
+// Read the encoded text: PyMuPDF 1.24.14 can omit STSong-Light's middle dot on Linux.
 const pdfText = (id: string) => execFileSync(process.env.CABLE_STUDIO_PYTHON ?? 'python', ['-c',
-  'import fitz,sys; d=fitz.open(sys.argv[1]); print("\\n".join(p.get_text() for p in d))', join(home, 'specifications', id, 'specification.pdf')],
+  'import sys; from pypdf import PdfReader; print("\\n".join(p.extract_text() for p in PdfReader(sys.argv[1]).pages))', join(home, 'specifications', id, 'specification.pdf')],
 { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
 
 // The published table is imported once; every test below works from it.
@@ -104,7 +105,7 @@ test('a specification typed in is the same kind of object as the imported one it
     modelling: { filler_rhoo: { value: 6, unit: 'K*m/W', reference: '拼错的参数' } } });
   assert.deepEqual([misspelt.status, misspelt.body.error?.code, misspelt.body.error?.path], [422, 'SERIES_INVALID', '/series/modelling/filler_rhoo']);
   const referenced = await op<SeriesCreated>('library.series.create', { name: '手工填写：参考参数', designation: declaration.designation, cores: 3, u0_v: 8700, u_v: 15000,
-    standards: declaration.standards, common: declaration.common, common_basis: declaration.common_basis, reference_modelling: true, outer_diameter_precision_mm: 1 });
+    um_v: declaration.um_v ?? undefined, standards: declaration.standards, common: declaration.common, common_basis: declaration.common_basis, reference_modelling: true, outer_diameter_precision_mm: 1 });
   assert.deepEqual(Object.keys(referenced.declaration.modelling).sort(), Object.keys(declaration.modelling).sort());
   assert.ok(Object.values(referenced.declaration.modelling).every(item => item.reference));
   assert.equal(referenced.declaration.modelling.diameter_rounding.value, declaration.modelling.diameter_rounding.value);

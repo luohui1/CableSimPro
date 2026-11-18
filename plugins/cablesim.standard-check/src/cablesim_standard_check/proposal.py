@@ -10,12 +10,19 @@ def propose(values, insulation_limit, sources, data, parameters=None):
         raise ValueError('/voltage：表外电压，未覆盖。')
     if family == 'hv' and values['construction'] != 'single_core':
         raise ValueError('/construction：GB/T 11017 高压三芯结构未覆盖。请选择单芯或其他电压。')
-    standard = 'GB/T 11017.2' if family == 'hv' else 'GB/T 12706.' + {'mv1':'1','mv2':'2','mv3':'3'}[family]
-    edition = '2024' if family == 'hv' else '2020'
+    if family == 'ehv' and values['construction'] != 'single_core':
+        raise ValueError('/construction：GB/T 18890.2 的 127/220 kV 提案仅覆盖单芯。')
+    if family == 'ehv' and values['conductor'] != 'copper_bare':
+        raise ValueError('/conductor：GB/T 18890.2—2015 6.1.1 为 TR 型圆铜线；铝或镀层替代未覆盖。')
+    if family == 'ehv' and values['form'] != 'unspecified':
+        raise ValueError('/form：127/220 kV 导体不能按实心等面积圆生成；请选明示外径并填写实际导体直径，绞合/分割结构仍待制造确认。')
+    standard = 'GB/T 18890.2' if family == 'ehv' else 'GB/T 11017.2' if family == 'hv' else 'GB/T 12706.' + {'mv1':'1','mv2':'2','mv3':'3'}[family]
+    edition = '2015' if family == 'ehv' else '2024' if family == 'hv' else '2020'
     queries = {'insulation': {'schema_version':'cablesim.standards-query/1', 'standard':standard, 'edition':edition,
-        'locator':'表 2' if family == 'hv' else '表 6' if family == 'mv3' else '表 7',
+        'locator':'表 3' if family == 'ehv' else '表 2' if family == 'hv' else '表 6' if family == 'mv3' else '表 7',
         'quantity':'insulation_nominal', 'conditions':{'area_m2':values['area_m2'],'u0_v':u0,'u_v':u,
-            **({} if family == 'hv' else {'insulation':'XLPE'})}}}
+            **({} if family == 'hv' else {'insulation':'XLPE'}),
+            **({'conductor_material':'copper'} if family == 'ehv' else {})}}}
     n = 1 if values['construction'] == 'single_core' else 3 if values['construction'] == 'three_core' else 4
     if n == 4 and family != 'mv1':
         raise ValueError('/construction：当前四芯标准提案仅覆盖 GB/T 12706.1 的低压 XLPE 圆形线芯。')
@@ -24,8 +31,8 @@ def propose(values, insulation_limit, sources, data, parameters=None):
         queries['neutral_insulation'] = deepcopy(queries['insulation'])
         queries['neutral_insulation']['conditions']['area_m2'] = values['neutral_area_m2']
     if values.get('generation_mode') == 'complete':
-        if family == 'hv':
-            raise ValueError('/generation_mode：110 kV 不适用 GB/T 12706 附录 A/B；完整高压结构生成尚未覆盖。')
+        if family in ('hv', 'ehv'):
+            raise ValueError('/generation_mode：110/220 kV 不适用 GB/T 12706 附录 A/B；完整高压结构生成尚未覆盖。')
         if any(values.get(key) is not None for key in ('filler_thickness_m','binder_thickness_m')):
             raise ValueError('/generation_mode：附加填充外包与包带的假设增量分支尚未覆盖；请选择当前无附加包带的挤包内衬，或只生成绝缘线芯后人工设计。')
         if values.get('screened') is None:
@@ -52,7 +59,7 @@ def propose(values, insulation_limit, sources, data, parameters=None):
                 'basis_queries':queries,'rows':[],'limitations':['待固定标准依据查询完成后提出尺寸，不批准或创建型号。']}
     refs = parameters['basis_references']
     insulation = refs.get('insulation')
-    if not insulation:
+    if not insulation or insulation.get('uncovered'):
         raise ValueError('/area_m2：所选标准版本、额定电压和截面的 XLPE 厚度本库暂未收录，不生成近似值。')
     record = evidence(insulation, queries['insulation'])
     if record['criterion'] != 'nominal' or record['quantity']['unit'] != 'mm':

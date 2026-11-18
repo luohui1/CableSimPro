@@ -1,37 +1,339 @@
 {
-  "areas_mm2": [1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240,300,400,500,630,800,1000,1200,1400,1600],
-  "fictitious_diameters_mm": [1.4,1.8,2.3,2.8,3.6,4.5,5.6,6.7,8,9.4,11,12.4,13.8,15.3,17.5,19.5,22.6,25.2,28.3,31.9,35.7,39.1,42.2,45.1],
-  "lv_xlpe_mm": [0.7,0.7,0.7,0.7,0.7,0.7,0.9,0.9,1,1.1,1.1,1.2,1.4,1.6,1.7,1.8,2,2.2,2.4,2.6,2.8],
-  "r20_areas_mm2": [0.5,0.75,1,1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240,300,400,500,630,800,1000,1200,1400,1600,1800,2000,2500],
+  "areas_mm2": [
+    1.5,
+    2.5,
+    4,
+    6,
+    10,
+    16,
+    25,
+    35,
+    50,
+    70,
+    95,
+    120,
+    150,
+    185,
+    240,
+    300,
+    400,
+    500,
+    630,
+    800,
+    1000,
+    1200,
+    1400,
+    1600
+  ],
+  "fictitious_diameters_mm": [
+    1.4,
+    1.8,
+    2.3,
+    2.8,
+    3.6,
+    4.5,
+    5.6,
+    6.7,
+    8,
+    9.4,
+    11,
+    12.4,
+    13.8,
+    15.3,
+    17.5,
+    19.5,
+    22.6,
+    25.2,
+    28.3,
+    31.9,
+    35.7,
+    39.1,
+    42.2,
+    45.1
+  ],
+  "lv_xlpe_mm": [
+    0.7,
+    0.7,
+    0.7,
+    0.7,
+    0.7,
+    0.7,
+    0.9,
+    0.9,
+    1,
+    1.1,
+    1.1,
+    1.2,
+    1.4,
+    1.6,
+    1.7,
+    1.8,
+    2,
+    2.2,
+    2.4,
+    2.6,
+    2.8
+  ],
+  "r20_areas_mm2": [
+    0.5,
+    0.75,
+    1,
+    1.5,
+    2.5,
+    4,
+    6,
+    10,
+    16,
+    25,
+    35,
+    50,
+    70,
+    95,
+    120,
+    150,
+    185,
+    240,
+    300,
+    400,
+    500,
+    630,
+    800,
+    1000,
+    1200,
+    1400,
+    1600,
+    1800,
+    2000,
+    2500
+  ],
   "r20_ohm_km": {
-    "copper_bare": [36,24.5,18.1,12.1,7.41,4.61,3.08,1.83,1.15,0.727,0.524,0.387,0.268,0.193,0.153,0.124,0.0991,0.0754,0.0601,0.047,0.0366,0.0283,0.0221,0.0176,0.0151,0.0129,0.0113,0.0101,0.009,0.0072],
-    "copper_coated": [36.7,24.8,18.2,12.2,7.56,4.7,3.11,1.84,1.16,0.734,0.529,0.391,0.27,0.195,0.154,0.126,0.1,0.0762,0.0607,0.0475,0.0369,0.0286,0.0224,0.0177,0.0151,0.0129,0.0113,0.0101,0.009,0.0072],
-    "aluminium": [3.08,1.91,1.2,0.868,0.641,0.443,0.32,0.253,0.206,0.164,0.125,0.1,0.0778,0.0605,0.0469,0.0367,0.0291,0.0247,0.0212,0.0186,0.0165,0.0149,0.0127]
+    "copper_bare": [
+      36,
+      24.5,
+      18.1,
+      12.1,
+      7.41,
+      4.61,
+      3.08,
+      1.83,
+      1.15,
+      0.727,
+      0.524,
+      0.387,
+      0.268,
+      0.193,
+      0.153,
+      0.124,
+      0.0991,
+      0.0754,
+      0.0601,
+      0.047,
+      0.0366,
+      0.0283,
+      0.0221,
+      0.0176,
+      0.0151,
+      0.0129,
+      0.0113,
+      0.0101,
+      0.009,
+      0.0072
+    ],
+    "copper_coated": [
+      36.7,
+      24.8,
+      18.2,
+      12.2,
+      7.56,
+      4.7,
+      3.11,
+      1.84,
+      1.16,
+      0.734,
+      0.529,
+      0.391,
+      0.27,
+      0.195,
+      0.154,
+      0.126,
+      0.1,
+      0.0762,
+      0.0607,
+      0.0475,
+      0.0369,
+      0.0286,
+      0.0224,
+      0.0177,
+      0.0151,
+      0.0129,
+      0.0113,
+      0.0101,
+      0.009,
+      0.0072
+    ],
+    "aluminium": [
+      3.08,
+      1.91,
+      1.2,
+      0.868,
+      0.641,
+      0.443,
+      0.32,
+      0.253,
+      0.206,
+      0.164,
+      0.125,
+      0.1,
+      0.0778,
+      0.0605,
+      0.0469,
+      0.0367,
+      0.0291,
+      0.0247,
+      0.0212,
+      0.0186,
+      0.0165,
+      0.0149,
+      0.0127
+    ]
   },
-  "hv_areas_mm2": [240,300,400,500,630,800,1000,1200,1400,1600,1800,2000],
+  "hv_areas_mm2": [
+    240,
+    300,
+    400,
+    500,
+    630,
+    800,
+    1000,
+    1200,
+    1400,
+    1600,
+    1800,
+    2000
+  ],
   "hv_mm": {
-    "insulation": [19,18.5,17.5,17,16.5,16,16,16,16,16,16,16],
-    "lead": [2.6,2.6,2.7,2.7,2.8,2.9,3,3.1,3.2,3.3,3.3,3.3],
-    "corrugated_aluminium": [2,2,2,2,2,2,2.3,2.3,2.3,2.3,2.3,2.3],
-    "oversheath": [4,4,4,4,4.5,4.5,4.5,5,5,5,5,5]
+    "insulation": [
+      19,
+      18.5,
+      17.5,
+      17,
+      16.5,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16
+    ],
+    "lead": [
+      2.6,
+      2.6,
+      2.7,
+      2.7,
+      2.8,
+      2.9,
+      3,
+      3.1,
+      3.2,
+      3.3,
+      3.3,
+      3.3
+    ],
+    "corrugated_aluminium": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2.3,
+      2.3,
+      2.3,
+      2.3,
+      2.3,
+      2.3
+    ],
+    "oversheath": [
+      4,
+      4,
+      4,
+      4,
+      4.5,
+      4.5,
+      4.5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ]
   },
   "screen_increment": [
-    [1.5,0.5],
-    [2.5,0.5],
-    [4,0.5],
-    [6,0.6],
-    [10,0.8],
-    [16,1.1],
-    [25,1.2],
-    [35,1.4],
-    [50,1.7],
-    [70,2],
-    [95,2.4],
-    [120,2.7],
-    [150,3],
-    [185,4],
-    [240,5],
-    [300,6]
+    [
+      1.5,
+      0.5
+    ],
+    [
+      2.5,
+      0.5
+    ],
+    [
+      4,
+      0.5
+    ],
+    [
+      6,
+      0.6
+    ],
+    [
+      10,
+      0.8
+    ],
+    [
+      16,
+      1.1
+    ],
+    [
+      25,
+      1.2
+    ],
+    [
+      35,
+      1.4
+    ],
+    [
+      50,
+      1.7
+    ],
+    [
+      70,
+      2
+    ],
+    [
+      95,
+      2.4
+    ],
+    [
+      120,
+      2.7
+    ],
+    [
+      150,
+      3
+    ],
+    [
+      185,
+      4
+    ],
+    [
+      240,
+      5
+    ],
+    [
+      300,
+      6
+    ]
   ],
   "insulation": [
     {
@@ -51,11 +353,26 @@
       "u0": 3600,
       "table": "DL",
       "bands": [
-        [185,2.5],
-        [240,2.6],
-        [300,2.8],
-        [400,3],
-        [null,3.2]
+        [
+          185,
+          2.5
+        ],
+        [
+          240,
+          2.6
+        ],
+        [
+          300,
+          2.8
+        ],
+        [
+          400,
+          3
+        ],
+        [
+          null,
+          3.2
+        ]
       ]
     },
     {
@@ -170,6 +487,11 @@
       64000,
       110000,
       "hv"
+    ],
+    [
+      127000,
+      220000,
+      "ehv"
     ]
   ],
   "rules": {
@@ -178,33 +500,61 @@
         "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
         "printed_page": 4,
         "page_bands_mm2": [
-          [1000,4],
-          [null,5]
+          [
+            1000,
+            4
+          ],
+          [
+            null,
+            5
+          ]
         ]
       },
       "mv2": {
         "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
         "printed_page": 4,
         "page_bands_mm2": [
-          [1000,4],
-          [null,5]
+          [
+            1000,
+            4
+          ],
+          [
+            null,
+            5
+          ]
         ]
       },
       "mv3": {
         "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
         "printed_page": 4,
         "page_bands_mm2": [
-          [1000,4],
-          [null,5]
+          [
+            1000,
+            4
+          ],
+          [
+            null,
+            5
+          ]
         ]
       },
       "hv": {
         "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
         "printed_page": 4,
         "page_bands_mm2": [
-          [1000,4],
-          [null,5]
+          [
+            1000,
+            4
+          ],
+          [
+            null,
+            5
+          ]
         ]
+      },
+      "ehv": {
+        "clause": "6.1.2，表 2",
+        "printed_page": 5
       }
     },
     "insulation-nominal": {
@@ -223,6 +573,10 @@
       "hv": {
         "clause": "6.2.2，表 2",
         "printed_page": 4
+      },
+      "ehv": {
+        "clause": "6.2.2，表 3",
+        "printed_page": 5
       }
     },
     "insulation-minimum": {
@@ -255,6 +609,10 @@
         "printed_page": 4,
         "factor": 0.9,
         "offset": -0.1
+      },
+      "ehv": {
+        "clause": "6.2.2 → GB/T 18890.1—2015 10.6.2",
+        "printed_page": 5
       }
     },
     "insulation-mean": {
@@ -377,6 +735,10 @@
         "clause": "6.5.2",
         "printed_page": 6,
         "limit": 1
+      },
+      "ehv": {
+        "clause": "6.5.2",
+        "printed_page": 7
       }
     },
     "screen-wire-gap": {
@@ -396,6 +758,11 @@
         "clause": "6.5.2，式 (1)",
         "printed_page": 6,
         "limit": 4,
+        "formula": "G = [π(D+d) − nd] / n"
+      },
+      "ehv": {
+        "clause": "6.5.2，式 (1)",
+        "printed_page": 7,
         "formula": "G = [π(D+d) − nd] / n"
       }
     },
@@ -477,6 +844,10 @@
         "offset": 0.7,
         "minimum": 1.2,
         "smooth_aluminium_mm": 1.8
+      },
+      "ehv": {
+        "clause": "6.6.2，表 4",
+        "printed_page": 8
       }
     },
     "sheath-minimum": {
@@ -501,6 +872,10 @@
         "printed_page": 6,
         "factor": 0.95,
         "offset": -0.1
+      },
+      "ehv": {
+        "clause": "6.6.2 → GB/T 18890.1—2015 10.7.1 / 10.7.2",
+        "printed_page": 8
       }
     },
     "conductor_screen-minimum": {
@@ -628,19 +1003,111 @@
         "printed_page": 11
       }
     },
-    "armour-material": {"mv2":{"clause":"13.2","printed_page":11,"limit":1}},
-    "armour-underlayer": {"mv2":{"clause":"13.3.1 / 13.3.2 / 13.3.3","printed_page":11,"limit":1}},
-    "armour-nonmagnetic": {"mv2":{"clause":"13.2","printed_page":11,"limit":1}},
-    "armour-wire-nominal": {"mv2":{"clause":"13.5，表 10","printed_page":12,"precision":2,"formula":"d_A ≥ table(D_A)"}},
-    "armour-tape-nominal": {"mv2":{"clause":"13.5，表 11","printed_page":13,"precision":2,"formula":"t_AD ≥ table(D_A, material)"}},
-    "armour-wire-measured": {"mv2":{"clause":"17.7.1 / 17.7.3；附录 B 表 B.1","printed_page":19,"precision":2,"factor":0.95,"offset":0,"formula":"d_measured ≥ 0.95 d_nominal"}},
-    "armour-tape-measured": {"mv2":{"clause":"17.7.2 / 17.7.3；附录 B 表 B.1","printed_page":19,"precision":2,"factor":0.9,"offset":0,"formula":"t_measured ≥ 0.90 t_nominal"}},
-    "armour-tape-count": {"mv2":{"clause":"13.7","printed_page":13,"limit":2}},
-    "armour-tape-gap": {"mv2":{"clause":"13.7","printed_page":13,"limit":0.5,"formula":"maximum axial gap / tape width ≤ 0.5"}},
-    "armour-coarse-bedding": {"mv2":{"clause":"13.6","printed_page":13,"limit":2,"precision":2}},
-    "armour-padding-total": {"mv2":{"clause":"13.7","printed_page":13,"precision":2,"formula":"t_total ≥ t_B + additional padding"}},
-    "armour-padding-minimum": {"mv2":{"clause":"13.7；附录 B 表 B.1","printed_page":13,"precision":2,"factor":0.8,"offset":-0.2,"formula":"t_min ≥ 0.8 t_total − 0.2"}},
-    "bedding-filled": {"mv2":{"clause":"8.2.1","printed_page":8,"limit":1}},
+    "armour-material": {
+      "mv2": {
+        "clause": "13.2",
+        "printed_page": 11,
+        "limit": 1
+      }
+    },
+    "armour-underlayer": {
+      "mv2": {
+        "clause": "13.3.1 / 13.3.2 / 13.3.3",
+        "printed_page": 11,
+        "limit": 1
+      }
+    },
+    "armour-nonmagnetic": {
+      "mv2": {
+        "clause": "13.2",
+        "printed_page": 11,
+        "limit": 1
+      }
+    },
+    "armour-wire-nominal": {
+      "mv2": {
+        "clause": "13.5，表 10",
+        "printed_page": 12,
+        "precision": 2,
+        "formula": "d_A ≥ table(D_A)"
+      }
+    },
+    "armour-tape-nominal": {
+      "mv2": {
+        "clause": "13.5，表 11",
+        "printed_page": 13,
+        "precision": 2,
+        "formula": "t_AD ≥ table(D_A, material)"
+      }
+    },
+    "armour-wire-measured": {
+      "mv2": {
+        "clause": "17.7.1 / 17.7.3；附录 B 表 B.1",
+        "printed_page": 19,
+        "precision": 2,
+        "factor": 0.95,
+        "offset": 0,
+        "formula": "d_measured ≥ 0.95 d_nominal"
+      }
+    },
+    "armour-tape-measured": {
+      "mv2": {
+        "clause": "17.7.2 / 17.7.3；附录 B 表 B.1",
+        "printed_page": 19,
+        "precision": 2,
+        "factor": 0.9,
+        "offset": 0,
+        "formula": "t_measured ≥ 0.90 t_nominal"
+      }
+    },
+    "armour-tape-count": {
+      "mv2": {
+        "clause": "13.7",
+        "printed_page": 13,
+        "limit": 2
+      }
+    },
+    "armour-tape-gap": {
+      "mv2": {
+        "clause": "13.7",
+        "printed_page": 13,
+        "limit": 0.5,
+        "formula": "maximum axial gap / tape width ≤ 0.5"
+      }
+    },
+    "armour-coarse-bedding": {
+      "mv2": {
+        "clause": "13.6",
+        "printed_page": 13,
+        "limit": 2,
+        "precision": 2
+      }
+    },
+    "armour-padding-total": {
+      "mv2": {
+        "clause": "13.7",
+        "printed_page": 13,
+        "precision": 2,
+        "formula": "t_total ≥ t_B + additional padding"
+      }
+    },
+    "armour-padding-minimum": {
+      "mv2": {
+        "clause": "13.7；附录 B 表 B.1",
+        "printed_page": 13,
+        "precision": 2,
+        "factor": 0.8,
+        "offset": -0.2,
+        "formula": "t_min ≥ 0.8 t_total − 0.2"
+      }
+    },
+    "bedding-filled": {
+      "mv2": {
+        "clause": "8.2.1",
+        "printed_page": 8,
+        "limit": 1
+      }
+    },
     "bedding-missing": {
       "mv1": {
         "clause": "7.2 / 7.3 / 7.4",
@@ -698,6 +1165,10 @@
           "1": 1.4,
           "3": 1.8
         }
+      },
+      "ehv": {
+        "clause": "6.7.2",
+        "printed_page": 8
       }
     },
     "oversheath-minimum": {
@@ -730,28 +1201,228 @@
         "printed_page": 7,
         "factor": 0.8,
         "offset": -0.2
+      },
+      "ehv": {
+        "clause": "6.7.2",
+        "printed_page": 8
+      }
+    },
+    "conductor-wire-count": {
+      "ehv": {
+        "clause": "6.1.2，表 2",
+        "printed_page": 5
+      }
+    },
+    "ehv-construction": {
+      "ehv": {
+        "clause": "6.1.2",
+        "printed_page": 4
+      }
+    },
+    "ehv-coverings": {
+      "ehv": {
+        "clause": "6.6 / 6.7，表 4",
+        "printed_page": 8
+      }
+    },
+    "ehv-routine-tests": {
+      "ehv": {
+        "clause": "8.2 / 表 6 → GB/T 18890.1—2015 第 9 章",
+        "printed_page": 9
+      }
+    },
+    "ehv-sample-tests": {
+      "ehv": {
+        "clause": "8.2 → GB/T 18890.1—2015 第 10 章",
+        "printed_page": 9
+      }
+    },
+    "ehv-type-tests": {
+      "ehv": {
+        "clause": "8.2 → GB/T 18890.1—2015 第 12 章",
+        "printed_page": 9
+      }
+    },
+    "ehv-prequalification-tests": {
+      "ehv": {
+        "clause": "8.2 → GB/T 18890.1—2015 第 13 章",
+        "printed_page": 9
+      }
+    },
+    "conductor-screen-minimum": {
+      "ehv": {
+        "clause": "6.3.2",
+        "printed_page": 6
+      }
+    },
+    "insulation-screen-minimum": {
+      "ehv": {
+        "clause": "6.3.3",
+        "printed_page": 6
+      }
+    },
+    "oversheath-mean": {
+      "ehv": {
+        "clause": "6.7.2",
+        "printed_page": 8
+      }
+    },
+    "aluminium-sheath-purity": {
+      "ehv": {
+        "clause": "6.6.1",
+        "printed_page": 7
+      }
+    },
+    "aluminium-strip-elongation": {
+      "ehv": {
+        "clause": "6.6.1",
+        "printed_page": 7
+      }
+    },
+    "oversheath-semiconductor-ratio": {
+      "ehv": {
+        "clause": "6.7.3",
+        "printed_page": 9
       }
     }
   },
   "armour": {
     "mv2": {
       "materials": {
-        "steel_galvanized":{"group":"steel","magnetic":true,"forms":["wires","tape"]},
-        "steel_stainless_nonmagnetic":{"group":"steel","magnetic":false,"forms":["wires","tape"]},
-        "aluminium":{"group":"aluminium","magnetic":false,"forms":["wires","tape"]},
-        "aluminium_alloy":{"group":"aluminium","magnetic":false,"forms":["wires","tape"]},
-        "copper_bare":{"group":"copper","magnetic":false,"forms":["wires"]}
+        "steel_galvanized": {
+          "group": "steel",
+          "magnetic": true,
+          "forms": [
+            "wires",
+            "tape"
+          ]
+        },
+        "steel_stainless_nonmagnetic": {
+          "group": "steel",
+          "magnetic": false,
+          "forms": [
+            "wires",
+            "tape"
+          ]
+        },
+        "aluminium": {
+          "group": "aluminium",
+          "magnetic": false,
+          "forms": [
+            "wires",
+            "tape"
+          ]
+        },
+        "aluminium_alloy": {
+          "group": "aluminium",
+          "magnetic": false,
+          "forms": [
+            "wires",
+            "tape"
+          ]
+        },
+        "copper_bare": {
+          "group": "copper",
+          "magnetic": false,
+          "forms": [
+            "wires"
+          ]
+        }
       },
       "forms": {
-        "wires": {"field":"wire_diameter","title":"铠装圆金属丝标称直径","rule":"armour-wire-nominal",
-          "bands":[[10,0.8],[15,1.25],[25,1.6],[35,2.0],[60,2.5],[null,3.15]],
-          "measured_field":"mean_wire_diameter","measured_title":"铠装圆金属丝实测直径","measured_rule":"armour-wire-measured",
-          "diameter_multiplier":2,"coarse_wire_mm":4.0},
-        "tape": {"field":"nominal_tape_thickness","title":"铠装单带标称厚度","rule":"armour-tape-nominal",
-          "bands_by_material":{"steel":[[30,0.2],[70,0.5],[null,0.8]],"aluminium":[[70,0.5],[null,0.8]]},
-          "measured_field":"minimum_tape_thickness","measured_title":"铠装金属带实测厚度","measured_rule":"armour-tape-measured",
-          "diameter_multiplier":4,"tape_count":2,"application":"two_tape_gap",
-          "padding_bands_mm":[[0.2,0.5],[null,0.8]],"padding_diameter_bands_mm":[[29,1.0],[null,1.6]]}
+        "wires": {
+          "field": "wire_diameter",
+          "title": "铠装圆金属丝标称直径",
+          "rule": "armour-wire-nominal",
+          "bands": [
+            [
+              10,
+              0.8
+            ],
+            [
+              15,
+              1.25
+            ],
+            [
+              25,
+              1.6
+            ],
+            [
+              35,
+              2.0
+            ],
+            [
+              60,
+              2.5
+            ],
+            [
+              null,
+              3.15
+            ]
+          ],
+          "measured_field": "mean_wire_diameter",
+          "measured_title": "铠装圆金属丝实测直径",
+          "measured_rule": "armour-wire-measured",
+          "diameter_multiplier": 2,
+          "coarse_wire_mm": 4.0
+        },
+        "tape": {
+          "field": "nominal_tape_thickness",
+          "title": "铠装单带标称厚度",
+          "rule": "armour-tape-nominal",
+          "bands_by_material": {
+            "steel": [
+              [
+                30,
+                0.2
+              ],
+              [
+                70,
+                0.5
+              ],
+              [
+                null,
+                0.8
+              ]
+            ],
+            "aluminium": [
+              [
+                70,
+                0.5
+              ],
+              [
+                null,
+                0.8
+              ]
+            ]
+          },
+          "measured_field": "minimum_tape_thickness",
+          "measured_title": "铠装金属带实测厚度",
+          "measured_rule": "armour-tape-measured",
+          "diameter_multiplier": 4,
+          "tape_count": 2,
+          "application": "two_tape_gap",
+          "padding_bands_mm": [
+            [
+              0.2,
+              0.5
+            ],
+            [
+              null,
+              0.8
+            ]
+          ],
+          "padding_diameter_bands_mm": [
+            [
+              29,
+              1.0
+            ],
+            [
+              null,
+              1.6
+            ]
+          ]
+        }
       }
     }
   },
@@ -766,17 +1437,41 @@
       "3": 2.16
     },
     "bedding_bands_mm": [
-      [25,1],
-      [35,1.2],
-      [45,1.4],
-      [60,1.6],
-      [80,1.8],
-      [null,2]
+      [
+        25,
+        1
+      ],
+      [
+        35,
+        1.2
+      ],
+      [
+        45,
+        1.4
+      ],
+      [
+        60,
+        1.6
+      ],
+      [
+        80,
+        1.8
+      ],
+      [
+        null,
+        2
+      ]
     ],
     "mv3_bedding_minimum_mm": 1.2,
     "wrapped_bedding_bands_mm": [
-      [40,0.4],
-      [null,0.6]
+      [
+        40,
+        0.4
+      ],
+      [
+        null,
+        0.6
+      ]
     ],
     "ignored_binder_maximum_m": 0.0003,
     "screen_tape_ignore_maximum_mm": 0.15,

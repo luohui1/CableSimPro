@@ -1,6 +1,6 @@
 {
-  "plugin_version": "0.7.0",
-  "data_sha256": "2ca9aea8d0223b81d2ac8468346c1df6f2e661970a769f92461ed58328fbeb16",
+  "plugin_version": "0.9.0",
+  "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
   "records": {
     "lv-表6/r1/c1": "a12f2101ab21d0cd4bd4227d72b72befce71349137d150332cec2b142b57b0e6",
     "lv-表6/r1/c2": "e1245325a57d2565e2bd3900b04cb5234f15bedbf9916160c8255e1e43b50ed5",
@@ -4343,6 +4343,1524 @@
     "sc-helical-tape-area/r1/short_circuit_geometrical_area_formula": "d4aaf78db986ed91ca765524c0d8d55a0c3a405698ae65479efe42633fbc2ee1",
     "sc-touching-wire-area/r1/short_circuit_geometrical_area_rule": "6794f968f1c0694e0fb0b81d9e755444fb5fc93fb4df3f30171c71fa276b8618",
     "sc-wire-braid-area/r1/short_circuit_geometrical_area_rule": "5e447002cabad8ac7a9932c1e3f625ebe71d73c8afc6986245e5a7c9c5e41c86",
-    "sc-parallel-metal-current/r1/parallel_metal_short_circuit_rule": "a0863e1eeff7018ac0bf140863425803085978cc78c8e0af5ffaeeb55174663c"
+    "sc-parallel-metal-current/r1/parallel_metal_short_circuit_rule": "a0863e1eeff7018ac0bf140863425803085978cc78c8e0af5ffaeeb55174663c",
+    "ehv-表2/r1/wire_count": "d869572cb90096c9b7f78ef7787f3692da71a38aacf04ed3a7f107fab0af5586",
+    "ehv-表2/r1/r20": "9780a0968ace714dd0158bbbd5205bed1b7425f87ec17398d04af1899214c26b",
+    "ehv-表2/r2/wire_count": "bb4425703d27e8dec24307d624fee869b0d494c0d8813856682f13c60470d50e",
+    "ehv-表2/r2/r20": "1effa0a517bbda60226ad16a0aa570dc00181402477c555e34023d6ee8ed359a",
+    "ehv-表2/r3/wire_count": "1a7ebffb8015782daeddc5fdca2e018a1ba2dd8c7c56cca47dbaf96ad169b170",
+    "ehv-表2/r3/r20": "83b72443ae58bb74d052e04d8a98fc12569163d572db2165230c6cd2f6de22db",
+    "ehv-表2/r4/wire_count": "472ca5042e7de1ff343bf74a514a2a0eb160c4a7757bdd82a91571d99e0ab8c6",
+    "ehv-表2/r4/r20": "2ab06f645784212cd76d1604f50b2597191f1b2989dea18445a894dccc7df4c8",
+    "ehv-表2/r5/wire_count": "5132216fa6ca8979008238bf9c0bc92136444f5572e5040a8476025ce96d5901",
+    "ehv-表2/r5/r20": "f1969fd77ce55baf3765971a2209af1d6e72e928cd8a82773cae7674df6e05a3",
+    "ehv-表2/r6/wire_count": "6e0df891e68c018f25b4ca9d7733a78eecfbd291e16a04f41ead46d0a3893288",
+    "ehv-表2/r6/r20": "6e6621d576b8e45e9523170bf38b91ab9259485d70848e363cd4a323d572f559",
+    "ehv-表2/r7/wire_count": "8cbcd905fa1e7edebf35d6646916a98ca7c73d4765c85d600cff7d3de8eab055",
+    "ehv-表2/r7/r20": "9dc3306da7817ec931134c40fca0991d80b95ac9d8d559a5f36e5a7e100d3e4a",
+    "ehv-表2/r8/wire_count": "bb302f5340841fa26f1f829104757b1dc078039bb13976e99e492218a3c2bfac",
+    "ehv-表2/r8/r20": "477cb9060a5d2e7c3d597e66a49aa06898176bd7144f58d4af1d2161cd89bc5a",
+    "ehv-表2/r9/wire_count": "4ed354273bd8da0d3ddd1e54193a58c7d377d4d2e52966066aa600a0d6dacda9",
+    "ehv-表2/r9/r20": "4a553a13b4e18b8bd5458870db36b4361e2a529fd5c4613f2a7b16013fe8adb2",
+    "ehv-表2/r10/wire_count": "40f08a5e3e49705be5f23bc9f42f7e8fd5957bb2f42fc0f09a00ce4f7893a809",
+    "ehv-表2/r10/r20": "f3266f331846efff096bfaf36dbda09eda00f49721d8659d6d9ce4adf0796de7",
+    "ehv-表2/r11/wire_count": "8b8ad03701ca1d164d4b31d05e52b2b9dc6809ac10f85e746b689e6c934986cd",
+    "ehv-表2/r11/r20": "0f6fdd3191b95015e2d57097c73046a0140c3cfcd48d3632f77ec6572defcaaf",
+    "ehv-表2/r12/wire_count": "9114267c953eadb0d534abd3adc3d21dd9f18c3c52584bbe3f00ad0045b1fa7c",
+    "ehv-表2/r12/r20": "d700d93a91fb9f8adfe8d3390aad1859f3d5f0c45c123347ab9a8bd2fb5e8ec4",
+    "ehv-表3/r1/thickness": "744f5cea3e9826084cd68840b9820068fcff3cdc42f8687ce8abd2ec9ff31502",
+    "ehv-表3/r2/thickness": "4100aade12f5aec7fde4a1bf646daec9dad490de1c038629e2190252c9066a04",
+    "ehv-表3/r3/thickness": "6eb9afa4d1a203c5854abb2fd344f93cdb1d7d96864094aab497b17c12e96873",
+    "ehv-表3/r4/thickness": "968cddaf605b26a55a24ee2352857cd974fe186f45cedfff01c4f99e498f5b88",
+    "ehv-表4/r1/lead": "8833710490b850db6799453e91de6ab7bc99b52217ab0e44dac72b115a078e95",
+    "ehv-表4/r1/corrugated_aluminium": "75fe34bb9cc13f8b416da91c342b031df862ee5c497627e95ab60121a8dc6c0d",
+    "ehv-表4/r2/lead": "d16e58a325edb08be9b366b6f653235148af120538c0858ac2397a012238f93e",
+    "ehv-表4/r2/corrugated_aluminium": "27f6e33784d0619fe39f0dacd9cad344dd9f419c9ef0211e7ed3fd59038e0471",
+    "ehv-表4/r3/lead": "275a06c812f54e3b25e3e21bcf921e277b478d0389b2ecdbeff3d6d50ecc7dbf",
+    "ehv-表4/r3/corrugated_aluminium": "e7a36d264448cedde8d8505f069ef65093dd7b7addb846eeab91e05ceb7aa663",
+    "ehv-表4/r4/lead": "34920efe0af5a3de6b860a76bec3f0478a9a47f537bbff766ab5ef0e4682ff25",
+    "ehv-表4/r4/corrugated_aluminium": "7dd3bdf746354c4c723963ca929ea5dcbf1c7f15db401f8b8b1ec25f82499618",
+    "ehv-表4/r5/lead": "d03bf47a01cd8bf306cccb7fabd1609e2ceab62c55b03a6061662543cb284c3e",
+    "ehv-表4/r5/corrugated_aluminium": "45d02d3c1f9bd276d6580ed455c2c1fc3dada23543723adbc16d70e9294e46b9",
+    "ehv-表4/r6/lead": "7fa0a052f0191bd11d12aa34d1c6063b7cfe7daed7e173a1dc97acc424679810",
+    "ehv-表4/r6/corrugated_aluminium": "8bc6a03b9fc35280a4afbe27ba4c02f06f7f513d5fcf74b29e68c223ca9358eb",
+    "ehv-表4/r7/lead": "9035562cd66d2a86adf72714dc2d264fb7eeb81f238c606cbdfb1aa4224ca89c",
+    "ehv-表4/r7/corrugated_aluminium": "8e71f91987cf982d30d97d1b10a89adb18f77c4fc8c7b08d8d5dd1104b596dcc",
+    "ehv-表4/r8/lead": "6d84ab5228cb5f764ce56ed6f7e57fcace0ea3fe3a2c7199915381d55df95ff5",
+    "ehv-表4/r8/corrugated_aluminium": "2298993e83f88194b1c0115c2dab8d826e9fc47987f4db3faf2960fc0a3348e7",
+    "ehv-表4/r9/lead": "7fc3af920479f95325d5539c7624a94f1d6e51768d4b09c2e6f43d820704f09b",
+    "ehv-表4/r9/corrugated_aluminium": "a8238b24202dc16c90bf1b50b7f5e7f3211d6c81ee719604f2995317cc2bfc80",
+    "ehv-表4/r10/lead": "3d3c099ba5ba5a7bc3d50438606425d88a6712bd0f74d2356cc6bfa0cded2c9a",
+    "ehv-表4/r10/corrugated_aluminium": "82dbf662988361c037cd595b9937c8a409da369642afd602d10fb74f5984b585",
+    "ehv-表4/r11/lead": "e382b436d180dc1147374f228b1b76a2ea78ed99a2f9bf83cace493e8b90bee0",
+    "ehv-表4/r11/corrugated_aluminium": "ae850d96767b6146db75a9215d8e451f0172925ee25e17512ce8d0618acb0574",
+    "ehv-表4/r12/lead": "a15150c70aa4a860c14dbbba44866ce36e8fa22b88eab5246c21f654ef2cc84a",
+    "ehv-表4/r12/corrugated_aluminium": "03ad9b83198ef55abed98e0fd974b312787cd92539b0e7b65f76d02a8666bc87",
+    "ehv-rule-6.3.2-reference/r1/value": "6d95234638b0204ced1f2be528b23f31d82d41a5dbce1a416b5e2a47262f1861",
+    "ehv-rule-6.3.2-minimum/r1/value": "59c92cbe66fbcbe248f887ee60a83d21ea783ae90883e5a77ab253cc6faeeacf",
+    "ehv-rule-6.3.3-reference/r1/value": "bb1957ca66f29b7547597d38278203fb8a1a355f9054b0dbdf4fbdad6245efce",
+    "ehv-rule-6.3.3-minimum/r1/value": "016ff11850ef18d229c249690de24664bc45f168e4ff95596ad9a5f2d8c7e22b",
+    "ehv-rule-6.5.2-wire/r1/value": "f3cd07946aabccd6619b04e5ea73b32c9034d094c51c771c1d8f84bf65b1bb5d",
+    "ehv-rule-6.5.2-gap/r1/value": "258de8f3f7043ddc28b09e88b6b7e11caf17bcb1e9f346f8d8ae781003c8cce3",
+    "ehv-rule-6.6.1-purity/r1/value": "9031941f1915572c957c027fc5a64be05b5d896677c836a63dc0c71d90cb10d4",
+    "ehv-rule-6.6.1-elongation/r1/value": "c3851163f2fcb4869d3b4ae680884523f1f7c2cf01e56369bd941c8c56797eb2",
+    "ehv-rule-6.7.2-nominal/r1/value": "80a44d856d7c27ed98c81a3717d14367b01c35a5f23096c0455b6d7d64b8b2cb",
+    "ehv-rule-6.7.2-mean/r1/value": "5f544452f42b358f28091316d0b8889a4ac16ee5e21d9003d9086b73941d0525",
+    "ehv-rule-6.7.2-minimum/r1/value": "5f396d4be216a396322321269766568d655955b4053d37183f6ed8d9716067db",
+    "ehv-rule-6.7.3-ratio/r1/value": "6c42497f17da1626d92ed195a5fd477530525ddefefa35e3afa279a14d1aaa0a"
+  },
+  "complete_lists": {
+    "[\"Deng et al.\",\"2020\",\"Table 2\"]": {
+      "record_count": 13,
+      "record_ids_sha256": "eeaeccbbc0ba8ddfc4956efbb8e70a3ef0e76deeeb29e9a1a3f8cb01e1053c84"
+    },
+    "[\"Deng et al.\",\"2020\",\"Table 2（ρ×cp派生）\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "6f3cd18111eb30bb5d4c5800a261d1ae2beb0499a9900482d14000521870206f"
+    },
+    "[\"GB 50217\",\"2018\",\"3.6.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "3aa7de92415237d3a1908eee36d8a75f6aa6ae53a1bbd942b0ce6b2ae797aca5"
+    },
+    "[\"GB 50217\",\"2018\",\"3.6.3\"]": {
+      "record_count": 10,
+      "record_ids_sha256": "eb5b2a994654f9a5b87a9763b0c7b7271f9ba3481476030baef24a9b06c3ea48"
+    },
+    "[\"GB 50217\",\"2018\",\"3.6.4\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "cfcb634328d56355111debee1287b7b28d09d643a15d416e6924e43c5c312fcd"
+    },
+    "[\"GB 50217\",\"2018\",\"5.1.11\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "24f55591e8cc3e98a86c9953cf3f0cea3af8334fb24e0086c8440a24b3ab67c8"
+    },
+    "[\"GB 50217\",\"2018\",\"5.1.18\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "a71fd4d382614f12d94cfd04ccf03a643ac1078563eb728c3c28769dea8a3ad0"
+    },
+    "[\"GB 50217\",\"2018\",\"5.1.18-2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "a71fd4d382614f12d94cfd04ccf03a643ac1078563eb728c3c28769dea8a3ad0"
+    },
+    "[\"GB 50217\",\"2018\",\"5.1.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "899c8290866438a5ebe37a660bc5098258015e4ee5732efae036c7f17fe7acc3"
+    },
+    "[\"GB 50217\",\"2018\",\"5.1.7\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "6b10b07830aa852c1eb1cf609e0dfc00c3000b197f40dcd4bc629c2c2e2dbed7"
+    },
+    "[\"GB 50217\",\"2018\",\"5.3.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "3a46cfe1185392e88330f43381e257b3d38870f47a038e8e4fc8d0837427a95f"
+    },
+    "[\"GB 50217\",\"2018\",\"5.3.3\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "90b7397ff818e16dc14de637e31e1a3fff04204d8262d9b42cacb41dcf1f557a"
+    },
+    "[\"GB 50217\",\"2018\",\"5.3.5\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "6ae1949dccfc3e41daa13f4a0b729c9f8903eb94b682984cb3a12e18cd4d2e4a"
+    },
+    "[\"GB 50217\",\"2018\",\"5.3.6\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "0e69e203e0f8daac53806d28782996df2c5b50baf3fcd784da31885dd6c45299"
+    },
+    "[\"GB 50217\",\"2018\",\"5.3.8\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "c98289f88521f9cdf1a5a1fd93c58116bb0fcacad0c379362652cc6b6f8781b8"
+    },
+    "[\"GB 50217\",\"2018\",\"5.3.8-1,2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "c98289f88521f9cdf1a5a1fd93c58116bb0fcacad0c379362652cc6b6f8781b8"
+    },
+    "[\"GB 50217\",\"2018\",\"5.4.4\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "18f008387c50ef40ea47a8d7af889b409c7ebb8dbc77969a6fc3c497240d7a0c"
+    },
+    "[\"GB 50217\",\"2018\",\"5.4.4-2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "18f008387c50ef40ea47a8d7af889b409c7ebb8dbc77969a6fc3c497240d7a0c"
+    },
+    "[\"GB 50217\",\"2018\",\"5.4.5\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "2650aa51f5976c329d1f64ab20e6347c090e0d6867c4e4522b25403ce76b7604"
+    },
+    "[\"GB 50217\",\"2018\",\"5.4.6\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "c3f35683cb46c3549ff679afc2631d13a485041db5a0afa5383c0511d0c51fc4"
+    },
+    "[\"GB 50217\",\"2018\",\"5.4.6-3,4\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "c3f35683cb46c3549ff679afc2631d13a485041db5a0afa5383c0511d0c51fc4"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.1\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "58398cffabd30e6f56abd0f0ffc3dc5e93cf7e92adcfc8791513a33bfccb7972"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.2\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "53fb49196ee8cb8d96ec02297adef33a59473cadb703003bc7f94066ed5807f5"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.3\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "6ead76c85dab1970c18e0e787c41c34c22d9e6e71b72b7e9c3227682d9f55d1e"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.3-1,2\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "6ead76c85dab1970c18e0e787c41c34c22d9e6e71b72b7e9c3227682d9f55d1e"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.4\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "1ea82f0feabb3e4d3f769da987384340765970bd61536a10a94af448ab61e7c4"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.4-3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "1ea82f0feabb3e4d3f769da987384340765970bd61536a10a94af448ab61e7c4"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.5\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "4adb736851f3e9491049f71175e7eeecdf37fc6a49967a38cb0aa9d6a33b09ca"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.5-1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "4adb736851f3e9491049f71175e7eeecdf37fc6a49967a38cb0aa9d6a33b09ca"
+    },
+    "[\"GB 50217\",\"2018\",\"5.5.6\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "e33b20a3746bc62c4f39fc8a84428896263cb4e6e0e92633d71dcc54e414853d"
+    },
+    "[\"GB 50217\",\"2018\",\"5.6.1\"]": {
+      "record_count": 13,
+      "record_ids_sha256": "d2f53353e5d8fbd24df3d06731473f053b34f9a222f10a72c20b275d18db1e5c"
+    },
+    "[\"GB 50217\",\"2018\",\"5.6.1-1,2\"]": {
+      "record_count": 7,
+      "record_ids_sha256": "9782cb74656b991552f66257218f8b0aefaf70d1a97dc113722500d81fef7001"
+    },
+    "[\"GB 50217\",\"2018\",\"5.6.3\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "c2f862d693d5974dc4ea6617f62bdca15f1f9b0c0d55df2e5138bbeb11cafd57"
+    },
+    "[\"GB 50217\",\"2018\",\"5.6.3-1,2\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "c2f862d693d5974dc4ea6617f62bdca15f1f9b0c0d55df2e5138bbeb11cafd57"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.1\"]": {
+      "record_count": 40,
+      "record_ids_sha256": "cd9bea98d159e33da78d2224a5d479cae6f2555557625c53993a88dd1c6dbb96"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "86793a5fc84bc4e6d819fe1974ef750a833c788324787882d758a1e18287bb6a"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.3\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "a9d41b780a2182c39dcb581a7eeebc36c1c3d442444727380474677d472a83c2"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.4\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "a58715075ec296a17ebe5112d12f3dd6069ad7c451080cb458c8ef87bc3ad3e9"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.5\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "2b75d44bbcb91f66d7b288ddd4e7a28fccef9351f5067d2353cb60150d2074b6"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.6\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "aace93e055c976e34b8451f3ac1a4a41e891fbcaa85ee0e2b15aaf44e787d9e6"
+    },
+    "[\"GB 50217\",\"2018\",\"D.0.7\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "82aa5ead3165d9294b191fb68c38679614e70c4cfdf0da873572e25ff00e962c"
+    },
+    "[\"GB 50217\",\"2018\",\"公式D.0.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "86793a5fc84bc4e6d819fe1974ef750a833c788324787882d758a1e18287bb6a"
+    },
+    "[\"GB 50217\",\"2018\",\"表 5.1.7\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "6b10b07830aa852c1eb1cf609e0dfc00c3000b197f40dcd4bc629c2c2e2dbed7"
+    },
+    "[\"GB 50217\",\"2018\",\"表 5.5.1\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "58398cffabd30e6f56abd0f0ffc3dc5e93cf7e92adcfc8791513a33bfccb7972"
+    },
+    "[\"GB 50217\",\"2018\",\"表 5.5.2\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "53fb49196ee8cb8d96ec02297adef33a59473cadb703003bc7f94066ed5807f5"
+    },
+    "[\"GB 50217\",\"2018\",\"表 5.6.1\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "1d852dc2575069d587bd7e8cbb7ff3fc17e6af2ce564eda68a162d2392c93172"
+    },
+    "[\"GB 50217\",\"2018\",\"表5.3.5\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "6ae1949dccfc3e41daa13f4a0b729c9f8903eb94b682984cb3a12e18cd4d2e4a"
+    },
+    "[\"GB 50217\",\"2018\",\"表D.0.1\"]": {
+      "record_count": 40,
+      "record_ids_sha256": "cd9bea98d159e33da78d2224a5d479cae6f2555557625c53993a88dd1c6dbb96"
+    },
+    "[\"GB 50217\",\"2018\",\"表D.0.3\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "a9d41b780a2182c39dcb581a7eeebc36c1c3d442444727380474677d472a83c2"
+    },
+    "[\"GB 50217\",\"2018\",\"表D.0.4\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "a58715075ec296a17ebe5112d12f3dd6069ad7c451080cb458c8ef87bc3ad3e9"
+    },
+    "[\"GB 50217\",\"2018\",\"表D.0.5\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "2b75d44bbcb91f66d7b288ddd4e7a28fccef9351f5067d2353cb60150d2074b6"
+    },
+    "[\"GB 50217\",\"2018\",\"表D.0.6\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "aace93e055c976e34b8451f3ac1a4a41e891fbcaa85ee0e2b15aaf44e787d9e6"
+    },
+    "[\"GB 50217\",\"2018\",\"表D.0.7\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "82aa5ead3165d9294b191fb68c38679614e70c4cfdf0da873572e25ff00e962c"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"5.2\"]": {
+      "record_count": 21,
+      "record_ids_sha256": "b694804da19ea457dc6a24e9f42def29e13e3d64b827ab8b7c415a6b9d0db554"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.3.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "78d6d25978dc36ade633e08686730c8cc35a802c517777b0e75531ea42de9e46"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.3.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "a6dec240938cfef58fe5c452c22ad0d3b585212065afc22ca2e17be79e278610"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.4\"]": {
+      "record_count": 36,
+      "record_ids_sha256": "c041c27fdcaf08c27aa2950a241fd20d0113c3ee58a3420ef65234fe677f42a7"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.5.2\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "b0e9b950332f21bb8fdc391e8c6aace6e5565feee8acd5d6b3ce66c85c048ff6"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.6\"]": {
+      "record_count": 36,
+      "record_ids_sha256": "4885e14cddf4f8cbc87e9f723bc304105648a52591b7fe917f6084cba6c6bfa3"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.7.2\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "70ff4d0c5e439126263b8c8cc0f4574ed337077cf7c0caa548c5572555089ec8"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"6.7.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "6c620afe1c31d062bb7319609c4accf8cd63a7f0a0584a45d097dd011cda74d8"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"表 1\"]": {
+      "record_count": 21,
+      "record_ids_sha256": "b694804da19ea457dc6a24e9f42def29e13e3d64b827ab8b7c415a6b9d0db554"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"表 2\"]": {
+      "record_count": 36,
+      "record_ids_sha256": "c041c27fdcaf08c27aa2950a241fd20d0113c3ee58a3420ef65234fe677f42a7"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"表 3\"]": {
+      "record_count": 36,
+      "record_ids_sha256": "4885e14cddf4f8cbc87e9f723bc304105648a52591b7fe917f6084cba6c6bfa3"
+    },
+    "[\"GB/T 11017.2\",\"2024\",\"表 4\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "70ff4d0c5e439126263b8c8cc0f4574ed337077cf7c0caa548c5572555089ec8"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"11\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "553ca2368febe49417f05bd5bfa750a3fefbfa2e9a82c3ff6e840c674724eea8"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"12.3.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "d3c97ab7c9f036bbaa6d820ae9f7bae73117f8da184d34591d74ea571fbefac3"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"12.5\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "9f5bd0cd550730f8f03834bd22c75ffad0afd4183ccf4302f800718569f2af33"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"13.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "dd57ee5a4b05da5f6f066db8e08945541990edbcba36d14b829779d9a60af9a9"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"15.3.4\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "3d6861f8e2a0a51ed3d85028f449149b548e0e9f804a9769a176cc5881573f48"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"16.2.2\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "e7b60a751d210e211e3a75d9b617cd61aa99829b9273ed18a9c0c212928b9768"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"16.5.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "6e91dadc80ee7c7586b79a630dc4a6848ea7a061bf0b4ab797be10571aa58ac4"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"16.5.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "938450caff4bdcd643fdfcb88dec77c703bb85e4184064f03ca52a6553d7f741"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"16.6.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "6681079ce680c80b838cbbb76863d1c3be56466082cc5c4bc140a09ffd194dfc"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"16.9.2\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "fece7346d18f9a96213f29f7dee348c7bd303f54ae21e5ee228e710cde82867a"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"17.2-17.3\"]": {
+      "record_count": 15,
+      "record_ids_sha256": "bb6695c4675261f58c00229d5d231eac543bc4d46372ad0373558ba772bcfce8"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"18.5.2\"]": {
+      "record_count": 133,
+      "record_ids_sha256": "79fe7317edf3b92716002ad7f5db727b7f83e2487b05236be14ccff8576900e5"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"18.6\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "0bfa1f292ff17a2928ad97bf19480b317af6355153901ebf007b8044fed33f57"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"18.8\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "a04eb739a1de68752bf1ea512728fb41d8cd143ef97cc9f6d494f5f492cd7fe3"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"18.9\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "ab3952a8f58d191c4e2ef3982502cc3012b809cc41289e5208ffa736c817e9b1"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"19\"]": {
+      "record_count": 220,
+      "record_ids_sha256": "b6ba5cc9679760a2539ea4152eac0646bf596fc44743e51fdfe434b1998e2a61"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"4.1\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "e25ea599d6ef25b5d40ce9da7e8e36551ec27298adc1483be1c92311befe42bc"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"4.2\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "f1a3e38f94d29e061baa4fbf300b5cf8ce426aca3efd1f9da2d30e15a54ae4eb"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"4.3\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "bebe4f2dc1b8d65d2b0495e50e7114f3737ba1bece6c9306551d14409cb9509a"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"6.1\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "f63089160595a5df6153ed4bd36cd2b900958f614163ee7164d54e9d1a9ba181"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"6.2\"]": {
+      "record_count": 126,
+      "record_ids_sha256": "a875ff0596a0a8671a62cd9726ad942fc09f156418c89c880ed3837a9106ff2d"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"7.2.3\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "0f6d645608d21d107be54615a47230c4814bb93f876196422cf581793baf7296"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"9.2.3\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "c1913d20cf9e6c085be8b328c9dabb07454bd86b592eb05599f0219b14eecaf7"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.1\"]": {
+      "record_count": 21,
+      "record_ids_sha256": "0006600ace4f5590f86cc53aa6a66da9a2ba21b15523028d7a1a64b8a4382b6f"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.10\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "4c76e4ec1531593a2bbcc1300e4369b70984f0f88d9f024c9cb5a8804c2b2b1e"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "ccf7b5a9b027cb80c45fd2152ed76e145945333b7cdd302dd58117aea4a0f599"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.3\"]": {
+      "record_count": 60,
+      "record_ids_sha256": "1c9a41e0ba6b58e722dedb2e3bd36845509c3281464867a1400f1ddf42d8062f"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.4\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "8d5b6fda14ccecf3996918d48829cef84116d1fca5f91df25c8b26151d050153"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.5 参数\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "6b55bfe1a48a7cf947678d2229198d9a4c16e5407162b9967ca7b28557746055"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.5\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "ff6cbb61afd04eb9e48c9ca81f2f4956acda7d5e4fcb3bec00bd15a925905ddb"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.6\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "d104d4663fedf4f3b340ee118127a8300f3d4f129aa55fd6454e0a8715e99fe4"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.7\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "e6d80c959272b7a993f38648d664ecbbbf82e85a7dd37f90f5d5c4cf00726088"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.8\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "987047293d3afc5f639b75e0bdaef31e545a56f16ed3d2f2b3efe24a3ed417bc"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"A.2.9\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "48c0b2f640007299288cc5a9f516c6a6e3bbe39a18f75dd6f5e1c43dec8ea33a"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"B.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "2471d950cc174654fa8e9689521f2ac648231629fcd78a89c0676358a1cae2e0"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"B.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "6e3f832c74369be2801c0ffadb721424e40e6444b9ba6f5129ccd174e1500a2b"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"B.3\"]": {
+      "record_count": 22,
+      "record_ids_sha256": "5bceb4c9c0860d28cbf30edf603222815bc3acb403a15177a91eca7f3fecea1e"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"式 A.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "c0526f9deedf39c695f3483fd09849b16e922bd02a6719e8e9ba7f7c7a35b332"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"式 A.4\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "af6944f63ce9f4d8ee99c521874b79e0c1f2fe3d4a32892415beb43de9eabc25"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"式 A.5\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "d83a639b6071617f2e8f9418c99040a8c3cd7844daa1d3328852d7fe9244ddff"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"式 A.6\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "7f39bd20be357050d9194347e7e036bec4107dc1ad9109b04a7e6f97fdab2b88"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"式 A.7\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "9bbf2b0de7414fa64d2c4d8fd2701c3c82a3c395e90a9c816909494a25172628"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 1\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "e25ea599d6ef25b5d40ce9da7e8e36551ec27298adc1483be1c92311befe42bc"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 10\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "7d0c861a4cfc0618203030b78f6f08ec263fc667ca4c310b6fe3a38e598abbd8"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 11\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "72804b4ca61ae41c00769b1dfa68eadb3ec1163579ee6db2e305c776d8cba4fa"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 12\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "3d6861f8e2a0a51ed3d85028f449149b548e0e9f804a9769a176cc5881573f48"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 13\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "e7b60a751d210e211e3a75d9b617cd61aa99829b9273ed18a9c0c212928b9768"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 14\"]": {
+      "record_count": 45,
+      "record_ids_sha256": "93358e32ee349135cc0d3efe0b64cc147b16668ef0543129c9e8e172ce1921df"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 15\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "e2718487e12f9b8992b1f5c018036fa2e65a2a642a76bdb4a4b7a865ed80be7f"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 16\"]": {
+      "record_count": 15,
+      "record_ids_sha256": "bb6695c4675261f58c00229d5d231eac543bc4d46372ad0373558ba772bcfce8"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 17\"]": {
+      "record_count": 220,
+      "record_ids_sha256": "b6ba5cc9679760a2539ea4152eac0646bf596fc44743e51fdfe434b1998e2a61"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 18\"]": {
+      "record_count": 133,
+      "record_ids_sha256": "79fe7317edf3b92716002ad7f5db727b7f83e2487b05236be14ccff8576900e5"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 19\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "0bfa1f292ff17a2928ad97bf19480b317af6355153901ebf007b8044fed33f57"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 2\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "f45482172b154beb962139f0770062c71c3785a2a5dd4f291d30195509230497"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 20\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "a04eb739a1de68752bf1ea512728fb41d8cd143ef97cc9f6d494f5f492cd7fe3"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 21\"]": {
+      "record_count": 7,
+      "record_ids_sha256": "faa5941d8ebffba4446404437b00915ce073f6fa50bb931f23cc6c5cc4c6f845"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 22\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "5f556aa1a3c013928689486197f2a0ab66852c65f1c21e3f2ec5ec89fe1a1b47"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 23\"]": {
+      "record_count": 7,
+      "record_ids_sha256": "116371ca358dc5a193e7f3658e89a48fb74a507e6c96dc6c4082ac7677ae1d9a"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 3\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "9ce4c4fc9bbb80bb69fd1c611ef506c6c353efbbed836993a3235ff827738eea"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 4\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "bebe4f2dc1b8d65d2b0495e50e7114f3737ba1bece6c9306551d14409cb9509a"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 5\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "f63089160595a5df6153ed4bd36cd2b900958f614163ee7164d54e9d1a9ba181"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 6\"]": {
+      "record_count": 26,
+      "record_ids_sha256": "d4e7cb4a69ac6ddaf3cef9e6a775965707ef4142cd2c4562c7c308809cef7686"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 7\"]": {
+      "record_count": 32,
+      "record_ids_sha256": "f2b5b500af3d297f3e19df215317380ed313757179a3f27bd1f0ee5fb95fbb8f"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 8\"]": {
+      "record_count": 68,
+      "record_ids_sha256": "bbdd3413652f89f4824dd955e60d7856bee8330de2743036bd336596e79280d4"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 9\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "0f6d645608d21d107be54615a47230c4814bb93f876196422cf581793baf7296"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 A.1\"]": {
+      "record_count": 21,
+      "record_ids_sha256": "0006600ace4f5590f86cc53aa6a66da9a2ba21b15523028d7a1a64b8a4382b6f"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 A.2\"]": {
+      "record_count": 55,
+      "record_ids_sha256": "1159c6cfdceb74112e418944cbf74d8de7fec4cc6ebed8261392b27720163e94"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 A.3\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "7e07b9fb531aac2b07b3b1896e20503dd63a22a8959b3de050d413d7b6ff1039"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 A.4\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "48c0b2f640007299288cc5a9f516c6a6e3bbe39a18f75dd6f5e1c43dec8ea33a"
+    },
+    "[\"GB/T 12706.1\",\"2020\",\"表 B.1\"]": {
+      "record_count": 22,
+      "record_ids_sha256": "5bceb4c9c0860d28cbf30edf603222815bc3acb403a15177a91eca7f3fecea1e"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"10.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "2066af422417741aa576d908fd21b6468d8e5a6cb8e2d19caee4be3488e5ce48"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"10.2.1\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "2d18c8162783ba13ef723235dc2083365a44c263f7e90e3fbf5e408a56dbf845"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"10.2.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "51edb65d6fa001b9efd720d563accc74fce1a89b5f2e7cce8eaeedb501755a7e"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"10.2.3\"]": {
+      "record_count": 7,
+      "record_ids_sha256": "ff73b7805585761bc102b9d49e839899080703c9156ca3164c8defbdf7de094c"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"12\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "ba629aa562c692bad756ad95815a0b347b73dff619712c7959b5c80a80bef401"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"13.2\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "c7af6862ecef22fa785db466bd3d2dfd99aa1868450e75391348980d5c88839c"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"13.3.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "bdee9ccfcf71dc899255ac922c22b0f7b6df172781e21981db7a5186e3e406d7"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"13.3.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "40943f201ad60985f622f6626d22fca098a898c99baade081683cc9210fa363c"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"13.3.3\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "9365280abb3ae3f735866059ca0bedf7f19bee7fc33fb3b97c987dc96a3352fe"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"13.5\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "1d9c65ee4c092759e34ec664b8cd64ef644b5226b25112fe50737af1d79a8ee2"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"13.7\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "00b24ffa64c712763e77986fb7b8dec9f944f7893185733d28c67b5e46562c6e"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"14.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "75f882f27364b852a2ea269683d57f1fb7fd7b62d38a269fbb9de5ff975c35b0"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"16.4.4\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "2eccedd98864939082ac0aea8abad0fa1ed79811844b175d03d12397d41bc07a"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.10.2\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "cbddc64b64e2aeb4484248d08c1c2a50143f12f2d1536c9194c41388f07142e4"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.12\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "27597714684dd3f2ac550bf44480b933179e6e0b116063499cabbdc7571771df"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.2.2\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "2c6839ee8aeaea33c62b6fc2137e00be882b6dc00703a346b98b6dcded30f929"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.5.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "617ec91dcf042c33636a41363f624aa32437aab4c25b88107b4363114478d798"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.5.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "af738bcc7ccf28608ff0a080777e7da2d4814613ef1f3404670f0670adf13973"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.5.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "65f26d99f3b5697f8703ade6439a66baed8ef0415b8421cd3af00240123b5573"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.6.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "c8f7d85cf67d8b8d429b429f23a2efb9b1471cb33be21e9775ce5a1c1c064d54"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.7.2\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "9a7e2bfa5273cc163f9709e334ce25a74b660604dc8678fba9831af0688a0222"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.7.3\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "0b6b84c8e5af714f754c3aeb7562345659eccb563babe1f544eb990c2623b743"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"17.9.3\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "7c3eb3b77446dce1f9d4c965308b051b1f9b74dd6d38b165975f6ebc60d0c20a"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"18.2.6, 18.3\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "9c0d1b991b555698c2f8263713161820b25de97296b71bded96e1edd0da43797"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"18.2.8\"]": {
+      "record_count": 10,
+      "record_ids_sha256": "9e308ee36cd8bd85661ab1d35ceb19e2502fadb7f204cd753fc62f5a181f6697"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"19\"]": {
+      "record_count": 250,
+      "record_ids_sha256": "8c36e56604b2c3c2a0a2974ad12a5f907a50fb60b3374b3f70fe45fa787fcda6"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"19.5\"]": {
+      "record_count": 40,
+      "record_ids_sha256": "a1fc8722f1f8221418a4ef21a2a6170b00782c22bb1978a74502db8d2afcdd72"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"19.6\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "86a1210aa8b153f4962eee6f68529e1232d51ffc0ac503b1aa4af51d374d410b"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"19.8\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "45b5ba323010262ecb44201fa4f4392b4e14af7af27e5580967d97827cc4b134"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"19.9\"]": {
+      "record_count": 32,
+      "record_ids_sha256": "1ac132fe3c55b04381414ee49bf53c7342892a3bbfec56ed319709dad0e3210c"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"4.1\"]": {
+      "record_count": 15,
+      "record_ids_sha256": "a6342f00f94f5c403fa03216ac18bd9074b7fb313c3b3be0a1ffa751f6582984"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"4.2 / 表3说明\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "750f067d817c97f84281f48b61277ad5c71afe3f53cb67c673b6a5f983689863"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"4.2\"]": {
+      "record_count": 22,
+      "record_ids_sha256": "bc22236146a013c46d47b08a7363b7b5357c780b73d548b9ae90b694f39a9a55"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"4.3\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "8eda5f6c5bdfdc1be43201f3b8953547befb5a795d6b103a45924392124b9109"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"6.1\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "63783dc6cf59ae385833c334ff4ba0fed713cc6ea1c195e4c15cde244173bf29"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"6.2\"]": {
+      "record_count": 100,
+      "record_ids_sha256": "4c4d41f70a351ef920c165ccb681fab8fe8177e1f83c9116c4f56b16fd35d6d3"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"8.2.3\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "fe16ec231ccdf39bdfedb1cbf6b21e4ef6bce8202c124a088fe43c08870eb128"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.1\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "70a67fd7709d5ea44cb101cfcfce55b193e66a00d96706375b96b688a06c7434"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.10\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "d5d45809ef43b4f0d810a6a498c17a622ab637b3ce1079f16544d4eedbbbd113"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "8f658b31aee17ad77a02e58262cd8f69094817ccef5e27294907b9d8c060b2d2"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "b93d0e11cfc92a02ad74b338f2703c751f0fc5e7d3c55dd4c58eae4fc45b548b"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.4\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "2764dddf2e1936511d3fee3c1b828751aa06cfdbca0f849aad9ea5d216947ed7"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.5 参数\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "c14ef99092176d29e6e319b4722ea046db43157af41367d106bc7c9a100a2f1f"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.5\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "95b8bc923bcca5077dc46078eade76783fcea93a84d6b3260db070baba746e61"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.6\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "82ce6a095e0d877885731e0141112b7305f6f5d8102660c41f1c77647b974088"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.7\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "0bb5fe4e7588ad2d14270d68d6c985285cdc1fd6a5388b7807a7f4d0c9389cbb"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.8\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "479f2010785acb029709ffddc0e8cdbadb621fe14f455106ab16e877cc15326a"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"A.2.9\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "08efc32060bd5660dcde84073d0afdc08975f598642fc07424dfb067367fd834"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"B.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "82d8a65ad2257df9b8dd7113ea11e5ed2b86abf0b52dbd0dc825523b5167a765"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"B.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "c07e3fc87e0f9635db64736b616c54dc6968da76f6d5881e144c89c3664237c7"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"B.3\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "ca71b90ecc8b71f1a406103c348921887ec6d4b3770914ac0f8a8cc3595df445"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 1\"]": {
+      "record_count": 15,
+      "record_ids_sha256": "a6342f00f94f5c403fa03216ac18bd9074b7fb313c3b3be0a1ffa751f6582984"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 10\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "02b88749562f43c3215648c0644f3744cbfb3f64c31b33b1e1b82e4d05cdcb62"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 11\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "874bfaf1f73339fdf65cb1fd90a6df08a75a8f78e5817594008c000a01f5c8a0"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 12\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "2eccedd98864939082ac0aea8abad0fa1ed79811844b175d03d12397d41bc07a"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 13\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "2c6839ee8aeaea33c62b6fc2137e00be882b6dc00703a346b98b6dcded30f929"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 14\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "7c3eb3b77446dce1f9d4c965308b051b1f9b74dd6d38b165975f6ebc60d0c20a"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 15\"]": {
+      "record_count": 45,
+      "record_ids_sha256": "7184e9ad25c1e2bd6908fdb6fe2b8d42d78ac47168b7156a207a8b7b6a27be02"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 16\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "97ea7d3e4c93c3cfce2057093e8486d06ca12bb550f46375ec690415793e84af"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 17\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "9c0d1b991b555698c2f8263713161820b25de97296b71bded96e1edd0da43797"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 18\"]": {
+      "record_count": 10,
+      "record_ids_sha256": "9e308ee36cd8bd85661ab1d35ceb19e2502fadb7f204cd753fc62f5a181f6697"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 19（续）\"]": {
+      "record_count": 250,
+      "record_ids_sha256": "8c36e56604b2c3c2a0a2974ad12a5f907a50fb60b3374b3f70fe45fa787fcda6"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 2\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "e079b7e9652884aee38bf62f8381f5a8687ce70f70ed567852fa1b5d60d6f868"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 20\"]": {
+      "record_count": 40,
+      "record_ids_sha256": "a1fc8722f1f8221418a4ef21a2a6170b00782c22bb1978a74502db8d2afcdd72"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 21\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "86a1210aa8b153f4962eee6f68529e1232d51ffc0ac503b1aa4af51d374d410b"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 22\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "45b5ba323010262ecb44201fa4f4392b4e14af7af27e5580967d97827cc4b134"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 23\"]": {
+      "record_count": 9,
+      "record_ids_sha256": "dd22007942cc06eb4944fb9a39c6ba71d3e335a23e2c394dce02e3d383998ac7"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 24\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "32824219a2f8f6193fc4eca01be9d3b34565fe3bf7f017e4ef17ad9e1a60ab15"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 25\"]": {
+      "record_count": 7,
+      "record_ids_sha256": "9b2855ccfa144301101b27442b61ccedafc5d5834e1974b88ba6f4ea10f74aa1"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 3\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "d6de06f2b92e61f5677e9ab15450072a7a1b2766831a7cfb88391688eab55b98"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 4\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "8eda5f6c5bdfdc1be43201f3b8953547befb5a795d6b103a45924392124b9109"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 5\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "63783dc6cf59ae385833c334ff4ba0fed713cc6ea1c195e4c15cde244173bf29"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 6\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "5b85fd3f798ba70db8b2f6078a32dae1fe6b34fb3fdc6f0a5b9240c919be95d7"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 7\"]": {
+      "record_count": 45,
+      "record_ids_sha256": "3ae0f4bdf7252cb370d574413aa8ad8ffffde2e5660b0e1efa683db0a7bd382b"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 8\"]": {
+      "record_count": 54,
+      "record_ids_sha256": "908904777a78124b9d7a9f3a36c63fc12f93a754393815cb4b26077e4da5e0a9"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 9\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "fe16ec231ccdf39bdfedb1cbf6b21e4ef6bce8202c124a088fe43c08870eb128"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 A.1\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "70a67fd7709d5ea44cb101cfcfce55b193e66a00d96706375b96b688a06c7434"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 A.2\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "038361b8c0b79520285e9b2a505127fa782c3a7b501cc34477e6c87f1e1846d3"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 A.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "08efc32060bd5660dcde84073d0afdc08975f598642fc07424dfb067367fd834"
+    },
+    "[\"GB/T 12706.2\",\"2020\",\"表 B.1\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "ca71b90ecc8b71f1a406103c348921887ec6d4b3770914ac0f8a8cc3595df445"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"10.2.2\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "74f36963de99155c4d5a9c693198be061aadfe4a23373bd5b76511a1467c254d"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"10.2.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "04cb09c1485e8708dee4fabfff2adb790f65ae48ce74e0ac8d8db209c9578ff4"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"12\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "4258bf80c31a3155ad1211ea1c3fe066c43952c8f18f909685e8c2e54c29a0bb"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"13.3.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "1bef66237147e9bdde8d58305b4b63f7234e62fb6ac922c65aef5b9dfac2cf63"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"13.5\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "9a08b759a5e59c5d5d31caed3eca0a8ab06adb661451e0f570e72650d4cc5a88"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"14.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "1f75d144e88fa7037aaa5c97737c952380aa08c652604ee5d5c9365ee1187d14"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"16.4.4\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "cb6d5a3f279df5ea4051df7a4be8f8be88d28701e50d450326444e9212affbae"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"17.10\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "0046bb898c9b9c050b3a01ae01bc7c2ca77be991155d359b2d99e805a283724f"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"17.2.2\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "0d444e53624b14fda348b57324a974c4bf680a5be51fa27303b1a941d0aa5bef"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"17.5.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "abdd38e50aab437125a4fc9ac00b5b9e5405b99ed26925b6b17cee507e3d45de"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"17.5.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "156fde242c37cba859ce6b4694cbda11329c5cfb50b8d679ea879130442f64d2"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"17.6.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "ab6ec8da6db8a970b991d5df4a943eddd607e112060b91ef3cf95aefb5ccded1"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"17.9.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "55a829d006e1b6a6f80c86d09bdf51e2957076d11953cb5728d796c541e6bdfb"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"19\"]": {
+      "record_count": 91,
+      "record_ids_sha256": "fcea5a1983d31b744b686e75ee3d37682bf8bacda5d72532bd20ccfbadfe3b37"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"19.1\"]": {
+      "record_count": 182,
+      "record_ids_sha256": "9a6adfd566d159aa5dd21353829317fed491ccc41428a0c8f7c1a58cce4b3c0f"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"19.13\"]": {
+      "record_count": 45,
+      "record_ids_sha256": "92b6619c70c93581712e9606c1bc483f6b44218344d3044c0664408957300aaa"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"19.14\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "7f51aad93e9a4ef06ee4c139b63cee72bbbb292c08094dca24568b43060d6f23"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"4.1\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "a7b251f199a20768bdc65502884d42c1fba82e0a150c1172d7a10661da95cb22"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"4.2\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "5f1ebee4b2246a1ad9da20b8ceb84e67c6cdfe51c2b9c740420b37c3ce2e6e9b"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"4.3\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "aa931505c81c7478302c46598fceb38d970987800481f5e82ca0205f2d585cbd"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"6.1\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "9e1742e9d7865648c4642e809b2138d05f22794cd5011f260c9d34ec6b01d251"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"6.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "9365cc9b67a3d201ec867f7551796cba2bfb2819027289847acd7f02ea07309e"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"8.2.3\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "84e8707f076f5c895b00896ce22c0213aaf72d50302dfb59f8b20d49b49ac3c1"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.1\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "148463bef4fb6da18c7e5fc05d1b0259747e943e7b28c471a0cb77e2b7da3ec3"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "4250e60c2fffc4e11d3bca61262bcd236b99f174ec06ace5bdaa0139e2ebe0c1"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "7604ccbae0fe669f12821383acd93428f128b4169ade9c84d6be9348941603cd"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.4\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "92ffb51c111b0f0824988b20a8f71cccc3a3a3049c9599d64f045f0cf1364152"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.5 参数\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "d1b361af5079377a889db07609dcfb0571c617a794348cf583f7df776eb5f3ba"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.5\"]": {
+      "record_count": 18,
+      "record_ids_sha256": "494cf845342ce9e49c60cfd726609f807c5103ea8ef91f0ff9180b3e56b197f2"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.6\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "36ffe9b2df144ece016d4e97891a764ee9fa6709139b61b51a0831d99a1e19ef"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.7\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "0f8117a92d0ffe26118af514b019d11bed7653438f123539b6af22ef516f8ff3"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.8\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "f43bdac294e8703724ca4c66cccd9baa1baeacc633c118d6e9fcf28151bd36a0"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"A.2.9\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "a320d36a08e152870c74f044070c0da5efa0776f2dfa67a9eda82886545dd816"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"B.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "dc6a941f0e0764c8132c9dfae0710e2920c5b195bf8345639f8d6ea47ccb7e7d"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"B.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "97810a33aa4c48c61b10d488bc43a6a8762488c424d5d28a0a4927ede3d56e46"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"B.3\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "aa21a8534ec7e9e3567626f805e4db051d3f75c466ec3b2a7364aee35030430e"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 1\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "a7b251f199a20768bdc65502884d42c1fba82e0a150c1172d7a10661da95cb22"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 10\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "cb6d5a3f279df5ea4051df7a4be8f8be88d28701e50d450326444e9212affbae"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 11\"]": {
+      "record_count": 20,
+      "record_ids_sha256": "0d444e53624b14fda348b57324a974c4bf680a5be51fa27303b1a941d0aa5bef"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 12\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "55a829d006e1b6a6f80c86d09bdf51e2957076d11953cb5728d796c541e6bdfb"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 13\"]": {
+      "record_count": 45,
+      "record_ids_sha256": "92b6619c70c93581712e9606c1bc483f6b44218344d3044c0664408957300aaa"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 14\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "7f51aad93e9a4ef06ee4c139b63cee72bbbb292c08094dca24568b43060d6f23"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 15\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "8f5d48eb9f81857b2be3ba1203768f468eb8a71027c93e37c977f3ef8eaa23ec"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 16\"]": {
+      "record_count": 182,
+      "record_ids_sha256": "9a6adfd566d159aa5dd21353829317fed491ccc41428a0c8f7c1a58cce4b3c0f"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 17\"]": {
+      "record_count": 27,
+      "record_ids_sha256": "dac7e7158b87cbd5ff980de51a54d4180f89c02cf37a55d5a17935e3d0bd80b8"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 18\"]": {
+      "record_count": 36,
+      "record_ids_sha256": "89d50466fa4dbc260cfd4e8bb033aa6c0ab00a7c9916628bbe969d5b0cd8610d"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 19\"]": {
+      "record_count": 9,
+      "record_ids_sha256": "4d7ce88657cfc75dd847462727d02d407dff143f2f8de3613263278ad0d2a928"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 2\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "0d71766ab5b1b75f05321b6a326a222ab3e2f82190016a7a3c16852e9d6e4a11"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 20\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "1b5a7672659b7f0b5cf837962828533ee44744a69505d2df14010de59db46b0a"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 21\"]": {
+      "record_count": 7,
+      "record_ids_sha256": "2a13b2e3435a523b512003e9320a2032497dec610962059d9bfcd1ec6457f82b"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 3\"]": {
+      "record_count": 6,
+      "record_ids_sha256": "b349de626a483de211e933dc396268164182c8cef80a30a31c73211bf0d6bc75"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 4\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "aa931505c81c7478302c46598fceb38d970987800481f5e82ca0205f2d585cbd"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 5\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "9e1742e9d7865648c4642e809b2138d05f22794cd5011f260c9d34ec6b01d251"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 6\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "9365cc9b67a3d201ec867f7551796cba2bfb2819027289847acd7f02ea07309e"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 7\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "84e8707f076f5c895b00896ce22c0213aaf72d50302dfb59f8b20d49b49ac3c1"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 8\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "4610c92ddfbf1e305b234726743c1146d1d6047175dc7ce4a47cdbe1a1e44bd8"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 9\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "c3c04e515f744e700136e4ad738a22a0fbc8ad7d69471fd21286038a0fd1da2d"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 A.1\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "148463bef4fb6da18c7e5fc05d1b0259747e943e7b28c471a0cb77e2b7da3ec3"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 A.2\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "d0f5352ecbe3d8d4de8656b61c63215ceb5ab50fa61af4c03b91647c4314ced6"
+    },
+    "[\"GB/T 12706.3\",\"2020\",\"表 B.1\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "aa21a8534ec7e9e3567626f805e4db051d3f75c466ec3b2a7364aee35030430e"
+    },
+    "[\"GB/T 12706.4\",\"2020\",\"7.1\"]": {
+      "record_count": 10,
+      "record_ids_sha256": "dead97203a3fa2811a5003e9a26f72d926d3f4f2e3da1bbd2c7f560b0327dadb"
+    },
+    "[\"GB/T 12706.4\",\"2020\",\"9\"]": {
+      "record_count": 49,
+      "record_ids_sha256": "b4a97617dd2df9bf30045214f26a811ae7840a0cda30da31cd2d84d74c0f080b"
+    },
+    "[\"GB/T 12706.4\",\"2020\",\"表1\"]": {
+      "record_count": 10,
+      "record_ids_sha256": "cdc777fa8c5d790d5b3b80631aa125eac613e2c521af4359c5e6b44e1467efa1"
+    },
+    "[\"GB/T 12706.4\",\"2020\",\"表14\"]": {
+      "record_count": 49,
+      "record_ids_sha256": "b4a97617dd2df9bf30045214f26a811ae7840a0cda30da31cd2d84d74c0f080b"
+    },
+    "[\"GB/T 12706.4\",\"2020\",\"表8\"]": {
+      "record_count": 10,
+      "record_ids_sha256": "dead97203a3fa2811a5003e9a26f72d926d3f4f2e3da1bbd2c7f560b0327dadb"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.1.2\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "eea15085ce06bcb3016504d178e02e31280bb6b060afb256503f231b2beaa46a"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.2.2\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "938fa7cce11523195f4bc3d309a33a2ec4e0da89b5c9bd0d4b4bcebb4ee24586"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.3.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "84f8f7b5b288f0f28632f17cdec16ed91aa9c66ff726e3de2ac9eea011f88d6b"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.3.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "3a9f4f3eb8f006e82cc5126c9aa695636c7a8c26f957aaf720e222d6acb25a5d"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.5.2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "594351283d424fb57289ea3360ac3f8db880150136d4bb6ee61e339e53535767"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.6.1\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "d15d9b91694c36be69086e4b0464f44b7d080e24e53834f6aa9034afb3578bb0"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.6.2\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "8b01425c4d0d3ec3f4cc47ec5c6b6e5b71e39f0952025cc2cc3f457f6e11f030"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.7.2\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "44e264f0a3500bc3d057ae541848098b933a31115a06b958a730049ca4b1d036"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"6.7.3\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "71c63bfd5e81b740580e07e30977e6f68cc7ef8de147a44213e9c0e8271226b4"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"表 2\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "eea15085ce06bcb3016504d178e02e31280bb6b060afb256503f231b2beaa46a"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"表 3\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "938fa7cce11523195f4bc3d309a33a2ec4e0da89b5c9bd0d4b4bcebb4ee24586"
+    },
+    "[\"GB/T 18890.2\",\"2015\",\"表 4\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "8b01425c4d0d3ec3f4cc47ec5c6b6e5b71e39f0952025cc2cc3f457f6e11f030"
+    },
+    "[\"GB/T 3956\",\"2008\",\"5.1.2\"]": {
+      "record_count": 75,
+      "record_ids_sha256": "67595ef6af4464f8b27c9e5e5b0029ca615cefc7c808ad4597128846a6250744"
+    },
+    "[\"GB/T 3956\",\"2008\",\"5.2.2\"]": {
+      "record_count": 270,
+      "record_ids_sha256": "e27d48847e24738f3cc071ee99d368c513d8f81034c67655f9ce419e3b7c19e1"
+    },
+    "[\"GB/T 3956\",\"2008\",\"6.1/6.2\"]": {
+      "record_count": 123,
+      "record_ids_sha256": "d398367f844f8ef839c60473e8ea3553a4f5c194b3116b52ef83c53041378609"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表 1\"]": {
+      "record_count": 75,
+      "record_ids_sha256": "67595ef6af4464f8b27c9e5e5b0029ca615cefc7c808ad4597128846a6250744"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表 2\"]": {
+      "record_count": 270,
+      "record_ids_sha256": "e27d48847e24738f3cc071ee99d368c513d8f81034c67655f9ce419e3b7c19e1"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表 3\"]": {
+      "record_count": 66,
+      "record_ids_sha256": "0eb6b8bfe05ab4c751541ada58e285024b2dd0d6d4a91d514fc3bb30ddd530e9"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表 4\"]": {
+      "record_count": 57,
+      "record_ids_sha256": "d7932abb09de49a66bae9e71536ce6a23cc0f3a263bdeb1bf883c6f3bb69ce0a"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表A.1\"]": {
+      "record_count": 41,
+      "record_ids_sha256": "b1a41a82b2be442065c3c5a123723fbac609f0835164426cc605c6e2cbbe01b6"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表C.1\"]": {
+      "record_count": 72,
+      "record_ids_sha256": "5f2b872d0b5f0da09187945beaee63e5a1d7737a2b32087501efb3517ac2748b"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表C.2\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "095a9897a33bc3786fed966983848699c77ea7922c48940c1c635988d2f70784"
+    },
+    "[\"GB/T 3956\",\"2008\",\"表C.3\"]": {
+      "record_count": 36,
+      "record_ids_sha256": "c6822785869551513c0c3e236ed1dd84c940d34249505aee980989d038cf0653"
+    },
+    "[\"GB/T 3956\",\"2008\",\"附录A\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "d2328f84d167b110cbb343981df527306006ecf7b4a37b55a8bac545c0f89d90"
+    },
+    "[\"GB/T 3956\",\"2008\",\"附录B\"]": {
+      "record_count": 8,
+      "record_ids_sha256": "a152946af049d4ccd9e51f6b2cbd3cf8c9dfe0790949166b0a08379b3c611d15"
+    },
+    "[\"Hopmans et al.\",\"2002\",\"§2.2 Eq. (1)/(2)\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "b5ebe2f0544134f4783dc3ffc293723112dd19d5f818e1adb21a5b69eb569cb7"
+    },
+    "[\"Huang and Niu\",\"2025\",\"Table A1\"]": {
+      "record_count": 70,
+      "record_ids_sha256": "78c34742c741ecda6a56b0aa5debe4a7b83d84b9fdc8b8909a051e4c69810472"
+    },
+    "[\"IEC 60228\",\"2023\",\"5.2\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "47ce3e97973d39f1897774eabdec7da1d511c875ecd291994352d6dc022c11f1"
+    },
+    "[\"IEC 60228\",\"2023\",\"5.3\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "1a1a2bb306d55399a039e0d4d828b21e73c81c2ea4286311c3c35d3ac0d4c59a"
+    },
+    "[\"IEC 60228\",\"2023\",\"6.1\"]": {
+      "record_count": 81,
+      "record_ids_sha256": "bfd0045220004df118090378062797574ee1e33ff22bca6b7c7a142863c72cc6"
+    },
+    "[\"IEC 60228\",\"2023\",\"6.2\"]": {
+      "record_count": 297,
+      "record_ids_sha256": "af68cb5df1e608cafcd96213119238b8185966f6d384a57715bab84abe7315c7"
+    },
+    "[\"IEC 60228\",\"2023\",\"6.3\"]": {
+      "record_count": 66,
+      "record_ids_sha256": "a9781fb38c25a8bee366878f8b4fddc161256ebfd85d1cac765d123c39e4139c"
+    },
+    "[\"IEC 60228\",\"2023\",\"6.4\"]": {
+      "record_count": 57,
+      "record_ids_sha256": "7c589bf5eac6cf243b8cd008ff43ebd3d63332abc5df7f911ba6920e2438e2de"
+    },
+    "[\"IEC 60228\",\"2023\",\"Table 1\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "47ce3e97973d39f1897774eabdec7da1d511c875ecd291994352d6dc022c11f1"
+    },
+    "[\"IEC 60228\",\"2023\",\"Table 2\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "1a1a2bb306d55399a039e0d4d828b21e73c81c2ea4286311c3c35d3ac0d4c59a"
+    },
+    "[\"IEC 60228\",\"2023\",\"Table 3\"]": {
+      "record_count": 81,
+      "record_ids_sha256": "bfd0045220004df118090378062797574ee1e33ff22bca6b7c7a142863c72cc6"
+    },
+    "[\"IEC 60228\",\"2023\",\"Table 4\"]": {
+      "record_count": 297,
+      "record_ids_sha256": "af68cb5df1e608cafcd96213119238b8185966f6d384a57715bab84abe7315c7"
+    },
+    "[\"IEC 60228\",\"2023\",\"Table 5\"]": {
+      "record_count": 66,
+      "record_ids_sha256": "a9781fb38c25a8bee366878f8b4fddc161256ebfd85d1cac765d123c39e4139c"
+    },
+    "[\"IEC 60228\",\"2023\",\"Table 6\"]": {
+      "record_count": 57,
+      "record_ids_sha256": "7c589bf5eac6cf243b8cd008ff43ebd3d63332abc5df7f911ba6920e2438e2de"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"5.1.2; 5.3.1; 5.4.1\"]": {
+      "record_count": 14,
+      "record_ids_sha256": "f70068cf76ea50c16fdaa269cf8c0d66657b5d790fddee30bcc05328ff707cf7"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"5.1.3; 5.1.4; 5.1.5\"]": {
+      "record_count": 28,
+      "record_ids_sha256": "662ae949450cd5846c9c84989eb3c88317fe5e91ae0ffffac649484189c596ca"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"5.2\"]": {
+      "record_count": 34,
+      "record_ids_sha256": "f1400f4103797b1a2fa5730f78e985f1b13b654f6135ff835db499eababa34cb"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"Table 1\"]": {
+      "record_count": 14,
+      "record_ids_sha256": "f70068cf76ea50c16fdaa269cf8c0d66657b5d790fddee30bcc05328ff707cf7"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"Table 2\"]": {
+      "record_count": 28,
+      "record_ids_sha256": "662ae949450cd5846c9c84989eb3c88317fe5e91ae0ffffac649484189c596ca"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"Table 3\"]": {
+      "record_count": 34,
+      "record_ids_sha256": "f1400f4103797b1a2fa5730f78e985f1b13b654f6135ff835db499eababa34cb"
+    },
+    "[\"IEC 60287-1-1\",\"2023\",\"Table 4\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "e4301c82f5a3d6a881d27c6d8324c3515a6575b1570cec2a3176ebc5dbddb34b"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"4.1.1\"]": {
+      "record_count": 29,
+      "record_ids_sha256": "b96fb0e53a08badabb90a64ab34ae960e2bb7e38e21a7c12246c3792c30633d6"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"4.2.1.1\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "6c131bcf764e243e43df579df4725fd618cd0726204af1f669638c48a5286c0c"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"4.2.6.3\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "9725ddf904858d99fc323be081a78743629efbbfefd594786d8c43664a8e173e"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"Table 1\"]": {
+      "record_count": 29,
+      "record_ids_sha256": "b96fb0e53a08badabb90a64ab34ae960e2bb7e38e21a7c12246c3792c30633d6"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"Table 3\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "6c131bcf764e243e43df579df4725fd618cd0726204af1f669638c48a5286c0c"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"Table 4\"]": {
+      "record_count": 5,
+      "record_ids_sha256": "bc1ff5bee17a8615342faa8e24a255ccecddf3f19ff3be205a6fc17d876d7d4d"
+    },
+    "[\"IEC 60287-2-1\",\"2023\",\"Table 5\"]": {
+      "record_count": 30,
+      "record_ids_sha256": "9725ddf904858d99fc323be081a78743629efbbfefd594786d8c43664a8e173e"
+    },
+    "[\"IEC 60287-3-1\",\"2017\",\"Annex A.4\"]": {
+      "record_count": 9,
+      "record_ids_sha256": "c3b2018c9a5b9d464417d8c301e6f1f35c3ee68317304cf8a7f19a5ae05067e9"
+    },
+    "[\"IEC 60287-3-1\",\"2017\",\"Table 1\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "c3bc83f7589c79418060e58974998882b670b8ea1c6d64bfdc343447f9626424"
+    },
+    "[\"IEC 60287-3-1\",\"2017\",\"Table 2\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "cd87e51dfe96348affe2fc90eb8bc8610c17f5c7aea30257aa3f81a24ce34444"
+    },
+    "[\"IEC 60949\",\"1988\",\"2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "aa6ae4b68385760ce6964ca60be446af4455e54ce2a227575705ebd3e2b8946a"
+    },
+    "[\"IEC 60949\",\"1988\",\"3\"]": {
+      "record_count": 26,
+      "record_ids_sha256": "2b7366ea46b2fa7ffcd99b4042cb16304d1ab7a3ec01a5ee74408b8e14992676"
+    },
+    "[\"IEC 60949\",\"1988\",\"5.1 / 6.1\"]": {
+      "record_count": 40,
+      "record_ids_sha256": "a9cc7aa4df6b72d806efb81f7dfd9328b794a025972635932ab5af0efee237e9"
+    },
+    "[\"IEC 60949\",\"1988\",\"5.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "dfa418f831711a838663a00e6e7c030f8f0ede920a3c5b31601f3eaf6b780a90"
+    },
+    "[\"IEC 60949\",\"1988\",\"5.2\"]": {
+      "record_count": 29,
+      "record_ids_sha256": "bd8d5c4bfa04f57a608bcc54cd650580c39b7344c46ad71cd6c1a06744678b30"
+    },
+    "[\"IEC 60949\",\"1988\",\"5.3.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "51f087d7f96e546ab3d44269983563de8f0ab6ca42dcf432534d2851fed7477b"
+    },
+    "[\"IEC 60949\",\"1988\",\"5.3.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "51b2161dee9ea4ae05f70ef95b9d03f6545eb0e533227f112a498b52fef3ec82"
+    },
+    "[\"IEC 60949\",\"1988\",\"6.1\"]": {
+      "record_count": 2,
+      "record_ids_sha256": "376c67946344110befffa1d75bcdeb48912f377105145fc3911901a84866f20b"
+    },
+    "[\"IEC 60949\",\"1988\",\"6.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "5a70b64032a7138edd49106a7b74a2b45e6989a136007d34e9e35744303bcbed"
+    },
+    "[\"IEC 60949\",\"1988\",\"6.3.1\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "9e8ee3c2fe85d096ca6d6ee8f28f9d9f4bfc55b558af03c9bf2189b1e7b95bf8"
+    },
+    "[\"IEC 60949\",\"1988\",\"6.3.2\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "a562827950b90fe0dff1cee116fb2394ea431975773ffa0c8342fb75a5c95ae2"
+    },
+    "[\"IEC 60949\",\"1988\",\"6.4\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "72705f3597b67565fd54647191bccca376360c676ec6e2cad1e79a5badb642ec"
+    },
+    "[\"IEC 60949\",\"1988\",\"6.5\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "275d3a1213495524e6676f89e9f5dff6691959722260fd5cb67520caa9e03b81"
+    },
+    "[\"IEC 60949\",\"1988\",\"Introduction / Appendix A(A)\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "3af41f81622360160363989eb3681ff5289be0a65cb76c907a572e577846b68f"
+    },
+    "[\"IEC 60949\",\"1988\",\"Introduction\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "a838b98afbcc762376fc85e8ff6990699842fde3e406c601b6246bc852047831"
+    },
+    "[\"IEC 60949\",\"1988\",\"Table I\"]": {
+      "record_count": 24,
+      "record_ids_sha256": "d1f96e31613508c6dfe792e955543653c5c431032ad3f70bf8320780e1c67b1d"
+    },
+    "[\"IEC 60949\",\"1988\",\"Table II\"]": {
+      "record_count": 40,
+      "record_ids_sha256": "a9cc7aa4df6b72d806efb81f7dfd9328b794a025972635932ab5af0efee237e9"
+    },
+    "[\"IEC 60949\",\"1988\",\"Table III\"]": {
+      "record_count": 28,
+      "record_ids_sha256": "360e02e442ea3c65871b3e209d4c5ddc86fb69c281d7b34926fbe2ece4b70184"
+    },
+    "[\"IEC 60949\",\"1988/AMD1:2008\",\"4 amendment\"]": {
+      "record_count": 1,
+      "record_ids_sha256": "5cb597639c8abc567aa69a1eae28a4a470366ae77fdb10744097ee9401a0bdcb"
+    },
+    "[\"IEC 60949\",\"1988/AMD1:2008\",\"Table II amendment\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "73988da0b025bd578c4c536474f4e45d0dca40bd030ab093591b6601c4e31167"
+    },
+    "[\"IEC 60949\",\"1988/AMD1:2008\",\"Table II insertion\"]": {
+      "record_count": 4,
+      "record_ids_sha256": "73988da0b025bd578c4c536474f4e45d0dca40bd030ab093591b6601c4e31167"
+    },
+    "[\"Nielsen et al.\",\"2019\",\"Table 1\"]": {
+      "record_count": 14,
+      "record_ids_sha256": "89b2f7c25a9a502699b0c9fc710d9320e3606cc3886d6ff0ebc6317e85d53049"
+    },
+    "[\"Qi et al.\",\"2021\",\"Table 1\"]": {
+      "record_count": 12,
+      "record_ids_sha256": "3a636901f4e0eb7dd380ae0c8ebe3188a5169d755016863b027c1fbce82246db"
+    },
+    "[\"Qi et al.\",\"2021\",\"Table 1（ρ×cp派生）\"]": {
+      "record_count": 3,
+      "record_ids_sha256": "0ea54ad13507e35dfa00ea131500c932bd8d71fec778be272cbab3dd0bb18de8"
+    },
+    "[\"Sah et al.\",\"2022-preprint-v1\",\"Table 2\"]": {
+      "record_count": 16,
+      "record_ids_sha256": "f04968cfa7ea12593ce3a58785503a9aa181ab8c08f5f4015006d1afc49bf91f"
+    },
+    "[\"Sah et al.\",\"2022-preprint-v1\",\"Table 3\"]": {
+      "record_count": 99,
+      "record_ids_sha256": "9066c942427b1b27591b8d201ebf6d72768858e6d5efc9ca71be6b5f2313df02"
+    },
+    "[\"Youn et al.\",\"2019\",\"Table 1\"]": {
+      "record_count": 9,
+      "record_ids_sha256": "c585d1e4f18b63e26dfbb5838ad37de6c0d87250b7e528ed0cd8bdeb9ecc7d0a"
+    }
   }
 }

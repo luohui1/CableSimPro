@@ -704,6 +704,18 @@
             "copper_wire",
             "copper_tape"
           ]
+        },
+        "metal_sheath_form": {
+          "type": "string",
+          "enum": [
+            "smooth",
+            "corrugated"
+          ]
+        },
+        "nominal_thickness_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "明确声明的标称厚度，SI m；不得以实测平均值代入"
         }
       }
     },

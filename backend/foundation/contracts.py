@@ -8,16 +8,17 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 import math
+import re
 from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_serializer, model_validator
 
 Digest = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:/-]*$")]
 Version = Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$", max_length=64)]
 AssetKind = Literal["material", "component", "assembly", "installation", "study_template", "rule"]
-Dimension = Literal["length", "area", "absolute_temperature", "temperature_difference", "linear_resistance", "thermal_resistivity", "thermal_conductivity", "current", "frequency"]
+Dimension = Literal["length", "area", "absolute_temperature", "temperature_difference", "linear_resistance", "thermal_resistivity", "thermal_conductivity", "current", "frequency", "mass_density", "resistivity", "volumetric_heat_capacity", "dimensionless"]
 
 
 class Contract(BaseModel):
@@ -40,6 +41,13 @@ UNITS: dict[str, tuple[Dimension, float, float, str]] = {
     "W/(m.K)": ("thermal_conductivity", 1.0, 0.0, "W/(m.K)"),
     "A": ("current", 1.0, 0.0, "A"),
     "Hz": ("frequency", 1.0, 0.0, "Hz"),
+    "kg/m3": ("mass_density", 1.0, 0.0, "kg/m3"),
+    "kg/m³": ("mass_density", 1.0, 0.0, "kg/m3"),
+    "ohm.m": ("resistivity", 1.0, 0.0, "ohm.m"),
+    "Ω·m": ("resistivity", 1.0, 0.0, "ohm.m"),
+    "J/(m3.K)": ("volumetric_heat_capacity", 1.0, 0.0, "J/(m3.K)"),
+    "J/(m³·K)": ("volumetric_heat_capacity", 1.0, 0.0, "J/(m3.K)"),
+    "1": ("dimensionless", 1.0, 0.0, "1"),
 }
 
 
@@ -93,7 +101,7 @@ def content_hash(value: Any) -> str:
 
 
 class SourceReference(Contract):
-    kind: Literal["manufacturer", "standard", "project_input", "derived"]
+    kind: Literal["manufacturer", "standard", "literature", "project_input", "derived"]
     reference: str = Field(min_length=1, max_length=512)
     reviewed: bool = Field(strict=True)
 
@@ -108,6 +116,77 @@ class AssetParameter(Contract):
     name: Identifier
     quantity: Quantity
     overridable: bool = Field(default=False, strict=True)
+
+
+class ReferenceEvidence(Contract):
+    """Frozen lookup receipt; an internally consistent receipt is not approval.
+
+    Adoption rechecks its exact identity against the installed sealed provider.
+    Keeping this separate from source prose preserves every condition and limit.
+    """
+    schema_version: Literal["cablesim.resource-reference/1"] = "cablesim.resource-reference/1"
+    parameter: Identifier
+    quantity: Quantity
+    selection: dict[str, JsonValue]
+    receipt: dict[str, JsonValue]
+    record_sha256: Digest
+
+    @model_validator(mode="after")
+    def consistent_receipt(self) -> ReferenceEvidence:
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False,
+                          allow_nan=False).encode("utf-8")) > 32 * 1024:
+            raise ValueError("RESOURCE_REFERENCE_TOO_LARGE")
+        record = self.receipt.get("record")
+        if not isinstance(record, dict):
+            raise ValueError("RESOURCE_REFERENCE_RECORD_REQUIRED")
+        selection_keys = {"release_digest", "data_sha256", "standard", "edition", "locator", "quantity", "record_id", "conditions"}
+        if (set(self.selection) != selection_keys or not isinstance(self.selection.get("conditions"), dict)
+                or any(not isinstance(self.selection.get(k), str) or not self.selection[k]
+                       for k in selection_keys - {"conditions"})
+                or any(not isinstance(self.receipt.get(k), str) or not re.fullmatch(r"[a-f0-9]{64}", self.receipt[k])
+                       for k in ("release_digest", "data_sha256", "request_sha256", "artifact_sha256"))):
+            raise ValueError("RESOURCE_REFERENCE_RECEIPT_INCOMPLETE")
+        record_quantity, trust = record.get("quantity"), self.receipt.get("trust")
+        if not isinstance(record_quantity, dict) or not isinstance(trust, dict):
+            raise ValueError("RESOURCE_REFERENCE_RECEIPT_INCOMPLETE")
+        method, verification = self.receipt.get("method"), record.get("verification")
+        if (not isinstance(method, dict) or not isinstance(verification, dict)
+                or verification.get("status") != "verified"
+                or not isinstance(record.get("conditions"), dict)
+                or not isinstance(record.get("limitations"), list)
+                or any(not isinstance(value, str) for value in record["limitations"])
+                or any(not isinstance(method.get(k), str) or not method[k].strip()
+                       for k in ("plugin_id", "name", "version", "method_version", "capability"))
+                or any(not isinstance(trust.get(k), str) or not trust[k].strip() for k in ("label", "reason"))
+                or any(not isinstance(record_quantity.get(k), str) or not record_quantity[k]
+                       for k in ("key", "name", "dimension", "unit"))
+                or any(type(record.get(k)) is not int or record[k] <= 0 for k in ("printed_page", "pdf_page"))
+                or not isinstance(record.get("citation"), str) or not record["citation"].strip()
+                or not isinstance(record.get("semantic"), str)
+                or not isinstance(record.get("source_sha256"), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", record["source_sha256"])
+                or type(record.get("value")) not in (int, float) or not math.isfinite(record["value"])):
+            raise ValueError("RESOURCE_REFERENCE_RECEIPT_INCOMPLETE")
+        if (self.receipt.get("quantity_status") != "available"
+                or self.receipt.get("quantity") != self.quantity.model_dump(mode="json")):
+            raise ValueError("RESOURCE_REFERENCE_QUANTITY_MISMATCH")
+        original = {k: v for k, v in record.items() if k not in ("record_sha256", "citation")}
+        if (record.get("record_sha256") != self.record_sha256
+                or content_hash(original) != self.record_sha256):
+            raise ValueError("RESOURCE_REFERENCE_RECORD_DIGEST")
+        if (any(self.selection.get(k) != self.receipt.get(k) for k in ("release_digest", "data_sha256", "conditions"))
+                or any(self.selection.get(k) != record.get(k) for k in ("standard", "edition"))
+                or self.selection.get("record_id") != record.get("id")
+                or self.selection.get("quantity") != record_quantity.get("key")
+                or self.selection.get("locator") not in (record.get("table"), record.get("clause"))):
+            raise ValueError("RESOURCE_REFERENCE_IDENTITY_MISMATCH")
+        if (self.receipt.get("approval") != "not_granted"
+                or self.receipt.get("applied_to_workspace") is not False
+                or trust.get("grade") != "reference"):
+            raise ValueError("RESOURCE_REFERENCE_NOT_APPROVAL")
+        if self.quantity != self.quantity.si():
+            raise ValueError("RESOURCE_REFERENCE_REQUIRES_SI")
+        return self
 
 
 class PayloadFile(Contract):
@@ -169,6 +248,14 @@ class AssetRelease(Contract):
     files: tuple[PayloadFile, ...] = Field(default=(), max_length=256)
     sources: tuple[SourceReference, ...] = Field(min_length=1, max_length=64)
     geometry_recipe: CircularRecipe | None = None
+    reference_evidence: tuple[ReferenceEvidence, ...] = Field(default=(), max_length=64)
+
+    @model_serializer(mode="wrap")
+    def omit_absent_reference_evidence(self, handler):
+        value = handler(self)
+        if not self.reference_evidence:
+            value.pop("reference_evidence", None)
+        return value
 
     @model_validator(mode="after")
     def unique_members(self) -> AssetRelease:
@@ -178,9 +265,17 @@ class AssetRelease(Contract):
             raise ValueError("GEOMETRY_REQUIRES_COMPONENT_OR_ASSEMBLY")
         groups = [tuple(p.name for p in self.parameters),
                   tuple(f.path.casefold() for f in self.files),
-                  tuple((d.asset_id, d.version) for d in self.dependencies)]
+                  tuple((d.asset_id, d.version) for d in self.dependencies),
+                  tuple(item.parameter for item in self.reference_evidence)]
         if any(len(g) != len(set(g)) for g in groups):
             raise ValueError("DUPLICATE_ASSET_MEMBER")
+        parameters = {p.name: p for p in self.parameters}
+        if any(item.parameter not in parameters or parameters[item.parameter].quantity.si() != item.quantity
+               for item in self.reference_evidence):
+            raise ValueError("RESOURCE_REFERENCE_PARAMETER_MISMATCH")
+        if self.reference_evidence and len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False,
+                allow_nan=False).encode("utf-8")) > 512 * 1024:
+            raise ValueError("RESOURCE_ASSET_TOO_LARGE")
         return self
 
     def reference(self) -> AssetRef:

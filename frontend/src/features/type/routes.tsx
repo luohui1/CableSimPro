@@ -1,14 +1,20 @@
-import { useEffect } from 'react';
-import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteComponent, type AnyRootRoute } from '@tanstack/react-router';
+import { lazy, useEffect } from 'react';
+import { createRoute, Outlet, useNavigate, useParams, useSearch, type AnyRootRoute } from '@tanstack/react-router';
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
 import { queryClient } from '@/lib/query-client';
 import { loadWorkspace, typeEvidence, moduleMethods, runArtifact, typeRequirements } from './api';
 import { typeSpecification } from './version-api';
 import {preloadTypeModule} from './module-loader';
-const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
-const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
-const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
+// React.lazy preserves the same suspension path across the initial render and
+// resolution. TanStack's lazyRouteComponent uses React.use() here and can
+// violate the React 19 thenable contract during a cold nested route load.
+const loadTypeListPage = () => import('./list-page');
+const loadTypeProvider = () => import('./provider');
+const loadTypeWorkspace = () => import('./workspace');
+const TypeListPage = lazy(() => loadTypeListPage().then(module => ({ default: module.TypeListPage })));
+const TypeProvider = lazy(() => loadTypeProvider().then(module => ({ default: module.TypeProvider })));
+const TypeWorkspace = lazy(() => loadTypeWorkspace().then(module => ({ default: module.TypeWorkspace })));
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
   create: value.create === '1' || value.create === 1 || value.create === true ? true : undefined,
@@ -37,8 +43,8 @@ export function createTypeRoutes(root: AnyRootRoute) {
       queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run), staleTime: 0 });
     const module=location.pathname.split('/')[3]||'structure';
     if(module!=='structure')void preloadTypeModule(module);
-    void TypeProvider.preload?.();
-    void TypeWorkspace.preload?.();
+    void loadTypeProvider();
+    void loadTypeWorkspace();
     if(module!=='structure') {
       // Start the actual module and its saved evidence alongside the workspace,
       // instead of downloading them only after the shell has mounted.

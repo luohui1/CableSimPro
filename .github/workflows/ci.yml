@@ -13,7 +13,7 @@ jobs:
   hygiene:
     name: Hygiene and plugin catalog checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -147,6 +147,68 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1 libxrender1
+      - name: Prepare real host, geometry and browser dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python scripts/prepare_plugin_environment.py cablesim.cable-geometry
+          npm --prefix frontend ci --ignore-scripts
+          cd frontend
+          npx playwright install --with-deps chromium
+      - name: Generate a fresh release database and run release workflows
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p .data/release .tmp/library-import-walk
+          .venv/bin/python frontend/scripts/seed-engineering-demo.py --release --database .data/release/engineering.sqlite 2>&1 | tee .tmp/library-import-walk/seed.log
+          .venv/bin/python scripts/verify_release_workflows.py --output .tmp/library-release-acceptance 2>&1 | tee .tmp/library-import-walk/release.log
+      - name: Walk real imports, series operations and public comparisons at both sizes
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        shell: bash
+        working-directory: frontend
+        env:
+          E2E_DEV: '1'
+          E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
+          LIBRARY_IMPORT_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk
+        run: npm run test:library-import 2>&1 | tee ../.tmp/library-import-walk/browser.log
+      - name: Retain every public catalogue value and deviation
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          .venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          from backend.kernel.catalogue_agreement import reference_report
+          output = Path('.tmp/library-import-walk/catalogues')
+          output.mkdir(parents=True, exist_ok=True)
+          for name in ('people-mv', 'bahra-mv'):
+              (output / (name + '.json')).write_text(json.dumps(reference_report(name), ensure_ascii=False, indent=2), encoding='utf-8')
+          PY
+      - name: Verify transcribed values against pinned manufacturer PDFs
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          mkdir -p .tmp/catalogue-source-audit
+          python scripts/verify_catalogue_originals.py --output .tmp/catalogue-source-audit/report 2>&1 | tee .tmp/catalogue-source-audit/audit.log
+      - name: Verify LV, 35 kV and 220 kV imports against official originals
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          python scripts/verify_import_originals.py --output .tmp/catalogue-source-audit/imports 2>&1 | tee .tmp/catalogue-source-audit/imports.log
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && runner.os == 'Linux' }}
+        with:
+          name: library-import-verification
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .tmp/library-import-walk/
+            .tmp/library-release-acceptance/
+            .tmp/catalogue-source-audit/
+            .data/release/engineering.seed.json
+          if-no-files-found: error
       - uses: actions/cache/restore@v4
         id: occt
         with:
