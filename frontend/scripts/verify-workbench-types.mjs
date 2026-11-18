@@ -370,6 +370,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       applicable: true, navigations: [] };
     (report.fixedTypeRunNavigation ||= []).push(evidence);
     const historyRequests = [], historyByRequest = new WeakMap(), historyUpdates = new Set();
+    const archiveRequests = [];
+    evidence.archiveRequests = archiveRequests;
+    const onArchiveRequest = request => {
+      const url = new URL(request.url());
+      if (request.method() === 'GET' && url.pathname === fullEndpoint && url.searchParams.get('view') === 'full')
+        archiveRequests.push({ url: url.pathname + url.search, requestedAt: Date.now() });
+    };
     const historyEndpoint = '/api/types/' + encodeURIComponent(source.wid) + '/display-runs';
     evidence.historyRequests = historyRequests;
     const notifyHistory = () => { for (const wake of [...historyUpdates]) wake(); };
@@ -417,6 +424,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       read.finishedAt = Date.now(); notifyHistory();
     };
     page.on('request', onHistoryRequest);
+    page.on('request', onArchiveRequest);
     page.on('response', onHistoryResponse);
     page.on('requestfailed', onHistoryFailed);
     async function completedHistory(readsBefore) {
@@ -495,7 +503,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       return { link, href: url.pathname + url.search };
     }
     async function openFixed(label, action) {
-      const readsBefore = historyRequests.length, startedAt = Date.now();
+      const readsBefore = historyRequests.length, archivesBefore = archiveRequests.length, startedAt = Date.now();
       const [archiveResponse, ratingResponse] = await Promise.all([
         page.waitForResponse(response => {
           const url = new URL(response.url());
@@ -554,7 +562,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         ratingHttp: ratingResponse?.status(), run: observed.id, inputDigest: observed.input_digest,
         outputDigest: observed.output_digest, workspaceRevision: observed.snapshot.workspace_revision,
         studyRevision: observed.snapshot.study_revision, subjectReadyMs, subjectCaptureMs: Date.now() - startedAt,
-        historyAtCapture: historyRequests.slice(readsBefore).map(read => ({ after: read.after, state: read.state, nextCursor: read.nextCursor })) };
+        historyAtCapture: historyRequests.slice(readsBefore).map(read => ({ after: read.after, state: read.state, nextCursor: read.nextCursor })),
+        archiveRequests: archiveRequests.slice(archivesBefore).map(read => ({ ...read, requestedMs: read.requestedAt - startedAt })) };
       evidence.navigations.push(navigation);
       // This verification wait starts after the ready-subject screenshot. It
       // does not replace first-paint evidence or alter the performance budget.
@@ -563,6 +572,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         navigation.historyReads = await completedHistory(readsBefore);
         navigation.historyCompleteMs = Math.max(...navigation.historyReads.map(read => read.finishedAt)) - startedAt;
         navigation.historyVerificationWaitMs = Date.now() - historyWaitStarted;
+        navigation.archiveRequests = archiveRequests.slice(archivesBefore).map(read => ({ ...read, requestedMs: read.requestedAt - startedAt }));
+        expect(navigation.archiveRequests, '同一次固定入口只读取一次选定运行完整档案，不因 provider 和结果组件挂载重复读取').toHaveLength(1);
+        check(target.label + ' · ' + label + '的真实完整档案请求与目录读取时序已记录', true,
+          { archiveRequests: navigation.archiveRequests, historyReads: navigation.historyReads,
+            subjectReadyMs, historyCompleteMs: navigation.historyCompleteMs });
         await expect(surface).toHaveAttribute('data-type-state', /^(success|historical)$/);
         expect(page.url(), '后台历史完成不能替换当前选中运行').toBe(navigation.url);
         await expect(page.getByText('保存运行目录不可用', { exact: true })).toHaveCount(0);
@@ -651,7 +665,48 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         await openFixed('当前型号返回保存运行', () => record.link.click());
         check('历史结构推导可键鼠返回同一当前型号并重新打开原保存运行', true, evidence.currentInputEntry);
       }
+      if (source.module === 'standard-check') {
+        // These are cold real type URLs. The missing/foreign run must stop at
+        // exact identity resolution, without replacing it with a current run.
+        const owners = await api('/api/design/type-workspaces');
+        const other = owners.find(owner => owner.id !== source.wid);
+        expect(other, '错型号校验需要另一个真实型号工作区').toBeTruthy();
+        const otherBefore = await workspace(other.id);
+        const knownRuns = evidence.navigations.flatMap(item => item.historyReads || []).flatMap(read => read.runs);
+        const absent = 'missing-' + source.rid;
+        expect(knownRuns.some(run => run.id === absent)).toBe(false);
+        const rejected = [
+          { label: '不存在的运行', wid: source.wid, rid: absent },
+          { label: '其他型号的运行身份', wid: other.id, rid: source.rid },
+        ];
+        evidence.rejectedIdentities = [];
+        for (const rejectedRun of rejected) {
+          const url = new URL(base + '/types/' + encodeURIComponent(rejectedRun.wid) + '/standard-check/results');
+          url.searchParams.set('theme', 'light'); url.searchParams.set('run', rejectedRun.rid);
+          const archiveCount = archiveRequests.length;
+          await page.goto(url.href);
+          await expect(page.getByText('型号读取失败', { exact: true })).toBeVisible();
+          await expect(page.getByRole('button', { name: '重新读取', exact: true })).toBeVisible();
+          await expect(page.locator('[data-type-page="standard-check-results"]')).toHaveCount(0);
+          await expect(page.getByRole('table', { name: target.table, exact: true })).toHaveCount(0);
+          expect(new URL(page.url()).pathname).toBe(url.pathname);
+          expect(new URL(page.url()).searchParams.get('run')).toBe(rejectedRun.rid);
+          expect(archiveRequests.length, '被拒绝的身份不能回退读取原运行完整档案').toBe(archiveCount);
+          expect(report.writes.length, '拒绝错身份入口不得保存或运行').toBe(writesBefore);
+          const shot = await capture('固定型号运行-标准核对-' + rejectedRun.label + '-明确拒绝');
+          evidence.rejectedIdentities.push({ ...rejectedRun, url: page.url(), screenshot: shot.screenshot,
+            state: await visibleText(), writes: report.writes.slice(writesBefore) });
+        }
+        const otherAfter = await workspace(other.id);
+        expect(otherAfter.revision).toBe(otherBefore.revision);
+        expect(otherAfter.domain).toEqual(otherBefore.domain);
+        const valid = new URL(base + '/types/' + encodeURIComponent(source.wid) + '/standard-check/results');
+        valid.searchParams.set('theme', 'light'); valid.searchParams.set('run', source.rid);
+        await openFixed('拒绝错身份后冷恢复原运行', () => page.goto(valid.href));
+        check('错运行与错型号冷入口明确拒绝且可恢复确切原运行', true, evidence.rejectedIdentities);
+      }
     } finally {
+      page.off('request', onArchiveRequest);
       page.off('request', onHistoryRequest);
       page.off('response', onHistoryResponse);
       page.off('requestfailed', onHistoryFailed);

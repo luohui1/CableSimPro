@@ -6,7 +6,7 @@ import { commandResultLabel, latestModuleRun, moduleResultStatus, useTypeEvidenc
 import { nominalNumber } from './design-summary';
 import { message, optionalRecord, text } from '@/api/client';
 import { moduleMethods } from './api';
-import { fixedRatingEvidenceOptions } from './evidence-query';
+import { fixedTypeEvidenceOptions } from './evidence-query';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icon';
 import { PropertyPanel, type PropertyGroup } from '@/components/property-panel';
@@ -49,10 +49,10 @@ export { typeModules } from "./module-definitions";
 export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
   const evidence = useTypeEvidence();
-  const queries = useQueryClient(), fixedRating = location.module === 'rating-table' && !!location.run;
-  const fixed = useQuery({ ...fixedRatingEvidenceOptions(queries, location.wid || '', location.run || ''),
-    enabled: !!location.wid && fixedRating, refetchOnMount: false });
-  const activeEvidence = fixedRating ? fixed : evidence;
+  const queries = useQueryClient(), fixedRun = !!location.run;
+  const fixed = useQuery({ ...fixedTypeEvidenceOptions(queries, location.wid || '', location.run || '', location.module),
+    enabled: !!location.wid && fixedRun, refetchOnMount: false });
+  const activeEvidence = fixedRun ? fixed : evidence;
   const methods = useQuery({ queryKey: ['type-method-catalog'], queryFn: ({ signal }) => moduleMethods(signal) });
   const specificationState = useQuery({ queryKey: ['type-specification', state.workspace?.id, 'customer'], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, 'customer'), enabled: !!state.workspace && location.module==='specification', staleTime:30000 });
   const comparisonState = useQuery({ queryKey: ['type-comparison', state.workspace?.id], queryFn: ({ signal }) => typeComparison(state.workspace!.id, signal), enabled: !!state.workspace && location.module==='comparison', staleTime:30000 });
@@ -104,9 +104,9 @@ export function TypeWorkspace() {
       const stale = state.dirty || spec.lifecycle.stale || spec.payload.revision !== state.workspace?.revision || sources.some(source => optionalRecord(source).freshness !== 'current');
       return { kind: stale ? 'historical' as const : 'current' as const, label: stale ? '过期' : '当前', reason: stale ? '规格书引用的输入或结果已变化，需重新生成。' : '规格书对应当前输入及保存结果。' };
     }
-    const selectedEvidence = id === 'rating-table' && fixedRating ? fixed : evidence;
+    const selectedEvidence = id === location.module && fixedRun ? fixed : evidence;
     if (selectedEvidence.error || methods.error) return { kind: 'error' as const, label: '读取失败', reason: message(selectedEvidence.error || methods.error) };
-    if (id === 'structure' && !state.inputDirty && !evidence.data?.some(item=>optionalRecord(optionalRecord(item.study.definition).method).plugin_id==='cablesim.cable-geometry' && ['succeeded','partial'].includes(text(item.run.status))) && rows.some(row => row.outerM !== null)) return {kind:'current' as const,label:'当前',reason:'参数截面对应当前输入；外径与用料尚未运行。'};
+    if (id === 'structure' && !state.inputDirty && !selectedEvidence.data?.some(item=>optionalRecord(optionalRecord(item.study.definition).method).plugin_id==='cablesim.cable-geometry' && ['succeeded','partial'].includes(text(item.run.status))) && rows.some(row => row.outerM !== null)) return {kind:'current' as const,label:'当前',reason:'参数截面对应当前输入；外径与用料尚未运行。'};
     return moduleResultStatus(selectedEvidence.data, id, state.workspace?.revision, state.inputDirty || !!state.methodDrafts[id] || id === 'rating-table' && !!state.ratingDraft, methods.data);
   }
   function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason} aria-label={value.label}>{value.kind === 'unknown' ? <span className="type-module-idle" aria-hidden="true" /> : <StatusMark kind={value.kind} label={value.label} />}</span></Tooltip>; }
@@ -248,6 +248,9 @@ export function TypeWorkspace() {
         <TabsContent asChild value={dockTab}><div className="type-page workbench-dock-body" aria-label={module?.label || '型号模块'} aria-busy={state.loading || undefined} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
           {dockMax && workspaceState}
           {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
+          {location.run && location.module !== 'rating-table' && document && !state.loading && (evidence.isPending
+            ? <p className="type-notice" role="status">正在读取保存运行目录；已校验的选定结果可继续查看。</p>
+            : evidence.error ? <ErrorState title="保存运行目录不可用" description={message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取运行目录</Button>} /> : null)}
           {state.dirty && <p className="type-notice">{state.changeCount} 处未保存 · {state.inputDirty ? evidence.data?.length ? '保存后重算受影响的结果。' : '保存后用于计算和交付。' : '保存方法条件后可运行。'}</p>}
           {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
             : location.module === 'structure' ? (dockTab === 'materials' ? <MaterialComparison /> : dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)

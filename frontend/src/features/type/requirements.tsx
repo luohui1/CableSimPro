@@ -15,7 +15,7 @@ import { formatNumber } from '@/lib/format';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
 import { typePath, useTypeNavigation } from './navigation';
-import { chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
+import { chooseEvidence, currentEvidence, useTypeResultEvidence } from './evidence';
 import { standardDefinition } from './standard-check';
 import { basisConditions, basisValue } from './basis-display';
 import { TypeRunControl } from './run-control';
@@ -28,7 +28,7 @@ import { EngineeringInputEntry } from './engineering-inputs';
 const states: Record<string, { label: string; kind: StatusKind }> = { proposed: { label: '待批准', kind: 'draft' }, approved: { label: '已批准', kind: 'success' }, conflict: { label: '版本冲突', kind: 'error' }, unbound: { label: '未定义 / 未覆盖', kind: 'unknown' } };
 type Row = Record<string, unknown> & { id: string };
 export function TypeRequirements({ tab }: { tab: string }) {
-  const state = useTypeWorkspace(), evidence = useTypeEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector(), queries = useQueryClient();
+  const state = useTypeWorkspace(), evidence = useTypeResultEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector(), queries = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set()), [filter, setFilter] = useState('all'), [picked, setPicked] = useState('');
   const [open, setOpen] = useState(false), [reviewer, setReviewer] = useState(''), [ack, setAck] = useState(false), [running, setRunning] = useState(false);
   const [currentBasis,setCurrentBasis]=useState<Record<string,unknown>|null>(null);

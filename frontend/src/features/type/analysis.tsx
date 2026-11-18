@@ -10,7 +10,7 @@ import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { InlineEmpty, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { engineeringQuantity, formatNumber } from '@/lib/format';
-import { chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
+import { chooseEvidence, currentEvidence, methodLabel, useTypeResultEvidence } from './evidence';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
 import { typePath, useTypeNavigation } from './navigation';
@@ -41,7 +41,7 @@ export function analysisValue(row: Record<string, unknown>, full = false) {
 }
 function savedValue(value: unknown) { return value === undefined || value === null ? '未提供' : typeof value === 'object' ? JSON.stringify(value) : String(value); }
 export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-circuit'; tab: string }) {
-  const state = useTypeWorkspace(), evidence = useTypeEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector();
+  const state = useTypeWorkspace(), evidence = useTypeResultEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector();
   const [selected, setSelected] = useState(''), [running, setRunning] = useState(false);
   const [curveOpen, setCurveOpen] = useState(false);
   const [trial, setTrial] = useState<Record<string,unknown> | null>(null), [trialError, setTrialError] = useState(''), [trying, setTrying] = useState(false);

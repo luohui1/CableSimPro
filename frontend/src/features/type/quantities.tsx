@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { formatNumber, significantNumber } from '@/lib/format';
 import type { CableType } from '@/features/drawing/types';
 import { useTypeWorkspace } from './provider';
-import { chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
+import { chooseEvidence, currentEvidence, methodLabel, useTypeResultEvidence } from './evidence';
 import { typePath, useTypeNavigation } from './navigation';
 import { TypeRunControl } from './run-control';
 import { geometryMethod } from './geometry';
@@ -30,7 +30,7 @@ function densityNote(row: Record<string, unknown>) {
   return (kinds[text(source.kind)] || '出处缺项') + ' · ' + (citation || '历史工件未记录密度出处');
 }
 export function TypeQuantities({ cable }: { cable: CableType }) {
-  const state = useTypeWorkspace(), evidence = useTypeEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector();
+  const state = useTypeWorkspace(), evidence = useTypeResultEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector();
   const [running, setRunning] = useState(false), [selected, setSelected] = useState('');
   let saved: ReturnType<typeof chooseEvidence> = null, layers: QuantityRow[] = [], error = '';
   try {

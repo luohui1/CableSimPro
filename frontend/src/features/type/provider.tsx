@@ -6,7 +6,7 @@ import { at, change, commitFields, isLocked, parseInput, type DomainDocument, ty
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { historyType, loadWorkspace, saveType, type Workspace } from './api';
-import { fixedRatingEvidenceOptions, readTypeEvidenceForWorkspace } from './evidence-query';
+import { fixedTypeEvidenceOptions, readTypeEvidenceForWorkspace } from './evidence-query';
 import { useTypeNavigation } from './navigation';
 import { isRatingDefinition, ratingBody, saveRating, typeStudies, type RatingDraft } from './rating-api';
 import { saveMethod, type MethodDraft } from './method-draft';
@@ -37,7 +37,7 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
   // The route starts this read on entry. Mounting must not repeat a just-finished
   // prefetch; explicit reload/save/undo keep their existing refresh behavior.
   const query = useQuery({ queryKey: ['type-workspace', wid, location.revision, location.run], queryFn: ({ signal }) => {
-    const fixed = location.module === 'rating-table' && location.run ? fixedRatingEvidenceOptions(queries, wid, location.run) : undefined;
+    const fixed = location.run ? fixedTypeEvidenceOptions(queries, wid, location.run, location.module) : undefined;
     return loadWorkspace(wid, signal, location.revision, location.run, fixed
       ? readTypeEvidenceForWorkspace(fixed, () => queries.fetchQuery(fixed), signal, queries) : undefined);
   }, staleTime: 0, refetchOnMount: false });

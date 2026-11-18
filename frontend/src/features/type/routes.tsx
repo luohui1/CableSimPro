@@ -9,7 +9,7 @@ import {preloadTypeModule} from './module-loader';
 import { isRatingDefinition, typeStudies } from './rating-api';
 import { inputContractQuery } from '@/api/input-contracts';
 import { contractFields } from '@/lib/heavy-components';
-import { fixedRatingEvidenceOptions, readTypeEvidenceForWorkspace, typeEvidenceOptions } from './evidence-query';
+import { fixedTypeEvidenceOptions, readTypeEvidenceForWorkspace, typeEvidenceOptions } from './evidence-query';
 export { readTypeEvidenceForWorkspace } from './evidence-query';
 // React.lazy preserves the same suspension path across the initial render and
 // resolution. TanStack's lazyRouteComponent uses React.use() here and can
@@ -50,7 +50,7 @@ export function createTypeRoutes(root: AnyRootRoute) {
     let savedEvidence: ReturnType<typeof typeEvidence> | undefined;
     const evidenceOptions = typeEvidenceOptions(params.wid, history, module);
     const readEvidence=()=>savedEvidence??=queryClient.fetchQuery(evidenceOptions);
-    const fixedOptions = search.run && module === 'rating-table' ? fixedRatingEvidenceOptions(queryClient, params.wid, search.run) : undefined;
+    const fixedOptions = search.run ? fixedTypeEvidenceOptions(queryClient, params.wid, search.run, module) : undefined;
     let fixedEvidence: ReturnType<typeof typeEvidence> | undefined;
     const readFixedEvidence = () => fixedEvidence ??= queryClient.fetchQuery(fixedOptions!);
     // Start the selected saved input together with both route bundles, rather
@@ -76,7 +76,7 @@ export function createTypeRoutes(root: AnyRootRoute) {
     if(module!=='structure'||tab==='quantities'||!!search.run||search.revision!==undefined) {
       // Start the actual module and its saved evidence alongside the workspace,
       // instead of downloading them only after the shell has mounted.
-      const evidence = readEvidence();
+      const evidence = fixedOptions ? readFixedEvidence() : readEvidence();
       // The requirement directory depends on the selected immutable run, not
       // on React mounting its table. Begin that read as soon as evidence arrives.
       void evidence.then(items=>{

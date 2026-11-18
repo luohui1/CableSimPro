@@ -5,7 +5,7 @@ import { fullTypeRun, matchingTypeRun, typeEvidence, typeRunReceipt } from './ap
 import { ratingResults } from './rating-api';
 
 export function typeEvidenceOptions(wid: string, history: boolean, module: string) {
-  return queryOptions({ queryKey: ['type-evidence', wid, history ? 'history' : 'recent', module],
+  return queryOptions({ queryKey: ['type-evidence', wid, history ? 'history' : 'recent', history ? 'all' : module],
     queryFn: ({ signal }) => typeEvidence(wid, AbortSignal.any([signal, AbortSignal.timeout(20000)]), !history, module),
     retry: false, staleTime: 30000 });
 }
@@ -69,5 +69,25 @@ export function fixedRatingEvidenceOptions(client: QueryClient, wid: string, run
         // Release this dependency even if its parallel archive read fails.
         dependency.abort();
       }
+    } });
+}
+
+/** Read an exact immutable result without making the full history its warm-link gate. */
+export function fixedTypeEvidenceOptions(client: QueryClient, wid: string, runId: string, module: string) {
+  if (module === 'rating-table') return fixedRatingEvidenceOptions(client, wid, runId);
+  return queryOptions({ queryKey: ['type-fixed-run', wid, runId], staleTime: 0, retry: false,
+    refetchInterval: query => query.state.data?.some(item => ['accepted', 'queued', 'running', 'validating'].includes(String(item.run.status))) ? 2000 : false,
+    queryFn: async ({ signal }) => {
+      const historyOptions = typeEvidenceOptions(wid, true, module);
+      // A direct type URL has no StudyProvider receipt. Discover its real study
+      // from the complete directory; never substitute the latest saved run.
+      const reference = cachedStudyRun(client, wid, runId)
+        ?? (await readTypeEvidenceForWorkspace(historyOptions, () => client.fetchQuery(historyOptions), signal, client))
+          .find(item => item.run.id === runId)?.run;
+      if (!reference) throw new Error('固定运行不存在或完整性未通过');
+      const saved = await fullTypeRun(wid, runId, reference, signal);
+      if (!savedTypeRunDestination(saved.run, { workspaceId: wid, studyId: saved.study.id, runId }))
+        throw new Error('所选运行不是保存的型号结果，停止显示');
+      return [saved];
     } });
 }
