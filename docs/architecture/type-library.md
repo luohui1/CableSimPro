@@ -232,7 +232,7 @@ Agent 应展示每项的 `source`、`method`、`confidence`、`usage`、`conditi
 
 ### 220 kV 制造数据与固定限值
 
-标准核对方法 `1.8.4`（插件发行 `1.8.5`）继续通过原有要求依据接口消费封签的 GB/T 18890.2—2015 记录。三项共用范围为 127/220 kV、裸铜导体、XLPE，截面仅为表列 400、500、630、800、1000、1200、1400、1600、1800、2000、2200、2500 mm²；不插值或套用其他电压。制造输入沿 `engineering_inputs` 给出的稳定来源路径保存，形如 `/cable_types/{escaped_id}/common_layers/{role}/engineering/{field}`；层在线芯内时使用对应 `cores/{escaped_core_id}/layers/{role}` 路径。
+标准核对方法 `1.8.5`（插件发行 `1.8.6`）继续通过原有要求依据接口消费封签的 GB/T 18890.2—2015 记录。三项共用范围为 127/220 kV、裸铜导体、XLPE，截面仅为表列 400、500、630、800、1000、1200、1400、1600、1800、2000、2200、2500 mm²；不插值或套用其他电压。制造输入沿 `engineering_inputs` 给出的稳定来源路径保存，形如 `/cable_types/{escaped_id}/common_layers/{role}/engineering/{field}`；层在线芯内时使用对应 `cores/{escaped_core_id}/layers/{role}` 路径。
 
 | 字段 | 层与数据性质 | 单位及适用条件 |
 | --- | --- | --- |
