@@ -52,6 +52,28 @@ jobs:
           npm ci --ignore-scripts
           npm run build
           npm test
+      - name: Generate API types from an isolated release host
+        shell: bash
+        env:
+          PYTHONUTF8: '1'
+          PYTHON: ${{ github.workspace }}/.venv/bin/python
+          E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
+        run: |
+          set -euo pipefail
+          mkdir -p .data/release .tmp/fusion-openapi
+          git rev-parse HEAD | tee .tmp/fusion-openapi/checkout.txt
+          .venv/bin/python frontend/scripts/seed-engineering-demo.py --release --database .data/release/engineering.sqlite 2>&1 | tee .tmp/fusion-openapi/seed.log
+          node frontend/scripts/isolated-e2e.mjs generate-api.mjs 2>&1 | tee .tmp/fusion-openapi/generate.log
+          cp frontend/src/api/generated/schema.ts frontend/src/api/generated/endpoints.ts .tmp/fusion-openapi/
+          cp .data/frontend-integration/openapi.json .tmp/fusion-openapi/
+      - name: Upload formal host API files and generation logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fusion-host-openapi
+          retention-days: 14
+          include-hidden-files: true
+          path: .tmp/fusion-openapi/
   native-plugins:
     name: Native plugins / Slurm dg83
     runs-on: [self-hosted, linux, cablesim-hpc]
