@@ -51,7 +51,7 @@ export function ApplicationFields({ fields, label = '部件与模板逐项来源
     rowLabel={row => `${row.label}，${applicationValue(row.value, row.unit, row.path)}`} columns={[
       { id: 'label', label: '保存参数', wrap: true, render: row => row.label },
       { id: 'value', label: '保存值与单位', wrap: true, render: row => applicationValue(row.value, row.unit, row.path) },
-      { id: 'source', label: '原始出处', wrap: true, render: row => fieldSource(row.source) },
+      { id: 'source', label: '原始出处', wrap: true, render: row => <span className="reference-evidence">{fieldSource(row.source)}</span> },
       { id: 'inspect', label: '完整来源', render: row => <Button size="compact" onClick={() => applicationDownload('fixed-field-source.json', row)}>下载此项原始记录</Button> },
     ]} />;
 }
@@ -86,7 +86,7 @@ export function ApplicationChanges({ changes }: { changes: ApplicationChange[] }
       { id: 'name', label: '参数', wrap: true, render: row => row.label },
       { id: 'before', label: '当前值', wrap: true, render: row => applicationValue(row.before, row.unit, row.path) },
       { id: 'after', label: '采用后', wrap: true, render: row => row.after === null ? '清空为未给出；不保留旧值' : `${applicationValue(row.after, row.unit, row.path)}${typeof row.after === 'string' && /^(material|cable_type|core|circuit|cable)\//.test(row.after) && row.before !== row.after ? ' · 引用已变化' : ''}` },
-      { id: 'source', label: '来源处理', wrap: true, render: row => <span>{row.source_action === 'unchanged' ? '保留目标原出处；下列为来源参考记录：' : '将保存下列固定来源：'}{fieldSource(row.source)}</span> },
+      { id: 'source', label: '来源处理', wrap: true, render: row => <span className="reference-evidence">{row.source_action === 'unchanged' ? '保留目标原出处；下列为来源参考记录：' : '将保存下列固定来源：'}{fieldSource(row.source)}</span> },
       { id: 'download', label: '核对原文', render: row => <Button size="compact" onClick={() => applicationDownload('component-change.json', row)}>下载前后值与出处</Button> },
     ]} />;
 }
