@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { displayUnit } from '@/lib/display-names';
 import { sourceLocationText, type Field, type SeriesDeclaration, type Vocabulary } from './api';
+import { MaterialDeclarations } from './material-declaration';
 
 export function emptyDeclaration(): SeriesDeclaration {
   return { name: '', manufacturer: '', designation: '', cores: 3, u0_v: 0, u_v: 0, standards: [], origin: 'factory', resistance_basis: 'stated', common: {}, common_basis: {}, modelling: {} };
@@ -130,5 +131,11 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
         </div>)}
       </div>
     </details>
+    <MaterialDeclarations value={value.material_properties} onChange={material_properties => {
+      const next = { ...value };
+      if (material_properties) next.material_properties = material_properties;
+      else delete next.material_properties;
+      onChange(next);
+    }} />
   </div>;
 }
