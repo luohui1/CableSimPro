@@ -95,7 +95,9 @@ export function AgentDemo() {
             <div className="border border-fd-foreground/70 bg-fd-background">
               <div className="flex items-center justify-between border-b border-fd-foreground/70 px-3 py-1.5 font-mono text-xs">
                 <span>修改方案</span>
-                <span className="text-fd-muted-foreground">等待批准</span>
+                <span className={verdict === 'approved' ? 'text-brand' : 'text-fd-muted-foreground'}>
+                  {verdict === 'approved' ? '已批准' : verdict === 'rejected' ? '已拒绝' : '等待批准'}
+                </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
                 <span className="text-fd-muted-foreground">介质热阻率</span>
