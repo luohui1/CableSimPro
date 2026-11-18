@@ -3,9 +3,10 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Button } from '@/components/ui/button';
 
 /** A source table must open at its first row, with its title and close action visible. */
-export function LibraryDialog({ open, onOpenChange, title, description, children, actions, busy = false, initialFocus = 'form' }: {
+export function LibraryDialog({ open, onOpenChange, title, description, children, actions, busy = false, initialFocus = 'form', onCloseAutoFocus }: {
   open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string;
   children: ReactNode; actions?: ReactNode; busy?: boolean; initialFocus?: 'form' | 'preserve';
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const previousFocus = useRef<HTMLElement | null>(null);
   return <Dialog open={open} onOpenChange={onOpenChange}>
@@ -19,6 +20,8 @@ export function LibraryDialog({ open, onOpenChange, title, description, children
         (first || event.target).focus({ preventScroll: true });
       }}
       onCloseAutoFocus={event => {
+        onCloseAutoFocus?.(event);
+        if (event.defaultPrevented) return;
         event.preventDefault();
         if (previousFocus.current?.isConnected) previousFocus.current.focus({ preventScroll: true });
       }}>

@@ -36,8 +36,27 @@ const sha = value => assert.match(value, /^[a-f0-9]{64}$/);
  * APIs; neither replaces resource creation, publication, binding or adoption. */
 export async function walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, report, previousCalculation }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
-  const audit = { selections: [], assets: [], material: {}, loss_tangent: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [], api_responses: [] };
+  const audit = { selections: [], assets: [], material: {}, loss_tangent: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [], api_responses: [], focus_outcomes: [] };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-resources-${name}.json`), JSON.stringify(value, null, 2));
+  async function materialOutcome(text, name) {
+    const result = page.getByRole('status').filter({ hasText: text });
+    // Assert the product's own focus/scroll before any capture or further click.
+    // toBeVisible alone accepts text below the viewport and hid this defect.
+    let passed = false;
+    try {
+      await expect(result).toBeFocused();
+      await expect(result).toBeInViewport({ ratio: 1 });
+      passed = true;
+    } finally {
+      const measured = await result.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return { text: element.textContent, focused: document.activeElement === element,
+          position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+      }).catch(error => ({ measurement_error: String(error) }));
+      audit.focus_outcomes.push({ name, viewport, passed, ...measured });
+      await write('focus-outcomes', audit.focus_outcomes);
+    }
+  }
   async function supportingResponse(response, endpoint, method) {
     const body = await response.body();
     const file = `${viewport.width}-resources-http-${String(audit.api_responses.length + 1).padStart(3, '0')}.json`;
@@ -232,6 +251,9 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await bindingDialog.getByRole('checkbox').check();
   await capture('仅绑定铜材料来源不采用数值');
   const binding = await postUI(`/api/types/${wid}/resources/material-confirm`, bindingDialog.getByRole('button', { name: '确认仅绑定来源', exact: true }), 'material-bind');
+  await expect(bindingDialog).toBeHidden();
+  await materialOutcome('已绑定此参考版本的来源。', 'copper-source-binding');
+  await capture('铜材料来源绑定成功结果自动呈现');
   const bound = await readApi(`/api/types/${wid}/workspace`);
   assert.deepEqual(bound.domain, initial.domain, '来源绑定不能改动材料数值或结构');
   assert.equal(bound.type_resource_bindings.material['material/cu'].resource_id, materialAsset.id);
@@ -270,7 +292,8 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     assert.deepEqual((await readApi(`/api/workspaces/${wid}/revisions/${initial.revision}`)).state, historicalInitial.state);
     audit.material.adoptions.push({ parameter: item.parameter, preview, adopted, readback: saved });
     current = saved;
-    await expect(page.getByRole('status').filter({ hasText: `所选物性已写入型号输入修订 ${saved.revision}` })).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await materialOutcome(`所选物性已写入型号输入修订 ${saved.revision}`, `copper-${item.parameter}-adoption`);
     await expect(page.getByRole('combobox', { name: '目标型号', exact: true })).toContainText(`${qifan.name} · 输入修订 ${saved.revision}`);
     await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeEnabled();
     await capture(`铜${item.label}人工采用并保存来源`);
@@ -283,6 +306,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await expect(sameDialog.getByRole('status')).toContainText('该值已一致');
   await capture('已有相同物性时阻止重复采用');
   await sameDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeFocused();
   audit.expected_ui_refusals.push({ kind: 'same_material_value', preview: same.value });
   // The same database is used for both viewport loops. Exercise the real history
   // API, preserving the binding while restoring the original three missing facts.
@@ -370,6 +394,9 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await lossBindDialog.getByRole('checkbox').check();
   await capture('真实XLPE仅绑定损耗角正切参考不改已有值');
   const lossBinding = await postUI(`/api/types/${lossWid}/resources/material-confirm`, lossBindDialog.getByRole('button', { name: '确认仅绑定来源', exact: true }), 'loss-tangent-bind');
+  await expect(lossBindDialog).toBeHidden();
+  await materialOutcome('已绑定此参考版本的来源。', 'loss-tangent-source-binding');
+  await capture('损耗角正切来源绑定成功结果自动呈现');
   assert.equal(lossBinding.request.preview_digest, lossBindPreview.value.digest);
   const lossBound = await readApi(`/api/types/${lossWid}/workspace`);
   assert.deepEqual(lossBound.domain, lossInitial.domain, '绑定损耗角正切来源不能改动任何型号字段或出处');
@@ -401,6 +428,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await positionDialogContent(lossDialog.locator('.reference-evidence'));
   await capture('损耗角正切IEC原文页码条件与参考分档');
   await lossDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeFocused();
   assert.equal(report.requests.filter(request => request.method === 'POST' && request.url.endsWith('/api/library/resources/materials/adopt')).length, adoptedBeforeLoss);
   const lossReadback = await readApi(`/api/types/${lossWid}/workspace`);
   assert.deepEqual(lossReadback, lossBound, '拒绝预览不得写入修订、物性或来源');
