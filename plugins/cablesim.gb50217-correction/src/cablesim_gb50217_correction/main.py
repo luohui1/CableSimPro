@@ -43,7 +43,7 @@ def main():
             cases.append(dict(case_id=case['case_id'],status='failed',error=dict(code='INPUT_INVALID',message='请补齐或修正该字段；数值必须使用契约规定的 SI 单位。',field=field)))
         except PluginHostError as exc:
             cases.append(dict(case_id=case['case_id'],status='failed',error=dict(code=exc.code,message=exc.message,field='/parameters/baseline_source')))
-    result=dict(protocol='cablesim.run/2',cases=cases,environment=dict(python=platform.python_version(),packages={},method='1.0.0'))
+    result=dict(protocol='cablesim.run/2',cases=cases,environment=dict(python=platform.python_version(),packages={},method='1.1.0'))
     attach_witnesses(request,result,manifest)
     Path('output/result.json').write_text(json.dumps(result,ensure_ascii=False,allow_nan=False),'utf-8')
 

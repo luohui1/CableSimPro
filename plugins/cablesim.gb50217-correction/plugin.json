@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.gb50217-correction",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "name": "GB 50217 载流量校正",
   "description": "按附录 D 对有出处的单根基准载流量校正；表外条件拒绝，系数由标准依据库核验。",
   "icon": "assets/icon.svg",
@@ -44,7 +44,7 @@
       "id": "steady-rating",
       "title": "按 GB 50217 校正",
       "solver": "local",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "ampacity_correction",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -85,8 +85,9 @@
       },
       "limitations": [
         "仅 10 kV 及以下；相同型号、正常温限和中心埋深的单根基准。",
-        "覆盖 D.0.1 温度表与 D.0.2 公式、D.0.3 土壤、D.0.4 / D.0.5 单层并列；其他分支明确拒绝。",
+        "覆盖 D.0.1 温度表与 D.0.2 公式、D.0.3 土壤、D.0.4 / D.0.5 单层并列；D.0.6 仅覆盖明确保存并有来源的梯架或托盘、1–4 层、每层不少于 7 根水平接触的同型号三芯电缆，各层横向排列相同。",
         "D.0.3 仅用于表 C.0.1-2；并列表不用于三相交流单芯电缆。",
+        "D.0.6 与 D.0.5 互斥；不推断梯架类别或标准层间距，不覆盖 D.0.7 日照、强制风冷、排管和外部热源。",
         "厂家基准由工程师核对；校正结果不是 IEC 完整热路计算，也不代表厂家保证值。"
       ],
       "description": "读取封签标准依据库的校正系数，将有出处的单根基准载流量换算到保存的实际工况。",
@@ -295,6 +296,70 @@
               "kind": "engineering",
               "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
             }
+          },
+          "tray_kind": {
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "tray",
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.6；有来源的明确类别、保存布局与人工条件核对，不填物理默认值"
+            },
+            "type": "string",
+            "title": "桥架类别",
+            "enum": [
+              "ladder",
+              "tray"
+            ],
+            "x-enum-labels": {
+              "ladder": "梯架",
+              "tray": "托盘"
+            },
+            "x-order": 10,
+            "description": "可选 D.0.6 分支，须与布局出处和明确确认一起填写；不从 rack、结构名称或外观猜类别。三项均未提供时保持原方法路径。"
+          },
+          "tray_layout_source": {
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "tray",
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.6；有来源的明确类别、保存布局与人工条件核对，不填物理默认值"
+            },
+            "type": "string",
+            "title": "桥架与布局出处",
+            "minLength": 4,
+            "maxLength": 2000,
+            "x-order": 11,
+            "description": "完整注明梯架或托盘类别、实际安装图纸或明确研究输入的名称、版本和条件。保存位置及径向几何也须各有来源；不可用期望层数替代实际布局。"
+          },
+          "tray_layout_confirmed": {
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "tray",
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.6；有来源的明确类别、保存布局与人工条件核对，不填物理默认值"
+            },
+            "type": "boolean",
+            "title": "已核对桥架类别与保存布局",
+            "x-order": 12,
+            "description": "必须实际勾选确认类别与保存布局一致、每层不少于 7 根逐根接触、1–4 层且各层排列一致；此确认不等于产品批准或厂家认证。"
           }
         },
         "required": [
@@ -321,6 +386,11 @@
           "id": "evidence",
           "title": "原件出处与人工核对",
           "order": 1
+        },
+        {
+          "id": "tray",
+          "title": "桥架适用条件（可选，三项须同时提供）",
+          "order": 2
         }
       ],
       "x-headline": [
@@ -389,12 +459,12 @@
     },
     {
       "path": "src/cablesim_gb50217_correction/correction.py",
-      "sha256": "4670cff763dca7fa732990b45d20b14697d604863ca1010cda36fb97b9d195de",
-      "size_bytes": 14572
+      "sha256": "4598fa8b7aa7043c0b8bcf6e8826038a2e0673932a02ce7643a5a5f22efe1572",
+      "size_bytes": 27448
     },
     {
       "path": "src/cablesim_gb50217_correction/main.py",
-      "sha256": "68ae4eb0a46895a950232566bcfd082290a42b254198fae59dce8b594631b050",
+      "sha256": "1bb4711dcbbb3e9e536cba8557ad696a32558f1c95df16eaa527294234f1b1f2",
       "size_bytes": 3546
     },
     {
