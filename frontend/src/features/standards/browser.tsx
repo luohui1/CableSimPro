@@ -168,7 +168,7 @@ export function StandardsBrowser() {
           <details><summary>引用与来源摘要</summary><p>{copyCitation(selected)}</p><p>{selected.source_sha256}</p>{selected.value && typeof selected.value === 'object' ? formulaDetails(selected.value).map((line,i) => <p key={i}>{line}</p>) : null}</details></div>
           <Button size="compact" disabled={selected.verification.status !== 'verified'} onClick={() => void copy(selected)}>复制引用</Button></div> : <p className="basis-selection-hint">选择表格中的值查看完整依据；方向键选格，Enter 复制引用。</p>}
       </div>}
-      <details className="basis-uncovered"><summary>下一轮 · 未覆盖条款</summary>{gaps.length ? gaps.map((g, i) => <p key={i}>{[...(Array.isArray(g.locators) ? g.locators : []),...(Array.isArray(g.items) ? g.items : []),g.reason].filter(v => typeof v === 'string').join(' · ')}</p>) : <p>当前标准未覆盖的其他条款与特殊条件留到下一轮；已列出的表格不代表整份标准合格。</p>}</details>
+      <details className="basis-uncovered"><summary>未覆盖条款</summary>{gaps.length ? gaps.map((g, i) => <p key={i}>{[...(Array.isArray(g.locators) ? g.locators : []),...(Array.isArray(g.items) ? g.items : []),g.reason].filter(v => typeof v === 'string').join(' · ')}</p>) : <p>当前标准未覆盖的其他条款与特殊条件尚未收录；已列出的表格不代表整份标准合格。</p>}</details>
       <span className="basis-notice" role="status">{notice}</span>
     </>}
   </section>;

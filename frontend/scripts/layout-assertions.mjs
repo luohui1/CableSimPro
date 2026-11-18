@@ -28,11 +28,18 @@ export async function assertLayout(page, label, nameOptions) {
     const font = Math.min(
       ...seen.map((node) => parseFloat(getComputedStyle(node).fontSize)),
     );
+    // A computed colour may be rgb(), color(srgb …), oklch() or a color-mix() such as
+    // a hover fill "color-mix(in srgb, rgb(13, 13, 13) 2%, transparent)", whose digits
+    // read in order once gave an alpha of 2 and a negative background. The canvas
+    // resolves any CSS colour to 8-bit RGBA; one it cannot parse stays transparent.
+    const paint = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
     function rgba(color) {
-      const values = color.match(/[\d.]+/g)?.map(Number) || [];
-      return values.length >= 3
-        ? [...values.slice(0, 3), values[3] ?? 1]
-        : [0, 0, 0, 0];
+      paint.clearRect(0, 0, 1, 1);
+      paint.fillStyle = "rgba(0, 0, 0, 0)";
+      paint.fillStyle = color;
+      paint.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
     }
     function over(a, b) {
       return [0, 1, 2]

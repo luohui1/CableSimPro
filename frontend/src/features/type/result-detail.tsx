@@ -8,7 +8,7 @@ export function resultCitation(row: Record<string, unknown>) {
   const clause = text(row.clause).replace(/4 amendment/g,'第 4 章（修订 1）').replace(/[；;]/g, ' ').replace(/\s+/g, ' ').trim();
   const printed = numeric(row.printed_page), pdf = numeric(row.pdf_page);
   return [text(row.standard), clause].filter(Boolean).join(' ') +
-    (printed === null ? ' · 本库暂未收录 · 下一轮' : ` · 第 ${printed} 页`) +
+    (printed === null ? ' · 本库暂未收录' : ` · 第 ${printed} 页`) +
     (pdf === null ? '' : `（PDF 第 ${pdf} 页）`);
 }
 

@@ -395,7 +395,7 @@ class _Check:
                 f'芯 {i+1} · 绝缘最薄点',
                 ip + '.minimum_thickness',
                 actual=ins.get('minimum_thickness') * 1000 if ins.get('minimum_thickness') is not None else None,
-                reason='GB/T 11017.1—2024 本库暂未收录 · 下一轮；本项保留未覆盖。',
+                reason='GB/T 11017.1—2024 本库暂未收录；本项保留未覆盖。',
                 uncovered=True,
                 basis='measurement',
             )
@@ -558,7 +558,7 @@ class _Check:
                 'screen-wire-gap',
                 f'芯 {i+1} · 屏蔽铜丝平均间隙',
                 sp + '.screen_inner_diameter',
-                reason='本项引用 GB/T 11017.2—2014；本库暂未收录 · 下一轮，不用 2024 版替代。',
+                reason='本项引用 GB/T 11017.2—2014；本库暂未收录，不用 2024 版替代。',
                 uncovered=True,
             )
 
@@ -640,7 +640,7 @@ class _Check:
             actual=sheath.get('minimum_thickness') * 1000 if sheath.get('minimum_thickness') is not None else None,
             uncovered=True,
             basis='measurement',
-            reason='GB/T 11017.1—2024 本库暂未收录 · 下一轮。',
+            reason='GB/T 11017.1—2024 本库暂未收录。',
         )
         for role, title in [('conductor_screen', '导体半导电屏蔽最薄点'), ('insulation_screen', '绝缘半导电屏蔽最薄点')]:
             layer, lp = find_layer(single_layers, role)
@@ -663,7 +663,7 @@ class _Check:
             actual=os.get('minimum_thickness') * 1000 if os.get('minimum_thickness') is not None else None,
             uncovered=True,
             basis='measurement',
-            reason='GB/T 11017.1—2024 本库暂未收录 · 下一轮。',
+            reason='GB/T 11017.1—2024 本库暂未收录。',
         )
         row('bedding-nominal', '内衬层 / 半导电缓冲层', root + '.common_layers', uncovered=True, reason='缓冲 / 阻水构造与产品协议尚未覆盖，未套用中压内衬层公式。')
 
