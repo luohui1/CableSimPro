@@ -78,7 +78,7 @@ try {
   }
   // 仅在本任务的隔离副本种一条非工程偏好夹具，之后经真实 UI 与 API 纠正、删除；不调用模型抽取。
   const fixtureId = '44444444-4444-4444-8444-444444444444';
-  const python = process.env.PYTHON || path.join(repositoryRoot, '.venv/Scripts/python.exe');
+  const python = process.env.PYTHON || path.join(repositoryRoot, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
   await promisify(execFile)(python, ['-c', "import sqlite3,sys;from pathlib import Path;p=Path(sys.argv[1]).resolve();assert 'frontend-e2e' in p.parts and '.tmp' in p.parts;db=sqlite3.connect(p);db.execute('INSERT INTO agent_memories(id,workspace_id,study_id,workspace_revision,study_revision,kind,topic,content,sources,methods,revision,status,created,updated) VALUES(?,?,NULL,NULL,NULL,?,?,?,?,?,1,?,?,?)',(sys.argv[2],sys.argv[3],'preference','浏览器验收偏好','先给结论，再列来源。','[]','[]','active',sys.argv[4],sys.argv[4]));db.commit();db.close()", process.env.CABLESIM_DB, fixtureId, workspaces[0].id, stamp], { windowsHide: true });
   await page.setViewportSize(sizes[0]); await go('/settings?section=ai&theme=light'); await page.locator('.memory-management > summary').click();
   const realMemory = page.locator('.memory-item').filter({ hasText: '浏览器验收偏好' }); await expect(realMemory).toBeVisible();

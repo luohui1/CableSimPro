@@ -133,7 +133,7 @@
 .agent-review-more { margin: 0; color: var(--text-secondary); line-height: 1.6; }
 .agent-review-document { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); }
 .agent-diff-line.is-removed { background: color-mix(in srgb, var(--error) 8%, transparent); color: var(--error); }
-.agent-diff-line.is-added { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); }
+.agent-diff-line.is-added { background: color-mix(in srgb, var(--success) 10%, transparent); color: color-mix(in srgb, var(--success) 75%, var(--text)); }
 .agent-review-checks { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); line-height: 1.7; }
 .agent-review-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 
