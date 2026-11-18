@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { workspaces, type StudyRow } from "@/api/research";
@@ -15,7 +15,6 @@ import {StudyRecalculate, studyPresentation} from '@/components/study-status';
 import '@/components/workbench-inspector.css';
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { AgentPanel } from "@/features/agent/agent-panel";
 import { CableSection } from "@/features/drawing/cable-section";
 import { LayingSection } from "@/features/drawing/laying-section";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
@@ -33,6 +32,7 @@ import { SolverLocation } from '@/components/solver-location';
 
 type Theme = "light" | "dark";
 
+const AgentPanel = lazy(() => import('@/features/agent/agent-panel').then(module => ({ default: module.AgentPanel })));
 
 /** 研究名常以工程名开头（“城北变电站 · …”），在工程内部省掉这段前缀。 */
 const shortTitle = (title: string, project: string) => {
@@ -96,7 +96,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
       <button type="button" role="tab" aria-selected={inspector === "project"} onClick={() => setInspector("project")}><Icon name="object/folder" />工程</button>
       <button type="button" role="tab" aria-selected={inspector === "agent"} onClick={() => setInspector("agent")}><Icon name="agent/agent" />Agent</button>
     </div>
-    {inspector === "agent" ? <div className="inspector-agent"><AgentPanel key={workspaceId} workspaceId={workspaceId} context={name} suggestions={projectSuggestions} /></div> : <>
+    {inspector === "agent" ? <div className="inspector-agent"><Suspense fallback={<LoadingState title="正在读取 Agent" />}><AgentPanel key={workspaceId} workspaceId={workspaceId} context={name} suggestions={projectSuggestions} /></Suspense></div> : <>
       <section className="inspector-block" aria-label="工程">
         <header><Icon name="object/folder" /><h2>工程</h2></header>
         <dl className="inspector-list">
