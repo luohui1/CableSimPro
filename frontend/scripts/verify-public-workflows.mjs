@@ -14,7 +14,7 @@ const agentOnly = process.env.PUBLIC_MODE === 'agent-decisions';
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/public-workflows');
 await fs.mkdir(out, { recursive: true });
 const result = { variants: [], checks: [], errors: [], writes: [], fixtures: agentOnly ? 'Agent 提案审批与保存失败使用响应夹具；记忆纠正和删除另验真实宿主 API' : '状态和记忆交互使用响应夹具；运行与材料及记忆纠正和删除另验真实隔离库 API' };
-const browser = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+const browser = await openHeadlessBrowser();
 const { page } = browser;
 const expect = baseExpect.configure({ timeout: 30000 });
 page.setDefaultTimeout(30000);

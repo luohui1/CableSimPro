@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, message, numeric, optionalRecord, text } from '@/api/client';
 import { Dialog } from '@/components/ui/dialog';
@@ -14,10 +14,10 @@ import { nominalNumber, versionLabel } from './design-summary';
 import { typePath, useTypeNavigation } from './navigation';
 import { dimensionBasis } from './dimension-basis';
 
-export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CreateTypeDialog({ open, onClose, initialModelId }: { open: boolean; onClose: () => void; initialModelId?: string }) {
   const { location, navigate } = useTypeNavigation(), queries = useQueryClient();
   const options = useQuery({ queryKey: ['type-creation-options'], queryFn: ({ signal }) => creationOptions(signal), enabled: open, retry: false });
-  const [origin, setOrigin] = useState<Origin>('library'), [name, setName] = useState(''), [source, setSource] = useState('');
+  const [origin, setOrigin] = useState<Origin>('library'), [name, setName] = useState(''), [source, setSource] = useState(initialModelId || '');
   const [search,setSearch] = useState('');
   const [generationMode,setGenerationMode] = useState('insulation');
   const [screened,setScreened]=useState(''),[armour,setArmour]=useState('');
@@ -27,6 +27,7 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
   const [neutralArea,setNeutralArea]=useState(''),[neutralDiameter,setNeutralDiameter]=useState(''),[filler,setFiller]=useState(''),[binder,setBinder]=useState('');
   const [proposal, setProposal] = useState<Proposal | null>(null), [confirmed, setConfirmed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const pending = useRef(false), attempts = useRef<Record<string, string>>({});
+  const disabledReasonId = useId();
   const [repair, setRepair] = useState('');
   const method = options.data?.generation[0], schema = optionalRecord(optionalRecord(method?.schema).properties);
   const choices = origin === 'library' ? options.data?.library : options.data?.imports;
@@ -45,11 +46,16 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
     (field || (node?.htmlFor ? document.getElementById(node.htmlFor) : null))?.focus();
   }
   function invalid(label: string, reason: string): never { focus(label); throw new Error(label + '：' + reason); }
-  function number(value: string, label: string, key: string, scale: number) {
-    if (!value.trim() || !Number.isFinite(Number(value))) return invalid(label, '请填写数值并核对单位');
+  function numberProblem(value: string, key: string, scale: number) {
+    if (!value.trim() || !Number.isFinite(Number(value))) return '请填写数值并核对单位';
     const result = Number(value) / scale, rule = optionalRecord(schema[key]);
-    if (numeric(rule.exclusiveMinimum) !== null && result <= Number(rule.exclusiveMinimum) || numeric(rule.minimum) !== null && result < Number(rule.minimum) || numeric(rule.maximum) !== null && result > Number(rule.maximum)) return invalid(label, '超出插件支持范围，请修正该字段');
-    return result;
+    if (numeric(rule.exclusiveMinimum) !== null && result <= Number(rule.exclusiveMinimum) || numeric(rule.minimum) !== null && result < Number(rule.minimum) || numeric(rule.maximum) !== null && result > Number(rule.maximum)) return '超出插件支持范围，请修正该字段';
+    return '';
+  }
+  function number(value: string, label: string, key: string, scale: number) {
+    const problem = numberProblem(value, key, scale);
+    if (problem) return invalid(label, problem);
+    return Number(value) / scale;
   }
   async function generate() {
     if (pending.current) return;
@@ -87,15 +93,58 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
         Object.assign(base, { [origin === 'library' ? 'resource_id' : 'proposal_id']: selected.id, content_sha256: selected.content_sha256 });
       }
       const workspace = await newType({ ...base, request_id: attempt(base) });
-      await queries.invalidateQueries({ queryKey: ['type-list'] }); onClose(); navigate(typePath(workspace.id, 'structure', 'section', location.theme));
+      await Promise.all(['type-list', 'type-index', 'workspace-index'].map(key =>
+        queries.invalidateQueries({ queryKey: [key], refetchType: 'all' })));
+      onClose(); navigate(typePath(workspace.id, 'structure', 'section', location.theme));
       delete attempts.current[JSON.stringify(base)];
       try { sessionStorage.removeItem('cablesim:type-create-attempt'); } catch { /* A confirmed response completes this attempt. */ }
     } catch (failure) { setError(message(failure)); setRepair(failure instanceof ApiError ? text(optionalRecord(failure.detail).repair_url) : ''); } finally { pending.current = false; setBusy(false); }
   }
+  const generating = origin === 'standard' && !proposal;
+  const disabledReason = (() => {
+    if (busy) return generating ? '正在生成结构提案，请等待本次请求完成。' : '正在建立型号草稿，请等待本次请求完成。';
+    if (origin !== 'blank' && options.isPending) return '正在读取型号起点，请稍候。';
+    if (origin !== 'blank' && options.error) return '起点读取失败，请先点击“重新读取”。';
+    if (generating) {
+      if (!method) return '当前版本没有可用的结构提案方法，暂不能按标准生成。';
+      if (!voltage) return '请选择额定电压，再生成结构提案。';
+      if (!form) return '请选择导体几何，明确推导条件或提供导体外径。';
+      if (generationMode === 'complete' && !screened) return '请选择半导电屏蔽，明确是否包含屏蔽层。';
+      if (generationMode === 'complete' && !armour) return '请选择护层构造，再生成完整护层提案。';
+      const values: [string, string, string, number][] = [[area, '导体截面', 'area_m2', 1e6]];
+      if (form === 'unspecified') values.push([diameter, '导体外径', 'diameter_m', 1000]);
+      if (construction !== 'single_core') values.push([gap, '芯间净距', 'gap_m', 1000]);
+      if (construction === 'three_plus_one') {
+        values.push([neutralArea, '中性线截面', 'neutral_area_m2', 1e6]);
+        if (form === 'unspecified') values.push([neutralDiameter, '中性线外径', 'neutral_diameter_m', 1000]);
+      }
+      if (generationMode !== 'complete' && ['four_core', 'three_plus_one'].includes(construction)) {
+        if (filler.trim()) values.push([filler, '填充外包厚度', 'filler_thickness_m', 1000]);
+        if (binder.trim()) values.push([binder, '包带等效厚度', 'binder_thickness_m', 1000]);
+      }
+      if (generationMode === 'complete') {
+        if (screened === 'yes') values.push([conductorScreen, '导体屏蔽厚度', 'conductor_screen_thickness_m', 1000], [insulationScreen, '绝缘屏蔽厚度', 'insulation_screen_thickness_m', 1000]);
+        if (!['600/1000', '1800/3000'].includes(voltage)) values.push([screenTape, '铜带单带厚度', 'screen_tape_thickness_m', 1000], [screenWidth, '铜带宽度', 'screen_tape_width_m', 1000]);
+      }
+      for (const [value, label, key, scale] of values) {
+        const problem = numberProblem(value, key, scale);
+        if (problem) return `${label}：${problem}。`;
+      }
+      return '';
+    }
+    if (!name.trim()) return '请填写型号名称，再建立草稿。';
+    if (origin === 'standard' && !confirmed) return '请先核对结构提案中的标准值、推导条件与缺项，并勾选确认。';
+    if (['library', 'import'].includes(origin) && (!source || !choices?.some(item => item.id === source))) {
+      if (initialModelId) return '所选固定型号版本尚不可用，请重新读取型号版本或返回资源页核对。';
+      return origin === 'library' ? '请选择一个可复制的型号版本，再建立草稿。' : '请选择已批准的资料结果；尚无结果时请先打开资料导入。';
+    }
+    return '';
+  })();
+  const canSubmit = !disabledReason;
   return <Dialog open={open} onOpenChange={value => { if (!value && !pending.current) onClose(); }} title="新建型号设计" initialFocus="form"
-    actions={origin === 'standard' && !proposal ? <Button variant="primary" loading={busy} disabled={!method || !!options.error} onClick={() => void generate()}>生成结构提案</Button> : <Button variant="primary" loading={busy} disabled={!name.trim() || origin === 'standard' && (!proposal || !confirmed) || ['library', 'import'].includes(origin) && !source} onClick={() => void create()}>{origin === 'standard' ? '确认并建立草稿' : '建立草稿'}</Button>}>
+    actions={<Button variant="primary" loading={busy} disabled={!canSubmit} title={disabledReason || undefined} aria-describedby={disabledReason ? disabledReasonId : undefined} onClick={() => void (generating ? generate() : create())}>{generating ? '生成结构提案' : origin === 'standard' ? '确认并建立草稿' : '建立草稿'}</Button>}>
     <div className="type-creation" data-origin={origin} data-creation-state={busy ? 'loading' : error ? 'error' : proposal ? 'success' : 'empty'}>
-      <RadioGroup.Root disabled={busy} className="type-origin-choices" aria-label="起点" value={origin} onValueChange={chooseOrigin}>{([['library', '从型号库复制'], ['standard', '按标准生成'], ['import', '从资料导入'], ['blank', '空白']] as const).map(([value, label]) => <label key={value} htmlFor={'type-origin-'+value}><RadioGroup.Item id={'type-origin-'+value} className="type-origin-radio" value={value} aria-label={label}><RadioGroup.Indicator /></RadioGroup.Item>{label}</label>)}</RadioGroup.Root>
+      {initialModelId ? <p className="muted">起点为资源页选中的固定型号版本。新草稿保留该版本的来源与缺项。</p> : <RadioGroup.Root disabled={busy} className="type-origin-choices" aria-label="起点" value={origin} onValueChange={chooseOrigin}>{([['library', '从型号库复制'], ['standard', '按标准生成'], ['import', '从资料导入'], ['blank', '空白']] as const).map(([value, label]) => <label key={value} htmlFor={'type-origin-'+value}><RadioGroup.Item id={'type-origin-'+value} className="type-origin-radio" value={value} aria-label={label}><RadioGroup.Indicator /></RadioGroup.Item>{label}</label>)}</RadioGroup.Root>}
       <label className="text-field">型号名称<Input aria-label="型号名称" maxLength={80} value={name} disabled={busy} onChange={event => { setName(event.target.value); setError(''); }} /></label>
       {origin === 'blank' ? <Select label="结构类型" value={construction} disabled={busy} onChange={setConstruction} options={[{ value: 'single_core', label: '单芯' }, { value: 'three_core', label: '三芯' },{value:'four_core',label:'四芯等截面'}]} /> : options.isPending ? <LoadingState title="正在读取起点" /> : options.error ? <ErrorState title="起点读取失败" description={message(options.error)} action={<Button onClick={() => void options.refetch()}>重新读取</Button>} /> : origin === 'standard' ? !method ? <InlineEmpty title="未安装结构提案方法，暂不能按标准生成。" /> : <>
         <div className="type-creation-grid">
@@ -119,12 +168,13 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
           <label><Checkbox aria-label="已核对标准值、推导条件与缺项" checked={confirmed} onCheckedChange={value => setConfirmed(value===true)} disabled={busy} /> 已核对标准值、推导条件与缺项</label>
         </section>}
       </> : <>
-        {!!choices?.length && <label className="text-field">查找型号<Input aria-label="查找型号版本" type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="型号或厂家名称" /></label>}
-        {choices?.length ? filteredChoices.length ? <Select label={origin === 'library' ? '型号版本' : '已批准资料结果'} value={source} disabled={busy} onChange={value => { setSource(value); setError(''); }} options={filteredChoices.map(item => ({ value: text(item.id), label: text(item.name) + ' · ' + versionLabel(text(item.version)) }))} /> : <InlineEmpty title="没有匹配的结果" action={<Button size="compact" onClick={()=>setSearch('')}>清除筛选</Button>} /> : <InlineEmpty title={origin === 'library' ? '尚无已发布的型号版本' : '尚无已批准的资料结果'} />}
+        {!!choices?.length && !initialModelId && <label className="text-field">查找型号<Input aria-label="查找型号版本" type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="型号或厂家名称" /></label>}
+        {initialModelId && !choices?.some(item => item.id === initialModelId) ? <InlineEmpty title="所选固定版本不在可复制清单中，请重新读取或返回资源页核对。" action={<Button onClick={() => void options.refetch()}>重新读取型号版本</Button>} /> : choices?.length ? filteredChoices.length ? <Select label={origin === 'library' ? '型号版本' : '已批准资料结果'} value={source} disabled={busy || !!initialModelId} onChange={value => { setSource(value); setError(''); }} options={filteredChoices.map(item => ({ value: text(item.id), label: text(item.name) + ' · ' + versionLabel(text(item.version)) }))} /> : <InlineEmpty title="没有匹配的结果" action={<Button size="compact" onClick={()=>setSearch('')}>清除筛选</Button>} /> : <InlineEmpty title={origin === 'library' ? '尚无已发布的型号版本' : '尚无已批准的资料结果'} />}
         {origin==='library'&&source&&choices?.find(item=>item.id===source)?.status&&<span className="muted">{choices.find(item=>item.id===source)?.status==='published'?'已发布':'库参考版本'} · 缺项会保留在新草稿中</span>}
         {origin === 'import' && <Button disabled={busy} onClick={() => { onClose(); navigate('/resources/cables/imports?theme=' + location.theme); }}>打开资料导入</Button>}
       </>}
       {error && <p className="field-error" role="alert">{error}{repair&&<Button size="compact" onClick={()=>{onClose();navigate(repair+'?theme='+location.theme);}}>核对资料结构与来源</Button>}</p>}
     </div>
+    {disabledReason && <p id={disabledReasonId} className="muted" role="status">{disabledReason}</p>}
   </Dialog>;
 }

@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:workbench-agent": "node scripts/isolated-e2e.mjs verify-workbench-agent.mjs",
+    "test:workbench-research": "node scripts/isolated-e2e.mjs verify-workbench-research.mjs",
+    "test:workbench-types": "node scripts/isolated-e2e.mjs verify-workbench-types.mjs",
+    "test:workbench-resources": "node scripts/isolated-e2e.mjs verify-workbench-resources.mjs",
+    "test:workbench-simulation": "node scripts/isolated-e2e.mjs verify-workbench-simulation.mjs",
     "test:real-use": "node scripts/isolated-e2e.mjs verify-real-use.mjs",
     "test:forms-real-use": "node scripts/isolated-e2e.mjs verify-form-real-use.mjs",
     "test:client-real-use": "node scripts/isolated-e2e.mjs verify-client-real-use.mjs",
@@ -39,7 +44,7 @@
     "build:release": "npm run check:styles && vite build",
     "preview": "vite preview",
     "check:styles": "node scripts/check-styles.mjs",
-    "test": "node --test scripts/check-styles.test.mjs scripts/format.test.mjs scripts/solver-location.test.mjs scripts/shared-experience.test.mjs scripts/visible-text-policy.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs scripts/field-geometry.test.mjs src/features/type/tests/organization.test.mjs src/features/cad/tests/what-if.test.mjs src/features/cad/tests/thermal-difference.test.mjs src/features/agent/transcript.test.mjs",
+    "test": "node --test scripts/lazy-workbench-route.test.mjs scripts/preloadable.test.mjs scripts/check-styles.test.mjs scripts/format.test.mjs scripts/solver-location.test.mjs scripts/saved-run-destination.test.mjs scripts/shared-experience.test.mjs scripts/visible-text-policy.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs scripts/field-geometry.test.mjs src/features/type/tests/organization.test.mjs src/features/cad/tests/what-if.test.mjs src/features/cad/tests/thermal-difference.test.mjs src/features/agent/transcript.test.mjs src/features/agent/agent-session.test.mjs",
     "test:browser": "node scripts/isolated-e2e.mjs verify-components.mjs",
     "test:migration": "node scripts/isolated-e2e.mjs verify-migration.mjs",
     "test:migration-states": "node scripts/isolated-e2e.mjs verify-migration-states.mjs",
@@ -58,6 +63,7 @@
     "capture:handoff": "node scripts/capture-handoff.mjs"
   },
   "dependencies": {
+    "@assistant-ui/react": "0.15.36",
     "@buildnbuzz/form-core": "^0.1.12",
     "@buildnbuzz/form-react": "^0.1.13",
     "@fontsource/ibm-plex-mono": "5.3.0",
@@ -76,16 +82,19 @@
     "ai": "^7.0.127",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "cmdk": "1.1.1",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.52.0",
     "motion": "13.5.0",
     "openapi-fetch": "0.17.0",
-    "radix-ui": "^1.6.7",
+    "radix-ui": "1.6.7",
     "react": "19.3.0",
     "react-day-picker": "^10.0.2",
     "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "tailwind-merge": "3.7.0",
-    "zustand": "^5.0.15"
+    "zustand": "5.0.15"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

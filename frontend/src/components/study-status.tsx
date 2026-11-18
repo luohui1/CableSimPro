@@ -52,7 +52,7 @@ export function studyPresentation(study: StudyRow, run?: Record<string, unknown>
     .map(optionalRecord).find(item => item.status === 'failed');
   const failureReason = text(optionalRecord(failure?.error).message) || text(failure?.message) || '请查看运行记录中的失败原因';
   const code = edits ? 'dirty' : error ? 'failed' : loading && !run ? 'loading' : state.code;
-  const label = edits ? '未保存' : error ? statusLabel('failed', '失败') : code === 'loading' ? '读取中' : state.label;
+  const label = edits ? `${edits} 处未保存` : error ? statusLabel('failed', '失败') : code === 'loading' ? '读取中' : state.label;
   const mark: StatusKind = edits ? 'draft' : error ? 'error' : code === 'loading' ? 'running' : state.mark;
   const reason = edits ? `${edits} 处未保存修改` : error ? message(error) : code === 'outdated' ? details.join('；') || '输入或方法版本已变化'
     : code === 'loading' ? '正在读取保存运行' : code === 'not_run' ? '尚未运行，请预检并运行' : code === 'running' ? '运行中，保存结果保留' : code === 'failed' ? failureReason : `最近运行 ${when} · ${state.label}`;

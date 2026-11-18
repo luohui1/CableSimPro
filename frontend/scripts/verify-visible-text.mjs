@@ -17,7 +17,7 @@ if (requestedPhase && !/^[a-z-]+$/.test(requestedPhase)) throw Error('文字巡�
 const phase = requestedPhase || (performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after');
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/visible-text', phase);
 await fs.mkdir(out, { recursive: true });
-const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe', routeGuard: !performanceMode });
+const session = await openHeadlessBrowser({ routeGuard: !performanceMode });
 const { page, context } = session;
 const performanceAudit = performanceMode ? await (await import('./performance-audit.mjs')).createPerformanceAudit({ page, context, root: repositoryRoot, base }) : null;
 if (!performanceMode) await installReadinessObserver(page);
@@ -319,6 +319,7 @@ try {
         }
         if (size.width === 1366) await page.screenshot({ path: path.join(out, 'runs-light.png') });
       }
+      const surfaceUrl = page.url().replace(base, '');
       if (!performanceMode) await scan(surface, size);
       if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === 1366) {
         const links = await page.locator(`a[href^="/studies/${surface.study}/"]`).evaluateAll(links => links.map(l => l.getAttribute('href')));
@@ -355,13 +356,15 @@ try {
           } else {
             await click(); await settled(); await scan(tab, size, /技术|追溯/.test(label) ? 'technical' : 'ordinary');
           }
-          report.pages.push({ ...tab, ...size });
+          report.pages.push({ ...tab, actualUrl: page.url().replace(base, ''), ...size });
         }
       }
-      report.pages.push({ ...surface, actualUrl: page.url().replace(base, ''), readiness, ...size });
+      report.pages.push({ ...surface, actualUrl: surfaceUrl, readiness, ...size });
     } catch (error) {
       const screenshot = 'uncovered-' + createHash('sha256').update(surface.route + size.width).digest('hex').slice(0, 12) + '.png';
-      await page.screenshot({ path: path.join(out, screenshot) }).catch(() => {});
+      // Keep the performance report's uncovered images in its early artifact,
+      // instead of leaving them only in the separate text-traversal directory.
+      await page.screenshot({ path: path.join(performanceAudit?.out || out, screenshot) }).catch(() => {});
       report.uncovered.push({ page: surface.route, label: surface.label, owner: surface.owner, ...size, reason: error.message, screenshot });
       if (page.isClosed() || !session.browser.isConnected()) throw Error('浏览器会话退出，停止该批巡检；未访问的页面不能计为通过。' + error.message);
       if (performanceMode && surface.route === '/') throw error; // Stop if the changed real creation flow fails.

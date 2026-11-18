@@ -231,7 +231,11 @@ async function agentTask({ name, route, prompt, panel, trigger, suggestion }) {
   const created = page.waitForResponse(r => new URL(r.url()).pathname === '/api/agent/sessions' && r.request().method() === 'POST');
   const response = page.waitForResponse(r => /\/api\/agent\/sessions\/[^/]+\/messages$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST');
   void created.catch(() => {}); void response.catch(() => {});
-  if (suggestion) await surface.getByRole('button', { name: prompt, exact: true }).click();
+  if (suggestion) {
+    await surface.getByRole('button', { name: prompt, exact: true }).click();
+    await expect(surface.getByRole('textbox', { name: '给 Agent 的任务' })).toHaveValue(prompt);
+    await surface.getByRole('button', { name: '发送', exact: true }).click();
+  }
   else {
     await surface.getByRole('textbox', { name: '给 Agent 的任务' }).fill(prompt);
     await surface.getByRole('textbox', { name: '给 Agent 的任务' }).press('Enter');
@@ -240,13 +244,14 @@ async function agentTask({ name, route, prompt, panel, trigger, suggestion }) {
   await expect(surface.getByRole('button', { name: '停止接收', exact: true })).toBeVisible();
   const waiting = await surface.locator('.agent-steps-head').last().innerText();
   await expect(surface.locator('.agent-question').filter({ hasText: prompt })).toHaveCount(1);
-  await expect(surface.getByRole('textbox', { name: '给 Agent 的任务' })).toBeDisabled();
+  await expect(surface.getByRole('textbox', { name: '给 Agent 的任务' })).toBeEditable();
+  await expect(surface.getByRole('button', { name: '发送', exact: true })).toBeDisabled();
   if (usePhase === 'agent-real-use') await appearance('真实 Agent 等待 · ' + name, panel ? '.agent-panel' : '.agent-page');
   const timer = setInterval(() => console.log('模型仍在处理：' + name), 30000);
   try {
     const stream = await response; assert.ok(stream.ok(), '消息请求失败：' + stream.status());
-    // The user-visible completion is the interface returning to Send; SSE fetch does not owe a Playwright network-finished event.
-    await expect(surface.getByRole('button', { name: '发送', exact: true })).toBeVisible({ timeout: 300000 });
+    // The send action remains visible while streaming; completion removes the active receive action.
+    await expect(surface.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0, { timeout: 300000 });
     await page.waitForTimeout(1200);
     const record = await get('/api/agent/sessions/' + id);
     const answers = await surface.locator('.agent-answer').allTextContents();

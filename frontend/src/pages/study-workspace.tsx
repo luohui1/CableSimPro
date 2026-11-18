@@ -1,7 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
+import { isSectionInputTable, methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
+import { studySweep } from '@/lib/heavy-components';
 import { displayName } from '@/lib/display-names';
+import { countInputChanges } from '@/lib/input-changes';
 import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
 import { useStudy } from "@/components/study-provider";
@@ -41,6 +43,7 @@ import { Select } from '@/components/ui/select';
 import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { StudyValidation } from "@/components/study-validation";
 import { rootModule, studyEntryTab, moduleConfiguration } from "@/lib/study-config";
+import { savedTypeRunDestination } from '@/lib/saved-run-destination';
 import { modelViews } from '@/components/study-workbench-config';
 import { SavedRunConclusion } from '@/components/study-saved-conclusion';
 import { FemConclusionBar, FemSavedComparison } from '@/components/study-fem-conclusion';
@@ -71,14 +74,43 @@ const AgentPanel = lazy(() => import('@/features/agent/agent-panel').then(m => (
 const StudyHybrid = lazy(() => import('@/components/study-hybrid').then(m => ({ default: m.StudyHybrid })));
 const StudyTemperature = lazy(() => import('@/components/study-temperature').then(m => ({ default: m.StudyTemperature })));
 const StudyNativeArtifact = lazy(() => import('@/components/study-native-artifact').then(m => ({ default: m.StudyNativeArtifact })));
-const StudySweep = lazy(() => import('@/components/study-sweep').then(m => ({ default: m.StudySweep })));
+const StudySweep = studySweep.Component;
 const StudyBatch = lazy(() => import('@/components/study-batch').then(m => ({ default: m.StudyBatch })));
 const StudyCompare = lazy(() => import('@/components/study-compare').then(m => ({ default: m.StudyCompare })));
 const StudySimulation = lazy(() => import('@/components/study-simulation').then(m => ({ default: m.StudySimulation })));
 export { moduleDefinitions } from "./study-modules";
-export function StudyEntry() {
-  const { study } = useStudy();
+function hasSavedViewIntent(search: { view?: string; delivery?: string; generate?: boolean; inspector?: string }) {
+  return !!search.view || !!search.delivery || !!search.generate || ['method', 'agent'].includes(search.inspector || '');
+}
+/** Resolve only an exact saved archive; pending/invalid evidence never guesses a result page. */
+function savedRunEntry(context: ReturnType<typeof useStudy>, search: { run: string; theme: 'light' | 'dark' }, onTheme: () => void): ReactElement | null {
+  if (!search.run) return null;
+  const { study, runs } = context;
+  const state = (children: ReactNode) => <AppShell title={study.title} theme={search.theme} status={null} actions={null}
+    onUnavailable={context.notice} onTheme={onTheme}>{children}</AppShell>;
+  if (context.loadingRuns) return state(<LoadingState title="正在读取指定运行" />);
+  if (context.runError) return state(<ErrorState description={message(context.runError)} action={<Button onClick={context.refresh}>重新读取</Button>} />);
+  const run = runs.find(item => item.id === search.run);
+  if (!run) return state(<ErrorState description="指定运行不存在或不属于此研究。" action={<Button onClick={context.refresh}>重新读取</Button>} />);
+  if (['accepted', 'queued', 'running', 'validating'].includes(text(run.status)))
+    return state(<LoadingState title="指定运行尚未完成" />);
+  try {
+    const destination = savedTypeRunDestination(run, { workspaceId: study.workspace, studyId: study.id, runId: search.run });
+    if (destination) return <Redirect to="/types/$wid/$module/$tab" params={{ wid: study.workspace, ...destination }}
+      search={{ run: search.run, theme: search.theme }} replace />;
+  } catch (error) {
+    return state(<ErrorState title="保存运行入口无法核对" description={message(error)} action={<Button onClick={context.refresh}>重新读取</Button>} />);
+  }
+  return null;
+}
+export function StudyEntry(): ReactElement {
+  const context = useStudy();
+  const { study } = context;
   const search = studyRootRoute.useSearch();
+  const navigate = studyRootRoute.useNavigate();
+  const savedEntry = hasSavedViewIntent(search) ? null : savedRunEntry(context, search,
+    () => void navigate({search:{...search,theme:search.theme === 'light' ? 'dark' : 'light'},replace:true}));
+  if (savedEntry) return savedEntry;
   return (
     <Redirect
       to="/studies/$sid/$module/$tab"
@@ -102,7 +134,7 @@ function fieldLoadLabel(savedCase: Record<string, unknown>) {
     .map(state => numeric(optionalRecord(state).current_a)).filter((value): value is number => value !== null))];
   return currents.length === 1 ? `保存负荷 ${Number(currents[0].toFixed(1))} A` : currents.length ? `保存负荷 ${currents.map(value => Number(value.toFixed(1)) + ' A').join(' / ')}` : '保存负荷（详见本次运行输入）';
 }
-export function StudyWorkspace() {
+export function StudyWorkspace(): ReactElement {
   const { sid, module, tab } = studyModuleRoute.useParams();
   const search = studyModuleRoute.useSearch();
   const navigate = studyModuleRoute.useNavigate();
@@ -112,11 +144,17 @@ export function StudyWorkspace() {
   const [selected, setSelected] = useState<SelectionRow | undefined>();
   const [fullFieldDomain,setFullFieldDomain]=useState(false);
   useEffect(()=>setFullFieldDomain(false),[sid,search.run]);
-  // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
+  // 曲线研究默认放大数据区；直接打开三维时给模型完整高度，其余模型保留分栏。
   const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
-  const [dockMax, setDockMax] = useState(plotFirst(module));
-  const [canvasExpanded,setCanvasExpanded]=useState(module!=='selection');
-  useEffect(()=>setCanvasExpanded(module!=='selection'),[sid,module]);
+  const [dockMax, setDockMax] = useState(!search.view && plotFirst(module));
+  const [canvasMax, setCanvasMax] = useState(search.view === 'three');
+  const [canvasMounted, setCanvasMounted] = useState(!!search.view || !plotFirst(module));
+  const [canvasExpanded,setCanvasExpanded]=useState(!!search.view || module!=='selection');
+  useEffect(()=>{
+    setCanvasExpanded(!!search.view || module!=='selection');
+    setDockMax(!search.view && plotFirst(module));
+    setCanvasMax(search.view === 'three');
+  },[sid,module,search.view]);
   const [creating, setCreating] = useState(false);
   const catalog = useQuery(methodCardsQuery());
   const [edit, setEdit] = useState(false);
@@ -128,9 +166,6 @@ export function StudyWorkspace() {
   const [inputSelection, setInputSelection] = useState<
     InputSelection | undefined
   >();
-  useEffect(() => {
-    setDockMax(plotFirst(module));
-  }, [module]);
   useEffect(() => {
     setInputSelection(undefined);
     setSelected(undefined);
@@ -222,9 +257,11 @@ export function StudyWorkspace() {
     return fieldView.kind==='fem' && !fullFieldDomain ? focusField(fieldView.points,fieldView.triangles,fieldValues,objects) : {points:fieldView.points,triangles:fieldView.triangles,values:fieldValues};
   },[fieldView,fieldValues,fullFieldDomain]);
   const inputModule = moduleBehavior.input.has(module);
+  const sectionTable = isSectionInputTable(module, tab);
   const snapshotInput = inputModule && !!search.run;
+  const savedInputReady = !!run && !context.loadingRuns && !context.runError && !pendingRun && run.integrity === 'verified';
   const inputDocument = (
-    snapshotInput ? (run ? savedDomain(run) : undefined) : context.domain
+    snapshotInput ? (savedInputReady ? savedDomain(run!) : undefined) : context.domain
   ) as DomainDocument | undefined;
   const inputProps = {
     tab,
@@ -246,14 +283,19 @@ export function StudyWorkspace() {
   );
   // 工作窗口：模型画布（历史运行显示当时保存的模型）、右侧检查器的方法信息
   // 只有查看已过期的运行时才显示当时保存的模型并只读；刚运行完的当前结果仍可直接继续编辑
-  const viewingOldInput = !!search.run && (run?.freshness === "historical" || isVersionStale(run));
+  const viewingOldInput = !!search.run && (inputModule || run?.freshness === "historical" || isVersionStale(run));
   const studyInput = optionalRecord((draft?.definition || study.definition).method_input);
-  const canvasDocument = (viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
+  const canvasDocument = (snapshotInput ? inputDocument : viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
     : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? context.domain : undefined) : context.domain) as DomainDocument | undefined;
   // S4: the complete simulation contract belongs in the work area when
   // editing its method, rather than inside the narrow properties column.
   const workspaceMethod = search.inspector === 'method' && ['thermal-field','transient','sheath-losses','electrothermal'].includes(module);
   const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded;
+  // A maximized result starts without a hidden lazy canvas. Once the engineer
+  // opens it, keep the existing canvas mounted across maximize/restore so its
+  // local drawing state and the provider's unsaved inputs remain intact.
+  const mountCanvas=showCanvas && (!dockMax || canvasMounted);
+  useEffect(()=>{if(showCanvas && !dockMax)setCanvasMounted(true);},[showCanvas,dockMax]);
   const independentInput = study.definition.input_source === 'study';
   const canvasReadOnly = viewingOldInput;
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
@@ -265,7 +307,7 @@ export function StudyWorkspace() {
   const canvasView = requestedCanvasView === 'field' && missingTemperatureField ? 'section' : requestedCanvasView;
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
-    enabled:showCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
+    enabled:mountCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
     queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
   const drawingRun = preview.result?.view || drawingInput.data || run;
   const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
@@ -276,7 +318,14 @@ export function StudyWorkspace() {
   const methodPin = optionalRecord(moduleConfiguration(shownDefinition, module)?.method || shownDefinition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
   const capabilityEntry = (Array.isArray(pluginEntry?.capabilities) ? pluginEntry!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(methodPin.capability));
-  const edits = context.dirty ? Math.max(1, Object.keys(context.domainDraft?.fields || {}).length + Object.keys(context.draft?.parameterFields || {}).length) : 0;
+  const domainEdits = context.domainDraft ? countInputChanges(context.domainDraft.base, context.domainDraft.document, Object.keys(context.domainDraft.fields)) : 0;
+  const draftDefinition = context.draft?.definition || study.definition;
+  const parameterPaths = Object.values(context.draft?.parameterFields || {}).map(field =>
+    (draftDefinition.modules?.[field.module] ? `/modules/${field.module}` : '')
+    + (field.crosscheck === undefined ? '/parameters' : `/crosschecks/${field.crosscheck}/parameters`) + field.path);
+  const studyEdits = context.draft ? countInputChanges(context.draft.base.definition, draftDefinition, parameterPaths)
+    + (context.draft.title !== context.draft.base.title ? 1 : 0) : 0;
+  const edits = context.dirty ? Math.max(1, domainEdits + studyEdits + Object.keys(context.moduleInputs).length) : 0;
   // 浏览子模块不会改变研究状态；状态来自研究保存的最近运行摘要。
   const overallRun = optionalRecord(study.raw.latest_run);
   const methodPresentationNotice = useMethodPresentationNotice(study, search.run ? run : overallRun.id ? overallRun : undefined);
@@ -317,13 +366,21 @@ export function StudyWorkspace() {
   function currentSearch() {
     return { ...search, workspace: study.workspace };
   }
-  // 电缆、截面、工况不再是单独页面：并入当前计算的工作窗口，画布切到对应视图
-  if (inputModule)
+  // The old generic run links landed type calculations in ampacity/batch.
+  // Preserve explicit reports, evidence tabs, model and method deep links.
+  const legacyRunEntry = (module === 'ampacity' && tab === 'results' || module === 'batch' && tab === 'space')
+    && !hasSavedViewIntent(search);
+  const savedEntry = legacyRunEntry ? savedRunEntry(context, search,
+    () => void navigate({search:{...currentSearch(),theme:theme === 'light' ? 'dark' : 'light'},replace:true})) : null;
+  if (savedEntry) return savedEntry;
+  // Keep the coordinate/media tables in this workbench. The drawing aliases
+  // open the matching view of the calculation without losing a fixed run.
+  if (inputModule && !sectionTable)
     return (
       <Redirect
         to="/studies/$sid/$module/$tab"
         params={{ sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) }}
-        search={{ ...search, workspace: study.workspace, view: module === "cable" ? "cable" : "section" }}
+        search={{ ...search, workspace: study.workspace, view: module === "cable" ? "cable" : tab === 'three-dimensional' ? 'three' : "section" }}
         replace
       />
     );
@@ -355,12 +412,26 @@ export function StudyWorkspace() {
   const analyses = enabled.filter(key => !moduleBehavior.input.has(key) && key !== 'report' && (key !== 'thermal-field' || calculatedModule === key))
     .map(key => ({value:key,label:key === calculatedModule ? (capabilityEntry?.analysis==='ampacity_correction' ? text(capabilityEntry.title) : taskName(study.definition, study.task)) : moduleDefinitions[key].label}));
   const currentAnalysis = module === 'report' || moduleBehavior.input.has(module) ? calculatedModule : module;
+  const inputCalculationModule = snapshotInput && savedInputReady
+    ? text(optionalRecord(run!.snapshot).module) || rootModule(optionalRecord(optionalRecord(run!.snapshot).definition) as StudyDefinition)
+    : calculatedModule;
   const reportReason = !run ? '先运行研究，取得保存结果' : context.dirty ? '先保存修改并重新运行' : selectedPresentation.historical ? '旧结果保持为历史，请先重算' : !['succeeded','partial'].includes(text(run.status)) ? '等待运行成功后生成' : undefined;
   const commandActions: CommandAction[] = [
     {id:'save',label:context.dirty?'保存修改':'已保存',icon:'action/save',role:'save',variant:'outline',loading:context.saving,disabledReason:!context.dirty?'工程修改已保存':undefined,onSelect:()=>void context.save()},
     {id:'undo',label:'撤销',icon:'action/undo',priority:70,variant:'ghost',disabledReason:!context.canUndo?'没有可撤销的修改':context.saving?'正在保存':undefined,onSelect:()=>void context.undo()},
     {id:'redo',label:'重做',icon:'action/redo',priority:40,variant:'ghost',disabledReason:!context.canRedo?'没有可重做的修改':context.saving?'正在保存':undefined,onSelect:()=>void context.redo()},
-    ...(module==='selection' && canvasDocument ? [{id:'canvas',label:canvasExpanded?'收起布置图':'查看布置图',priority:20,variant:'ghost' as const,onSelect:()=>setCanvasExpanded(value=>!value)}] : []),
+    ...(module==='selection' && canvasDocument ? [{id:'canvas',label:canvasExpanded?'收起布置图':'查看布置图',priority:20,variant:'ghost' as const,onSelect:()=>{
+      if (canvasExpanded) {
+        setCanvasExpanded(false);
+        if (search.view) void navigate({search:{...currentSearch(),view:undefined},replace:true});
+      } else {
+        setCanvasExpanded(true);
+        setDockMax(false);
+      }
+    }}] : []),
+    ...(sectionTable ? [{id:'calculation',label:`返回${moduleDefinitions[inputCalculationModule]?.label || '计算结果'}`,role:'primary' as const,
+      disabledReason:snapshotInput && !savedInputReady ? '先读取并核对指定运行的保存输入' : !moduleDefinitions[inputCalculationModule] ? '该保存运行的计算模块尚未支持显示' : undefined,
+      onSelect:()=>void navigate({params:{sid,module:inputCalculationModule,tab:studyEntryTab(inputCalculationModule)},search:currentSearch()})}] : []),
     ...(module !== 'report' ? [{id:'report',label:'生成计算书',icon:'result/report',priority:80,variant:'ghost' as const,disabledReason:reportReason,onSelect:()=>void navigate({ params: { sid, module: 'report', tab: 'preview' }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}] : []),
   ];
   const commandBar = <CommandBar label="工程命令" actions={commandActions} status={!presentation.historical?presentation.label:undefined} leading={<>
@@ -435,7 +506,7 @@ export function StudyWorkspace() {
             />
           }
           actions={null}
-          property={module === "report" ? undefined : (
+          property={module === "report" || snapshotInput && !savedInputReady ? undefined : (
             <WorkbenchInspector
               relationPanel={<RelationPanel kind="study" id={sid} />}
               view={search.inspector === "agent" ? "agent" : methodPanel && search.inspector === "method" ? "method" : "input"}
@@ -472,9 +543,9 @@ export function StudyWorkspace() {
           {commandBar}
           <div className="workbench-frame">
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined}>
+          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined} data-canvas={showCanvas && canvasMax ? 'max' : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
-          {showCanvas && (
+          {mountCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views study-canvas-toolbar" role="toolbar" aria-label="视图与绘图工具">
                 <div className="study-view-switch" role="group" aria-label="模型视图">
@@ -483,12 +554,14 @@ export function StudyWorkspace() {
                     <Icon name={icon} /><span className="study-view-label">{label}</span>
                   </button>
                 ))}
-                </div><div data-drawing-toolbar-slot />
+                </div>
+                <Button size="compact" variant="ghost" className="study-model-size" aria-pressed={canvasMax} onClick={() => setCanvasMax(value => !value)}>{canvasMax ? '还原模型布局' : '放大模型'}</Button>
+                <div data-drawing-toolbar-slot />
                 {canvasView==='field' && fieldView?.kind==='fem' && <Button size="compact" variant="ghost" onClick={()=>setFullFieldDomain(value=>!value)}>{fullFieldDomain ? '对准电缆区域' : '适配全域'}</Button>}
               </div>
               {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
               {canvasView === "field" && fieldView ? (
-                <div className="study-field-slot"><FieldView
+                <div className="study-field-slot" data-run-id={text((needsFieldProjection ? fieldRun : shownRun)?.id)} data-case-id={text(fieldView.case.case_id)}><FieldView
                   label={fieldView.kind === "iec" ? `土壤温度场（IEC 解析） · ${fieldLoadLabel(fieldView.case)}` : "温度场"}
                   key={fullFieldDomain ? 'full-domain' : 'cable-region'}
                   points={focusedField!.points}
@@ -509,7 +582,9 @@ export function StudyWorkspace() {
                   hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: fieldView.kind === "iec" ? "土壤最高" : "最高" }}
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
                   limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
-                /></div>
+                />
+                {fieldView.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
+                </div>
               ) : canvasView === 'field' && needsFieldProjection && fieldProjection.isPending ? <LoadingState title="正在读取保存场图" />
                 : canvasView === 'field' && fieldProjection.error ? <ErrorState title="场图读取失败" description={message(fieldProjection.error)} action={<Button onClick={() => void fieldProjection.refetch()}>重新读取</Button>} />
                 : canvasView === 'field' ? <InlineEmpty title="该保存运行没有温度场" />
@@ -523,7 +598,6 @@ export function StudyWorkspace() {
                   downloadBlob(image.blob, '三维视图.png');
                 }} />
               )}
-              {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
             </section>
           )}
           {showCanvas && <WorkbenchSplitter kind="study" />}
@@ -571,7 +645,7 @@ export function StudyWorkspace() {
             />
           ) : search.run && !run ? (
             <ErrorState description="指定运行不存在或不属于此研究。" />
-          ) : pendingRun && !inputModule && tab !== "parameters" ? (
+          ) : pendingRun && tab !== "parameters" ? (
             <LoadingState title="运行尚未完成" />
           ) : inputModule ? (
             run?.integrity !== "verified" ? (
@@ -610,6 +684,8 @@ export function StudyWorkspace() {
               cases={(view?.rows || []).map((row) => ({ id: row.id, label: row.name }))}
               initialCase={selectedRow?.id || view?.recommendation?.id}
             />
+          ) : !run && ["transient", "sheath-losses"].includes(module) && !moduleConfiguration(study.definition, module) ? (
+            <SimulationSetup module={module} />
           ) : module === "transient" && tab === "history" ? (
             <StudyNativeArtifact run={run} kind="history" />
           ) : module === "sheath-losses" && tab === "losses" ? (
@@ -673,6 +749,11 @@ export function StudyWorkspace() {
               did={search.delivery}
               tab={tab}
               dirty={context.dirty}
+              calculationLabel={moduleDefinitions[calculatedModule].label}
+              onReturnToCalculation={() => void navigate({
+                params: { sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) },
+                search: { ...currentSearch(), run: '', delivery: '', generate: false, preflight: false },
+              })}
               cadImage={reportImage && reportImage.runId === run?.id ? reportImage.image : undefined}
               runs={runs}
               autoGenerate={search.generate}
@@ -730,7 +811,7 @@ export function StudyWorkspace() {
           />
         </label>
       </Dialog>
-      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} />
+      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} sourceStudyId={study.id} />
       <StudyGeometryProposal proposal={geometryProposal} onClose={()=>setGeometryProposal(undefined)} />
       <RunRecordsDrawer
         workspace={study.workspace}

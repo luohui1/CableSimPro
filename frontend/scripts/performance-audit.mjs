@@ -51,7 +51,7 @@ export async function createPerformanceAudit({ page, context, root, base }) {
   const report = { generated: new Date().toISOString(), complete: false, pages: [], uncovered: [], budgets: { coldMs: 3000, hotMs: 1000, frameMs: 5000 },
     sourceDatabase: process.env.E2E_DATABASE_SOURCE || path.join(root, '.data/release/engineering.sqlite'), frontendSnapshot: process.env.E2E_FRONTEND_DIST || '当前前端构建',
     definition: '1366×768 浅色，真实发布库只读副本、真实宿主/插件；无节流。冷=每页清空浏览器 HTTP 缓存后完整导航；热=同页完整刷新，保留 HTTP 缓存。两次都重新建立页面及查询缓存。服务端先启动，跨页缓存/常驻几何进程不重启，故不是服务端冷启动。插件内部页签另测首次切换/再次切换。内容以工作面板实际文字/控件、可见加载态结束及连续两帧提交为准；画布单独以 CAD 实际 ready/首帧回执或场图真实 WebGL 绘制后的帧为准。',
-    instrumentation: '只观察 DOM、Resource Timing、Long Tasks、CAD 已有初始化/显示回执和 Worker 创建；不把未归因的主线程长任务猜成 WASM 初始化。请求按开始时间与响应完成时间记录；最慢并行请求不自动等同于阻塞原因。所有 API 写请求由隔离后端拒绝；不使用 Playwright route，以保留真实浏览器缓存。' };
+    instrumentation: '只观察 DOM、Resource Timing、Long Tasks、CAD 已有初始化/显示回执和 Worker 创建；不把未归因的主线程长任务猜成 WASM 初始化。请求保留 fetch、DNS、连接、发送、首字节和响应完成的原始时点，零值按浏览器原样保留；最慢并行请求不自动等同于阻塞原因。所有 API 写请求由隔离后端拒绝；不使用 Playwright route，以保留真实浏览器缓存。' };
   await installReadinessObserver(page);
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -67,10 +67,12 @@ export async function createPerformanceAudit({ page, context, root, base }) {
   });
   async function measure(surface, kind, action) {
     workers = []; failures = []; blocked = []; requests = new Map();
-    const started = Date.now(); let startMs = 0, failure = null;
+    const started = Date.now(); let startMs = 0, actionTimeOrigin = null, failure = null;
     if (action) {
-      startMs = await page.evaluate(() => performance.now());
-      await page.evaluate(() => { window.__loadAudit.mainMs = null; window.__loadAudit.frameMs = null; });
+      ({ startMs, actionTimeOrigin } = await page.evaluate(() => {
+        window.__loadAudit.mainMs = null; window.__loadAudit.frameMs = null;
+        return { startMs: performance.now(), actionTimeOrigin: performance.timeOrigin };
+      }));
     }
     try {
       if (action) await action();
@@ -81,34 +83,51 @@ export async function createPerformanceAudit({ page, context, root, base }) {
       await waitForPageReady(page, { includeCanvas: false });
       await page.waitForFunction(() => window.__loadAudit?.mainMs !== null, null, { timeout: 3000, polling: 25 });
     } catch (error) { failure = error.message; }
-    const content = await page.evaluate(() => ({ ...window.__loadAudit, now: performance.now() })).catch(() => null);
-    let mainMs = content?.mainMs === null ? null : content?.mainMs - startMs;
-    if (mainMs < 0) mainMs = null;
     let state = await page.evaluate(readinessSnapshot).catch(() => null), frameFailure = null;
     if (state?.canvases.length || state?.busy.some(b => b.canvas)) {
       try { await waitForPageReady(page, { timeout: 30000 }); }
       catch (error) { frameFailure = error.message; }
     }
-    const metrics = await page.evaluate(() => {
+    const readMetrics = () => page.evaluate(({ snapshot }) => {
       const audit = window.__loadAudit;
-      return { ...audit, now: performance.now(), resources: performance.getEntriesByType('resource').map(r => ({ url: r.name, startMs: r.startTime, endMs: r.responseEnd,
+      return { ...audit, actualUrl: location.href, timeOrigin: performance.timeOrigin, state: (0, eval)('(' + snapshot + ')')(), now: performance.now(), resources: performance.getEntriesByType('resource').map(r => ({ url: r.name, startMs: r.startTime, endMs: r.responseEnd,
+        fetchStartMs: r.fetchStart, domainLookupStartMs: r.domainLookupStart, domainLookupEndMs: r.domainLookupEnd,
+        connectStartMs: r.connectStart, secureConnectionStartMs: r.secureConnectionStart, connectEndMs: r.connectEnd,
+        requestStartMs: r.requestStart, responseStartMs: r.responseStart, nextHopProtocol: r.nextHopProtocol,
         durationMs: r.duration, ttfbMs: r.responseStart - r.requestStart, serverTiming: (r.serverTiming || []).map(t => ({ name: t.name, durationMs: t.duration, description: t.description })), transferBytes: r.transferSize, encodedBytes: r.encodedBodySize, decodedBytes: r.decodedBodySize, initiator: r.initiatorType })),
         navigation: performance.getEntriesByType('navigation').map(n => ({ ttfbMs: n.responseStart - n.requestStart, domContentLoadedMs: n.domContentLoadedEventEnd, transferBytes: n.transferSize })) };
-    }).catch(() => null);
-    state = await page.evaluate(readinessSnapshot).catch(() => state);
+    }, { snapshot: readinessSnapshot.toString() }).catch(() => null);
+    let metrics = await readMetrics();
+    if (metrics && (metrics.url !== metrics.actualUrl || metrics.mainMs === null || !metrics.state.mainReady)) {
+      // The same measurement continues through a late client redirect. Its
+      // clock and budget are unchanged; never pair a prior URL's time with the
+      // target workspace's ready state.
+      try {
+        await waitForPageReady(page, { includeCanvas: false });
+        await page.waitForFunction(() => window.__loadAudit?.url === location.href && window.__loadAudit?.mainMs !== null,
+          null, { timeout: 3000, polling: 25 });
+      } catch (error) { failure ||= error.message; }
+      metrics = await readMetrics();
+    }
+    state = metrics?.state || state;
+    let mainMs = metrics?.mainMs === null || metrics?.mainMs === undefined ? null : metrics.mainMs - startMs;
+    if (mainMs < 0) mainMs = null;
+    if (!state?.mainReady) failure ||= '测量结束时主内容仍未就绪：' + JSON.stringify(state);
+    if (!metrics || metrics.url !== metrics.actualUrl) failure ||= '目标页面与就绪时间戳不属于同一地址';
+    if (action && metrics?.timeOrigin !== actionTimeOrigin) failure ||= '页签操作进入了新文档，不能沿用原页面的计时起点';
     const rendering = (state?.canvases || []).flatMap(canvas => canvas.rendering ? [canvas.rendering] : []);
     const frameMs = metrics?.frameMs === null ? null : metrics?.frameMs - startMs;
     const applicableFrames = (state?.canvases || []).filter(c => !c.empty);
-    const horizon = Math.max(content?.mainMs || 0, metrics?.frameMs || 0, (failure || frameFailure) ? metrics?.now || 0 : 0);
+    const horizon = Math.max(metrics?.mainMs || 0, metrics?.frameMs || 0, (failure || frameFailure) ? metrics?.now || 0 : 0);
     const resources = (metrics?.resources || []).filter(r => r.startMs >= startMs && r.startMs <= horizon).map(r => {
       const url = r.url.replace(base, ''), response = [...requests.values()].filter(request => request.url === url && request.serverTiming !== undefined).at(-1);
       return { ...r, url, readCache: response?.readCache || null, serverTimingHeader: response?.serverTiming || null, status: response?.status };
     });
     const tasks = (metrics?.longTasks || []).filter(t => t.startMs >= startMs && t.startMs <= horizon);
-    const row = { page: surface.route, actualUrl: page.url().replace(base, ''), label: surface.label, owner: surface.owner, kind, navigation: action ? '页签切换' : '完整导航', mainMs: mainMs === null || mainMs === undefined ? null : Math.round(mainMs),
-      budgetMs: kind === 'cold' ? 3000 : 1000, mainPassed: mainMs !== null && mainMs !== undefined && mainMs <= (kind === 'cold' ? 3000 : 1000) && !failure,
+    const row = { page: surface.route, actualUrl: (metrics?.actualUrl || page.url()).replace(base, ''), label: surface.label, owner: surface.owner, kind, navigation: action ? '页签切换' : '完整导航', mainMs: mainMs === null || mainMs === undefined ? null : Math.round(mainMs),
+      budgetMs: kind === 'cold' ? 3000 : 1000, mainPassed: Number.isFinite(mainMs) && mainMs >= 0 && mainMs <= (kind === 'cold' ? 3000 : 1000) && !failure,
       frameMs: state?.canvases.length && frameMs !== null ? Math.round(frameMs) : null, canvases: state?.canvases || [],
-      framePassed: applicableFrames.length ? frameMs !== null && frameMs <= 5000 && applicableFrames.every(c => c.ready && !c.error) && !frameFailure : null,
+      framePassed: applicableFrames.length ? Number.isFinite(frameMs) && frameMs >= 0 && frameMs <= 5000 && applicableFrames.every(c => c.ready && !c.error) && !failure && !frameFailure : null,
       unavailableFrames: (state?.canvases || []).filter(c => c.empty).map(c => ({ kind: c.kind, reason: '此保存状态没有几何工件；未制造首帧' })),
       terminalErrors: state?.errors || [], failure, frameFailure, rendering, slowestRequests: [...resources].sort((a,b) => b.durationMs - a.durationMs).slice(0,8),
       slowestApi: resources.filter(r => r.url.startsWith('/api/')).sort((a,b) => b.durationMs - a.durationMs).slice(0,3),

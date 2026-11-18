@@ -39,6 +39,8 @@ function CurrentReport({
   tab,
   dirty,
   onDelivery,
+  calculationLabel,
+  onReturnToCalculation,
   autoGenerate = false,
   onGenerateConsumed,
   cadImage, runs = [],
@@ -50,6 +52,8 @@ function CurrentReport({
   tab: string;
   dirty: boolean;
   onDelivery: (id: string) => void;
+  calculationLabel: string;
+  onReturnToCalculation: () => void;
   autoGenerate?: boolean;
   onGenerateConsumed?: () => void;
   cadImage?: CadImage;
@@ -263,6 +267,7 @@ function CurrentReport({
         art="report"
         title="尚无可交付运行"
         description="计算书只从一次成功的运行生成。先在计算模块运行，再回到这里生成。"
+        action={<Button variant="primary" onClick={onReturnToCalculation}>返回{calculationLabel}</Button>}
       />
     );
   if (!current && !did)

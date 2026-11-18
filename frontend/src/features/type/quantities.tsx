@@ -45,6 +45,7 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
     }
   } catch (failure) { error = message(failure); }
   const current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.inputDirty);
+  const fixedInput = !!navigation.location.run || !!navigation.location.revision;
   const source = saved ? methodLabel(saved.run) + '；保存实体积分与输入快照' : '';
   const inputs = layerRows(state.document!, cable);
   function locate(layer: typeof inputs[number], field?: string) {
@@ -76,7 +77,8 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
     {saved && <div className="type-result-toolbar"><SavedRunPicker schema="cablesim.cad-model/1" /></div>}
     <div className="type-material-actions"><MaterialBatchBindings rows={inputs} selectedIds={[]} /><MaterialBatchDensity rows={inputs} selectedIds={[]} /></div>
     {bodyState === 'loading' ? <LoadingState title="正在读取或推导实体用料" /> : bodyState === 'error' ? <ErrorState title="结构推导不可用" description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : !saved ? <InlineEmpty title="尚无保存的结构推导，使用命令栏更新。" /> : <>
-      {!current && <StaleBanner description="以下为历史推导；保存修改后点击“更新结构推导”。" />}
+      {!current && <StaleBanner description={fixedInput ? '以下为历史推导；历史输入和保存结果保持只读。' : state.readOnly ? '以下为历史推导；当前型号保持只读。' : '以下为历史推导；保存修改后点击“更新结构推导”。'}
+        action={fixedInput ? <Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme))}>打开当前型号</Button> : undefined} />}
       <div className="type-result-summary"><span>成品外径 <strong>{formatNumber(numeric(saved.artifact.outer_diameter_m)! * 1000, 2)}</strong><span className="unit">mm</span></span>
         <span>理论每公里重量 <strong>{saved.artifact.mass_kg_per_km == null ? '缺项' : formatNumber(numeric(saved.artifact.mass_kg_per_km), 1)}</strong><span className="unit">kg/km</span></span>
         <span>建模长度 {formatNumber(numeric(saved.artifact.length_m), 3)} m</span><SourceBadge kind="derived" detail={source} /></div>

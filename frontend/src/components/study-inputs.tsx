@@ -27,6 +27,7 @@ import {
 import type { PropertyGroup } from "./property-panel";
 import { StudyDrawing } from "./study-drawing";
 import { StudyCrossingInputs } from './study-crossing-inputs';
+import { displayName } from '@/lib/display-names';
 
 export type InputSelection = {
   id: string;
@@ -730,7 +731,7 @@ export function SectionInputs({
     )
     .map((material) => ({
       id: material.id,
-      label: material.label,
+      label: displayName(material.label),
       material: material.id,
       fields: [
         {

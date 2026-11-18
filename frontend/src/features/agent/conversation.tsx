@@ -1,4 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog } from "@/components/ui/dialog";
+import { AnswerText, CopyAnswer } from "./answer-text";
+import { WorkingMark } from "./working-mark";
+export { WorkingMark } from "./working-mark";
+export { AnswerText } from "./answer-text";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/icon";
 import { ObjectChip } from "@/components/object-link";
@@ -37,63 +43,11 @@ const decimals = (value: unknown) => (typeof value === "number" ? (String(Number
 const show = (value: unknown, places = decimals(value)) => (value === null || value === undefined ? "—" : typeof value === "number" ? Number(value.toPrecision(10)).toFixed(Math.min(places, 6)) : typeof value === "object" ? JSON.stringify(value) : String(value));
 const seconds = (ms: number) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60_000)} 分 ${Math.round((ms % 60_000) / 1000)} 秒`);
 
-function inline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((part, index) =>
-    part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong>
-      : part.startsWith("`") && part.endsWith("`") ? <code key={index}>{part.slice(1, -1)}</code> : part);
-}
-
-/** 回答正文：段落、列表、表格、加粗；不解析 HTML。 */
-export function AnswerText({ text }: { text: string }) {
-  const blocks: ReactNode[] = [];
-  let paragraph: string[] = [], items: { ordered: boolean; text: string }[] = [], rows: string[][] = [];
-  const flush = () => {
-    if (paragraph.length) blocks.push(<p key={blocks.length}>{paragraph.flatMap((line, index) => index ? [<br key={index} />, ...inline(line)] : inline(line))}</p>);
-    if (items.length) {
-      const children = items.map((item, index) => <li key={index}>{inline(item.text)}</li>);
-      blocks.push(items[0].ordered ? <ol key={blocks.length}>{children}</ol> : <ul key={blocks.length}>{children}</ul>);
-    }
-    if (rows.length) {
-      const [head, ...body] = rows;
-      const numberCell = (cell: string) => /^[+−-]?\d[\d ,]*(?:\.\d+)?\s*(?:[A-Za-z°%²³·/]+)?$/.test(cell.replace(/\*\*|`/g, '').trim());
-      const numericColumns = head.map((_, column) => body.some(row => numberCell(row[column] || '')) && body.every(row => ['','—'].includes(row[column] || '') || numberCell(row[column])));
-      blocks.push(<div key={blocks.length} className="agent-answer-table"><table><thead><tr>{head.map((cell, index) => <th key={index} className={numericColumns[index] ? 'numeric' : undefined}>{inline(cell)}</th>)}</tr></thead>
-        <tbody>{body.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column} className={numericColumns[column] ? 'numeric' : undefined}>{inline(cell)}</td>)}</tr>)}</tbody></table></div>);
-    }
-    paragraph = []; items = []; rows = [];
-  };
-  for (const raw of text.split("\n")) {
-    const line = raw.trimEnd();
-    if (/^\s*\|.*\|\s*$/.test(line)) {
-      if (paragraph.length || items.length) { const kept = rows; rows = []; flush(); rows = kept; }
-      if (!/^\s*\|?[\s:|-]+\|?\s*$/.test(line)) rows.push(line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
-      continue;
-    }
-    if (rows.length) flush();
-    const bullet = /^\s*[-*•]\s+(.*)$/.exec(line), numbered = /^\s*\d+[.、)]\s*(.*)$/.exec(line), heading = /^#{1,4}\s+(.*)$/.exec(line);
-    if (!line.trim()) flush();
-    else if (bullet || numbered) {
-      if (paragraph.length) { const kept = items; items = []; flush(); items = kept; }
-      items.push({ ordered: !!numbered, text: (bullet || numbered)![1] });
-    } else if (heading) { flush(); blocks.push(<h3 key={blocks.length} className="agent-answer-heading">{inline(heading[1])}</h3>); }
-    else { if (items.length) flush(); paragraph.push(line); }
-  }
-  flush();
-  return <div className="agent-answer">{blocks}</div>;
-}
-
-/** 工作中的点阵（3×3 由中心向外涟漪）；完成或失败换成对应图标。 */
-export function WorkingMark({ state }: { state: "working" | "done" | "error" }) {
-  if (state === "done") return <Icon name="agent/approve" className="agent-mark is-done" />;
-  if (state === "error") return <Icon name="status/warning" className="agent-mark is-error" />;
-  return <span className="agent-lattice" aria-hidden="true">{Array.from({ length: 9 }, (_, index) => <span key={index} />)}</span>;
-}
-
 function useElapsed(turn: Turn) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!turn.running) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [turn.running]);
   const start = turn.started ? Date.parse(turn.started) : now;
@@ -107,26 +61,26 @@ const stepIcon = (step: Step, kinds: Map<string, string>) =>
 /** 工作过程：进行中展开并显示当前步骤；完成后收成“已完成 N 步，用时 …”。 */
 export function WorkSteps({ turn, kinds, label = displayName }: { turn: Turn; kinds: Map<string, string>; label?: Label }) {
   const elapsed = useElapsed(turn);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<boolean>();
   const steps = turn.steps;
   if (!steps.length && !turn.running) return null;
   const current = [...steps].reverse().find((step) => step.status === "running");
   const failed = !turn.running && (['blocked', 'failed'].includes(turn.task?.state || '') || turn.interrupted || steps.some((step) => step.status === "error" && step.tool !== "answer-check"));
-  const expanded = open || (turn.running && steps.length > 0);
-  return <div className={`agent-steps ${expanded ? "is-open" : ""}`}>
-    <button type="button" className="agent-steps-head" aria-expanded={expanded} onClick={() => setOpen((value) => !value)} disabled={turn.running}>
+  const expanded = open ?? (turn.running && steps.length > 0);
+  return <Collapsible open={expanded} onOpenChange={setOpen} className={`agent-steps ${expanded ? "is-open" : ""}`}>
+    <CollapsibleTrigger asChild><Button variant="ghost" size="compact" className="agent-steps-head">
       <WorkingMark state={turn.running ? "working" : failed ? "error" : "done"} />
       <span>{turn.running ? (current ? `正在${current.title}` : "正在思考") : `${failed ? '已结束' : '已完成'} ${steps.length} 步，用时`}</span>
       <time>{seconds(elapsed)}</time>
-      {!turn.running && <Icon name="action/chevron-down" className="agent-steps-chevron" />}
-    </button>
-    {expanded && <ol className="agent-step-list">{steps.map((step) => <li key={step.id} className={`agent-step is-${step.status}`}>
+      <Icon name="action/chevron-down" className="agent-steps-chevron" />
+    </Button></CollapsibleTrigger>
+    <CollapsibleContent><ol className="agent-step-list">{steps.map((step) => <li key={step.id} className={`agent-step is-${step.status}`}>
       <Icon name={stepIcon(step, kinds)} />
       <b>{step.title}</b>
       {step.summary && <span title={step.summary}>{readableAgentText(step.summary, label, turn.refs)}</span>}
       <time>{step.status === "running" ? "…" : step.ms !== undefined ? seconds(step.ms) : ""}</time>
-    </li>)}</ol>}
-  </div>;
+    </li>)}</ol></CollapsibleContent>
+  </Collapsible>;
 }
 
 const BASIS: Record<string, string> = { rating: "单独额定", "rating-simultaneous": "同时额定" };
@@ -171,33 +125,47 @@ export function HoldButton({ children, onConfirm, disabled, loading }: { childre
     setHolding(true);
     timer.current = window.setTimeout(() => { timer.current = null; setHolding(false); onConfirm(); }, 800);
   };
-  useEffect(() => stop, []);
-  return <button type="button" className="agent-hold" data-holding={holding || undefined} disabled={disabled || loading}
+  useEffect(() => {
+    const cancel = () => stop();
+    window.addEventListener('blur', cancel);
+    document.addEventListener('visibilitychange', cancel);
+    return () => { window.removeEventListener('blur', cancel); document.removeEventListener('visibilitychange', cancel); stop(); };
+  }, []);
+  useEffect(() => { if (disabled || loading) stop(); }, [disabled, loading]);
+  return <Button type="button" variant="primary" className="agent-hold" data-holding={holding || undefined} aria-busy={loading || undefined} disabled={disabled || loading}
     onPointerDown={event => { if (event.button === 0) start(); }} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} onBlur={stop}
     onKeyDown={(event) => { if (event.key === 'Escape') { stop(); return; } if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); start(); } }}
     onKeyUp={(event) => { if (event.key === " " || event.key === "Enter") stop(); }}>
     <span>{loading ? "正在保存" : children}</span>
-  </button>;
+  </Button>;
 }
 
 /** 改动审核：字段级前后值；只有人能批准，批准走工作台同一保存路径。 */
 export function ProposalCard({ proposal, onDecide, busy, error, receipt, label = displayName }: { proposal: AgentProposal; onDecide: (id: string, decision: "approve" | "reject") => void; busy?: boolean; error?: string; receipt?: { created: string; actor?: string; status: string }; label?: Label }) {
+  const [reviewOpen, setReviewOpen] = useState(false);
   const title = readableAgentText(proposal.title, label);
-  const shortTitle = title.length > 50 ? title.split(' · ')[0] : title;
+  const changes = (complete = false) => <div className="agent-diff">{(complete ? proposal.changes : proposal.changes.slice(0, 6)).map((change, index) => {
+    const places = Math.max(decimals(change.before), decimals(change.after));
+    const pathLabel = proposalFieldLabel(change.path, label);
+    const field = change.label.startsWith('/') || change.path.includes('/cores/') && !pathLabel.endsWith('参数字段') ? pathLabel : readableAgentText(change.label, label);
+    return <div key={`${index}/${change.path}`} className="agent-diff-hunk">
+      <div className="agent-diff-label">{field}</div>
+      <div className="agent-diff-line is-removed"><span className="agent-diff-kind">修改前</span><span>{show(change.before, places)}{change.unit && ` ${change.unit}`}</span></div>
+      <div className="agent-diff-line is-added"><span className="agent-diff-kind">修改后</span><span>{show(change.after, places)}{change.unit && ` ${change.unit}`}</span></div>
+    </div>;
+  })}</div>;
   return <article className={`agent-review-card is-${proposal.status}`}>
-    <header><Icon name="agent/proposal" /><b title={title}>{shortTitle}</b><span>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : `待审核 · ${proposal.changes.length} 项改动`}</span></header>
-    {shortTitle !== title && <details className="agent-notice-details"><summary>方案说明</summary><p>{title}</p></details>}
+    <header><Icon name="agent/proposal" /><b title={title}>{title}</b><span>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : `待审核 · ${proposal.changes.length} 项改动`}</span></header>
     {proposal.base_revision != null && <p className="agent-card-meta">基于第 {proposal.base_revision} 修订</p>}
     {receipt && receipt.status === proposal.status && <p className="agent-card-meta">{receipt.actor ? `${receipt.actor === 'human' ? '人工' : receipt.actor} · ` : ''}{formatDateTime(receipt.created)} · {receipt.status === 'approved' ? '已保存输入，工程结果尚未批准' : '已拒绝方案'}</p>}
-    <div className="agent-diff">{proposal.changes.map((change) => {
-      const places = Math.max(decimals(change.before), decimals(change.after));
-      const pathLabel = proposalFieldLabel(change.path, label);
-      return <div key={change.path} className="agent-diff-hunk">
-        <div className="agent-diff-label" title={change.path}>{change.label.startsWith('/') || change.path.includes('/cores/') && !pathLabel.endsWith('参数字段') ? pathLabel : readableAgentText(change.label, label)}</div>
-        <div className="agent-diff-line is-removed"><span aria-hidden="true">−</span>{show(change.before, places)}{change.unit && ` ${change.unit}`}</div>
-        <div className="agent-diff-line is-added"><span aria-hidden="true">+</span>{show(change.after, places)}{change.unit && ` ${change.unit}`}</div>
-      </div>;
-    })}</div>
+    {changes()}
+    {proposal.changes.length > 6 && <p className="agent-review-more">当前列出 6 项，共 {proposal.changes.length} 项。展开完整审核可查看每个字段。</p>}
+    <Button variant="outline" size="compact" onClick={() => setReviewOpen(true)}>展开完整审核</Button>
+    <Dialog open={reviewOpen} onOpenChange={setReviewOpen} title="审核字段改动" description={`${title}。逐项核对修改前、修改后和单位；关闭后回到方案卡批准或拒绝。`}>
+      <div className="agent-review-document">{changes(true)}
+        {!!proposal.checks?.length && <ul className="agent-review-checks">{proposal.checks.map((check, index) => <li key={index}>{readableAgentText(check, label)}</li>)}</ul>}
+      </div>
+    </Dialog>
     {!!proposal.checks?.length && <ul className="agent-review-checks">{proposal.checks.map((check) => <li key={check} title={check}>{readableAgentText(check, label)}</li>)}</ul>}
     <details className="agent-notice-details"><summary>追溯 · 提案详情</summary><pre>{proposal.title}{'\n'}{proposal.changes.map(change => change.path).join('\n')}</pre></details>
     {error && <p className="agent-notice" role="alert">{error}</p>}
@@ -215,10 +183,10 @@ function ProposalLine({ proposal, label }: { proposal: AgentProposal; label: Lab
     <b>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : "在右侧审核"}</b></div>;
 }
 
-export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, onRetry, onRefresh, onOpenWorkspace, onReview }: {
+export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, onRetry, onRefresh, onOpenWorkspace, onReview, showQuestion = true }: {
   turn: Turn; kinds: Map<string, string>; proposals: Map<string, AgentProposal>; label: Label;
   review: "aside" | ((proposal: AgentProposal) => ReactNode); onOpenStudy?: (studyId: string) => void; onRetry?: () => void;
-  onRefresh?: () => void; onOpenWorkspace?: () => void; onReview?: () => void;
+  onRefresh?: () => void; onOpenWorkspace?: () => void; onReview?: () => void; showQuestion?: boolean;
 }) {
   const evidence = turn.evidenceOnly ? turn.answer.slice(EVIDENCE_LABEL.length).trim() : turn.answer;
   const readableEvidence = readableAgentText(evidence, label, turn.refs);
@@ -232,7 +200,9 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
   const refresh = turn.interrupted || reason === 'external_job';
   const retry = !turn.interrupted && !pending && !waiting && !blocked && (failed || !turn.answer && turn.notices.length > 0);
   return <section className="agent-turn">
-    <p className="agent-question">{turn.question}</p>
+    {showQuestion && <><div className="agent-question-meta"><span>你</span>{turn.started && <time dateTime={turn.started}>{formatDateTime(turn.started)}</time>}</div>
+    <p className="agent-question">{turn.question}</p></>}
+    <div className="agent-response-label"><Icon name="agent/agent" />Agent</div>
     <WorkSteps turn={turn} kinds={kinds} label={label} />
     {turn.proposals.map((id) => proposals.get(id)).filter((proposal): proposal is AgentProposal => !!proposal)
       .map((proposal) => <div key={proposal.id}>{review === "aside" ? <ProposalLine proposal={proposal} label={label} /> : review(proposal)}</div>)}
@@ -240,6 +210,7 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
       onOpen={item.studyId && onOpenStudy ? () => onOpenStudy(item.studyId!) : undefined} />)}
     {turn.evidenceOnly && <p className="agent-evidence-tag"><Icon name="result/evidence" />证据摘要 · 模型的解释没有通过数值核对，下面只列工具结果</p>}
     {evidence && <AnswerText text={readableEvidence} />}
+    {evidence && !turn.running && <CopyAnswer text={readableEvidence} />}
     {readableEvidence !== evidence && <details className="agent-notice-details"><summary>追溯 · 原文</summary><pre>{evidence}</pre></details>}
     {/* 回答里提到的对象：同一张名片，点了回到它的家（§2.3） */}
     {!turn.running && turn.refs.length > 0 && (turn.refs.length > 4

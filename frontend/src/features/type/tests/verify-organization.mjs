@@ -11,10 +11,11 @@ const fixture = await createBrowserFixture({ production: true }), { page } = fix
 const result = { checks: [], screenshots: [], errors: fixture.errors, writes: [] };
 let wid, saved;
 let listState = 'success', workspaceState = 'success', standardsState = 'live', release;
+const declaredNames=['GB/T 11017.2—2024','GB/T 3956—2008'];
 async function prepare() {
 const index = await fetch(fixture.url + '/api/design/type-workspaces').then(r => r.json());
 assert.ok(index.length, '需要至少一个真实型号设计作为只读验收输入');
-wid = index[0].id; saved = await fetch(fixture.url + '/api/workspaces/' + wid).then(r => r.json());
+wid = index[0].id; saved = await fetch(fixture.url + '/api/types/' + wid + '/workspace').then(r => r.json());
 page.on('request', request => { if (request.url().includes('/api/') && !['GET', 'HEAD'].includes(request.method())) result.writes.push(request.method()); });
 await page.route('**/api/design/type-workspaces', async route => {
   if (listState === 'loading') await new Promise(resolve => { release = resolve; });
@@ -23,21 +24,25 @@ await page.route('**/api/design/type-workspaces', async route => {
   else await route.continue();
 });
 await page.route('**/api/types/library', route => listState === 'empty' ? route.fulfill({ json: { items: [] } }) : route.continue());
-await page.route('**/api/workspaces/' + wid, async route => {
+await page.route('**/api/types/' + wid + '/workspace', async route => {
+  if (standardsState !== 'live') {
+    // Presentation-only contract cases: the real saved workspace remains untouched.
+    const value=structuredClone(saved);value.domain.provenance={...value.domain.provenance};
+    delete value.domain.provenance['/execution_standards'];
+    if (standardsState.startsWith('declared')) value.domain.provenance['/execution_standards']={kind:'standard',reviewed:true,reference:JSON.stringify({schema:'cablesim.execution-standards/1',items:declaredNames.map(standard=>({standard,source_digest:'a'.repeat(64)}))})};
+    if (standardsState==='invalid-declaration') value.domain.provenance['/execution_standards']={kind:'standard',reviewed:true,reference:'unreadable declaration'};
+    return route.fulfill({json:value});
+  }
   if (workspaceState === 'loading') await new Promise(resolve => { release = resolve; });
   if (workspaceState === 'error') await route.fulfill({ status: 503, json: { detail: '型号输入暂时不可用，请重新读取。' } });
   else if (workspaceState === 'empty') { const empty = structuredClone(saved); empty.domain.cable_types = []; empty.domain.circuits = []; empty.domain.sections = []; empty.domain.load_cases = []; await route.fulfill({ json: empty }); }
   else await route.continue();
 });
-// Contract-only saved evidence/approval responses; never create runs or approve anything in the source database.
-const standardRun='00000000-0000-4000-8000-000000000001', standardStudy='00000000-0000-4000-8000-000000000002';
-await page.route('**/api/workspaces/' + wid + '/studies', route => standardsState === 'live' ? route.continue() : route.fulfill({json:[{id:standardStudy,definition:{method:{capability:'dimensions'}}}]}));
-await page.route('**/api/workspaces/' + wid + '/studies/*/runs?*', route => standardsState === 'live' ? route.continue() : route.fulfill({json:{items:[{id:standardRun,status:'succeeded',integrity:'verified',freshness:'current',snapshot:{workspace_revision:saved.revision},output:{cases:[{status:'succeeded',artifacts:{standard:{schema:'cablesim.standard-check/1'}}}]}}],next_cursor:null}}));
-await page.route('**/api/design/type-workspaces/' + wid + '/requirements?*', route => {
-  if(standardsState==='unavailable') return route.fulfill({status:503,json:{detail:'要求目录离线'}});
+// The catalog reads this approval summary separately from the explicit workspace declaration.
+await page.route('**/api/types/' + wid + '/standards-summary', route => {
+  if(standardsState==='unavailable'||standardsState==='declared-unavailable') return route.fulfill({status:503,json:{detail:'要求目录离线'}});
   if(standardsState==='live') return route.continue();
-  const standard='GB/T 12706.2-2020';
-  return route.fulfill({json:{run_id:standardRun,source_current:true,items:[{state:standardsState==='approved'?'approved':'conflict',bindable:true,definition:{standard},approval:{id:'receipt',digest:'a'.repeat(64),definition:{standard}}}]}});
+  return route.fulfill({json:{revision:saved.revision+(standardsState==='revision-mismatch'?1:0),standards:standardsState==='approved'?['GB/T 12706.2-2020']:[],reason:'只读批准摘要契约验收'}});
 });
 }
 async function check(label) {
@@ -93,7 +98,7 @@ try {
       listState = state; workspaceState = 'success';
       await navigate('/types?theme=' + theme, '[data-type-page=list]', state);
       if (state === 'success') {
-        assert.deepEqual(await page.getByRole('table', { name: '型号', exact: true }).locator('thead th').allTextContents(), ['型号', '电压', '截面', '执行标准', '基准版本', '状态']);
+        assert.deepEqual(await page.getByRole('table', { name: '型号', exact: true }).locator('thead th').allTextContents(), ['选择', '型号与方案', '电压', '截面', '执行标准', '基准版本', '状态']);
         await page.getByRole('table', { name: '型号', exact: true }).locator('tbody .data-row').first().click();
         await expect(page.locator('[data-type-card]')).toBeVisible();
         assert.doesNotMatch(await page.getByRole('table', { name: '型号', exact: true }).innerText(), /\.0(?:\/| kV| mm²)/);
@@ -149,20 +154,34 @@ try {
   await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveClass(/button-primary/);
   await page.locator('.explorer-item').first().focus(); await page.keyboard.press('Control+z');
   await expect(name).toHaveValue(saved.domain.name); await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
-  for(const state of ['approved','conflict','unavailable']) {
+  for(const state of ['approved','conflict','declared','invalid-declaration','unavailable','declared-unavailable','revision-mismatch']) {
     standardsState=state;
     await navigate('/types?theme=light','[data-type-page=list]','success');
-    const row=page.getByRole('table',{name:'型号',exact:true}).locator('tbody .data-row').filter({has:page.locator('.object-link').filter({hasText:saved.domain.name.replace(/（[^）]*演示[^）]*）|\([^)]*演示[^)]*\)/g,'').trim()})});
-    const standard=row.locator('td').nth(3);
-    await expect(standard).toHaveText(state==='approved'?'GB/T 12706.2-2020':'未声明');
-    if(state!=='approved') await expect(standard.locator('span')).toHaveAttribute('title',/在要求与标准里添加/);
-    if(state==='unavailable') await expect(standard.locator('span')).toHaveAttribute('title',/要求目录离线/);
+    const standard=page.locator(`[data-type-execution-standards="${wid}"]`),row=page.getByRole('row').filter({has:standard});
+    const expected={approved:'未声明；已有批准要求',conflict:'未声明',declared:declaredNames.join('、'),'invalid-declaration':'声明待核对',unavailable:'标准读取失败','declared-unavailable':declaredNames.join('、')+'；批准状态读取失败','revision-mismatch':'标准读取失败'};
+    await expect(standard).toHaveText(expected[state]);
+    await expect(standard).toHaveAttribute('data-declaration-state',state.startsWith('declared')?'declared':state==='invalid-declaration'?'invalid':'undeclared');
+    const failed=['unavailable','declared-unavailable','revision-mismatch'].includes(state);
+    await expect(standard).toHaveAttribute('data-approval-state',failed?'error':'ready');
+    if(state==='approved') await expect(standard).toHaveAttribute('title',/已有批准要求涉及：GB\/T 12706.2-2020.*不据此推断执行版本声明/);
+    if(state.includes('unavailable')) await expect(standard).toHaveAttribute('title',/要求目录离线/);
+    if(state==='revision-mismatch') await expect(standard).toHaveAttribute('title',/型号修订已变化/);
+    await standard.focus(); await expect(standard).toBeFocused();
+    const explanation=page.locator('.tooltip-content:visible');
+    await expect(explanation).toContainText(state.includes('unavailable')?'要求目录离线':state==='revision-mismatch'?'型号修订已变化':state==='invalid-declaration'?'无法完整读取':state==='declared'?'声明不等于批准要求':'执行版本');
+    await page.keyboard.press('Escape'); await expect(explanation).toBeHidden();
     await check('执行标准契约 '+state);
+    if(failed){
+      standardsState=state.startsWith('declared')?'declared':'conflict';
+      await row.getByRole('button',{name:'重新读取标准',exact:true}).click();
+      await expect(standard).toHaveText(state.startsWith('declared')?declaredNames.join('、'):'未声明');
+      await expect(standard).toHaveAttribute('data-approval-state','ready');
+    }
   }
   standardsState='live';
   assert.deepEqual(fixture.errors, []); assert.deepEqual(result.writes, []);
   result.workflow = '目录筛选、选中名片、Enter进入、层属性、Esc取消选中、编辑启用保存、Ctrl+Z撤销；只读，无计算请求。';
-  result.coverage = '目录没有历史模式；历史验收使用真实型号保存修订。已批准/冲突/目录离线使用只读接口契约注入，不声称源库新增了批准数据。';
+  result.coverage = '目录没有历史模式；历史验收使用真实型号保存修订。执行版本声明、批准、冲突、读取失败及修订不一致使用只读响应契约注入，仅验证呈现与重读，不声称源库新增了声明或批准；真实声明保存与返回目录由四线走查覆盖。';
 } catch (error) { result.failure = String(error.stack || error); console.error(result.failure); console.error((await page.locator('body').innerText()).slice(0, 1500)); process.exitCode = 1; }
 finally { release?.(); await fixture.close(); await fs.writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2)); }
 console.log(JSON.stringify({ checks: result.checks.length, screenshots: result.screenshots, failure: result.failure || null }));

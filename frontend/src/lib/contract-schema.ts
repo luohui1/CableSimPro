@@ -1,4 +1,5 @@
 import { numeric, optionalRecord, text } from "@/api/client";
+import { displayUnit } from './display-names';
 
 /** 展开参数契约里的包内引用（#/$defs/…）与可空的 anyOf，得到可直接渲染的字段描述。 */
 export function expand(raw: unknown, root: unknown): Record<string, unknown> {
@@ -20,7 +21,7 @@ export function declaredUnit(value: unknown): DisplayUnit | null {
   const unit = optionalRecord(value);
   if (!("display" in unit) && !("si" in unit)) return null;
   const label = text(unit.display) || text(unit.si);
-  return label ? { unit: label === "1" ? "" : label, scale: numeric(unit.scale) ?? 1, offset: numeric(unit.offset) ?? 0 } : null;
+  return label ? { unit: label === "1" ? "" : displayUnit(label), scale: numeric(unit.scale) ?? 1, offset: numeric(unit.offset) ?? 0 } : null;
 }
 
 /** 单位随同一行另一个字段变化（x-unit-by：selector + cases）。 */

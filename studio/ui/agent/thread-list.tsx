@@ -2,8 +2,11 @@
 // the mark on a running one); the kit's sidebar parts hold the look. The host has no rename, archive or delete, so none is offered.
 import { ThreadListPrimitive, useAui, useAuiState } from '@assistant-ui/react';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ChatNotice } from '@/kit/chat/empty';
 import { ChatGroup, ChatItem, ChatListEmpty, ChatSearch, ChatSidebar, NewChatButton } from '@/kit/chat/sidebar';
+import { Icon } from '@/kit/icon';
 import { useChats } from '@/state/queries';
 
 const GROUPS = ['今天', '昨天', '近 7 天', '更早'] as const;
@@ -29,10 +32,21 @@ export function ConversationList() {
       <ThreadListPrimitive.New render={<NewChatButton />} />
       <ChatSearch value={search} onChange={event => setSearch(event.target.value)} />
     </>}>
+      {chats.isError && <ChatNotice tone="error">
+        <p className="m-0 font-medium">历史对话读取失败</p>
+        <p className="my-2 whitespace-pre-wrap wrap-anywhere">{chats.error.message}</p>
+        {chats.data && <p className="my-2">下方是上次读取到的对话，列表可能尚未更新。</p>}
+        <Button variant="outline" size="sm" disabled={chats.isFetching} onClick={() => void chats.refetch()}>
+          <Icon name="agent/retry" data-icon="inline-start" />{chats.isFetching ? '正在重试…' : '重试读取历史'}
+        </Button>
+      </ChatNotice>}
       {loading
         ? <div role="status" aria-label="正在载入对话" className="flex flex-col gap-1">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-9 w-full rounded-nav" />)}</div>
         : rows.length === 0
-          ? needle ? <p className="m-0 px-3 py-2 text-sm text-ink-2">没有找到对话</p> : <ChatListEmpty />
+          ? chats.isError ? null : needle ? <div className="flex flex-col items-start gap-2 px-3 py-2">
+            <p role="status" className="m-0 text-sm text-ink-2">没有找到对话</p>
+            <Button variant="ghost" size="sm" onClick={() => setSearch('')}>清除搜索</Button>
+          </div> : <ChatListEmpty />
           : GROUPS.map(label => {
             const inGroup = rows.filter(item => groupOf(item.updated, now) === label);
             return inGroup.length === 0 ? null : <ChatGroup key={label} label={label}>

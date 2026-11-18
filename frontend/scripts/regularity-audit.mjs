@@ -13,13 +13,15 @@ export async function createRegularityAudit({ page, context, root }) {
   report.sourceDatabase = process.env.E2E_DATABASE_SOURCE || path.join(root, '.data/release/engineering.sqlite');
   report.frontendSnapshot = process.env.E2E_FRONTEND_DIST || '当前前端构建';
   const keys = new Set(), shots = new Map();
+  const screenshotKey = (route, size) => `${route}|${size.width}x${size.height}`;
   async function capture(surface, size) {
-    if (size.width !== 1366 || shots.has(surface.route)) return;
+    const key = screenshotKey(surface.route, size);
+    if (shots.has(key)) return;
     await waitForPageReady(page);
     await page.evaluate(() => document.fonts.ready);
-    const filename = 'page-' + createHash('sha256').update(surface.route).digest('hex').slice(0, 12) + '.png';
+    const filename = 'page-' + createHash('sha256').update(key).digest('hex').slice(0, 12) + '.png';
     await page.screenshot({ path: path.join(out, filename) });
-    shots.set(surface.route, filename);
+    shots.set(key, filename);
   }
   async function record(surface, size, layer) {
     if (layer === 'technical') { report.exclusions.technicalSurfaces = (report.exclusions.technicalSurfaces || 0) + 1; return; }
@@ -195,7 +197,7 @@ export async function createRegularityAudit({ page, context, root }) {
     report.uncovered = traversal.uncovered;
     report.errors = traversal.errors;
     report.blockedWrites = traversal.blockedWrites;
-    report.pages = traversal.pages.map(p => ({ ...p, screenshot: shots.get(p.route) }));
+    report.pages = traversal.pages.map(p => ({ ...p, screenshot: shots.get(screenshotKey(p.route, p)) }));
     const byOwner = {}, byCategory = {}, patterns = new Map();
     for (const h of report.findings) { byOwner[h.owner] = (byOwner[h.owner] || 0) + 1; byCategory[h.category] = (byCategory[h.category] || 0) + 1; }
     for (const h of report.findings) {

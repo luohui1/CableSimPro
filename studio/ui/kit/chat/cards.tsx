@@ -2,7 +2,7 @@
 // line with the object's name and its trust mark, the result, and the actions that take it further. Numbers come in as
 // props already formatted from the run; a card never computes or invents one.
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import type { ComponentProps, ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -175,32 +175,35 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
   onCancelReject?: () => void;
   busy?: boolean;
 }) {
-  const list = <ChangeList changes={changes} />;
+  const list = <ProposalChanges changes={changes} />;
   if (phase === 'accepted' || phase === 'rejected') {
     const accepted = phase === 'accepted';
     return <Collapsible className="rounded-card border border-line bg-surface" data-card="proposal" data-phase={phase}>
-      <CollapsibleTrigger className="group flex min-h-12 w-full items-center gap-2 rounded-card px-4 text-left outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring">
+      <CollapsibleTrigger className="group flex min-h-12 w-full items-start gap-2 rounded-card px-4 py-3 text-left outline-none hover:bg-subtle focus-visible:ring-3 focus-visible:ring-ring">
         <Icon name={accepted ? 'agent/approve' : 'agent/reject'} className={accepted ? 'text-success' : 'text-error'} />
-        <span className="min-w-0 flex-1 truncate text-sm">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-anywhere text-sm">
           <span className="font-medium text-ink">{accepted ? '已接受' : '已拒绝'} · {action}</span>
           <span className="ml-2 text-ink-2">{subject}</span>
+          <span className="mt-1 block text-ink-2">{accepted ? `${changes.length} 项已生效` : note ? '没有改动 · 展开查看拒绝原因' : '没有改动'}</span>
         </span>
-        <span className="text-sm whitespace-nowrap text-ink-2">{accepted ? `${changes.length} 项已生效` : note ? `原因：${note}` : '没有改动'}</span>
         <Icon name="action/chevron-right" className="text-ink-2 transition-transform duration-std group-data-panel-open:rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
-        <div className="border-t border-line px-4 py-3">{list}</div>
+        <div className="flex min-w-0 flex-col gap-3 border-t border-line px-4 py-3">
+          {!accepted && note && <p className="m-0 whitespace-pre-wrap wrap-anywhere text-sm text-ink"><span className="font-medium">拒绝原因：</span>{note}</p>}
+          {list}
+        </div>
       </CollapsibleContent>
     </Collapsible>;
   }
   return <section className="flex min-w-0 flex-col overflow-hidden rounded-card border border-agent bg-surface" data-card="proposal" data-phase={phase}>
-    <header className="flex min-h-12 items-center gap-2 px-4 pt-3">
+    <header className="flex min-h-12 flex-wrap items-start gap-2 px-4 pt-3">
       <Badge variant="agent"><Icon name="agent/proposal" data-icon="inline-start" />待你审阅</Badge>
-      <h3 className="m-0 min-w-0 flex-1 truncate text-h3 text-ink">{action}<span className="ml-2 font-normal text-ink-2">{subject}</span></h3>
+      <h3 className="m-0 min-w-0 flex-1 whitespace-pre-wrap wrap-anywhere text-h3 text-ink">{action}<span className="ml-2 font-normal text-ink-2">{subject}</span></h3>
     </header>
     <div className="flex flex-col gap-3 px-4 pt-3 pb-4">
       {list}
-      {consequence && <div className="flex items-start gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name="status/warning" className="mt-1 text-attention" /><div className="min-w-0">{consequence}</div></div>}
+      {consequence && <div className="flex items-start gap-2 rounded-lg bg-attention-fill px-3 py-2 text-sm text-ink"><Icon name="status/warning" className="mt-1 text-attention" /><div className="min-w-0 whitespace-pre-wrap wrap-anywhere">{consequence}</div></div>}
     </div>
     <footer className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
       {phase === 'pending'
@@ -210,7 +213,7 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
         </>
         : <>
           <Input value={note ?? ''} onChange={event => onNoteChange?.(event.target.value)} placeholder="拒绝的原因，Agent 会照此调整（可不写）"
-            aria-label="拒绝的原因" className="h-9 max-w-sm flex-1" />
+            aria-label="拒绝的原因" className="h-9 min-w-0 max-w-sm flex-1" />
           <Button variant="outline" onClick={onConfirmReject} disabled={busy}>确认拒绝</Button>
           <Button variant="ghost" onClick={onCancelReject}>取消</Button>
         </>}
@@ -218,15 +221,46 @@ export function ProposalCard({ action, subject, changes, phase, consequence, not
   </section>;
 }
 
+const PROPOSAL_PREVIEW_COUNT = 4;
+
+/** The entire host preview stays available, including source rows; a long proposal first shows its size and a short preview. */
+function ProposalChanges({ changes }: { changes: Change[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (changes.length <= PROPOSAL_PREVIEW_COUNT) return <ChangeList changes={changes} />;
+  const remaining = changes.length - PROPOSAL_PREVIEW_COUNT;
+  return <div className="flex min-w-0 flex-col gap-3">
+    <p className="m-0 text-sm text-ink-2">共 {changes.length} 项，先显示前 {PROPOSAL_PREVIEW_COUNT} 项；展开可核对其余字段和来源。</p>
+    <ChangeList changes={changes.slice(0, PROPOSAL_PREVIEW_COUNT)} />
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="flex min-w-0 flex-col gap-3">
+      <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-height data-ending-style:h-0 data-starting-style:h-0">
+        <ChangeList changes={changes.slice(PROPOSAL_PREVIEW_COUNT)} />
+      </CollapsibleContent>
+      <CollapsibleTrigger render={<Button variant="outline" size="sm" className="self-start" />}>
+        <Icon name="action/chevron-right" className={cn('transition-transform duration-std', expanded && 'rotate-90')} />
+        {expanded ? '收起其余字段' : `查看其余 ${remaining} 项`}
+      </CollapsibleTrigger>
+    </Collapsible>
+  </div>;
+}
+
 function ChangeList({ changes }: { changes: Change[] }) {
-  const edits = changes.some(change => change.before !== undefined && change.before !== '—');
-  return <dl className={cn('m-0 grid items-baseline gap-x-3 gap-y-2', edits ? 'grid-cols-change' : 'grid-cols-label')}>
-    {changes.map((change, index) => <div key={change.id ?? `${index}/${change.label}`} className="contents">
-      <dt className="min-w-0 truncate text-sm text-ink-2">{change.label}</dt>
-      {edits && <dd className="m-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3">{change.before ?? '—'}</dd>}
-      {edits && <dd className="m-0 flex items-center self-center text-ink-3" aria-hidden="true"><Icon name="action/arrow-right" /></dd>}
-      <dd className="m-0 min-w-0 text-sm font-medium text-ink tabular-nums">{change.after}</dd>
-    </div>)}
+  return <dl className="m-0 flex min-w-0 flex-col gap-3">
+    {changes.map((change, index) => {
+      const edited = change.before !== undefined && change.before !== '—';
+      return <div key={change.id ?? `${index}/${change.label}`} className="min-w-0 border-b border-line pb-3 last:border-b-0 last:pb-0">
+        <dt className="mb-1 whitespace-pre-wrap wrap-anywhere text-sm font-medium text-ink">{change.label}</dt>
+        <dd className={cn('m-0 grid min-w-0 gap-2', edited && 'sm:grid-cols-2')}>
+          {edited && <div className="min-w-0">
+            <span className="block text-sm text-ink-2">改前</span>
+            <span className="block whitespace-pre-wrap wrap-anywhere text-sm text-ink-2 tabular-nums">{change.before || '（空）'}</span>
+          </div>}
+          <div className="min-w-0">
+            {edited && <span className="block text-sm text-ink-2">改后</span>}
+            <span className="block whitespace-pre-wrap wrap-anywhere text-sm text-ink tabular-nums">{change.after || '（空）'}</span>
+          </div>
+        </dd>
+      </div>;
+    })}
   </dl>;
 }
 

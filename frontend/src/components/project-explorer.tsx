@@ -12,6 +12,7 @@ import { Icon } from "./icon";
 import { driverViews } from "./study-workbench-config";
 import {StatusMark} from './status-mark';
 import {studyPresentation, type StudyPresentation} from './study-status';
+import { pinnedSolverCapability } from '@/lib/solver-location';
 import './workbench-inspector.css';
 
 type Theme = "light" | "dark";
@@ -22,12 +23,12 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
   const kind = text(optionalRecord(study.definition.driver).kind);
   const pin = optionalRecord(study.definition.method);
   const plugin = catalog.find((row) => text(optionalRecord(row.method).plugin_id) === text(pin.plugin_id));
-  const capability = (Array.isArray(plugin?.capabilities) ? plugin!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(pin.capability));
-  const hpc = text(optionalRecord(plugin?.execution_policy).backend) === "slurm";
+  const capability = pinnedSolverCapability(pin, catalog);
+  const hpc = capability?.solver === 'slurm';
   const icon = driverViews[kind]?.icon || (hpc || text(capability?.analysis) === "transient" ? "calc/thermal-field" : text(capability?.analysis) === "geometry" ? "object/section" : "calc/ampacity");
   // 能力标题里的括注（标准条款、适用场景）留给方法页，列表只用主名
   return { icon, label: driverViews[kind]?.label || study.task,
-    methodName: text(plugin?.name) || text(pin.plugin_id), hpc };
+    methodName: text(plugin?.name) || text(pin.plugin_id), hpc, capability };
 }
 
 /** 运行状态：来自运行摘要，不读结果正文。有插件声明的关键结论时直接显示答案（如允许电流），否则显示状态点。 */

@@ -90,8 +90,8 @@ export const agentSessions = (workspaceId?: string, signal?: AbortSignal) =>
 export const agentSession = (id: string, signal?: AbortSignal) =>
   fetch(`/api/agent/sessions/${encodeURIComponent(id)}`, { signal }).then((response) => json<AgentRecord>(response));
 
-export const createSession =(workspaceId: string, studyId?: string) =>
-  fetch("/api/agent/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id: workspaceId, study_id: studyId }) })
+export const createSession =(workspaceId: string, studyId?: string, signal?: AbortSignal) =>
+  fetch("/api/agent/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id: workspaceId, study_id: studyId }), signal })
     .then((response) => json<{ id: string }>(response));
 
 export const decideProposal = (id: string, decision: "approve" | "reject") =>
@@ -100,24 +100,53 @@ export const decideProposal = (id: string, decision: "approve" | "reject") =>
 /** 发送一条消息并逐个回调服务器推送的事件（SSE：event: 类型，data: JSON）。 */
 /** 宿主配方调用：带上它时宿主先按配方确定性执行工具步骤，再请模型作答一次（host-inputs.md）。 */
 export type RecipeCall = { id: string; parameters: Record<string, unknown> };
-export async function sendMessage(sessionId: string, content: string, onEvent: (event: AgentEvent) => void, signal?: AbortSignal, recipe?: RecipeCall) {
+export async function sendMessage(sessionId: string, content: string, onEvent: (event: AgentEvent) => void, signal?: AbortSignal, recipe?: RecipeCall, onAccepted?: () => void) {
   const response = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify(recipe ? { content, recipe } : { content }), signal,
   });
-  if (!response.ok || !response.body) throw await failure(response);
+  if (!response.ok) throw await failure(response);
+  onAccepted?.();
+  signal?.throwIfAborted();
+  if (!response.body || response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'text/event-stream')
+    throw new Error('任务请求已接收，但对话连接没有返回事件流。请更新任务记录确认结果，勿重复发送。');
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += value;
+  let buffer = '', block: string[] = [], complete = false;
+  const dispatch = () => {
+    const type = block.find(line => line.startsWith('event:'))?.slice(6).trim();
+    const data = block.filter(line => line.startsWith('data:')).map(line => line.slice(5).replace(/^ /, '')).join('\n');
+    block = [];
+    if (!type || !data) return;
+    const value: unknown = JSON.parse(data);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('对话事件格式不完整，请更新任务记录确认结果。');
+    onEvent({ ...value, type } as AgentEvent);
+    if (type === 'done') complete = true;
+  };
+  const lines = (end = false) => {
     let boundary: number;
-    while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-      const block = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const type = /^event: *(.+)$/m.exec(block)?.[1]?.trim();
-      const data = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-      if (type && data) onEvent({ type, ...JSON.parse(data) } as AgentEvent);
+    while (!complete && (boundary = buffer.search(/[\r\n]/)) >= 0) {
+      // A CRLF can straddle two transport chunks. Do not invent an empty line.
+      if (!end && buffer[boundary] === '\r' && boundary === buffer.length - 1) return;
+      const line = buffer.slice(0, boundary);
+      const length = buffer[boundary] === '\r' && buffer[boundary + 1] === '\n' ? 2 : 1;
+      buffer = buffer.slice(boundary + length);
+      if (!line) dispatch(); else block.push(line);
     }
+  };
+  try {
+    while (!complete) {
+      signal?.throwIfAborted();
+      const { value, done } = await reader.read();
+      if (done) {
+        lines(true);
+        if (!complete) throw new Error('对话连接在完成回执前结束。已接收的内容仍保留，请更新任务记录确认服务端结果。');
+        break;
+      }
+      buffer += value;
+      lines();
+    }
+  } finally {
+    // Releasing this reader only closes the browser transport; it never sends a server cancellation or repeats the task.
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }

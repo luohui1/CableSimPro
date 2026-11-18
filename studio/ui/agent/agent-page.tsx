@@ -26,7 +26,7 @@ export function AgentPage({ sessionId }: { sessionId?: string }) {
   return <AssistantRuntimeProvider runtime={runtime}>
     {/* The shell above holds the top bar; the frame here is the sidebar and the sheet. */}
     <AppFrame top={null} side={<ConversationList />}>
-      <Thread notice={notice} />
+      <Thread notice={notice} sessionId={sessionId} />
     </AppFrame>
   </AssistantRuntimeProvider>;
 }
