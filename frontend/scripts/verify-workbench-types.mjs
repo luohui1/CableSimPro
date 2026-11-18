@@ -16,7 +16,9 @@ let declaredTypeSeedIds, declaredTypeSeedId;
 // publishes at 1366 is newer than the seeded library and has no structure
 // citation, so every fixture starts from a seeded library version instead.
 function seededLibrarySource(options) {
-  const seeded = options.library.filter(item => item.source !== 'published_type');
+  // Published versions lead the list and carry no `source`; seeded catalogue
+  // and manufacturer entries say where they came from.
+  const seeded = options.library.filter(item => ['catalogue', 'manufacturer'].includes(item.source));
   return seeded.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || seeded[0] || options.library[0];
 }
 // The teaching copy is a plan of one seeded type. Once one size published it,
