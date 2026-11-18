@@ -53,15 +53,17 @@ spec=importlib.util.spec_from_file_location("workbench_formal_verifier",source)
 verifier=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(verifier)
 bundle=json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+# Parse the original HTTP JSON here: a JavaScript object round-trip changes 1.0 and -0.0.
+preview=json.loads(bundle["preview_json"])
 class SavedReads:
  def api(self,method,url):
   verifier.require(method=="GET" and url in bundle["responses"],"正式文件来源未从本次隔离服务独立读取")
-  return bundle["responses"][url]
+  return json.loads(bundle["responses"][url])
  def artifact(self,path,value):
   pass
-payloads=verifier.SourceReader(SavedReads()).payloads(bundle["preview"])
-checks=verifier.validate_model(bundle["preview"],payloads,expected_document=bundle["request"]["document"])
-pdf=verifier.validate_pdf(pathlib.Path(sys.argv[3]).read_bytes(),bundle["preview"],payloads)
+payloads=verifier.SourceReader(SavedReads()).payloads(preview)
+checks=verifier.validate_model(preview,payloads,expected_document=bundle["request"]["document"])
+pdf=verifier.validate_pdf(pathlib.Path(sys.argv[3]).read_bytes(),preview,payloads)
 print(json.dumps({"model":checks,"pdf":pdf},ensure_ascii=False))`;
   return new Promise((resolve, reject) => {
     const child = spawn(process.env.E2E_PYTHON || process.env.PYTHON || 'python',
@@ -102,7 +104,7 @@ function csvRows(text) {
 
 // Engineering changes go through the real interface. GETs verify saved identities.
 let readinessInstalled = false;
-await walkthrough('research', async ({ page, expect, base, api, choose, step, check, capture, out, size, tag, report }) => {
+await walkthrough('research', async ({ page, context, expect, base, api, choose, step, check, capture, out, size, tag, report }) => {
   if (!readinessInstalled) { await installReadinessObserver(page); readinessInstalled = true; }
   const command = () => page.getByRole('toolbar', { name: '工程命令', exact: true });
   const field = label => page.getByLabel(label, { exact: true });
@@ -571,6 +573,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       deliveries: await api('/api/workspaces/' + wid + '/deliveries'),
     };
     const requests = [], responses = [], pendingReads = [];
+    const previewBodies = new Map();
     const formalPath = url => {
       const parsed = new URL(url);
       return parsed.origin === new URL(base).origin
@@ -586,7 +589,14 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       if (!endpoint) return;
       pendingReads.push((async () => {
         const entry = { path: endpoint, status: response.status(), headers: await response.allHeaders() };
-        if (endpoint.endsWith('/preview')) entry.model = await response.json();
+        if (endpoint.endsWith('/preview')) {
+          const bytes = await response.body();
+          const originalJson = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          entry.model = JSON.parse(originalJson);
+          entry.jsonBytes = bytes.length;
+          entry.jsonSha256 = createHash('sha256').update(bytes).digest('hex');
+          previewBodies.set(entry, originalJson);
+        }
         responses.push(entry);
       })().catch(error => responses.push({ path: endpoint, readError: error.message })));
     };
@@ -743,16 +753,29 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       check('计算书预览与原始下载字节一致且已绘出实际纸面文字', finalPixels.painted,
         { run: second.id, pdfSha256, preview: binding, pixels: finalPixels });
 
-      const sourceReplies = {};
+      const sourceReplies = {}, sourceJsonBodies = [];
       for (const source of Object.values(preview.sources)) {
         const url = new URL(source.api_url, base);
         expect(source.api_url.startsWith('/api/') && url.origin === new URL(base).origin && !url.hash).toBe(true);
-        sourceReplies[source.api_url] = await api(source.api_url);
+        const response = await context.request.get(url.href, { timeout: 90000, failOnStatusCode: false });
+        try {
+          const bytes = await response.body();
+          const originalJson = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          expect(response.ok(), source.api_url + ': HTTP ' + response.status() + ' ' + originalJson.slice(0, 1000)).toBe(true);
+          JSON.parse(originalJson); // Validate JSON without reserializing its numeric tokens.
+          sourceReplies[source.api_url] = originalJson;
+          sourceJsonBodies.push({ api_url: source.api_url, status: response.status(), bytes: bytes.length,
+            sha256: createHash('sha256').update(bytes).digest('hex') });
+        } finally { await response.dispose(); }
       }
+      const previewJson = previewBodies.get(previews[0]);
+      expect(typeof previewJson).toBe('string');
       const bundle = path.join(out, 'formal-calculation-sources-' + tag + '.json');
-      await fs.writeFile(bundle, JSON.stringify({ request: frozen, preview, responses: sourceReplies }, null, 2));
+      // JSON strings preserve the complete HTTP JSON until Python parses it with its native number types.
+      await fs.writeFile(bundle, JSON.stringify({ request: frozen, preview_json: previewJson, responses: sourceReplies }, null, 2));
       const inspected = await inspectFormalBook(bundle, target);
       Object.assign(evidence, { download: path.basename(target), sourceBundle: path.basename(bundle),
+        rawJsonEvidence: { preview: { bytes: previews[0].jsonBytes, sha256: previews[0].jsonSha256 }, sources: sourceJsonBodies },
         pdfSha256, bytes: pdf.length, sourceIdentity: preview.source_identity, inspected, previewBinding: binding,
         previewScreenshotSha256: createHash('sha256').update(finalScreenshot).digest('hex') });
       check('正式计算书逐个数值、单位、四独立空签栏、完整附件与独立API来源相符', true, inspected);
