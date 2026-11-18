@@ -21,9 +21,11 @@ export const actionStates: Record<AssetAction, { from: AssetStatus; to: AssetSta
 };
 export const sourceKinds: Record<AssetRelease['sources'][number]['kind'], { label: string; badge: SourceKind }> = {
   manufacturer: { label: '厂家资料', badge: 'document' }, standard: { label: '标准依据', badge: 'standard' },
+  literature: { label: '文献资料', badge: 'document' },
   project_input: { label: '工程师填写', badge: 'user' }, derived: { label: '推导', badge: 'derived' },
 };
-export const assetUnit = (unit: string) => ({ degC: '°C', delta_degC: '°C（温差）', delta_K: 'K（温差）', m2: 'm²', mm2: 'mm²' }[unit] || displayUnit(unit));
+export const assetUnit = (unit: string) => ({ degC: '°C', delta_degC: '°C（温差）', delta_K: 'K（温差）', m2: 'm²', mm2: 'mm²',
+  'kg/m3': 'kg/m³', 'J/(m3.K)': 'J/(m³·K)' }[unit] || displayUnit(unit));
 
 // This is the host's Quantity contract, not a new physical-property registry.
 // Unsupported dimensions remain absent instead of being relabelled to fit a unit.
@@ -32,6 +34,8 @@ export const quantityKinds = {
   absolute_temperature: { label: '温度', units: ['degC', 'K'] }, temperature_difference: { label: '温差', units: ['delta_K', 'delta_degC'] },
   linear_resistance: { label: '单位长度电阻', units: ['ohm/m', 'ohm/km'] }, thermal_resistivity: { label: '热阻率', units: ['K.m/W'] },
   thermal_conductivity: { label: '热导率', units: ['W/(m.K)'] }, current: { label: '电流', units: ['A'] }, frequency: { label: '频率', units: ['Hz'] },
+  mass_density: { label: '密度', units: ['kg/m3'] }, resistivity: { label: '电阻率', units: ['ohm.m'] },
+  volumetric_heat_capacity: { label: '体积热容', units: ['J/(m3.K)'] }, dimensionless: { label: '无量纲', units: ['1'] },
 } satisfies Record<components['schemas']['Quantity']['dimension'], { label: string; units: string[] }>;
 export type Dimension = keyof typeof quantityKinds;
 export const parameterPresets: { name: string; label: string; dimension: Dimension }[] = [
