@@ -2529,6 +2529,101 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   });
   if (!delivery) return;
 
+  await attempt('13a-迁移材料名称显示保留原始材料并可撤销', async () => {
+    await module('结构 ·');
+    await page.getByRole('button', { name: '电缆截面', exact: true }).click();
+    await savedState();
+    const before = await workspace(delivery.id), writesBefore = report.writes.length;
+    const material = before.domain.materials.find(item => item.label === 'v0 insulation');
+    expect(material, '本次教学输入必须实际含有已注册迁移材料，不能制造替代标签').toBeTruthy();
+    expect(material.category).toBe('insulation');
+    const cable = before.domain.cable_types[0];
+    const core = cable.cores.find(item => item.layers.some(layer => layer.role === 'insulation' && layer.material !== material.id));
+    expect(core, '使用现有绝缘层核对真实材料引用，不新增虚拟结构').toBeTruthy();
+    const layer = core.layers.find(item => item.role === 'insulation');
+    const row = layers().locator('[id="row-型号分层-' + core.id + '/insulation"]');
+    const reference = page.getByRole('combobox', { name: '材料引用', exact: true });
+    const expectedLabel = '旧版绝缘材料';
+    const entry = { ...size, workspace: delivery.id, material: structuredClone(material),
+      target: { cable: cable.id, core: core.id, role: layer.role, originalMaterial: layer.material },
+      writesBefore, screenshots: [] };
+    (report.migratedMaterialDisplay ||= []).push(entry);
+    const keep = async (suffix, value) => {
+      const file = path.join(out, 'material-display-' + tag + '-' + suffix + '.json');
+      const content = JSON.stringify(value, null, 2) + '\n';
+      await fs.writeFile(file, content);
+      return { file, bytes: Buffer.byteLength(content), sha256: createHash('sha256').update(content).digest('hex'),
+        representation: 'parsed API workspace object; not raw HTTP bytes' };
+    };
+    entry.before = await keep('before', before);
+    await row.click();
+    await expect(reference).toBeEnabled();
+    const originalReference = await reference.innerText();
+    let failure;
+    try {
+      await choose('材料引用', expectedLabel);
+      await expect.poll(dirty).toBe(true);
+      await expect(reference).toHaveText(expectedLabel);
+      await expect(row).toContainText(expectedLabel);
+      await expect(row.getByRole('checkbox', { name: '选择全部旧版绝缘材料层', exact: true })).toBeVisible();
+      await expect(page.getByRole('complementary', { name: '所选对象属性', exact: true })).toContainText(expectedLabel);
+      const section = page.locator('.type-canvas [data-cable-section-state="success"]');
+      await expect(section).toBeVisible();
+      const summary = section.locator('.drawing-layer-detail[aria-label="所选层尺寸与材料"]');
+      await expect(summary).toContainText(expectedLabel);
+      const compact = section.locator('.drawing-compact-layers');
+      entry.compactSummaryVisible = await compact.isVisible();
+      if (entry.compactSummaryVisible) await expect(compact).toContainText(expectedLabel);
+      await expect(page.getByText(material.label, { exact: true }).filter({ visible: true })).toHaveCount(0);
+      entry.screenshots.push(await capture('迁移材料-分层属性与截面摘要'));
+      const parameters = page.locator('details.type-property-detail')
+        .filter({ has: page.locator('summary').filter({ hasText: /^材料参数$/ }) });
+      await expect(parameters).toHaveCount(1);
+      if (await parameters.getAttribute('open') === null) await parameters.locator(':scope > summary').click();
+      const rawName = parameters.getByRole('textbox', { name: '材料名称', exact: true });
+      await expect(rawName).toBeVisible();
+      await expect(rawName).toHaveValue(material.label);
+      entry.rawEditorValue = await rawName.inputValue();
+      entry.screenshots.push(await capture('迁移材料-原始名称编辑值保持'));
+      await parameters.locator(':scope > summary').click();
+      const trigger = page.getByRole('button', { name: '添加结构层', exact: true });
+      await trigger.click();
+      const dialog = page.getByRole('dialog', { name: '添加结构层', exact: true });
+      await choose('新层材料', expectedLabel, dialog);
+      await expect(dialog.getByRole('combobox', { name: '新层材料', exact: true })).toHaveText(expectedLabel);
+      await expect(dialog.getByText(material.label, { exact: true })).toHaveCount(0);
+      entry.screenshots.push(await capture('迁移材料-新增层材料选项'));
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await expect(trigger).toBeFocused();
+    } catch (error) {
+      entry.error = error.stack || error.message;
+      failure = error;
+    } finally {
+      try {
+        await dismissDialog();
+        if (await dirty()) {
+          const undo = await command('撤销', true);
+          await expect(undo).toBeEnabled();
+          await undo.click();
+        }
+        await savedState();
+        await expect(reference).toHaveText(originalReference);
+        const after = await workspace(delivery.id);
+        entry.after = await keep('after', after);
+        entry.writes = report.writes.slice(writesBefore);
+        expect(after, '材料显示与撤销不得改原始实体、密度、来源、绑定或版本').toEqual(before);
+        expect(entry.writes, '此回归只选择本地材料引用并撤销，不保存或计算').toEqual([]);
+      } catch (error) {
+        entry.cleanupError = error.stack || error.message;
+        failure = failure ? new AggregateError([failure, error], '迁移材料显示检查及撤销核验失败') : error;
+      }
+    }
+    if (failure) throw failure;
+    entry.complete = true;
+    check('已注册迁移材料在分层属性摘要及新增层中显示中文且原值与来源不变', true, entry);
+  });
+
   await attempt('14-教学交付副本运行真实结构推导', async () => {
     await module('结构 ·');
     await page.getByRole('tab', { name: '外径与用料', exact: true }).click();

@@ -9,6 +9,7 @@ import { cableShape, layerNames } from '@/features/drawing/cable-geometry';
 import type { CableType, LayerTarget } from '@/features/drawing/types';
 import { commitFields, pointer } from '@/lib/domain-fields';
 import { useTypeWorkspace } from './provider';
+import { materialLabel } from './labels';
 
 const commonRoles = ['filler', 'bedding', 'separator', 'binder', 'metallic_screen', 'metallic_sheath', 'armour', 'oversheath'];
 const coreRoles = ['conductor_screen', 'insulation', 'insulation_screen', 'metallic_screen', 'metallic_sheath', 'separator', 'binder'];
@@ -103,7 +104,7 @@ export function StructureActions({ cable, selected, onSelect }: { cable: CableTy
       <Select label="所属位置" value={scope} options={[{ value: 'common', label: '共同层' }, ...cable.cores.map((core, index) => ({ value: core.id, label: `芯 ${index + 1}` }))]} onChange={value => { setScope(value); setRole(''); }} />
       <Select label="结构层" value={role} options={(scope === 'common' ? [...(cable.cores.length === 1 ? coreRoles : []), ...commonRoles] : coreRoles)
         .filter((value, index, array) => array.indexOf(value) === index).map(value => ({ value, label: layerNames[value], disabled: layers.some(layer => layer.role === value) }))} onChange={setRole} />
-      <Select label="新层材料" value={material} options={state.document!.materials.filter(value => !['soil', 'backfill', 'duct', 'concrete', 'fluid'].includes(value.category)).map(value => ({ value: value.id, label: value.label }))} onChange={setMaterial} />
+      <Select label="新层材料" value={material} options={state.document!.materials.filter(value => !['soil', 'backfill', 'duct', 'concrete', 'fluid'].includes(value.category)).map(value => ({ value: value.id, label: materialLabel(value.label) }))} onChange={setMaterial} />
       <NumberField label="新层厚度" value={thickness} unit="mm" precision={3} required min={0} minExclusive onCommit={setThickness} />
       <Select label="新层构造" value={form} options={[['unspecified', '未给定'], ['smooth', '挤包或连续层'], ['tape', '带层'], ['wires', '丝层']].map(([value, label]) => ({ value, label }))} onChange={setForm} />
     </>}{error && <p role="alert" className="type-error">{error}</p>}</div>
