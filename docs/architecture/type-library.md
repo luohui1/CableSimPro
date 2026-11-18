@@ -41,6 +41,24 @@
 
 映射方法为“明示材料物性映射” `1.0.0`；数值及完整 `value/unit/reference` 保存在稳定且按 JSON Pointer 转义的 `/materials/{材料id}/{物性}` 来源中，标为 `kind:user`、`confidence:reference`、`reviewed:false`。分离共用材料时同时保存材料引用变更及映射依据，不改原表事实，不将声明变成厂家实测或产品批准。人工确认、预览摘要、错误行处理与原导入合同相同。此十项显式声明与后述六类封签参考采用是不同入口，不能据此声称完整材料库或机械参数已齐全。
 
+### 中压结构的明示温限与导体类别
+
+沿用 `POST /api/type-library/imports/preview` 的 `series.modelling`，每项声明仍为 `{value,unit,reference}`；`reference` 须为 1–2000 字符且不能全为空白。三项数值不接受布尔值、数字字符串、NaN、Infinity 或不能转换为有限浮点值的巨大整数，此类请求在声明校验时返回 422。
+
+| 声明字段 | 单位与有效值 | 完整型号中的目标 |
+| --- | --- | --- |
+| `normal_temperature_k` | `K`，有限正数 | `/cable_type/rating/max_conductor_temperature/normal` |
+| `short_circuit_temperature_k` | `K`，有限正数，不能低于正常许可温限 | `/cable_type/rating/max_conductor_temperature/short_circuit` |
+| `conductor_class` | `1`，类别 1、2、5 或 6 | 每个实际芯的 `/cable_type/cores/{core_id}/conductor/conductor_class` |
+
+本轮映射在既有中压构造器成功形成完整结构后进行。只填原空项，或在同值时补充这次明确声明的出处；已有不同温限或导体类别返回 `TABLE_RATING_CONFLICT`，不覆盖后沿用旧派生结果或原类别的 GB/T 3956 查询。单位错误、无效类别、非正温限或短路温限低于正常温限返回 `TABLE_RATING_INVALID`。逐行错误定位为 `modelling.<字段>`，出错行 `payload:null`，不能部分落库。当前中压构造及第 2 类标准电阻查询不会因另一类别声明而自动改算。
+
+来源按 JSON Pointer 转义后的稳定路径保存，`core/1` 在路径中写为 `core~11`。每条来源为 `kind:user`、`reviewed:false`，其 `reference` JSON 固定完整声明、字段、`confidence:reference` 和“明示额定条件映射”方法 `1.0.0`；温限的用途为 `permitted_temperature_limit`，类别为 `declared_conductor_class`。预览 `derivation.rating_mapping` 同时列出实际目标路径、值、单位和映射方法。没有声明不添加这类映射或出处；原单芯入口及不完整草稿路径不扩展，缺项草稿仍只在系列声明中保留这些输入，不因此补造结构。
+
+人民电器样本的 `series.reference.published_operating_limits` 使用 `cablesim.published-operating-limits/1`，保存原 PDF 第 1 页／印刷 043 页“使用特性”第 3、4 项的正常最高 90℃、短路最高 250℃及最长 5 s 三个事实，均为 `criterion:maximum`，并保留固定原件 URL/SHA、`semantic:manufacturer_limit`、`usage:permitted_limits_only`、`confidence:reference`、`reviewed:false`。转录方法为 `cablesim.catalogue-operating-limits-transcription`／“人民电器公开使用特性转录” `1.0.0`。仅两个温限以“摄氏温度换算开尔文” `1.0.0` 转成 363.15 K 与 523.15 K；最长 5 s 随短路温限的完整出处保留为适用条件，不写入实际 `duration_s`，不创建研究运行或审批。
+
+入库继续要求原预览摘要、人工头与明确确认。系列 JSON/XLSX 继续通过 `/api/type-library/exchange/export|preview|import` 搬运完整声明、型号值和逐字段出处；目标独立草稿，不继承审核或生成计算结果。原件校验脚本方法 `1.2.0` 在固定 SHA 的 PDF 原页指定区域独立提取完整条件句；三个许可事实单独计数，原 877 个数值、88 个指南数值和 46 个未发表 R20 的口径不变。机制测试或来源记录不能替代真实原 PDF 字节的校验。
+
 ### 真实厂家表的跨电压导入回归
 
 `tests/fixtures/` 中另有三组可通过同一接口上传的原表摘录；它们核验的是数据保真与缺项拒绝，不是完整产品认证。重量的通用字段名称为“电缆重量”，具体是近似值、最大值还是其他口径，仍读取原表表头及逐值来源。

@@ -4,11 +4,13 @@ The test handler sends actual HTTP bytes, stalls sockets, and resets connections
 Only the HTTPS connection transport is redirected to a loopback HTTP server;
 the production URL/redirect validation and response reader still run unchanged.
 Small, explicitly synthetic payload hashes replace the source pins in these
-protocol tests. The official PDFs and their 877 + 88 values remain a separate gate.
+protocol tests. Parser tests below likewise use labelled synthetic PDF pages;
+the official PDFs and their 877 + 88 + 3 values remain a separate gate.
 """
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 import json
 import socket
 import ssl
@@ -340,3 +342,96 @@ def test_fixed_production_transport_limits_and_pins():
     assert audit.OfficialRedirect.max_redirections == 3 and audit.OfficialRedirect.max_repeats == 1
     assert audit.SOURCES['people']['sha256'] == 'c60b53c188478b55f424f49ca31506c5f7c100d2c876f91aab65622e86ddba4a'
     assert audit.SOURCES['bahra']['sha256'] == '6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a'
+
+
+def synthetic_usage_page(*, normal='电缆导体的长期允许工作温度：≤90℃',
+                         short='短路时(最长持续时间不超过5s)电缆的最高工作温度：250℃',
+                         normal_y=273, footer='043'):
+    """A parser fixture, never passed through the official SHA verification."""
+    document = audit.fitz.open()
+    page = document.new_page(width=595.5, height=652)
+    page.insert_text((208, 220), '使用特性', fontname='china-s', fontsize=9)
+    page.insert_text((208, normal_y), normal, fontname='china-s', fontsize=7)
+    page.insert_text((208, 285), short, fontname='china-s', fontsize=7)
+    page.insert_text((47, 632), footer, fontsize=7)
+    return document
+
+
+def production_limit_declarations():
+    from backend.kernel.public_catalogues import _data, _people_operating_limits
+    return _people_operating_limits(_data('people-mv'))
+
+
+def test_usage_parser_keeps_three_limits_separate_and_preserves_duration_condition():
+    modelling, published = production_limit_declarations()
+    with synthetic_usage_page() as document:
+        result = audit.audit_people_operating_limits(document, published, modelling)
+    assert result['summary'] == {'permissible_limits_checked': 3,
+                                 'numeric_status_counts': {'exact_match': 3}, 'mismatches': []}
+    rows = {row['id']: row for row in result['numeric_checks']}
+    assert rows['people.usage.normal_temperature']['pdf_value'] == 90
+    assert rows['people.usage.short_circuit_temperature']['pdf_value'] == 250
+    assert rows['people.usage.short_circuit_duration']['pdf_value'] == 5
+    assert rows['people.usage.short_circuit_temperature']['conditions'] == {'maximum_duration_s': 5}
+    assert rows['people.usage.short_circuit_duration']['conditions'] == {'maximum_temperature_c': 250}
+    assert all(row['criterion'] == 'maximum' and row['pdf_page'] == 1 and row['printed_page'] == 43
+               and row['bbox_pdf_points'] == [205, 210, 552, 296] for row in rows.values())
+    assert all(row['difference'] == 0 for row in rows.values())
+    json.dumps(result, allow_nan=False)  # The persisted evidence must use JSON numbers, not Decimal objects.
+    assert sum(audit.EXPECTED_COUNTS.values()) == 877
+
+
+def test_usage_parser_reports_original_number_mismatch_instead_of_copying_declaration():
+    modelling, published = production_limit_declarations()
+    with synthetic_usage_page(normal='电缆导体的长期允许工作温度：≤91℃') as document:
+        result = audit.audit_people_operating_limits(document, published, modelling)
+    assert result['summary']['numeric_status_counts'] == {'mismatch': 1, 'exact_match': 2}
+    mismatch, = result['summary']['mismatches']
+    assert (mismatch['dataset_value'], mismatch['pdf_value'], mismatch['difference']) == (90, 91, -1)
+
+
+@pytest.mark.parametrize('change', [
+    {'normal': '电缆导体的长期允许工作温度：90℃'},
+    {'normal': '电缆导体的长期允许工作温度：≥90℃'},
+    {'normal': '电缆导体的长期允许工作温度：≤90K'},
+    {'short': '短路时(最长持续时间超过5s)电缆的最高工作温度：250℃'},
+    {'normal_y': 330},
+    {'footer': '044'},
+])
+def test_usage_parser_requires_original_location_units_and_maximum_wording(change):
+    modelling, published = production_limit_declarations()
+    with synthetic_usage_page(**change) as document, pytest.raises(audit.AuditError) as failure:
+        audit.audit_people_operating_limits(document, published, modelling)
+    assert failure.value.code == 'PDF_LAYOUT_MISMATCH'
+
+
+@pytest.mark.parametrize('change', ['approved', 'missing_method', 'wrong_page', 'actual_duration',
+                                    'wrong_kelvin', 'lost_duration', 'wrong_reference_method'])
+def test_usage_declaration_cannot_promote_or_detach_limits_from_sources(change):
+    modelling, published = production_limit_declarations()
+    modelling, published = deepcopy(modelling), deepcopy(published)
+    code = 'OPERATING_LIMIT_MAPPING'
+    if change == 'approved':
+        published['reviewed'] = True
+        code = 'OPERATING_LIMIT_SCHEMA'
+    elif change == 'missing_method':
+        published.pop('method')
+        code = 'OPERATING_LIMIT_SCHEMA'
+    elif change == 'wrong_page':
+        published['source']['pdf_page'] = 2
+        code = 'OPERATING_LIMIT_SOURCE'
+    elif change == 'actual_duration':
+        modelling['duration_s'] = {'value': 5, 'unit': 's', 'reference': 'This must never be an actual fault input.'}
+    elif change == 'wrong_kelvin':
+        modelling['normal_temperature_k']['value'] = 90
+    else:
+        parameter = modelling['short_circuit_temperature_k']
+        source = json.loads(parameter['reference'])
+        if change == 'lost_duration':
+            source.pop('conditions')
+        else:
+            source['method']['version'] = 'unknown'
+        parameter['reference'] = json.dumps(source, ensure_ascii=False)
+    with synthetic_usage_page() as document, pytest.raises(audit.AuditError) as failure:
+        audit.audit_people_operating_limits(document, published, modelling)
+    assert failure.value.code == code

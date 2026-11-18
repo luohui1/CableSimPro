@@ -3,10 +3,11 @@
 Usage: python scripts/verify_catalogue_originals.py --output <new-directory>
 Optional --people-pdf and --bahra-pdf use local originals instead of downloading
 the fixed official URLs. --catalogue-root selects a copy of the two JSON files.
-No application, importer or calculation plugin is used. All output is evidence,
+No application, import API or calculation plugin is executed. All output is evidence,
 not product approval; the 46 unpublished People R20 entries remain absent.
 The 877 product-table cells remain separate from four material-guide values and
-84 logical direct-burial factors; published guidance is not a calculation input.
+84 logical direct-burial factors and three People permissible limits; these
+separate reference facts are not actual calculation inputs.
 Official downloads share one transport retry and a checked time budget; all
 attempts, including failures, are retained in original-pdf-downloads.json.
 """
@@ -33,7 +34,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 import fitz
 
 ROOT = Path(__file__).resolve().parents[1]
-METHOD_VERSION = '1.1.1'
+METHOD_VERSION = '1.2.0'
 MAX_PDF_BYTES = 32 * 1024 * 1024
 NETWORK_TIMEOUT = 30
 DOWNLOAD_SECONDS = 120
@@ -738,6 +739,92 @@ def audit_published_guidance(doc, data):
             'scope': 'Manufacturer reference guidance only; not manufacturing measurements, GB 50217 factors, or actual calculation inputs.'}
 
 
+def audit_people_operating_limits(doc, published, modelling):
+    """Compare declared limits with independent text in the pinned first page.
+
+    Read the complete clauses, including <= / maximum-duration wording, inside
+    the fixed usage-characteristics region. A number elsewhere on the page is
+    not evidence for this limit. The declared numeric values never determine
+    what is extracted or where it is read.
+    """
+    require(isinstance(published, dict) and isinstance(modelling, dict),
+            'OPERATING_LIMIT_SCHEMA', 'People permissible-limit declarations must be objects')
+    source = published.get('source', {})
+    require(published.get('schema') == 'cablesim.published-operating-limits/1'
+            and published.get('semantic') == 'manufacturer_limit'
+            and published.get('usage') == 'permitted_limits_only'
+            and published.get('confidence') == 'reference' and published.get('reviewed') is False,
+            'OPERATING_LIMIT_SCHEMA', 'People operating facts must remain unreviewed permissible limits')
+    method = {'id': 'cablesim.catalogue-operating-limits-transcription',
+              'name': '人民电器公开使用特性转录', 'version': '1.0.0'}
+    require(published.get('method') == method, 'OPERATING_LIMIT_SCHEMA', 'People transcription method differs')
+    require(isinstance(source, dict) and source.get('sha256') == SOURCES['people']['sha256'] and source.get('url') == SOURCES['people']['url']
+            and source.get('pdf_page') == 1 and source.get('printed_page') == 43,
+            'OPERATING_LIMIT_SOURCE', 'People operating-limit source or original page differs')
+    region = (205, 210, 552, 296)
+    header = header_evidence(doc, 1, region, ('使用特性',))
+    footer = re.sub(r'\s+', '', doc[0].get_text(clip=fitz.Rect(40, 620, 100, 642)))
+    require(footer == '043', 'PDF_LAYOUT_MISMATCH', 'People usage characteristics must be on printed page 043')
+    text = re.sub(r'\s+', '', header['text'])
+    normal = list(re.finditer(r'电缆导体的长期允许工作温度[:：]≤(\d+(?:\.\d+)?)(?:℃|°C)', text))
+    short = list(re.finditer(r'短路时[（(]最长持续时间不超过(\d+(?:\.\d+)?)s[）)]'
+                            r'电缆的最高工作温度[:：](\d+(?:\.\d+)?)(?:℃|°C)', text))
+    require(len(normal) == len(short) == 1, 'PDF_LAYOUT_MISMATCH',
+            'People usage temperature units or maximum-duration condition is missing or ambiguous')
+    originals = {
+        'normal_temperature': (normal[0].group(1), 'degC', normal[0].group(0), {}),
+        'short_circuit_temperature': (short[0].group(2), 'degC', short[0].group(0),
+                                     {'maximum_duration_s': float(short[0].group(1))}),
+        'short_circuit_duration': (short[0].group(1), 's', short[0].group(0),
+                                  {'maximum_temperature_c': float(short[0].group(2))}),
+    }
+    facts = published.get('limits', {})
+    require(isinstance(facts, dict) and set(facts) == set(originals), 'OPERATING_LIMIT_SCHEMA', 'People permissible-limit coverage differs')
+    require(set(modelling) == {'normal_temperature_k', 'short_circuit_temperature_k'},
+            'OPERATING_LIMIT_MAPPING', 'Only declared temperature limits may be mapped; no actual fault duration')
+    checks = []
+    for key, (original, unit, clause, conditions) in originals.items():
+        fact = facts[key]
+        require(isinstance(fact, dict) and set(fact) == {'value', 'unit', 'criterion'}
+                and fact.get('unit') == unit and fact.get('criterion') == 'maximum',
+                'OPERATING_LIMIT_SCHEMA', 'People permissible-limit unit or maximum semantics differs: ' + key)
+        value = float(numeric(fact['value'], 'People permissible limit ' + key))
+        require(value > 0, 'OPERATING_LIMIT_SCHEMA', 'People permissible limit must be positive: ' + key)
+        difference = Decimal(str(value)) - Decimal(original)
+        checks.append({'id': 'people.usage.' + key, 'unit': unit, 'criterion': 'maximum', 'conditions': conditions,
+                       'dataset_value': value, 'pdf_value': float(original), 'difference': float(difference),
+                       'status': 'exact_match' if difference == 0 else 'mismatch', 'text': clause,
+                       'pdf_page': 1, 'printed_page': 43, 'bbox_pdf_points': list(region)})
+        if key == 'short_circuit_duration':
+            continue
+        parameter = modelling[key + '_k']
+        require(isinstance(parameter, dict) and parameter.get('unit') == 'K' and type(parameter.get('value')) in (int, float)
+                and math.isfinite(parameter['value'])
+                and Decimal(str(parameter['value'])) == Decimal(str(value)) + Decimal('273.15'),
+                'OPERATING_LIMIT_MAPPING', 'People SI temperature conversion differs: ' + key)
+        try:
+            reference = json.loads(parameter['reference'], object_pairs_hook=unique_object, parse_constant=nonfinite_json)
+        except (KeyError, TypeError, ValueError) as error:
+            raise AuditError('OPERATING_LIMIT_MAPPING', 'People temperature source is malformed: ' + key) from error
+        require(isinstance(reference, dict) and reference.get('source') == source and reference.get('semantic') == 'manufacturer_limit'
+                and reference.get('method') == method
+                and reference.get('quantity') == key and reference.get('value') == value
+                and reference.get('unit') == unit and reference.get('criterion') == 'maximum'
+                and reference.get('conversion') == {'name': '摄氏温度换算开尔文', 'version': '1.0.0',
+                                                      'expression': 'T/K = t/degC + 273.15'}
+                and reference.get('limitations') == published.get('limitations')
+                and isinstance(reference.get('limitations'), list) and bool(reference['limitations']),
+                'OPERATING_LIMIT_MAPPING', 'People exact declared source or limit semantics differs: ' + key)
+        if key == 'short_circuit_temperature':
+            require(reference.get('conditions') == {'short_circuit_duration': facts['short_circuit_duration']},
+                    'OPERATING_LIMIT_MAPPING', 'People short-circuit temperature lost its maximum-duration condition')
+    return {'summary': {'permissible_limits_checked': len(checks),
+                        'numeric_status_counts': dict(Counter(row['status'] for row in checks)),
+                        'mismatches': [row for row in checks if row['status'] != 'exact_match']},
+            'source_headers_and_units': header, 'printed_page_text': footer, 'numeric_checks': checks,
+            'scope': 'Published maximum temperatures and their duration condition only; not operating/fault inputs or manufacturing measurements.'}
+
+
 def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
 
@@ -760,23 +847,34 @@ def run(args):
         originals = original_cells(docs)
         checks, metrics, summary = compare_catalogues(data, originals)
         guidance = audit_published_guidance(docs['bahra'], data['bahra'])
+        # Read the production metadata helper only; do not build a workbook,
+        # invoke an importer, start the application, or execute a method.
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from backend.kernel.public_catalogues import _data, _people_operating_limits
+        modelling, published = _people_operating_limits(_data('people-mv'))
+        operating_limits = audit_people_operating_limits(docs['people'], published, modelling)
         summary['published_guidance'] = guidance['summary']
-        mismatches = summary['mismatches'] + guidance['summary']['mismatches']
+        summary['published_operating_limits'] = operating_limits['summary']
+        mismatches = summary['mismatches'] + guidance['summary']['mismatches'] + operating_limits['summary']['mismatches']
         summary['status'] = 'failed' if mismatches else 'passed'
         report = {'created_utc': datetime.now(timezone.utc).isoformat(),
             'method': {'id': 'cablesim.catalogue-original-audit', 'version': METHOD_VERSION,
                        'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                        'pdf_engine': 'PyMuPDF', 'pdf_engine_version': fitz.VersionBind},
-            'audit_method': 'Independent coordinate extraction from SHA-pinned original PDFs; no workbook, importer, application or calculation plugin.',
+            'audit_method': 'Independent coordinate extraction from SHA-pinned original PDFs; no workbook, import API, application or calculation plugin execution.',
             'source_files': source_files, 'catalogue_files': catalogue_files,
             'original_headers_and_units': originals[3], 'overlaid_pdf_tokens_suppressed': originals[4],
             'summary': summary, 'four_metric_checks': metrics, 'all_numeric_cell_checks': checks,
             'published_guidance_audit': guidance,
+            'published_operating_limits_audit': operating_limits,
+            'operating_limits_declaration_sha256': hashlib.sha256((ROOT / 'backend/kernel/public_catalogues.py').read_bytes()).hexdigest(),
             'rendered_pages': {},
             'visual_review': 'PNG pages are evidence for review; this automated run does not assert human visual inspection.',
             'limits': [
                 'Checks faithful transcription of published approximate values, not measured manufacturing data or product compliance.',
-                'The original product-table coverage is 877 numeric cells; four material-guide values and 84 logical factors are reported separately. This is not coverage of the complete handbooks.',
+                'The original product-table coverage is 877 numeric cells; four material-guide values, 84 logical factors, and three People operating limits are reported separately. This is not coverage of the complete handbooks.',
+                'People page 1 permits up to 90 degrees C normally and 250 degrees C for at most 5 seconds. These maxima never declare actual operating temperatures, fault duration or test results.',
                 'People R20 is unpublished: 46 absent slots do not count as numeric matches.',
                 'Missing manufacturer construction and installation conditions remain missing; no reference assumptions are used here.',
                 'Bahra reactance, cable codes and drum lengths are outside the transcribed columns; their neighbouring grid positions are not silently substituted.',
@@ -812,11 +910,19 @@ def run(args):
             writer.writeheader()
             writer.writerows({**item, 'conditions': json.dumps(item['conditions'], ensure_ascii=False, sort_keys=True),
                               'bbox_pdf_points': json.dumps(item['bbox_pdf_points'])} for item in guidance['numeric_checks'])
+        with (args.output / 'original-pdf-operating-limits.csv').open('w', newline='', encoding='utf-8') as stream:
+            fields = ['id', 'unit', 'criterion', 'conditions', 'dataset_value', 'pdf_value', 'difference',
+                      'status', 'text', 'pdf_page', 'printed_page', 'bbox_pdf_points']
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows({**item, 'conditions': json.dumps(item['conditions'], ensure_ascii=False, sort_keys=True),
+                              'bbox_pdf_points': json.dumps(item['bbox_pdf_points'])} for item in operating_limits['numeric_checks'])
         require(not mismatches, 'CATALOGUE_VALUE_MISMATCH',
                 f'{len(mismatches)} published values differ from the original PDFs; see original-pdf-cell-audit.json')
         require(summary['four_metric_status_counts'] == {'exact_match': 190, 'not_published': 46}
                 and summary['all_transcribed_numeric_cell_status_counts'] == {'exact_match': 877}
-                and guidance['summary']['numeric_status_counts'] == {'exact_match': 88},
+                and guidance['summary']['numeric_status_counts'] == {'exact_match': 88}
+                and operating_limits['summary']['numeric_status_counts'] == {'exact_match': 3},
                 'AUDIT_COVERAGE', 'Unexpected exact-match or unpublished-metric coverage')
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
