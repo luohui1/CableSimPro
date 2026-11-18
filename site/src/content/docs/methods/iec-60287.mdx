@@ -1,0 +1,34 @@
+---
+title: IEC 60287 稳态载流量
+description: 按 IEC 60287-1-1 / 2-1:2023 计算地下电缆的稳态载流量与温度：原理、适用范围、输入要求、验证依据和已知限制。
+sidebar:
+  label: IEC 60287 稳态载流量
+---
+
+import PluginMethods from '../../../components/PluginMethods.astro';
+
+## 原理
+
+在给定敷设条件下，导体温度达到允许最高温度时的电流即为载流量。IEC 60287-1-1 把电缆与周围介质看成一串热阻，损耗沿热路逐段产生温升：
+
+$$
+I = \left[\frac{\Delta\theta - W_d\left[0.5\,T_1 + n\,(T_2 + T_3 + T_4)\right]}{R\,T_1 + n\,R\,(1+\lambda_1)\,T_2 + n\,R\,(1+\lambda_1+\lambda_2)(T_3 + T_4)}\right]^{0.5}
+$$
+
+式中 $\Delta\theta$ 为导体允许温升（K），$R$ 为最高工作温度下单位长度交流电阻（Ω/m），$W_d$ 为介质损耗（W/m），$T_1 \ldots T_4$ 分别为绝缘、内衬、外护套和外部热阻（K·m/W），$n$ 为电缆芯数，$\lambda_1$、$\lambda_2$ 为金属套和铠装损耗系数。
+
+```mermaid
+flowchart LR
+  A[导体损耗 I²R] --> T1[T1 绝缘]
+  D[介质损耗 Wd] --> T1
+  T1 --> T2[T2 内衬]
+  S[金属套损耗 λ1] --> T2
+  T2 --> T3[T3 外护套]
+  M[铠装损耗 λ2] --> T3
+  T3 --> T4[T4 外部土壤或排管]
+  T4 --> E[环境温度]
+```
+
+## 验证与适用范围
+
+<PluginMethods id="cablesim.iec60287" only={['steady-rating']} />

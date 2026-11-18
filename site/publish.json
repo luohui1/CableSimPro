@@ -1,0 +1,43 @@
+{
+  "$comment": "文档站点的发布清单。pages 中的文件在构建前从仓库 docs/ 同步到站点（副本不入库），unpublished 列出明确不发布的文件和目录及原因；两边都没列的 docs/ 文件默认不发布，构建时会提示。新增公开页面前先确认其中没有内部主机名、本机路径、个人信息、密钥和内部过程记录。",
+  "repository": "https://github.com/luohui1/CableSimPro",
+  "pages": [
+    { "source": "docs/architecture/release-installation.md", "slug": "install/reference/release-installation", "label": "离线发行技术说明", "order": 90 },
+    { "source": "docs/architecture/database-operations.md", "slug": "install/reference/database-operations", "label": "工程库维护技术说明", "order": 91 },
+
+    { "source": "docs/METHOD.md", "slug": "methods/notes/rating-basis", "label": "载流量口径与热网络参考", "order": 1 },
+    { "source": "docs/plugins/IEC60287_SINGLE_CORE.md", "slug": "methods/notes/iec-60287", "label": "IEC 60287 逐项依据与算例", "order": 2 },
+    { "source": "docs/plugins/TYPE_ELECTRICAL.md", "slug": "methods/notes/type-electrical", "label": "型号电气参数与短路容量", "order": 3 },
+    { "source": "docs/plugins/TYPE_RATING_TABLE.md", "slug": "methods/notes/type-rating-table", "label": "型号载流量表", "order": 4 },
+    { "source": "docs/plugins/STANDARD_CHECK.md", "slug": "methods/notes/standard-check", "label": "产品标准尺寸核对", "order": 5 },
+    { "source": "docs/plugins/HYBRID_RATING.md", "slug": "methods/notes/hybrid-rating", "label": "混合载流量与物理对比", "order": 6 },
+    { "source": "docs/plugins/BURIED_REFERENCE.md", "slug": "methods/notes/buried-reference", "title": "三根电缆均匀土壤热参考（英文）", "label": "均匀土壤热参考（英文）", "order": 7 },
+    { "source": "docs/plugins/LINE_SOURCE_CROSSCHECK.md", "slug": "methods/notes/line-source-crosscheck", "title": "半空间线热源交叉校核（英文）", "label": "线热源交叉校核（英文）", "order": 8 },
+    { "source": "docs/plugins/ELECTROTHERMAL_REFERENCE.md", "slug": "methods/notes/electrothermal-reference", "title": "电热耦合参考（英文）", "label": "电热耦合参考（英文）", "order": 9 },
+
+    { "source": "docs/architecture/formal-deliveries.md", "slug": "develop/host/formal-deliveries", "label": "正式交付文件契约", "order": 1 },
+    { "source": "docs/architecture/customer-selection.md", "slug": "develop/host/customer-selection", "label": "选型与工程补全契约", "order": 2 },
+    { "source": "docs/architecture/ASSET_WORKSPACE.md", "slug": "develop/host/asset-workspace", "label": "资源与工程资产", "order": 3 },
+    { "source": "docs/architecture/installation-scene.md", "slug": "develop/host/installation-scene", "label": "敷设场景", "order": 4 },
+    { "source": "docs/architecture/cad-viewport.md", "slug": "develop/host/cad-viewport", "label": "三维模型视口", "order": 5 }
+  ],
+  "unpublished": [
+    { "source": "docs/design/", "reason": "内部设计与界面规划" },
+    { "source": "docs/product/", "reason": "产品需求与内部决策" },
+    { "source": "docs/plugins/PLUGIN_SPEC.md", "reason": "待审修改稿；现行清单字段见站内“插件清单字段”" },
+    { "source": "docs/plugins/SIMULATION.md", "reason": "含超算作业与开发过程记录；方法要点见站内“有限元对照”" },
+    { "source": "docs/plugins/SIMULATION_TARGETS.md", "reason": "复现计划清单" },
+    { "source": "docs/plugins/STANDARDS_BASIS.md", "reason": "含开发过程记录；依据范围见站内“标准核对”" },
+    { "source": "docs/plugins/CAD_RUNTIME_COMPATIBILITY.md", "reason": "开发环境记录" },
+    { "source": "docs/architecture/host-inputs.md", "reason": "含开发过程记录；接口以站内“接口参考”为准" },
+    { "source": "docs/architecture/type-library.md", "reason": "含开发过程记录；使用方法见站内用户指南" },
+    { "source": "docs/architecture/datasheet-import.md", "reason": "含开发过程记录" },
+    { "source": "docs/architecture/BATCH_DATASETS.md", "reason": "含超算预算与开发过程记录" },
+    { "source": "docs/architecture/simulation-research.md", "reason": "含开发过程记录" },
+    { "source": "docs/architecture/simulation-geometry.md", "reason": "含开发过程记录" },
+    { "source": "docs/architecture/electromagnetic-losses.md", "reason": "含开发过程记录" },
+    { "source": "docs/architecture/electrical-topology.md", "reason": "含开发过程记录" },
+    { "source": "docs/architecture/temperature-field.md", "reason": "含开发过程记录" },
+    { "source": "docs/plugins/examples/", "reason": "示例清单以代码形式展示在站内“插件示例”页" }
+  ]
+}

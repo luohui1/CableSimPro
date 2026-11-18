@@ -1,0 +1,44 @@
+/* 文档站点只覆盖少量主题变量：字体照顾中文，强调色取 design/tokens.css 中的铜色。 */
+:root {
+  --sl-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+  --sl-color-accent-low: #3a2314;
+  --sl-color-accent: #e08a4c;
+  --sl-color-accent-high: #f6d5bd;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #f6e4d7;
+  --sl-color-accent: #aa5827;
+  --sl-color-accent-high: #5a2b0f;
+}
+
+/* 长公式在窄屏上横向滚动，不撑破版面 */
+.sl-markdown-content .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25rem;
+}
+
+/* 截图带细边框，便于和白色页面区分 */
+.sl-markdown-content img {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.375rem;
+}
+
+/* 流程图居中，宽度不超过正文 */
+.sl-markdown-content pre.mermaid,
+.sl-markdown-content .mermaid {
+  display: flex;
+  justify-content: center;
+  background: transparent;
+}
+.sl-markdown-content .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 步骤编号与表格数字等宽，便于对照 */
+.sl-markdown-content td {
+  font-variant-numeric: tabular-nums;
+}
