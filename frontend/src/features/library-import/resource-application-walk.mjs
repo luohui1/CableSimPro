@@ -217,6 +217,21 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
     const value = await response.json(); await recordResponse(`applications-${name}`, response, value);
     return { request: response.request().postDataJSON(), value };
   }
+  async function adoptionPosition(label, message, action) {
+    const notice = page.getByRole('status', { name: '采用结果', exact: true });
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(notice).toContainText(message);
+    await expect(notice).toBeFocused();
+    await expect(notice).toBeInViewport({ ratio: 1 });
+    await expect(action).toBeInViewport({ ratio: 1 });
+    const position = await notice.evaluate(element => {
+      const box = element.getBoundingClientRect(), container = element.closest('.main-content')?.getBoundingClientRect();
+      return { active: document.activeElement === element, text: element.textContent, top: box.top, bottom: box.bottom, container_top: container?.top, container_bottom: container?.bottom };
+    });
+    assert.ok(position.active && position.top >= position.container_top && position.bottom <= position.container_bottom, '采用结果须由页面自身定位，不能依赖截图或后续点击滚动');
+    report.completion_positions.push({ viewport: viewport.width, kind: 'resource-adoption', label, ...position });
+    return position;
+  }
   async function projects() {
     const rows = [];
     for (let offset = 0; offset < 5000; offset += 100) {
@@ -392,8 +407,15 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
         assert.deepEqual(after.domain.provenance[pathname], targetBefore.domain.provenance[pathname], '未选对象的出处不变：' + pathname);
     }
     assert.deepEqual((await readApi(`/api/library/resources/applications/${frozen.asset.id}/evidence`)).source, frozen.evidence.source);
+    const openType = page.getByRole('link', { name: '打开目标型号并核对或撤销', exact: true });
+    if (!reuseMaterial) {
+      await expect(page.getByText(`本次采用已创建独立材料，保存在型号输入修订 ${after.revision}。再次采用须另取独立标识，或明确选择复用。`, { exact: true })).toBeVisible();
+      await expect(page.getByText('此材料标识已存在。请另取独立标识，或明确选择复用并核对全部材料内容。', { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: '预览目标采用变化', exact: true })).toBeDisabled();
+    }
+    const completionPosition = await adoptionPosition(label, `已采用到型号输入修订 ${after.revision}，固定来源与逐字段变化已保存。`, openType);
     await capture(label + '人工采用后保存回读');
-    await page.getByRole('link', { name: '打开目标型号并核对或撤销', exact: true }).click();
+    await openType.click();
     const undo = page.getByRole('button', { name: '撤销', exact: true }); await expect(undo).toBeEnabled();
     await capture(label + '原型号入口核对');
     const response = await afterAction(page.waitForResponse(item => new URL(item.url()).pathname === `/api/workspaces/${targetBefore.id}/history/undo` && item.request().method() === 'POST'), () => undo.click());
@@ -401,7 +423,7 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
     const restored = await readApi(`/api/workspaces/${targetBefore.id}`);
     assert.equal(restored.revision, after.revision + 1); assert.deepEqual(restored.domain, targetBefore.domain);
     await capture(label + '原型号真实撤销后核对');
-    const entry = { capture: frozen, target_before: targetBefore, preview, adopted, readback: after, field_receipts: fieldReceipts, restored };
+    const entry = { capture: frozen, target_before: targetBefore, preview, adopted, readback: after, field_receipts: fieldReceipts, completion_position: completionPosition, restored };
     audit.components.push(entry); await write(label + '-audit', entry);
   }
   async function copyProject(source) {
@@ -497,9 +519,10 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       assert.deepEqual(saved.definition, preview.value.definition);
       const savedRuns = await readApi(`/api/workspaces/${target.id}/studies/${saved.id}/runs?view=summary&after=0&limit=20`);
       assert.deepEqual(savedRuns.items, []); assert.equal(savedRuns.next_cursor, null);
-      await capture('研究模板仅保存研究而未运行');
       const openStudy = page.getByRole('button', { name: '打开新保存研究', exact: true });
       await expect(openStudy).toBeEnabled();
+      const completionPosition = await adoptionPosition('保存研究模板', `已创建保存研究，工程输入仍为修订 ${target.revision}；没有启动计算。`, openStudy);
+      await capture('研究模板仅保存研究而未运行');
       opening = await observeStudyOpening({ page, base, viewport, out, write, workspaceId: target.id, studyId: saved.id });
       opening.mark('click_started');
       await openStudy.click();
@@ -523,7 +546,7 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       assert.deepEqual((await readApi(`/api/library/resources/applications/${frozen.asset.id}/evidence`)).source, frozen.evidence.source);
       assert.deepEqual(runWrites, [], '采用后完整加载原研究页面并回读，仍未自动提交计算');
       audit.study = { source: project, source_study: study, source_run: sourceRun, target_before: target, capture: frozen, preview, adopted, target_after: targetAfter, saved, saved_runs: savedRuns,
-        opened_url: page.url(), opened_target: openedTarget, opened_study: openedStudy, opened_runs: openedRuns, automatic_run_requests: runWrites };
+        completion_position: completionPosition, opened_url: page.url(), opened_target: openedTarget, opened_study: openedStudy, opened_runs: openedRuns, automatic_run_requests: runWrites };
     } catch (error) { studyError = error; throw error; }
     finally {
       try {

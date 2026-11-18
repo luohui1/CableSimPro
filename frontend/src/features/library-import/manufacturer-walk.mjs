@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 
 /** Real manufacturer bytes and source metadata enter through visible controls.
  * All upload/preview/commit mutations are dispatched by the existing wizard. */
-export async function walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report }) {
+export async function walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, recordExpectedRefusal, positionDialogContent, readApi, report }) {
   const metadata = JSON.parse(await fs.readFile(path.join(root, 'tests/fixtures/jiangnan_yjv22.json'), 'utf8'));
   const csv = await fs.readFile(path.join(root, 'tests/fixtures/jiangnan_yjv22.csv'));
   const digest = createHash('sha256').update(csv).digest('hex');
@@ -118,7 +118,57 @@ export async function walkManufacturer({ page, base, viewport, out, root, expect
   assert.equal(commitResponse.request().postDataJSON().human_confirmed, true);
   await expect(page.getByRole('heading', { name: '已保存 9 个规格草稿', exact: true })).toBeVisible();
   await capture('江南九规格人工确认保存草稿');
-  await page.getByRole('button', { name: '打开系列，核对与计算', exact: true }).click();
+  const beforeDuplicate = { library: await readApi('/api/type-library/series'), series: await readApi('/api/type-library/series/' + receipt.series_id) };
+  // Use the real wizard and a fresh preview/request id. The backend must reject
+  // this second human-confirmed import, not replay the earlier successful POST.
+  await page.getByRole('button', { name: '继续导入其他工作表', exact: true }).click();
+  await page.getByRole('button', { name: '确认工作表，设置列映射', exact: true }).click();
+  for (const column of sheet.columns) {
+    const key = Object.keys(mapping).find(key => mapping[key] === column.index);
+    const field = inspection.fields.find(item => item.key === key);
+    await select(`${column.letter} 列对应`, key ? `${field.label} / ${units[key][0]}` : '不导入此列');
+  }
+  await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
+  await expect(page.getByRole('form', { name: '系列声明', exact: true }).getByLabel('系列名称', { exact: true })).toHaveValue(seriesName);
+  const duplicatePreviewResponse = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 }),
+    () => page.getByRole('button', { name: '逐行校验并预览', exact: true }).click());
+  const duplicatePreview = await duplicatePreviewResponse.json();
+  await recordResponse('jiangnan-duplicate-preview', duplicatePreviewResponse, duplicatePreview);
+  assert.equal(duplicatePreviewResponse.status(), 200);
+  assert.deepEqual(duplicatePreview.series, preview.series);
+  assert.deepEqual(duplicatePreview.rows.map(row => row.values), preview.rows.map(row => row.values));
+  await page.getByRole('checkbox', { name: '确认来源与系列声明', exact: true }).check();
+  const refusalStart = { errorIndex: report.errors.length, requestIndex: report.requests.length, started_at: new Date().toISOString() };
+  const duplicateResponse = await afterAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/commit') && response.request().method() === 'POST', { timeout: 180000 }),
+    () => page.getByRole('button', { name: '确认入库 9 个规格', exact: true }).click());
+  const duplicate = await duplicateResponse.json();
+  const duplicateRaw = await recordResponse('jiangnan-duplicate-commit', duplicateResponse, duplicate);
+  const duplicateRequest = duplicateResponse.request().postDataJSON();
+  assert.equal(duplicateResponse.status(), 409);
+  assert.equal(duplicate.detail.code, 'TYPE_SERIES_EXISTS');
+  assert.equal(duplicateRequest.human_confirmed, true);
+  assert.equal(duplicateRequest.preview_id, duplicatePreview.preview_id);
+  assert.equal(duplicateRequest.preview_digest, duplicatePreview.preview_digest);
+  assert.notEqual(duplicateRequest.request_id, commitResponse.request().postDataJSON().request_id);
+  await recordExpectedRefusal(duplicateResponse, duplicate, duplicateRaw, refusalStart);
+  const commitError = page.getByRole('alert').filter({ hasText: '同名系列已存在，请修改系列名称后重新预览。' });
+  await expect(commitError).toBeFocused();
+  await expect(commitError).toBeInViewport({ ratio: 1 });
+  const duplicateButton = page.getByRole('button', { name: '确认入库 9 个规格', exact: true });
+  await expect(duplicateButton).toBeInViewport({ ratio: 1 });
+  await expect(duplicateButton).toHaveAttribute('aria-describedby', await commitError.getAttribute('id'));
+  const failurePosition = await commitError.evaluate(element => {
+    const box = element.getBoundingClientRect(), container = element.closest('.main-content')?.getBoundingClientRect();
+    return { active: document.activeElement === element, text: element.textContent, top: box.top, bottom: box.bottom, container_top: container?.top, container_bottom: container?.bottom };
+  });
+  assert.ok(failurePosition.active && failurePosition.top >= failurePosition.container_top && failurePosition.bottom <= failurePosition.container_bottom);
+  report.completion_positions.push({ viewport: viewport.width, kind: 'import-refusal', ...failurePosition });
+  await capture('江南同名提交拒绝后错误自动定位');
+  const afterDuplicate = { library: await readApi('/api/type-library/series'), series: await readApi('/api/type-library/series/' + receipt.series_id) };
+  assert.deepEqual(afterDuplicate, beforeDuplicate, '重复提交拒绝后系列数量、原系列与逐项值完全不变');
+  await fs.writeFile(path.join(out, `${viewport.width}-jiangnan-duplicate-readback.json`), JSON.stringify({ before: beforeDuplicate, after: afterDuplicate, position: failurePosition, refusal: duplicate, raw_response: duplicateRaw }, null, 2));
+  await page.getByRole('tab', { name: '系列与规格', exact: true }).click();
+  await page.getByRole('table', { name: '型号系列', exact: true }).getByRole('button', { name: seriesName, exact: true }).click();
   const series = await readApi('/api/type-library/series/' + receipt.series_id);
   assert.equal(series.specs.length, 9);
   const readbacks = await Promise.all(series.specs.map(spec => readApi('/api/type-library/specs/' + spec.id)));
@@ -162,5 +212,5 @@ export async function walkManufacturer({ page, base, viewport, out, root, expect
   await expect(note).toBeInViewport({ ratio: 1 });
   await capture('江南86点3原值与来源复核说明');
   await page.keyboard.press('Escape'); await expect(dialog).toBeHidden();
-  report.checks.push(`${viewport.width}：江南官方原表的真实CSV字节经UI上传、选表、四列映射；坏来源JSON在客户端明确拒绝，随后通过来源文件控件载入完整原列口径/原件定位，未自动填结构或工况。9个三芯规格全部缺项预览并人工保存草稿，回读逐值来源一致；最大重量“不是实测质量或材料密度”、原刊3×95外径86.3mm及随来源保存的厂家复核提示分别截图；原件链接的href/title与官方URL一致。`);
+  report.checks.push(`${viewport.width}：江南官方原表的真实CSV字节经UI上传、选表、四列映射；坏来源JSON在客户端明确拒绝，随后通过来源文件控件载入完整原列口径/原件定位，未自动填结构或工况。9个三芯规格全部缺项预览并人工保存草稿，回读逐值来源一致；实际再次预览并人工提交同名系列得到409，错误取得焦点且与提交按钮同处视口，未借走查滚动，原系列和数量不变。最大重量“不是实测质量或材料密度”、原刊3×95外径86.3mm及随来源保存的厂家复核提示分别截图；原件链接的href/title与官方URL一致。`);
 }

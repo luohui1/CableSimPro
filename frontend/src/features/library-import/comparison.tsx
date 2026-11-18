@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { catalogueComparison, confidenceText, displayLibraryText, methodText, sourceLocationText, type CatalogueComparisonReport, type ReferenceAssumption } from './api';
+import { catalogueComparison, confidenceText, displayLibraryText, methodText, sourceLocationText, type CatalogueComparisonReport, type CatalogueComparisonRow, type CatalogueMetric, type ReferenceAssumption } from './api';
 import { LibraryDialog } from './dialog';
 import { PublishedGuidance } from './published-guidance';
 
@@ -36,6 +36,93 @@ function AssumptionValue({ assumption }: { assumption: ReferenceAssumption }) {
     return <span>单芯：品字形排列；三芯：直埋单回路。</span>;
   return <Textarea aria-label={`${assumption.label}原始值`} readOnly rows={1} spellCheck={false}
     value={typeof assumption.value === 'string' ? assumption.value : JSON.stringify(assumption.value, null, 2)} />;
+}
+
+type MissingField = NonNullable<CatalogueMetric['missing_fields']>[number];
+const missingIdentity = (field: MissingField) => JSON.stringify([field.field, field.label, field.reason]);
+
+function missingListReason(metric: CatalogueMetric) {
+  return metric.status === 'refused' && !!metric.missing_fields?.length
+    && metric.reason === `厂家条件缺失，拒绝计算真实载流量及偏差：${metric.missing_fields.map(field => field.label).join('、')}。`;
+}
+
+function commonEvidence(metrics: CatalogueMetric[]) {
+  const first = metrics[0];
+  const missing = (first?.missing_fields || []).filter(field => metrics.every(metric => metric.missing_fields?.some(other => missingIdentity(other) === missingIdentity(field))));
+  return {
+    reason: first && metrics.every(metric => metric.reason === first.reason && metric.status === first.status) ? first.reason : null,
+    status: first && metrics.every(metric => metric.status === first.status) ? first.status : null,
+    missing,
+    listedReason: missing.length > 0 && metrics.every(missingListReason),
+  };
+}
+
+function MissingFields({ fields }: { fields: MissingField[] }) {
+  return <>{fields.map(field => <span key={missingIdentity(field)} data-field={field.field}>{field.label}：{displayLibraryText(field.reason)}</span>)}</>;
+}
+
+function MetricEvidence({ metric, unit, label }: { metric: CatalogueMetric; unit: string; label: string }) {
+  const exact = (value: number | null) => value === null ? '未提供数值' : `${String(value)} ${unit}`;
+  const comparisonMethod = optionalRecord(metric).comparison_method;
+  return <div className="library-import-issues" aria-label={label}>
+    <p>判定：{STATUS[metric.status]}；可信分档：参考，未人工审核。</p>
+    <p aria-label="完整原因">{displayLibraryText(metric.reason)}</p>
+    <div className="library-import-issues" aria-label="完整缺项清单">
+      {metric.missing_fields?.length ? <MissingFields fields={metric.missing_fields} /> : <span className="muted">未列出缺项清单，请核对完整原因。</span>}
+    </div>
+    <span>厂家样本原值：{exact(metric.published)}</span>
+    <span>{metric.status === 'declared_input' ? '输入回读值' : '结果原值'}：{exact(metric.value)}</span>
+    <span>{metric.status === 'declared_input' ? '回读差值，不作独立验证' : '差值原值'}：{exact(metric.difference)}；相对差值：{metric.relative_difference === null ? '未作对照' : `${String(metric.relative_difference * 100)} %`}</span>
+    {comparisonMethod != null && <span>对照方法：{methodText(comparisonMethod)}</span>}
+    <span>独立计算方法：{metric.method ? methodText(metric.method) : '未提供'}</span>
+    {metric.tier != null && <span>方法覆盖分档：{confidenceText(metric.tier)}</span>}
+  </div>;
+}
+
+function ComparisonTable({ item, rows, originals, isReference }: { item: typeof METRICS[number]; rows: CatalogueComparisonRow[]; originals: Map<string, CatalogueComparisonRow>; isReference: boolean }) {
+  const metrics = rows.map(row => row.metrics[item.key]);
+  const common = commonEvidence(metrics);
+  const manufacturerCommon = commonEvidence(rows.map(row => originals.get(row.key)!.metrics[item.key]));
+  const remaining = (metric: CatalogueMetric, shared: ReturnType<typeof commonEvidence>) => (metric.missing_fields || []).filter(field => !shared.missing.some(other => missingIdentity(other) === missingIdentity(field)));
+  return <>
+    <section className="library-import-stack" aria-label={`${isReference ? '研究情景' : ''}${item.label}共同说明`}>
+      <h3>{item.label}的共同说明</h3>
+      <p>以下 {rows.length} 个规格{isReference ? '属于本次研究参考情景，结果未人工审核，也不计入厂家独立核验通过数' : '均按厂家公开资料核验，可信分档为参考，未人工审核'}。各规格原值与偏差逐行保留，完整原因、缺项与方法可在行内展开。</p>
+      {common.status && <p>所有规格：{isReference && common.status === 'compared' ? '研究参考值，非厂家核验' : STATUS[common.status]}。{common.status === 'declared_input' && '回读数值不作独立偏差判断。'}</p>}
+      {common.listedReason ? <p>厂家条件缺失，拒绝计算真实载流量及偏差。以下缺项适用于全部规格；每行另列本规格的额外缺项。</p> : common.reason && <p>{displayLibraryText(common.reason)}</p>}
+      {!!common.missing.length && <div className="library-import-issues" aria-label="全部规格共同缺项"><MissingFields fields={common.missing} /></div>}
+      {isReference && <section className="library-import-issues" aria-label="厂家共同缺项与限制">
+        <p>厂家独立核验保持原判定{manufacturerCommon.status ? `：${STATUS[manufacturerCommon.status]}` : '，逐规格可查'}，研究假设不会补成厂家数据。</p>
+        {!manufacturerCommon.listedReason && manufacturerCommon.reason && <span>{displayLibraryText(manufacturerCommon.reason)}</span>}
+        <MissingFields fields={manufacturerCommon.missing} />
+      </section>}
+    </section>
+    <DataTable label={`${isReference ? '研究情景' : ''}${item.label}逐规格对照`} showGroups={false} groups={[{ id: 'comparison', label: item.label, rows: rows.map(row => ({ ...row, id: row.key, metric: row.metrics[item.key], manufacturer: originals.get(row.key)!.metrics[item.key] })) }]} rowLabel={row => `${row.designation} ${row.area_mm2} mm²`} columns={[
+      { id: 'spec', label: '规格', wrap: true, render: row => <div>{displayLibraryText(row.designation.replaceAll('/', ' / '))} · {row.area_mm2} mm²<br /><span className="muted">{row.sheet}</span></div> },
+      { id: 'published', label: '厂家样本值', unit: item.unit, numeric: true, render: row => row.metric.published === null ? '原表未给出' : number(row.metric.published, item.key === 'r20' ? 6 : 3) },
+      { id: 'computed', label: isReference ? '研究情景结果或回读' : '独立结果或输入回读', unit: item.unit, numeric: true, render: row => row.metric.value === null ? '未给出结果' : number(row.metric.value, item.key === 'r20' ? 6 : 3) },
+      { id: 'difference', label: isReference ? '与样本值的参考差异' : '偏差', wrap: true, numeric: true, render: row => row.metric.status === 'declared_input' ? '—' : row.metric.difference === null ? '不可对照' : `${number(row.metric.difference, item.key === 'r20' ? 6 : 3)} ${item.unit}（${percent(row.metric.relative_difference)}）` },
+      { id: 'status', label: '判定', wrap: true, render: row => row.metric.status === 'declared_input' ? '输入回读' : isReference && row.metric.status === 'compared' ? '研究参考值，非厂家核验' : STATUS[row.metric.status] },
+      { id: 'reason', label: '本规格补充说明与完整依据', wrap: true, render: row => <div className="library-import-issues">
+        {row.metric.reason !== common.reason && !(common.listedReason && missingListReason(row.metric)) && <span>{displayLibraryText(row.metric.reason)}</span>}
+        <MissingFields fields={remaining(row.metric, common)} />
+        {!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}
+        {isReference && <>
+          <span>厂家核验仍为{STATUS[row.manufacturer.status]}。</span>
+          {row.manufacturer.reason !== manufacturerCommon.reason && !(manufacturerCommon.listedReason && missingListReason(row.manufacturer)) && <span>{displayLibraryText(row.manufacturer.reason)}</span>}
+          <MissingFields fields={remaining(row.manufacturer, manufacturerCommon)} />
+        </>}
+        {row.metric.tier != null && <span className="muted">方法覆盖分档：{confidenceText(row.metric.tier)}</span>}
+        <details className="library-import-value-conditions" aria-label={`${row.designation} ${row.area_mm2} mm² ${item.label}完整依据`}>
+          <summary>本规格完整依据</summary>
+          <div className="library-import-stack">
+            <MetricEvidence metric={row.metric} unit={item.unit} label="当前对照完整依据" />
+            {isReference && <><h3>厂家原始核验</h3><MetricEvidence metric={row.manufacturer} unit={item.unit} label="厂家原始核验完整依据" /></>}
+          </div>
+        </details>
+      </div> },
+    ]} />
+  </>;
 }
 
 export function CatalogueComparison() {
@@ -97,21 +184,7 @@ export function CatalogueComparison() {
       <Tabs value={metric} onValueChange={setMetric}>
         <TabsList aria-label="对照指标">{METRICS.map(item => <TabsTrigger key={item.key} value={item.key}>{item.label}</TabsTrigger>)}</TabsList>
         {METRICS.map(item => <TabsContent key={item.key} value={item.key} className="library-import-stack">
-          <DataTable label={`${isReference ? '研究情景' : ''}${item.label}逐规格对照`} showGroups={false} groups={[{ id: 'comparison', label: item.label, rows: shown.rows.map(row => ({ ...row, id: row.key, metric: row.metrics[item.key], manufacturer: originals.get(row.key)!.metrics[item.key] })) }]} rowLabel={row => `${row.designation} ${row.area_mm2} mm²`} columns={[
-            { id: 'spec', label: '规格', wrap: true, render: row => <div>{displayLibraryText(row.designation.replaceAll('/', ' / '))} · {row.area_mm2} mm²<br /><span className="muted">{row.sheet}</span></div> },
-            { id: 'published', label: '厂家样本值', unit: item.unit, numeric: true, render: row => row.metric.published === null ? '原表未给出' : number(row.metric.published, item.key === 'r20' ? 6 : 3) },
-            { id: 'computed', label: isReference ? '研究情景结果或回读' : '独立结果或输入回读', unit: item.unit, numeric: true, render: row => row.metric.value === null ? '未给出结果' : number(row.metric.value, item.key === 'r20' ? 6 : 3) },
-            { id: 'difference', label: isReference ? '与样本值的参考差异' : '偏差', wrap: true, numeric: true, render: row => row.metric.status === 'declared_input' ? '不作独立偏差' : row.metric.difference === null ? '不可对照' : `${number(row.metric.difference, item.key === 'r20' ? 6 : 3)} ${item.unit}（${percent(row.metric.relative_difference)}）` },
-            { id: 'status', label: '判定', wrap: true, render: row => isReference && row.metric.status === 'compared' ? '研究参考值，非厂家核验' : STATUS[row.metric.status] },
-            { id: 'reason', label: '原因、方法与可信分档', wrap: true, render: row => <div className="library-import-issues">
-              <span>{displayLibraryText(row.metric.reason)}</span>
-              {row.metric.missing_fields?.map(field => <span key={field.field}>{field.label}：{displayLibraryText(field.reason)}</span>)}
-              {!!row.metric.method && <span className="muted">{methodText(row.metric.method)}</span>}
-              {isReference && <span>厂家核验仍为{STATUS[row.manufacturer.status]}：{displayLibraryText(row.manufacturer.reason)}</span>}
-              <span className="muted">{isReference ? '本次研究情景：参考' : '厂家公开资料核验：参考，未人工审核'}</span>
-              {!!row.metric.tier && <span className="muted">方法覆盖分档：{confidenceText(row.metric.tier)}</span>}
-            </div> },
-          ]} />
+          <ComparisonTable item={item} rows={shown.rows} originals={originals} isReference={isReference} />
         </TabsContent>)}
       </Tabs>
       <LibraryDialog open={scenarioOpen} onOpenChange={open => { if (!busy) setScenarioOpen(open); }} busy={!!busy} title="研究参考情景与完整假设" initialFocus="preserve"

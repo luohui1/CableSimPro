@@ -21,7 +21,7 @@ const out = path.resolve(process.env.LIBRARY_IMPORT_EVIDENCE || path.join(root, 
 await fs.mkdir(out, { recursive: true });
 const expect = baseExpect.configure({ timeout: 30000 });
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [] };
+const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [], completion_positions: [], expected_refusals: [] };
 const saveReport = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
 await saveReport();
 let browser;
@@ -43,13 +43,18 @@ async function readApi(url) {
 for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
   const context = await browser.newContext({ viewport, acceptDownloads: true, locale: 'zh-CN' });
   const page = await context.newPage();
+  const requestIds = new WeakMap();
+  let requestSequence = 0;
+  const requestId = request => { if (!requestIds.has(request)) requestIds.set(request, ++requestSequence); return requestIds.get(request); };
+  page.on('request', request => requestId(request));
   page.on('pageerror', error => report.errors.push({ viewport: viewport.width, kind: 'page', page: page.url(), time: new Date().toISOString(), message: error.message }));
   page.on('console', entry => { if (entry.type() === 'error') report.errors.push({ viewport: viewport.width, kind: 'console', page: page.url(), time: new Date().toISOString(), location: entry.location(), message: entry.text() }); });
   page.on('requestfailed', request => { if (!request.failure()?.errorText.includes('ERR_ABORTED')) report.errors.push({ viewport: viewport.width, kind: 'request', url: request.url(), message: request.failure()?.errorText }); });
   page.on('response', response => {
     if (!response.url().includes('/api/')) return;
-    report.requests.push({ viewport: viewport.width, method: response.request().method(), url: response.url(), status: response.status() });
-    if (response.status() >= 400) report.errors.push({ viewport: viewport.width, kind: 'network', url: response.url(), status: response.status() });
+    const request_id = requestId(response.request());
+    report.requests.push({ viewport: viewport.width, request_id, method: response.request().method(), url: response.url(), status: response.status() });
+    if (response.status() >= 400) report.errors.push({ viewport: viewport.width, request_id, kind: 'network', url: response.url(), status: response.status() });
   });
   let shot = 0;
   let bahraOriginal;
@@ -134,6 +139,124 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
   async function recordResponse(name, response, body) {
     const raw = await saveRawResponse(response, path.join(out, `${viewport.width}-${name}-raw.json`));
     await fs.writeFile(path.join(out, `${viewport.width}-${name}.json`), JSON.stringify({ request: response.request().postDataJSON(), request_headers: safeRequestHeaders(response.request()), status: response.status(), response: body, raw_response: raw }, null, 2));
+    return raw;
+  }
+  async function recordExpectedRefusal(response, body, raw, start) {
+    const request = response.request(), request_id = requestId(request);
+    assert.equal(request.method(), 'POST');
+    assert.equal(new URL(response.url()).pathname, '/api/type-library/imports/commit');
+    assert.equal(response.status(), 409);
+    assert.equal(body.detail.code, 'TYPE_SERIES_EXISTS');
+    assert.equal(await response.finished(), null, '预期拒绝必须等到真实响应正文完成');
+    const bytes = await fs.readFile(path.join(out, raw.file));
+    assert.equal(bytes.length, raw.size); assert.equal(createHash('sha256').update(bytes).digest('hex'), raw.sha256);
+    assert.deepEqual(JSON.parse(bytes.toString('utf8')), body);
+    const failedResponses = report.requests.slice(start.requestIndex).filter(item => item.url === response.url() && item.status >= 400);
+    assert.deepEqual(failedResponses.map(item => item.request_id), [request_id], '该操作范围只能有这个实际Request对应的失败响应');
+    const consoleIndexes = () => report.errors.map((item, index) => ({ item, index })).filter(({ item, index }) => index >= start.errorIndex && item.viewport === viewport.width && item.kind === 'console' && item.location?.url === response.url());
+    await expect.poll(() => consoleIndexes().length).toBe(1);
+    const consoles = consoleIndexes();
+    assert.match(consoles[0].item.message, /^Failed to load resource: the server responded with a status of 409 \(Conflict\)$/);
+    const networks = report.errors.map((item, index) => ({ item, index })).filter(({ item, index }) => index >= start.errorIndex && item.viewport === viewport.width && item.kind === 'network' && item.request_id === request_id);
+    assert.equal(networks.length, 1);
+    assert.equal(networks[0].item.url, response.url()); assert.equal(networks[0].item.status, 409);
+    report.expected_refusals.push({ viewport: viewport.width, request_id, method: request.method(), url: response.url(), status: response.status(), code: body.detail.code,
+      request: request.postDataJSON(), response: body, raw_response: raw, action_boundary: start,
+      error_record_indices: [...networks, ...consoles].map(item => item.index).sort((a, b) => a - b),
+      console_association: 'Only one failed response for this exact endpoint inside the recorded UI action; network identity is the actual Playwright Request.' });
+    await saveReport();
+  }
+  async function batchResultPosition(label) {
+    const region = page.getByRole('region', { name: '批量操作结果', exact: true });
+    const heading = region.getByRole('heading', { name: '本次批量操作结果', exact: true });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport({ ratio: 1 });
+    await expect(region.getByRole('status')).toContainText('已返回 11 / 11 个规格的处理结果');
+    await expect(region.getByRole('status')).toBeInViewport({ ratio: 1 });
+    await expect(region.getByRole('table').locator('thead')).toBeInViewport({ ratio: 1 });
+    await expect(region.getByRole('table').getByRole('row').nth(1)).toBeInViewport({ ratio: 1 });
+    const position = await heading.evaluate(element => {
+      const box = element.getBoundingClientRect(), container = element.closest('.main-content')?.getBoundingClientRect();
+      return { active: document.activeElement === element, text: element.textContent, top: box.top, bottom: box.bottom, container_top: container?.top, container_bottom: container?.bottom };
+    });
+    assert.ok(position.active && position.top >= position.container_top && position.bottom <= position.container_bottom);
+    report.completion_positions.push({ viewport: viewport.width, kind: 'batch', label, ...position });
+  }
+  async function inspectComparisonRows(sample, key, label, unit, rows, originals, reference = false) {
+    const table = page.getByRole('table', { name: `${reference ? '研究情景' : ''}${label}逐规格对照`, exact: true });
+    const common = page.getByRole('region', { name: `${reference ? '研究情景' : ''}${label}共同说明`, exact: true });
+    await expect(table.getByRole('row')).toHaveCount(rows.length + 1);
+    await expect(common).toContainText(`以下 ${rows.length} 个规格`);
+    await expect(common).toContainText('未人工审核');
+    const fieldKey = field => JSON.stringify([field.field, field.label, field.reason]);
+    const commonFields = values => {
+      const counts = new Map(), fields = new Map();
+      for (const value of values) for (const field of new Map((value.missing_fields || []).map(item => [fieldKey(item), item])).values()) {
+        const id = fieldKey(field); fields.set(id, field); counts.set(id, (counts.get(id) || 0) + 1);
+      }
+      return [...fields].filter(([id]) => counts.get(id) === values.length).map(([, field]) => field);
+    };
+    const currentShared = commonFields(rows.map(row => row.metrics[key]));
+    const originalByKey = new Map(originals.map(row => [row.key, row]));
+    const manufacturerShared = commonFields(rows.map(row => originalByKey.get(row.key).metrics[key]));
+    const fieldText = field => ({ field: field.field, text: `${field.label}：${field.reason}` });
+    const readFields = locator => locator.evaluateAll(nodes => nodes.map(node => ({ field: node.dataset.field, text: node.textContent })));
+    assert.deepEqual(await readFields(common.locator('[aria-label="全部规格共同缺项"] [data-field]')), currentShared.map(fieldText), '只把全部规格的相同字段、原因集中展示一次');
+    if (reference) assert.deepEqual(await readFields(common.getByRole('region', { name: '厂家共同缺项与限制', exact: true }).locator('[data-field]')), manufacturerShared.map(fieldText));
+    const displayReason = reason => reason.replace('cable_types/cable_type/ct1/cores/layers/metallic_screen/longitudinal_r20', '金属屏蔽纵向电阻');
+    const rounded = (value, digits = key === 'r20' ? 6 : 3) => value.toLocaleString('zh-CN', { maximumFractionDigits: digits, useGrouping: false });
+    if (rows.every(row => row.metrics[key].reason === rows[0].metrics[key].reason)) {
+      const reason = displayReason(rows[0].metrics[key].reason);
+      if (!currentShared.length) await expect(common).toContainText(reason);
+      assert.equal((await table.innerText()).includes(reason), false, '共同完整原因只在表前或展开依据显示，不在收起的每行重复');
+    }
+    const evidence = [];
+    for (const [index, row] of rows.entries()) {
+      const rendered = table.getByRole('row').nth(index + 1), metric = row.metrics[key], original = originalByKey.get(row.key).metrics[key];
+      const cells = await rendered.getByRole('cell').allTextContents();
+      assert.equal(cells[1], metric.published === null ? '原表未给出' : rounded(metric.published), row.key + ' 厂家原值');
+      assert.equal(cells[2], metric.value === null ? '未给出结果' : rounded(metric.value), row.key + ' 结果或输入回读');
+      const difference = metric.status === 'declared_input' ? '—' : metric.difference === null ? '不可对照'
+        : `${rounded(metric.difference)} ${unit}（${metric.relative_difference === null ? '—' : `${rounded(metric.relative_difference * 100, 2)} %`}）`;
+      assert.equal(cells[3], difference, row.key + ' 逐规格偏差');
+      const status = metric.status === 'declared_input' ? '输入回读' : metric.status === 'compared' ? reference ? '研究参考值，非厂家核验' : '有独立计算对照' : metric.status === 'refused' ? '拒绝计算' : '缺少独立数据';
+      assert.equal(cells[4], status, row.key + ' 判定不可提升');
+      const inline = await rendered.locator('[data-field]').evaluateAll(nodes => nodes.filter(node => !node.closest('details')).map(node => ({ field: node.dataset.field, text: node.textContent })));
+      const additional = (value, shared) => (value.missing_fields || []).filter(field => !shared.some(other => fieldKey(field) === fieldKey(other))).map(fieldText);
+      assert.deepEqual(inline, [...additional(metric, currentShared), ...(reference ? additional(original, manufacturerShared) : [])], row.key + ' 收起时只保留该规格的额外缺项');
+      const entry = { key: row.key, visible_values: cells.slice(0, 5), additional_missing: inline, expanded: [] };
+      // Every ampacity row must expose all its original reasons. Other metrics
+      // retain every visible numerical row and exercise their first full record.
+      if (key === 'ampacity' || index === 0) {
+        const detail = rendered.locator('details'), toggle = detail.locator('summary');
+        await toggle.click(); await expect(detail).toHaveAttribute('open', '');
+        for (const [name, value] of [['当前对照完整依据', metric], ...(reference ? [['厂家原始核验完整依据', original]] : [])]) {
+          const full = detail.getByLabel(name, { exact: true });
+          await expect(full).toBeVisible();
+          await expect(full.getByLabel('完整原因', { exact: true })).toHaveText(displayReason(value.reason));
+          assert.deepEqual(await readFields(full.getByLabel('完整缺项清单', { exact: true }).locator('[data-field]')), (value.missing_fields || []).map(fieldText), row.key + ' 展开必须保留全部缺项原文');
+          await expect(full).toContainText('可信分档：参考，未人工审核');
+          const exact = number => number === null ? '未提供数值' : `${String(number)} ${unit}`;
+          await expect(full).toContainText('厂家样本原值：' + exact(value.published));
+          await expect(full).toContainText(`${value.status === 'declared_input' ? '输入回读值' : '结果原值'}：${exact(value.value)}`);
+          await expect(full).toContainText(`${value.status === 'declared_input' ? '回读差值，不作独立验证' : '差值原值'}：${exact(value.difference)}`);
+          const version = value.method?.method_version || value.method?.version || value.method?.plugin_version;
+          if (version) await expect(full).toContainText(version);
+          if (value.method?.plugin_id === 'cablesim.iec60287') await expect(full).toContainText('IEC 60287 稳态载流量');
+          await expect(full).not.toContainText('cablesim.');
+          entry.expanded.push({ label: name, text: await full.innerText() });
+        }
+        if (key === 'ampacity' && index === 0) {
+          await detail.evaluate(element => element.scrollIntoView({ block: 'start' }));
+          await capture(`${sample}-${reference ? '研究情景' : '厂家'}首规格完整依据展开`);
+        }
+        await toggle.click(); await expect(detail).not.toHaveAttribute('open', '');
+      }
+      evidence.push(entry);
+    }
+    if (rows.every(row => row.metrics[key].status === 'declared_input')) await expect(common).toContainText('输入保真，非独立验证');
+    await fs.writeFile(path.join(out, `${viewport.width}-${sample}-${reference ? 'reference' : 'manufacturer'}-${key}-visible-evidence.json`), JSON.stringify({ common_missing: currentShared, manufacturer_common_missing: reference ? manufacturerShared : null, rows: evidence }, null, 2));
+    await common.getByRole('heading', { name: `${label}的共同说明`, exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
   }
   async function advanceSheet() {
     await page.getByRole('button', { name: '确认工作表，设置列映射', exact: true }).click();
@@ -461,7 +584,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await recordResponse('batch-check', batchResponse, batch);
     assert.equal(batch.items.length, 11);
     await expect(page.getByRole('table', { name: '批量操作结果', exact: true })).toBeVisible();
-    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await batchResultPosition('真实批量标准核对');
     await capture('真实批量核对结果');
     assert.ok(batch.items.some(item => item.run_id && item.checks?.length), '批量核对须保存真实标准核对运行');
 
@@ -489,7 +612,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const rated = await ratedResponse.json();
     await recordResponse('batch-calculate', ratedResponse, rated);
     await expect(calculation).toBeHidden();
-    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await batchResultPosition('真实批量载流量计算');
     await capture('真实批量载流量结果');
     assert.equal(rated.items.length, 11);
     const calculated = rated.items.filter(item => item.run_id && item.rows?.some(row => typeof row.value_a === 'number' && row.value_a > 0));
@@ -515,7 +638,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const afterReview = await readApi(`/api/type-library/series/${saved.series_id}`);
     assert.ok(afterReview.specs.every(spec => spec.state !== 'approved' && spec.state !== 'published'));
     await expect(review).toBeHidden();
-    await page.getByRole('heading', { name: '本次批量操作结果', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await batchResultPosition('批量审核真实拒绝');
     await capture('审核门禁真实拒绝');
     report.checks.push(`${viewport.width}：真实Excel上传→工作表→列映射保存复用→系列声明→11规格预览→人工确认入库→型号库→真实批量标准核对与载流量计算→未提交草稿整批拒绝批准，保存版本/来源可回读`);
     await page.reload();
@@ -634,7 +757,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await expect(page.getByRole('table', { name: '载流量逐规格对照', exact: true })).toBeVisible();
       await expect(page.getByLabel('厂家独立核验总览', { exact: true })).toContainText('载流量可对照 0 个');
       await expect(page.getByRole('button', { name: '研究参考情景结果', exact: true })).toHaveCount(0);
-      await page.getByRole('table', { name: '载流量逐规格对照', exact: true }).locator('thead').evaluate(element => element.scrollIntoView({ block: 'start' }));
+      await inspectComparisonRows(sample.id, 'ampacity', '载流量', 'A', compared.rows, compared.rows);
       await capture(`${sample.id}-厂家载流量缺项拒算`);
       if (sample.id === 'bahra-mv') {
         const lossReasons = [
@@ -642,17 +765,20 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
           ['materials.insulation_loss_tangent', '绝缘介质损耗因数', '手册仅给出含 tanδ 的介质损耗公式，没有公布 tanδ 数值；旧版独立参考情景使用 IEC 参考值 0.004。'],
         ];
         for (const row of compared.rows) for (const [field, label, reason] of lossReasons) assert.deepEqual(row.metrics.ampacity.missing_fields.find(item => item.field === field), { field, label, reason });
-        const firstManufacturer = page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('row').nth(1);
-        const visibleReasons = lossReasons.map(([, label, reason]) => firstManufacturer.getByText(`${label}：${reason}`, { exact: true }));
+        const commonManufacturer = page.getByRole('region', { name: '载流量共同说明', exact: true });
+        const visibleReasons = lossReasons.map(([, label, reason]) => commonManufacturer.getByText(`${label}：${reason}`, { exact: true }));
         await visibleReasons[0].evaluate(element => element.scrollIntoView({ block: 'center' }));
         for (const reason of visibleReasons) await expect(reason).toBeInViewport({ ratio: 1 });
         await capture('Bahra电容量指南与介质损耗缺项范围');
       }
       await page.getByRole('tab', { name: '外径', exact: true }).click();
+      await inspectComparisonRows(sample.id, 'outer_diameter', '外径', 'mm', compared.rows, compared.rows);
       await capture(`${sample.id}-外径输入保真非独立验证`);
       await page.getByRole('tab', { name: '重量', exact: true }).click();
+      await inspectComparisonRows(sample.id, 'weight', '重量', 'kg/km', compared.rows, compared.rows);
       await capture(`${sample.id}-重量缺少独立数据`);
       await page.getByRole('tab', { name: '导体直流电阻', exact: true }).click();
+      await inspectComparisonRows(sample.id, 'r20', '导体直流电阻', 'Ω/km', compared.rows, compared.rows);
       await capture(`${sample.id}-电阻来源与限制`);
 
       if (sample.id === 'bahra-mv') {
@@ -759,6 +885,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await expect(calculatedRow).toContainText('厂家核验仍为拒绝计算');
       await calculatedRow.evaluate(element => element.scrollIntoView({ block: 'center' }));
       await capture(`${sample.id}-研究参考数值差异与厂家拒绝并列`);
+      await inspectComparisonRows(sample.id, 'ampacity', '载流量', 'A', calculated.rows, compared.rows, true);
+      await capture(`${sample.id}-研究参考共同说明与逐规格差异`);
       await page.getByRole('button', { name: '厂家数据与缺项', exact: true }).click();
       const manufacturerTable = page.getByRole('table', { name: '载流量逐规格对照', exact: true });
       await expect(manufacturerTable.getByRole('row').nth(1)).toContainText('未给出结果');
@@ -766,7 +894,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await manufacturerTable.locator('thead').evaluate(element => element.scrollIntoView({ block: 'start' }));
       await capture(`${sample.id}-参考计算后厂家仍缺项拒算`);
     }
-    report.checks.push(`${viewport.width}：人民46规格与Bahra13规格默认厂家条件缺项全部拒算；四项原值与原因分别截图；全部研究假设及原始声明逐字核对，人工明确确认后单列21/13项参考数值与差异，厂家拒绝与零真实通过数保持不变；两份完整JSON已保存`);
+    report.checks.push(`${viewport.width}：人民46规格与Bahra13规格默认厂家条件缺项全部拒算；四项每个规格的可见原值、结果、偏差、判定均与真实回执核对，共同原因集中展示且每行只补自身缺项；所有厂家及研究载流量行均经实际展开核对完整原因、全部缺项、精确数值、方法版本与参考分档。全部研究假设及原始声明逐字核对，人工明确确认后单列21/13项参考数值与差异，厂家拒绝与零真实通过数保持不变；原始JSON与可见证据已保存`);
 
     // Import the complete, unchanged Bahra workbook through the visible entry.
     // Catalogue performance values remain evidence, never engineering inputs.
@@ -1021,7 +1149,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     await expect(bahraSources).toBeHidden();
     report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；未声明的计算参数保持为空。逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
     await walkShortBasis({ page, base, viewport, out, capture, expect, report, readApi });
-    await walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report });
+    await walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, recordExpectedRefusal, positionDialogContent, readApi, report });
     await walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report,
       previousCalculation: { request: ratedResponse.request().postDataJSON(), response: rated } });
     const resourceAudit = JSON.parse(await fs.readFile(path.join(out, `${viewport.width}-resources-summary.json`), 'utf8'));
@@ -1057,7 +1185,9 @@ if (exchangeTasks.length) {
   await fs.rm(emptyDatabase, { force: true });
 }
 await fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
-assert.deepEqual(report.errors, [], '控制台或网络存在错误');
+const expectedErrorIndexes = report.expected_refusals.flatMap(item => item.error_record_indices).sort((a, b) => a - b);
+assert.equal(new Set(expectedErrorIndexes).size, expectedErrorIndexes.length, '同一原始错误不能被多个拒绝重复归属');
+assert.deepEqual(report.errors, expectedErrorIndexes.map(index => report.errors[index]), '控制台或网络存在未被真实同名提交拒绝证明的错误；原始错误全部保留');
 assert.deepEqual(report.failures, [], '真实导入流程未通过');
 assert.deepEqual(report.layout_failures, [], '截图布局或可见名称检查未通过');
 console.log(JSON.stringify({ checks: report.checks, screenshots: report.screenshots.length, output: out }, null, 2));

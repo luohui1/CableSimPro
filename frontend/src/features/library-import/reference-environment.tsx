@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { message, optionalRecord, text } from '@/api/client';
 import { DataTable } from '@/components/data-table';
@@ -44,6 +44,8 @@ export function EnvironmentReferenceAdoption({ asset }: { asset: ReferenceAsset 
   const [rating, setRating] = useState<RatingFormValue>(() => ({ ...emptyRating(1), layout: '' }));
   const [preview, setPreview] = useState<ReadyEnvironmentPreview | null>(null);
   const [batch, setBatch] = useState<EnvironmentBatch | null>(null);
+  const resultHeading = useRef<HTMLHeadingElement>(null);
+  const focusResultAfterClose = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const seriesList = useQuery({ queryKey: ['type-library', 'series'], queryFn: ({ signal }) => libraryRequest<{ items: SeriesSummary[] }>('/series', { signal }) });
@@ -68,8 +70,20 @@ export function EnvironmentReferenceAdoption({ asset }: { asset: ReferenceAsset 
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
   function executed(value: EnvironmentBatch) {
+    focusResultAfterClose.current = true;
     setBatch(value); setPreview(null);
     void client.invalidateQueries({ queryKey: ['type-library', 'series', seriesId] });
+  }
+  function closeAutoFocus(event: Event) {
+    if (!focusResultAfterClose.current) return;
+    focusResultAfterClose.current = false;
+    event.preventDefault();
+    requestAnimationFrame(() => {
+      const heading = resultHeading.current;
+      if (!heading) return;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: 'center' });
+    });
   }
   return <section className="reference-section library-import-stack" aria-label="环境参考预览与工况采用">
     <h2>环境参考预览与工况采用</h2>
@@ -104,12 +118,12 @@ export function EnvironmentReferenceAdoption({ asset }: { asset: ReferenceAsset 
     {spec && <div className="reference-toolbar"><Button disabled={busy} onClick={() => { invalidate(); void series.refetch(); }}>刷新目标修订</Button>
       <Button variant="primary" loading={busy} disabled={!spec.workspace_revision || !selectedParameters.length || !!context.conflicts.length || !conditionsReady(context.schema, conditions) || !ratingReady(rating)} onClick={() => void readPreview()}>预览环境字段变化</Button></div>}
     {error && <p role="alert">{error}</p>}
-    {batch && <EnvironmentBatchResult batch={batch} />}
-    {preview && <EnvironmentAdoptionDialog key={preview.response.preview_digest} preview={preview} onClose={() => setPreview(null)} onDone={executed} />}
+    {batch && <EnvironmentBatchResult batch={batch} headingRef={resultHeading} />}
+    {preview && <EnvironmentAdoptionDialog key={preview.response.preview_digest} preview={preview} onClose={() => setPreview(null)} onCloseAutoFocus={closeAutoFocus} onDone={executed} />}
   </section>;
 }
 
-function EnvironmentAdoptionDialog({ preview, onClose, onDone }: { preview: ReadyEnvironmentPreview; onClose: () => void; onDone: (batch: EnvironmentBatch) => void }) {
+function EnvironmentAdoptionDialog({ preview, onClose, onCloseAutoFocus, onDone }: { preview: ReadyEnvironmentPreview; onClose: () => void; onCloseAutoFocus: (event: Event) => void; onDone: (batch: EnvironmentBatch) => void }) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -129,6 +143,7 @@ function EnvironmentAdoptionDialog({ preview, onClose, onDone }: { preview: Read
   }
   const { response, request } = preview;
   return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} busy={busy} title="核对环境字段并用于本次计算"
+    onCloseAutoFocus={onCloseAutoFocus}
     description={`${preview.spec.name} · ${request.row.name}；预览尚未改变工程或保存计算。`}
     actions={<Button variant="primary" disabled={!confirmed} loading={busy} onClick={() => void execute()}>确认采用并计算这一规格</Button>}>
     <div className="library-import-stack">
@@ -152,9 +167,9 @@ function EnvironmentAdoptionDialog({ preview, onClose, onDone }: { preview: Read
   </LibraryDialog>;
 }
 
-function EnvironmentBatchResult({ batch }: { batch: EnvironmentBatch }) {
+function EnvironmentBatchResult({ batch, headingRef }: { batch: EnvironmentBatch; headingRef: RefObject<HTMLHeadingElement | null> }) {
   return <div className="library-import-stack" aria-label="环境参考计算回执">
-    <h3>本次计算回执</h3>
+    <h3 ref={headingRef} tabIndex={-1}>本次计算回执</h3>
     {batch.items.map(item => <section key={item.spec_id} className="library-import-stack">
       <p role="status">{item.name}：{({ succeeded: '已完成', partial: '部分完成', refused: '拒算', failed: '失败', error: '失败' } as Record<string, string>)[item.status] ?? item.status}。
         {item.message || text(optionalRecord(item.error).message) || (typeof item.error === 'string' ? item.error : '')}</p>

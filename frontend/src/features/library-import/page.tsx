@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { message } from '@/api/client';
@@ -64,11 +64,13 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
   const [receipt, setReceipt] = useState<CommitReceipt | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [skipErrors, setSkipErrors] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ message: string } | null>(null);
   const [busy, setBusy] = useState('');
   const [fileName, setFileName] = useState('');
   const picker = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const errorMessage = useRef<HTMLParagraphElement>(null);
+  const errorId = useId();
   const requestId = useRef('');
   const previewGeneration = useRef(0);
   const selectedSheet = upload?.sheets.find(sheet => sheet.name === sheetName);
@@ -82,18 +84,23 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     heading.current?.focus({ preventScroll: true });
     heading.current?.closest('.main-content')?.scrollTo({ top: 0 });
   }, [step, receipt]);
+  useEffect(() => {
+    if (!error || busy || !errorMessage.current) return;
+    errorMessage.current.focus({ preventScroll: true });
+    errorMessage.current.scrollIntoView({ block: 'center' });
+  }, [error, busy]);
 
   const invalidatePreview = () => { previewGeneration.current++; setPreview(null); setPreviewRow(null); setConfirmed(false); setSkipErrors(false); requestId.current = ''; };
   const updateSeries = (next: SeriesDeclaration) => { setSeries(next); invalidatePreview(); };
-  const changeStep = (next: number) => { if (next !== 4) previewGeneration.current++; setError(''); setStep(next); };
+  const changeStep = (next: number) => { if (next !== 4) previewGeneration.current++; setError(null); setStep(next); };
   async function run(label: string, action: () => Promise<void>) {
     if (busy) return;
-    setBusy(label); setError('');
-    try { await action(); } catch (cause) { setError(message(cause)); } finally { setBusy(''); }
+    setBusy(label); setError(null);
+    try { await action(); } catch (cause) { setError({ message: message(cause) }); } finally { setBusy(''); }
   }
   function reset() {
     setStep(0); setUpload(null); setSheetName(''); setFirst(1); setMapping({}); setMappingName(''); setMappingNotice(''); setActiveMapping('');
-    setSeries(emptyDeclaration()); setReceipt(null); setFileName(''); setError(''); invalidatePreview();
+    setSeries(emptyDeclaration()); setReceipt(null); setFileName(''); setError(null); invalidatePreview();
   }
   function chooseFile(file: File) {
     void run('正在上传并检查结构表', async () => {
@@ -125,10 +132,11 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     const saved = vocabulary.mappings.find(item => item.name === name);
     if (!saved) return;
     const mismatch = Object.entries(saved.mapping).filter(([field, index]) => saved.headers[field] !== columns.find(column => column.index === index)?.header);
-    if (mismatch.length) { setError('该映射与当前表头不一致，请逐列核对后保存新的映射。'); return; }
-    setMapping({ ...saved.mapping }); setMappingName(saved.name); setActiveMapping(saved.name); setMappingNotice(`已复用“${saved.name}”，请核对各列。`); setError(''); invalidatePreview();
+    if (mismatch.length) { setError({ message: '该映射与当前表头不一致，请逐列核对后保存新的映射。' }); return; }
+    setMapping({ ...saved.mapping }); setMappingName(saved.name); setActiveMapping(saved.name); setMappingNotice(`已复用“${saved.name}”，请核对各列。`); setError(null); invalidatePreview();
   }
   const headers = () => Object.fromEntries(Object.entries(mapping).map(([key, index]) => [key, columns.find(column => column.index === index)?.header || '']));
+  const errorContent = error && <p id={errorId} ref={errorMessage} tabIndex={-1} role="alert" className="field-error library-import-error">{error.message}</p>;
 
   let body: ReactNode;
   if (receipt) {
@@ -206,7 +214,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       const generation = previewGeneration.current;
       const result = await libraryPost<Preview>('/imports/preview', { upload_id: upload!.upload_id, sheet: sheetName, first_data_row: first, mapping, series });
       if (generation !== previewGeneration.current) {
-        setError('预览期间设置已修改，本次旧预览已作废。请核对当前设置后重新逐行校验。');
+        setError({ message: '预览期间设置已修改，本次旧预览已作废。请核对当前设置后重新逐行校验。' });
         return;
       }
       setPreview(result); setConfirmed(false); setSkipErrors(false); requestId.current = crypto.randomUUID(); changeStep(4);
@@ -247,7 +255,8 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       {preview.error_count > 0 && <label className="library-import-confirm"><Checkbox checked={skipErrors} onCheckedChange={value => setSkipErrors(value === true)} aria-label="明确跳过错误行" /><span>明确跳过 {preview.error_count} 个错误行，仅保存其余 {importable} 个规格；错误行需回原表更正。</span></label>}
       <label className="library-import-confirm"><Checkbox checked={confirmed} onCheckedChange={value => setConfirmed(value === true)} aria-label="确认来源与系列声明" /><span>我已核对原始资料、列映射、系列声明与执行标准来源，确认将本次预览保存为未发布草稿。</span></label>
       {!importable && <p className="field-error">没有可入库的规格，请返回修正列映射或原始结构表。</p>}
-      <div className="library-import-actions"><Button disabled={!!busy} onClick={() => changeStep(3)}>返回修改声明</Button><Button variant="primary" loading={!!busy} disabled={!importable || !confirmed || !preview.execution_standards || (preview.error_count > 0 && !skipErrors)} onClick={() => void run('正在保存型号草稿', async () => {
+      {errorContent}
+      <div className="library-import-actions"><Button disabled={!!busy} onClick={() => changeStep(3)}>返回修改声明</Button><Button variant="primary" loading={!!busy} aria-describedby={error ? errorId : undefined} disabled={!importable || !confirmed || !preview.execution_standards || (preview.error_count > 0 && !skipErrors)} onClick={() => void run('正在保存型号草稿', async () => {
         const result = await libraryPost<CommitReceipt>('/imports/commit', { preview_id: preview.preview_id, preview_digest: preview.preview_digest, request_id: requestId.current, human_confirmed: true, skip_errors: skipErrors });
         setReceipt(result); await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
       })}>确认入库 {importable} 个规格</Button></div>
@@ -261,7 +270,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     </div>
     {upload && !receipt && <p className="library-import-file">{upload.file}{sheetName && ` · ${sheetName}`}</p>}
     {vocabularyQuery.isPending ? <LoadingState title="正在读取导入字段" /> : vocabularyQuery.isError ? <ErrorState description={message(vocabularyQuery.error)} action={<Button onClick={() => void vocabularyQuery.refetch()}>重新读取字段</Button>} /> : null}
-    {error && <p role="alert" className="field-error library-import-error">{error}</p>}
+    {(step !== 4 || receipt) && errorContent}
     {busy && <p role="status" className="muted">{busy}…</p>}
     {body}
     <LibraryDialog open={!!previewRow} onOpenChange={open => { if (!open) setPreviewRow(null); }} title={previewRow ? `原表第 ${previewRow.row_number} 行 · ${previewRow.name || '数值预览'}` : '数值预览'} description="确认入库前逐项核对数值、原表位置、方法版本与可信分档。" initialFocus="form">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { message, optionalRecord, text } from '@/api/client';
 import { DataTable } from '@/components/data-table';
@@ -20,6 +20,7 @@ const OPERATIONS = { check: '批量标准核对', calculate: '批量计算', rev
 type Operation = keyof typeof OPERATIONS;
 interface BatchItem { spec_id?: string; name?: string; status?: string; message?: string; error?: unknown; errors?: unknown[]; method_name?: string; method_version?: string; confidence?: string; checks?: Record<string, unknown>[]; rows?: Record<string, unknown>[]; workspace_id?: string }
 interface BatchReceipt { items?: BatchItem[]; results?: BatchItem[]; [key: string]: unknown }
+interface SavedBatch { receipt: BatchReceipt; operation: Operation; seriesId: string; selectedCount: number }
 
 export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: string; onSelect: (id: string) => void; onImport: () => void }) {
   const client = useQueryClient();
@@ -33,10 +34,13 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [batch, setBatch] = useState<BatchReceipt | null>(null);
+  const [batch, setBatch] = useState<SavedBatch | null>(null);
   const [specDetail, setSpecDetail] = useState<LibrarySpec | null>(null);
   const [exportNotice, setExportNotice] = useState('');
   const requestId = useRef({ signature: '', id: '' });
+  const batchHeading = useRef<HTMLHeadingElement>(null);
+  const focusBatchOnClose = useRef(false);
+  const batchSummaryId = useId();
   const list = useQuery({ queryKey: ['type-library', 'series'], queryFn: ({ signal }) => libraryRequest<{ items: SeriesSummary[] }>('/series', { signal }) });
   const details = useQuery({ queryKey: ['type-library', 'series', selected], queryFn: ({ signal }) => libraryRequest<SeriesDetail>(`/series/${encodeURIComponent(selected!)}`, { signal }), enabled: !!selected });
   useEffect(() => { setSelectedSpecs(new Set()); setBatch(null); setError(''); }, [selected]);
@@ -45,9 +49,10 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
   if (series && !seriesOptions.some(item => item.value === series.id)) seriesOptions.unshift({ value: series.id, label: series.name });
   const specs = details.data?.specs || [];
   const checked = specs.filter(spec => selectedSpecs.has(spec.id));
+  const batchRows = batch?.receipt.items || batch?.receipt.results || [];
   const rows = (list.data?.items || []).filter(item => [item.name, item.manufacturer, item.designation].join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const toggle = (id: string, value: boolean) => setSelectedSpecs(previous => { const next = new Set(previous); if (value) next.add(id); else next.delete(id); return next; });
-  const showBatch = (action: Operation) => { setOperation(action); setConfirmed(false); setError(''); setNote(''); setReviewAction('submit'); requestId.current = { signature: '', id: '' }; if (action === 'calculate') setRating(emptyRating(series?.cores || 1)); };
+  const showBatch = (action: Operation) => { focusBatchOnClose.current = false; setOperation(action); setConfirmed(false); setError(''); setNote(''); setReviewAction('submit'); requestId.current = { signature: '', id: '' }; if (action === 'calculate') setRating(emptyRating(series?.cores || 1)); };
   const closeBatch = (open: boolean) => { if (!open && !busy) setOperation(null); };
   async function exportCurrent(format: 'json' | 'xlsx') {
     if (!selected) return;
@@ -71,7 +76,9 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
       const signature = JSON.stringify(payload);
       if (requestId.current.signature !== signature) requestId.current = { signature, id: crypto.randomUUID() };
       const result = await libraryPost<BatchReceipt>(`/series/${encodeURIComponent(selected)}/batch`, { ...payload, request_id: requestId.current.id });
-      setBatch(result); setOperation(null);
+      setBatch({ receipt: result, operation, seriesId: selected, selectedCount: checked.length });
+      focusBatchOnClose.current = true;
+      setOperation(null);
       await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
@@ -107,17 +114,27 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
         { id: 'state', label: '状态', wrap: true, render: row => STATES[row.state] || row.state },
         { id: 'missing', label: '缺项与下一步', wrap: true, render: row => <div className="library-import-issues">{row.missing?.length ? row.missing.map((item, index) => <span key={index}>{issueText(item)}</span>) : <span>查看来源并进行标准核对</span>}{row.workspace_id && <a className="object-link" href={`/types/${encodeURIComponent(row.workspace_id)}/structure/section`}>打开型号设计</a>}</div> },
       ]} />
-      {batch && <section className="library-import-stack" aria-label="批量操作结果">
-        <h2>本次批量操作结果</h2>
-        <DataTable label="批量操作结果" showGroups={false} groups={[{ id: 'result', label: '结果', rows: (batch.items || batch.results || []).map((item, index) => ({ ...item, id: String(index) })) }]} rowLabel={row => row.name || '规格结果'} columns={[
+    </>}
+      {batch && batch.seriesId === selected && <section className="library-import-stack" aria-label="批量操作结果">
+        <h2 ref={batchHeading} tabIndex={-1} aria-describedby={batchSummaryId}>本次批量操作结果</h2>
+        <p id={batchSummaryId} role="status">{OPERATIONS[batch.operation]}已返回 {batchRows.length} / {batch.selectedCount} 个规格的处理结果。请逐项核对状态、缺项、拒算原因与方法范围。</p>
+        <DataTable label="批量操作结果" showGroups={false} groups={[{ id: 'result', label: '结果', rows: batchRows.map((item, index) => ({ ...item, id: String(index) })) }]} rowLabel={row => row.name || '规格结果'} columns={[
           { id: 'name', label: '规格', wrap: true, render: row => row.name || specs.find(spec => spec.id === row.spec_id)?.name || '规格' },
           { id: 'status', label: '状态', wrap: true, render: row => ({ succeeded: '已完成', success: '已完成', passed: '通过', failed: '未通过', partial: '部分完成', refused: '拒算', reviewed: '已审核', incomplete: '缺项', error: '失败', completed: '已完成' } as Record<string, string>)[row.status || ''] || STATES[row.status || ''] || row.status || '查看说明' },
           { id: 'message', label: '结果与限制', wrap: true, render: row => <BatchOutcome row={row} /> },
           { id: 'method', label: '方法与可信分档', wrap: true, render: row => [row.method_name, row.method_version, row.confidence ? confidenceText(row.confidence) : ''].filter(Boolean).join(' · ') || '—' },
         ]} />
       </section>}
-    </>}
-    <LibraryDialog open={operation !== null} onOpenChange={closeBatch} busy={busy} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
+    <LibraryDialog open={operation !== null} onOpenChange={closeBatch} busy={busy} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" onCloseAutoFocus={event => {
+      if (!focusBatchOnClose.current) return;
+      focusBatchOnClose.current = false;
+      if (!batchHeading.current) return;
+      event.preventDefault();
+      requestAnimationFrame(() => {
+        batchHeading.current?.focus({ preventScroll: true });
+        batchHeading.current?.scrollIntoView({ block: 'start' });
+      });
+    }} actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
       <div className="library-import-stack">
         <p>{checked.map(spec => `${spec.name}（第 ${spec.version} 版）`).join('；')}</p>
         {operation === 'review' && <>

@@ -31,7 +31,8 @@ export function ApplicationAdoption({ asset, evidence }: { asset: ApplicationAss
   const [confirmedBindings, setConfirmedBindings] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState<{ workspaceId: string; revision: number; studyId?: string } | null>(null);
+  const [notice, setNotice] = useState<{ workspaceId: string; revision: number; studyId?: string; context: string } | null>(null);
+  const noticeElement = useRef<HTMLDivElement>(null), focusNoticeOnClose = useRef(false);
   const [preview, setPreview] = useState<{ request: ComponentTargetRequest | StudyTargetRequest; response: ApplicationTargetPreview } | null>(null);
   const snapshot = useQuery({ queryKey: ['resource-application-snapshot', workspaceId], enabled: !!workspaceId,
     queryFn: ({ signal }) => applicationSnapshot(workspaceId, signal) });
@@ -55,7 +56,11 @@ export function ApplicationAdoption({ asset, evidence }: { asset: ApplicationAss
   const sourceReady = !!snapshot.data && !snapshot.error && !snapshot.isFetching;
   const materialReady = materialMode === 'new' ? /^material\/[A-Za-z0-9_-]+$/.test(materialId) && !existingMaterial : materialMode === 'reuse' && !!existingMaterial;
   const ready = sourceReady && (kind === 'component' ? !!selection && materialReady : !!title.trim() && bindingsReady);
+  const targetContext = JSON.stringify([asset.id, asset.content_sha256, workspaceId, selectionKey, materialMode, materialId, title, confirmedBindings]);
+  const activeNotice = notice?.context === targetContext && (!snapshot.data || snapshot.data.revision <= notice.revision) ? notice : null;
+  const materialJustCreated = !!activeNotice && !activeNotice.studyId && materialMode === 'new' && snapshot.data?.revision === activeNotice.revision;
   useEffect(() => { setPreview(null); }, [workspaceId, snapshot.data?.revision, selectionKey, materialId, materialMode, title, confirmedBindings]);
+  useEffect(() => { if (notice && !activeNotice) setNotice(null); }, [notice, activeNotice]);
   function changeWorkspace(value: string) {
     setWorkspaceId(value); setSelectionKey(''); setMaterialMode(''); setMaterialId(''); setConfirmedBindings({}); setPreview(null); setNotice(null); setError('');
   }
@@ -72,7 +77,8 @@ export function ApplicationAdoption({ asset, evidence }: { asset: ApplicationAss
   }
   function adopted(result: ApplicationSnapshot | StudyAdoption) {
     const studyId = 'study' in result ? result.study.id : undefined;
-    setNotice({ workspaceId, revision: result.revision, studyId }); setPreview(null);
+    focusNoticeOnClose.current = true;
+    setNotice({ workspaceId, revision: result.revision, studyId, context: targetContext }); setPreview(null);
     void client.invalidateQueries({ queryKey: ['resource-application-snapshot', workspaceId] });
     void client.invalidateQueries({ queryKey: ['resource-application-workspaces'] });
     void client.invalidateQueries({ queryKey: ['resource-application-studies', workspaceId] });
@@ -93,7 +99,9 @@ export function ApplicationAdoption({ asset, evidence }: { asset: ApplicationAss
         {materialMode === 'new' && <label className="text-field">目标材料新标识<Input aria-label="目标材料新标识" placeholder="material/copper-reference" value={materialId} disabled={busy} onChange={event => setMaterialId(event.target.value)} /></label>}
         {materialMode === 'reuse' && <Select label="复用目标材料" value={materialId} disabled={busy} options={[{ value: '', label: '请选择已存在材料' }, ...(document?.materials ?? []).map(item => ({ value: item.id, label: item.label }))]} onChange={setMaterialId} />}
       </div>
-      {materialMode === 'new' && existingMaterial && <p role="status">此材料标识已存在。请另取独立标识，或明确选择复用并核对全部材料内容。</p>}
+      {materialMode === 'new' && existingMaterial && <p role="status">{materialJustCreated
+        ? `本次采用已创建独立材料，保存在型号输入修订 ${activeNotice!.revision}。再次采用须另取独立标识，或明确选择复用。`
+        : '此材料标识已存在。请另取独立标识，或明确选择复用并核对全部材料内容。'}</p>}
       {materialMode === 'reuse' && <p className="muted">仅允许复用全部物性相同的材料。复用保留目标材料原出处，捕获来源继续作为独立参考保存。</p>}
     </div>}
     {workspaceId && kind === 'study_template' && <>
@@ -107,12 +115,22 @@ export function ApplicationAdoption({ asset, evidence }: { asset: ApplicationAss
     </>}
     {error && <p role="alert" className="library-import-error">{error}</p>}
     <div className="library-import-actions"><Button variant="primary" disabled={!ready} loading={busy} onClick={() => void readPreview()}>预览目标采用变化</Button></div>
-    {notice && <div className="library-import-stack" role="status">
-      <p>{notice.studyId ? `已创建保存研究，工程输入仍为修订 ${notice.revision}；没有启动计算。` : `已采用到型号输入修订 ${notice.revision}，固定来源与逐字段变化已保存。`}</p>
-      {notice.studyId ? <OpenSavedStudy key={`${notice.workspaceId}:${notice.revision}:${notice.studyId}`} workspaceId={notice.workspaceId} studyId={notice.studyId} />
-        : <div><Button asChild><a href={`/types/${encodeURIComponent(notice.workspaceId)}/structure/section`}>打开目标型号并核对或撤销</a></Button></div>}
+    {activeNotice && <div ref={noticeElement} className="library-import-stack" role="status" aria-label="采用结果" tabIndex={-1}>
+      <p>{activeNotice.studyId ? `已创建保存研究，工程输入仍为修订 ${activeNotice.revision}；没有启动计算。` : `已采用到型号输入修订 ${activeNotice.revision}，固定来源与逐字段变化已保存。`}</p>
+      {activeNotice.studyId ? <OpenSavedStudy key={`${activeNotice.workspaceId}:${activeNotice.revision}:${activeNotice.studyId}`} workspaceId={activeNotice.workspaceId} studyId={activeNotice.studyId} />
+        : <div><Button asChild><a href={`/types/${encodeURIComponent(activeNotice.workspaceId)}/structure/section`}>打开目标型号并核对或撤销</a></Button></div>}
     </div>}
-    {preview && <AdoptionConfirmation key={preview.response.preview_digest} kind={kind} value={preview} onClose={() => setPreview(null)} onDone={adopted} />}
+    {preview && <AdoptionConfirmation key={preview.response.preview_digest} kind={kind} value={preview} onClose={() => setPreview(null)} onDone={adopted}
+      onCloseAutoFocus={event => {
+        if (!focusNoticeOnClose.current) return;
+        focusNoticeOnClose.current = false;
+        if (!noticeElement.current) return;
+        event.preventDefault();
+        requestAnimationFrame(() => {
+          noticeElement.current?.focus({ preventScroll: true });
+          noticeElement.current?.scrollIntoView({ block: 'center' });
+        });
+      }} />}
   </section>;
 }
 
@@ -153,9 +171,10 @@ function OpenSavedStudy({ workspaceId, studyId }: { workspaceId: string; studyId
   </div>;
 }
 
-function AdoptionConfirmation({ kind, value, onClose, onDone }: {
+function AdoptionConfirmation({ kind, value, onClose, onDone, onCloseAutoFocus }: {
   kind: ApplicationKind; value: { request: ComponentTargetRequest | StudyTargetRequest; response: ApplicationTargetPreview };
   onClose: () => void; onDone: (result: ApplicationSnapshot | StudyAdoption) => void;
+  onCloseAutoFocus: (event: Event) => void;
 }) {
   const [confirmed, setConfirmed] = useState(false), [limits, setLimits] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -171,7 +190,7 @@ function AdoptionConfirmation({ kind, value, onClose, onDone }: {
       onDone(result);
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
-  return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title={kind === 'component' ? '核对部件采用变化' : '核对新研究的固定定义'} busy={busy}
+  return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} onCloseAutoFocus={onCloseAutoFocus} title={kind === 'component' ? '核对部件采用变化' : '核对新研究的固定定义'} busy={busy}
     description={`目标输入修订 ${value.request.expected_revision}；参考分档和适用限制随本次采用保存。`}
     actions={<Button variant="primary" disabled={!confirmed || !limits} loading={busy} onClick={() => void adopt()}>{kind === 'component' ? '人工确认采用该部件' : '人工确认创建保存研究'}</Button>}>
     <div className="library-import-stack">
