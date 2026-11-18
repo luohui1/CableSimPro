@@ -134,7 +134,7 @@ export function HeroDesktop({ area }: { area: RefObject<HTMLElement | null> }) {
           </div>
           <span className="font-mono text-xs text-fd-muted-foreground">K·m/W</span>
           <span className="ml-auto hidden whitespace-nowrap text-xs text-fd-muted-foreground sm:inline">
-            切一下，看允许电流怎么变
+            切换工况，对比允许电流
           </span>
         </div>
         <div className="relative">
@@ -169,7 +169,7 @@ export function HeroDesktop({ area }: { area: RefObject<HTMLElement | null> }) {
 
       {draggable && (
         <p className="absolute bottom-0 left-0 hidden items-center gap-3 font-mono text-xs text-fd-muted-foreground lg:flex">
-          试试：拖动窗口，切换土壤热阻率
+          窗口可拖动；切换土壤热阻率可对比两次运行结果
           {moved && (
             <button
               type="button"

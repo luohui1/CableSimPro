@@ -85,10 +85,10 @@ export function ThermalMatrix() {
             </p>
             <p className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1">
               <span>
-                最大载流量误差 <strong className="font-pixel text-base font-normal text-brand">{cell.amp.toFixed(4)}%</strong>
+                最大载流量相对误差 <strong className="font-pixel text-base font-normal text-brand">{cell.amp.toFixed(4)}%</strong>
               </span>
               <span>
-                最大导体温差 <strong className="font-pixel text-base font-normal text-brand">{cell.temp.toFixed(4)} ℃</strong>
+                最大导体温度偏差 <strong className="font-pixel text-base font-normal text-brand">{cell.temp.toFixed(4)} ℃</strong>
               </span>
             </p>
           </motion.div>

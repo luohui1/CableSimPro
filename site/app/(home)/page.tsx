@@ -16,16 +16,16 @@ import compare from '@/src/assets/screenshots/research/compare.webp';
 import resultBase from '@/src/assets/screenshots/research/result-base.webp';
 
 const sections = [
-  { label: 'CableSimPro', href: '/docs/' },
-  { label: '电缆厂上手', href: '/docs/quickstart/factory/' },
-  { label: '研究院上手', href: '/docs/quickstart/research/' },
-  { label: 'IEC 60287', href: '/docs/methods/iec-60287/' },
+  { label: '文档首页', href: '/docs/' },
+  { label: '制造企业入门', href: '/docs/quickstart/factory/' },
+  { label: '科研院所入门', href: '/docs/quickstart/research/' },
+  { label: 'IEC 60287 方法', href: '/docs/methods/iec-60287/' },
 ];
 
 const points = [
-  '厂家结构表直接导入，尺寸和电阻按产品标准逐项核对。',
-  'IEC 60287 算载流量，有限元上超算，两边结果互相对照。',
-  '数据不够就停下来告诉你缺什么，不拿默认值凑数。',
+  '结构数据导入：支持厂家结构表与 PDF 技术资料，按产品标准逐项核对结构尺寸与导体电阻。',
+  '计算与仿真对照：IEC 60287 解析计算与有限元热仿真结果相互校核。',
+  '输入完整性校验：必需数据缺失或超出方法适用范围时终止计算并列明原因，不以默认值替代。',
 ];
 
 const shots = [
@@ -58,7 +58,7 @@ const tiles = pluginList.map((plugin) => ({
 const stats = [
   { value: pluginList.length, label: '第一方插件' },
   { value: capabilityCount, label: '计算与核对能力' },
-  { value: caseCount, label: '核对算例' },
+  { value: caseCount, label: '验证算例' },
 ];
 
 export default function HomePage() {
@@ -72,8 +72,8 @@ export default function HomePage() {
       <section className="mx-auto max-w-[1400px] px-6 py-20 md:py-24">
         <Reveal>
           <h2 className="font-display text-[34px] leading-snug text-balance sm:text-[46px]">
-            给<span className="whitespace-nowrap text-brand">电缆厂技术部</span>和
-            <span className="whitespace-nowrap text-brand">研究院</span>的<span className="whitespace-nowrap">电缆计算工作台。</span>
+            面向<span className="whitespace-nowrap text-brand">电缆制造企业</span>与
+            <span className="whitespace-nowrap text-brand">科研院所</span>的<span className="whitespace-nowrap">工程计算平台。</span>
           </h2>
           <ul className="mt-8 space-y-3 text-base text-fd-foreground/85">
             {points.map((point) => (
@@ -98,9 +98,9 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-[1400px] gap-10 px-6 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] lg:items-end">
           <Reveal>
             <h2 className="font-display text-[34px] leading-snug sm:text-[44px]">
-              算法全在<span className="text-brand-invert">插件</span>里，
+              计算方法<span className="text-brand-invert">插件化</span>，
               <br />
-              逐个封签，逐个核对。
+              逐项封签，逐项验证。
             </h2>
           </Reveal>
           <Reveal className="grid grid-cols-3 border border-fd-background/25" delay={0.1}>
@@ -127,16 +127,16 @@ export default function HomePage() {
         <div className="mx-auto max-w-[1400px] px-6 pb-6 pt-20 text-center md:pt-24">
         <Reveal>
           <h2 className="font-display text-[34px] leading-snug text-balance sm:text-[46px]">
-            <span className="whitespace-nowrap">挑一条工作线，</span>
-            <span className="whitespace-nowrap">照着走一遍。</span>
+            <span className="whitespace-nowrap">从典型业务流程</span>
+            <span className="whitespace-nowrap">开始使用。</span>
           </h2>
           <div className="mt-9 flex flex-wrap justify-center gap-4">
             <Link href="/docs/quickstart/factory/" className={primaryButton}>
-              电缆厂：结构表到规格书
+              电缆制造：结构表至规格书
               <ArrowRight className="size-4" />
             </Link>
             <Link href="/docs/quickstart/research/" className={secondaryButton}>
-              研究院：工程到计算书
+              科研计算：工程至计算书
             </Link>
           </div>
         </Reveal>

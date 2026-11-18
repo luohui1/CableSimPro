@@ -3,9 +3,9 @@
 // 首屏标题：逐字落位，强调词下面画一道手写下划线。
 import { motion, useReducedMotion } from 'motion/react';
 
-const first = '每个载流量，';
-const lead = '都';
-const accent = '经得起追问';
+const first = '电缆载流量计算，';
+const lead = '';
+const accent = '全程可追溯';
 
 export function Headline() {
   const reduced = useReducedMotion();
@@ -29,9 +29,9 @@ export function Headline() {
   return (
     <h1
       aria-label={`${first}${lead}${accent}。`}
-      className="font-display text-[42px] leading-[1.18] sm:text-6xl xl:text-[72px] 2xl:text-[80px]"
+      className="font-display text-[38px] leading-[1.18] sm:text-6xl lg:text-[52px] xl:text-[72px] 2xl:text-[76px]"
     >
-      <span aria-hidden className="block">
+      <span aria-hidden className="block whitespace-nowrap">
         {letters(first)}
       </span>
       <span aria-hidden className="block whitespace-nowrap">

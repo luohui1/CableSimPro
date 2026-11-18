@@ -23,7 +23,7 @@ const standards = [
 export function StandardsTicker() {
   return (
     <div className="group flex items-stretch overflow-hidden border-b border-fd-foreground/60 font-mono text-[13px]">
-      <span className="z-10 flex shrink-0 items-center border-r border-fd-foreground/60 bg-fd-background px-3">依据</span>
+      <span className="z-10 flex shrink-0 items-center border-r border-fd-foreground/60 bg-fd-background px-3">依据标准</span>
       {[0, 1].map((copy) => (
         <ul
           key={copy}
@@ -49,24 +49,24 @@ const card =
 const lines = [
   {
     title: '载流量计算',
-    text: 'IEC 60287 逐项算损耗与热阻，GB 50217 校正，热网络交叉校核。',
-    points: ['直埋、排管、回填，多回路互热', '应急额定与交叉热源降额', '结果注明口径，缺项逐条指出'],
+    text: '依据 IEC 60287 计算稳态载流量，支持 GB 50217 校正与热网络交叉校核。',
+    points: ['直埋、排管与回填敷设，多回路互热', '应急负荷与交叉热源降额', '逐项输出损耗、热阻与适用范围说明'],
     href: '/docs/methods/iec-60287/',
-    cta: '看方法与依据',
+    cta: '计算方法与依据',
   },
   {
     title: '电缆设计',
-    text: '导入结构表，核对尺寸，算电气参数，出载流量表和规格书。',
-    points: ['厂家结构表与 PDF 资料导入', '按产品标准核对尺寸与电阻', '电气参数、短路容量、规格书'],
+    text: '由结构数据生成型号，完成标准核对、电气参数计算与技术文件输出。',
+    points: ['厂家结构表与 PDF 技术资料导入', '结构尺寸与导体电阻合规核对', '电气参数、短路容量与产品规格书'],
     href: '/docs/quickstart/factory/',
-    cta: '电缆厂上手',
+    cta: '制造企业快速入门',
   },
   {
     title: '电缆仿真',
-    text: '有限元温度场、暂态和电热耦合，提交超算，和 IEC 结果对照。',
-    points: ['稳态热场，阶跃与负荷曲线暂态', '电热耦合与护套损耗', '网格收敛证据随结果保存'],
+    text: '有限元稳态与暂态热场、电热耦合分析，由超算集群求解并与标准计算对照。',
+    points: ['稳态热场，阶跃与负荷曲线暂态温升', '电热耦合与金属护套损耗', '网格收敛性证据随结果归档'],
     href: '/docs/quickstart/research/',
-    cta: '研究院上手',
+    cta: '科研院所快速入门',
   },
 ];
 
@@ -75,7 +75,7 @@ export function CoreLines() {
     <section className="mx-auto max-w-[1400px] px-6 pb-20 md:pb-24">
       <Reveal>
         <h2 className={heading}>
-          三条主线，<span className="text-brand">一个工程</span>。
+          三项核心功能，<span className="whitespace-nowrap text-brand">统一工程数据</span>。
         </h2>
       </Reveal>
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
@@ -109,11 +109,11 @@ export function CoreLines() {
 }
 
 const abilities = [
-  { Icon: Bot, title: 'Agent 协作', text: '读工程、理待办、解释结果，起草字段级的修改方案，先试算再给你看。' },
-  { Icon: Plug, title: '插件即工具', text: '插件里的计算能力，Agent 都能当工具调用，走的是和界面按钮同一套接口。' },
-  { Icon: FileSearch, title: '资料识别', text: '厂家 PDF 逐页识别参数，保留页码和原文位置；结果只是候选，逐项核对后才入库。' },
-  { Icon: BrainCircuit, title: 'AI 额定模型', text: '用收敛的有限元结果训练的修正模型，给出载流量和 95% 预测区间；超出训练范围就拒算，默认只作参考。' },
-  { Icon: KeyRound, title: '模型你定', text: '接 OpenAI 兼容的模型服务，密钥只放环境变量；扫描件默认离线识别，数据可以不出内网。' },
+  { Icon: Bot, title: '工程智能体（Agent）', text: '读取工程、研究与运行结果，梳理待办事项，生成字段级修改方案并支持试算验证。' },
+  { Icon: Plug, title: '插件能力调用', text: '计算插件的能力以工具形式向智能体开放，调用路径与界面操作一致，同样受预检与适用范围约束。' },
+  { Icon: FileSearch, title: '技术资料识别', text: '从厂家 PDF 资料中提取结构参数，保留页码与原文位置；提取结果作为候选项，经人工逐项核对后入库。' },
+  { Icon: BrainCircuit, title: 'AI 载流量模型', text: '基于收敛的有限元结果训练的修正模型，输出载流量及 95% 预测区间；超出训练范围时拒绝计算，默认仅供参考。' },
+  { Icon: KeyRound, title: '模型接入与数据安全', text: '支持接入 OpenAI 兼容的模型服务，密钥仅通过环境变量配置；扫描件默认离线识别，可配合内网部署的模型运行。' },
 ];
 
 export function AiSection() {
@@ -123,13 +123,13 @@ export function AiSection() {
         <Reveal>
           <p className="inline-flex items-center gap-2 border border-fd-foreground/70 bg-brand-soft px-2.5 py-0.5 font-mono text-xs">
             <span className="size-1.5 animate-pulse rounded-full bg-brand" />
-            AI 原生
+            AI 深度融合
           </p>
           <h2 className={`${heading} mt-5`}>
-            AI 不是外挂，是坐在旁边的<span className="text-brand">同事</span>。
+            AI 贯穿<span className="whitespace-nowrap text-brand">录入、计算与校核</span>全流程。
           </h2>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed text-fd-muted-foreground">
-            它读得懂工程，也守规矩：只提方案，批准永远在你手里。
+            工程智能体可读取工程数据、调用计算插件并提出修改方案；数据保存、计算运行与文件签发均须人工确认。
           </p>
         </Reveal>
         <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -162,9 +162,9 @@ export function AiSection() {
 
 const thermalFacts = [
   { value: '5 × 5', label: '单芯结构 × 敷设方式' },
-  { value: '150', label: '个独立复核算例' },
-  { value: '0.35%', label: '最大载流量误差' },
-  { value: '0.22 ℃', label: '最大导体温差' },
+  { value: '150', label: '独立复核算例' },
+  { value: '0.35%', label: '最大载流量相对误差' },
+  { value: '0.22 ℃', label: '最大导体温度偏差' },
 ];
 
 export function ThermalSection() {
@@ -176,10 +176,10 @@ export function ThermalSection() {
             即将接入
           </p>
           <h2 className={`${heading} mt-5`}>
-            下一步：<span className="text-brand">电缆热模型</span>。
+            <span className="text-brand">电缆热模型</span>：以有限元为基准的代理模型。
           </h2>
           <p className="mt-4 max-w-xl text-lg leading-relaxed text-fd-muted-foreground">
-            不跑有限元，也能拿到允许电流、导体温度和预测区间；条件超出验证范围，直接拒算。
+            无需运行有限元即可输出允许电流、导体温度及预测区间；输入超出验证范围时拒绝计算。
           </p>
           <dl className="mt-8 grid grid-cols-2 border border-fd-foreground/70">
             {thermalFacts.map((fact, index) => (
@@ -196,7 +196,7 @@ export function ThermalSection() {
             ))}
           </dl>
           <p className="mt-6 max-w-xl text-[15px] leading-relaxed text-fd-muted-foreground">
-            误差参照的是收敛的有限元结果。现场精度和工程批准还在验证中，这个模型目前尚未接入 CableSimPro。
+            误差以收敛的有限元结果为基准。现场验证与工程审批尚在进行，该模型目前尚未集成至 CableSimPro。
           </p>
         </Reveal>
         <Reveal delay={0.1}>
@@ -234,18 +234,18 @@ export function PluginWall({ plugins }: { plugins: PluginTile[] }) {
 }
 
 const deploy = [
-  { title: '离线安装包', text: '安装包自带运行时和依赖，按哈希离线安装，全程不联网。' },
-  { title: '内网部署', text: '服务、工程库和这份文档都能放在内网；升级前自动快照，可以回退。' },
-  { title: '超算作业', text: '有限元和批量仿真提交到 Slurm 集群，核时有上限，结果带着收敛证据取回。' },
+  { title: '离线安装', text: '安装包内置运行环境与全部依赖，经哈希校验后离线安装，无需联网。' },
+  { title: '内网部署', text: '服务、工程库与文档站点均可部署于内网；升级前自动创建快照，支持版本回退。' },
+  { title: '超算求解', text: '有限元与批量仿真作业提交至 Slurm 集群，设有核时上限，结果连同收敛性证据一并取回。' },
 ];
 
 const docs = [
-  { title: '快速上手', text: '两条真实工作线，照着做一遍。', href: '/docs/quickstart/factory/' },
-  { title: '安装与部署', text: '离线安装、配置、内网、超算、模型。', href: '/docs/' },
-  { title: '使用指南', text: '型号、研究、仿真、交付与 Agent。', href: '/docs/' },
-  { title: '方法与依据', text: '每个方法的原理、范围与验证。', href: '/docs/methods/iec-60287/' },
-  { title: '插件与开发', text: '清单字段、示例与宿主接口。', href: '/docs/' },
-  { title: '版本说明', text: '更新内容与已知限制。', href: '/docs/' },
+  { title: '快速入门', text: '按两条典型业务流程完成首次操作。', href: '/docs/quickstart/factory/' },
+  { title: '安装与部署', text: '离线安装、参数配置、内网部署、超算与模型接入。', href: '/docs/' },
+  { title: '使用指南', text: '型号库、载流量研究、仿真、交付文件与 Agent。', href: '/docs/' },
+  { title: '方法与依据', text: '各计算方法的原理、适用范围与验证依据。', href: '/docs/methods/iec-60287/' },
+  { title: '插件与开发', text: '插件清单字段、示例与宿主接口。', href: '/docs/' },
+  { title: '版本说明', text: '版本更新内容与已知限制。', href: '/docs/' },
 ];
 
 export function DeployAndDocs() {
@@ -254,7 +254,7 @@ export function DeployAndDocs() {
       <div className="mx-auto max-w-[1400px] px-6 py-20 md:py-24">
         <Reveal>
           <h2 className={heading}>
-            装在<span className="text-brand">你自己的机器</span>上。
+            本地化部署，<span className="whitespace-nowrap text-brand">数据自主可控</span>。
           </h2>
         </Reveal>
         <div className="mt-10 grid border border-fd-foreground/70 md:grid-cols-3">
@@ -270,7 +270,7 @@ export function DeployAndDocs() {
         </div>
 
         <Reveal className="mt-20">
-          <h2 className={heading}>文档里有什么</h2>
+          <h2 className={heading}>文档导航</h2>
         </Reveal>
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {docs.map((item, index) => (

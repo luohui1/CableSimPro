@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn';
 
 import { TitleBar, windowFrame } from './window';
 
-const tools = ['读取研究与最近一次运行', '起草修改方案（字段级对比）', '试算，不保存：IEC 60287 载流量'];
+const tools = ['读取研究及最近一次运行结果', '生成修改方案（字段级对比）', '试算（不保存）：IEC 60287 载流量'];
 const HOLD = 1100; // 按住批准需要的毫秒数
 const PROPOSAL = tools.length + 2;
 
@@ -70,7 +70,7 @@ export function AgentDemo() {
       <div className="flex min-h-[400px] flex-1 flex-col gap-3 px-4 py-5 text-sm sm:px-5">
         {step >= 1 && (
           <motion.p {...row} className="ml-auto max-w-[85%] bg-fd-foreground px-3.5 py-2 text-fd-background">
-            <span className="font-mono text-brand-invert">@直埋载流量</span> 把土壤热阻率改成 1.5，看看允许电流变多少
+            <span className="font-mono text-brand-invert">@直埋载流量</span> 将土壤热阻率调整为 1.5 K·m/W，评估对允许电流的影响
           </motion.p>
         )}
         {tools.map(
@@ -88,15 +88,15 @@ export function AgentDemo() {
         )}
         {step >= PROPOSAL && (
           <motion.div {...row} className="space-y-3">
-            <p className="max-w-[92%] leading-relaxed">
-              土壤热阻率从 1.00 调到 1.50 K·m/W 后，允许电流从 <strong className="font-semibold">944.8 A</strong> 降到{' '}
-              <strong className="font-semibold text-brand">801.1 A</strong>。要保存这项修改吗？
+            <p className="leading-relaxed text-pretty">
+              土壤热阻率由 1.00 调整为 1.50 K·m/W 后，允许电流由 <strong className="font-semibold">944.8 A</strong> 降至{' '}
+              <strong className="font-semibold text-brand">801.1 A</strong>。是否保存该修改？
             </p>
             <div className="border border-fd-foreground/70 bg-fd-background">
               <div className="flex items-center justify-between border-b border-fd-foreground/70 px-3 py-1.5 font-mono text-xs">
                 <span>修改方案</span>
                 <span className={verdict === 'approved' ? 'text-brand' : 'text-fd-muted-foreground'}>
-                  {verdict === 'approved' ? '已批准' : verdict === 'rejected' ? '已拒绝' : '等待批准'}
+                  {verdict === 'approved' ? '已批准' : verdict === 'rejected' ? '已拒绝' : '待审批'}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
@@ -134,7 +134,7 @@ export function AgentDemo() {
                     </button>
                     <span className="ml-auto hidden items-center gap-1 font-mono text-xs text-fd-muted-foreground sm:flex">
                       <CornerDownLeft className="size-3" />
-                      这一步只有人能做
+                      须人工审批
                     </span>
                   </motion.div>
                 ) : (
@@ -147,8 +147,8 @@ export function AgentDemo() {
                     <span className={cn('size-2 shrink-0 rotate-45', verdict === 'approved' ? 'bg-brand' : 'bg-fd-foreground/40')} />
                     <span>
                       {verdict === 'approved'
-                        ? '已保存为新修订。运行计算仍然由你在工作台预检后确认。'
-                        : '已放弃。试算不留痕，工程里没有任何改动。'}
+                        ? '已保存为新修订。计算运行仍须在工作台完成预检后人工确认。'
+                        : '已放弃修改。试算结果不保存，工程数据未发生变更。'}
                     </span>
                     <button
                       type="button"
@@ -166,14 +166,14 @@ export function AgentDemo() {
         )}
       </div>
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-fd-foreground/70 px-4 py-2.5 text-[13px] text-fd-muted-foreground sm:px-5">
-        在产品里，用
+        产品中可通过
         <kbd className="border border-fd-foreground/50 bg-fd-background px-1.5 font-mono text-xs text-fd-foreground">@</kbd>
-        引用研究或型号，用
+        引用研究或型号，通过
         <kbd className="border border-fd-foreground/50 bg-fd-background px-1.5 font-mono text-xs text-fd-foreground">/</kbd>
-        选常用任务。
+        选择常用任务。
       </p>
       <p className="border-t border-fd-foreground/25 px-4 py-2 font-mono text-xs text-fd-muted-foreground sm:px-5">
-        流程演示，不连接模型；两个允许电流取自研究院快速上手的两次真实运行。
+        流程示意，未连接模型；允许电流数值取自快速入门中的两次实际运行。
       </p>
     </div>
   );
