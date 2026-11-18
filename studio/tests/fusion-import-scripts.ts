@@ -14,6 +14,7 @@ export interface ImportFlowState extends FlowState {
   attachment?: Record<string, any>;
   upload?: Record<string, any>;
   preview?: Record<string, any>;
+  previewDetail?: Record<string, any>;
   imported?: Record<string, any>;
   checked?: Record<string, any>;
 }
@@ -57,9 +58,13 @@ function advance(faux: Faux, state: ImportFlowState, next: Reply, tool: string, 
   return call(tool, args);
 }
 
-export function installStructureImport(faux: Faux, input: { workspace: string; seriesName: string }): ImportFlowState {
+export function installStructureImport(faux: Faux, input: { workspace: string; seriesName: string; inspectSavedDetail?: boolean }): ImportFlowState {
   const state: ImportFlowState = { done: false };
   let attachmentId = '';
+  let previewRead: { tool: string; arguments: Record<string, any> } | undefined;
+  let previewDetailDigest = '';
+  let firstRowPath = '';
+  let detailPages = 0;
   const finish: Reply = context => {
     const saved = data(context);
     assert.ok(saved && state.typeId, 'the imported type can be read in its own adopted scope');
@@ -91,6 +96,41 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
     return advance(faux, state, afterImport, 'propose_structure_import', { workspace_id: input.workspace,
       preview_id: state.preview!.preview_id, preview_digest: state.preview!.preview_digest, skip_errors: false });
   };
+  const readPreviewCount = () => advance(faux, state, afterReadPreview, 'structure_import_read', { workspace_id: input.workspace,
+    kind: 'preview', id: state.preview!.preview_id, view: '/valid_count', limit: 20 });
+  const afterPreviewDetail: Reply = context => {
+    const saved = data(context);
+    assert.equal(saved.source.response_digest, previewDetailDigest, 'a field expansion uses the same immutable saved preview');
+    assert.equal(saved.page.view, firstRowPath + '/values/0');
+    assert.equal(saved.page.complete, true);
+    assert.ok(saved.page.value?.key && saved.page.value?.source && typeof saved.page.value?.unit === 'string');
+    state.previewDetail = saved.page.value;
+    return readPreviewCount();
+  };
+  const afterPreviewPage: Reply = context => {
+    const saved = data(context);
+    assert.equal(saved.resource.kind, 'preview');
+    assert.equal(saved.resource.preview_id, state.preview!.preview_id);
+    assert.equal(saved.page.view, '/rows');
+    assert.equal(saved.page.total, 11);
+    assert.equal(saved.page.items.length, 1, 'each request asks for just one row reference');
+    const row = saved.page.items[0];
+    assert.equal(row.omitted, true, 'the complete row is disclosed as an unread reference, never claimed read');
+    assert.ok(row.children.includes(row.path + '/values'), 'discover the field path from the actual saved page');
+    if (!detailPages) {
+      previewDetailDigest = saved.source.response_digest;
+      assert.match(previewDetailDigest, /^[0-9a-f]{64}$/);
+      firstRowPath = row.path;
+      detailPages += 1;
+      assert.equal(saved.next_read?.tool, 'structure_import_read');
+      assert.equal(saved.next_read.arguments.expected_digest, previewDetailDigest, 'continuation binds the immutable preview');
+      return advance(faux, state, afterPreviewPage, saved.next_read.tool, saved.next_read.arguments);
+    }
+    assert.equal(saved.source.response_digest, previewDetailDigest);
+    assert.notEqual(row.path, firstRowPath, 'the second page advances to another saved row');
+    return advance(faux, state, afterPreviewDetail, previewRead!.tool, { ...previewRead!.arguments,
+      view: firstRowPath + '/values/0', offset: 0, limit: 1, expected_digest: previewDetailDigest });
+  };
   const afterPreview: Reply = context => {
     state.preview = receipt(context);
     assert.equal(state.preview.kind, 'structure_preview');
@@ -99,8 +139,15 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
     assert.equal(state.preview.incomplete_count, 0);
     assert.equal(state.preview.sha256, state.upload!.sha256);
     assert.equal(state.preview.row_count, 11, 'the model receives the row count; complete rows belong to the review/result card');
-    return advance(faux, state, afterReadPreview, 'structure_import_read', { workspace_id: input.workspace,
-      kind: 'preview', id: state.preview.preview_id, view: '/valid_count', limit: 20 });
+    if (input.inspectSavedDetail) {
+      previewRead = JSON.parse(toolText(context)).detail?.read;
+      assert.equal(previewRead?.tool, 'structure_import_read', 'the bounded summary advertises its actual native receipt reader');
+      assert.equal(previewRead.arguments.kind, 'preview');
+      assert.equal(previewRead.arguments.id, state.preview.preview_id);
+      return advance(faux, state, afterPreviewPage, previewRead.tool, { ...previewRead.arguments,
+        view: '/rows', offset: 0, limit: 1 });
+    }
+    return readPreviewCount();
   };
   const afterDeclaration: Reply = context => {
     const saved = data(context);
@@ -117,8 +164,19 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
       upload_id: state.upload!.upload_id, sha256: state.upload!.sha256, request });
   };
   const afterUpload: Reply = context => {
-    state.upload = receipt(context);
+    // Length recovery can append its continuation instruction after the real
+    // tool result. Read that receipt from the actual model-visible history;
+    // no fixture or persisted database supplies the next tool arguments.
+    const upload = context.messages.findLastIndex(message => message.role === 'toolResult' && message.toolName === 'propose_structure_upload');
+    assert.ok(upload >= 0, 'the accepted upload receipt must remain visible after native compaction');
+    if (upload !== context.messages.length - 1) {
+      const continuation = context.messages.slice(upload + 1);
+      assert.ok(continuation.every(message => message.role !== 'toolResult'), 'never skip a newer tool result');
+      assert.match(JSON.stringify(continuation), /上一响应因输出长度结束/, 'only the actual recovery instruction may follow the upload receipt');
+    }
+    state.upload = receipt({ ...context, messages: context.messages.slice(0, upload + 1) });
     assert.equal(state.upload.kind, 'structure_upload');
+    assert.equal(state.upload.attachment_id, attachmentId, 'the next step uses this round\'s actual accepted attachment');
     assert.equal(state.upload.sha256, state.attachment!.sha256);
     const declaration = state.upload.declarations?.find((item: any) => item.table === 'three-core');
     assert.ok(declaration, 'only the actual source digest can provide this sample declaration');

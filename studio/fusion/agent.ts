@@ -8,24 +8,27 @@ import { fileURLToPath } from 'node:url';
 import type { AgentSession, ExtensionFactory, SessionManager } from '@earendil-works/pi-coding-agent';
 import type { AgentStatus, ChatSummary, ChatView, Proposal, StudioEvent } from '../shared/types.ts';
 import type { StructureAttachment, StructureAttachmentInput } from '../shared/fusion-types.ts';
+import { proposalValueText } from '../shared/fusion-presentation.ts';
 import { failureText, scrubValue, skillReader } from '../host/agent-tools.ts';
 import { attachmentNote, chatMessages, plainText, titleOf, type PiMessage } from '../host/chat-view.ts';
 import { StudioError } from '../host/core.ts';
 import { type Backend, type BackendTool, type WorkbenchContext } from './backend.ts';
 import { describeResult, targetFor } from './cards.ts';
-import { agentStatus, NOT_CONFIGURED, resolveModel } from './model.ts';
+import { agentStatus, modelBudget, NOT_CONFIGURED, resolveModel } from './model.ts';
 import { noPaths, pi, type ModelConfig } from './pi.ts';
 import { SYSTEM_PROMPT } from './prompt.ts';
 import { backendTools, ScopeBook, type AdoptedScopes, type Entry, type ReviewCall, type ReviewDecision } from './tools.ts';
 import { attachmentInputs, isStructureAttachment } from './attachments.ts';
 import { createdTypeScopes, savedStructureCheck, unfinishedStructureCheck } from './structure-import.ts';
 import { modelResult, projectHistory, resultText, MODEL_RESULT_MAX_CHARS, MODEL_RESULT_MAX_BYTES } from './model-result.ts';
+import { compactionSettings, engineeringCompaction, savedConversation } from './compaction.ts';
 
 const SKILLS = resolve(dirname(fileURLToPath(import.meta.url)), '../skills');
 const PROPOSAL_ENTRY = 'cablesim.fusion.proposal';
 const CONTEXT_ENTRY = 'cablesim.fusion.context';
 const ADOPTED_ENTRY = 'cablesim.fusion.created';
 const ATTACHMENT_ENTRY = 'cablesim.fusion.attachment';
+const NO_NEW_COMPACTION = /^(?:Compaction failed: )?(?:Already compacted|Nothing to compact \(session too small\))$/;
 interface RecordedProposal { proposal: Proposal; scope: Entry }
 interface Waiting extends RecordedProposal {
   live: Live;
@@ -33,11 +36,6 @@ interface Waiting extends RecordedProposal {
   deciding?: Promise<Proposal>;
 }
 
-/** The review shows backend values in their declared display units, including missing values. */
-function valueText(value: unknown, unit?: string | null): string {
-  const text = value === null || value === undefined ? '—' : typeof value === 'string' ? value : typeof value === 'boolean' ? (value ? '是' : '否') : typeof value === 'number' ? String(value) : JSON.stringify(value);
-  return unit && unit !== '1' && text !== '—' ? `${text} ${unit}` : text;
-}
 
 interface Live {
   id: string;
@@ -57,6 +55,9 @@ interface Live {
   context?: WorkbenchContext;
   adopted: AdoptedScopes;
   attachments: Map<string, StructureAttachment>;
+  lengthRecoveryUsed: boolean;
+  lengthRecoveryCheckpoint?: string;
+  stopped: boolean;
   unsubscribe(): void;
 }
 
@@ -191,7 +192,7 @@ export class FusionAgent {
       live.timer = undefined;
       live.dirty = false;
       live.revision += 1;
-      const { items, waiting, ...summary } = this.#viewOf(live.id, live.session.messages as PiMessage[], live);
+      const { items, waiting, ...summary } = this.#viewOf(live.id, savedConversation(live.manager.getBranch()) as PiMessage[], live);
       // From the first message that is not settled (still streaming, waiting, or holding a step that runs), and at least the last three.
       const open = items.findIndex(item => item.status === 'streaming' || item.queued
         || item.parts.some(part => part.type === 'step' && (part.status === 'running' || part.status === 'waiting_review')));
@@ -217,7 +218,7 @@ export class FusionAgent {
     });
     for (const live of this.#live.values()) {
       if (seen.has(live.id)) continue;
-      const { items: _items, waiting: _waiting, ...summary } = this.#viewOf(live.id, live.session.messages as PiMessage[], live);
+      const { items: _items, waiting: _waiting, ...summary } = this.#viewOf(live.id, savedConversation(live.manager.getBranch()) as PiMessage[], live);
       rows.push(summary);
     }
     return rows.sort((a, b) => b.updated.localeCompare(a.updated));
@@ -226,11 +227,11 @@ export class FusionAgent {
   async view(id: string): Promise<ChatView> {
     await this.#tools().catch(() => undefined);
     const live = this.#live.get(id);
-    if (live) return this.#viewOf(id, live.session.messages as PiMessage[], live);
+    if (live) return this.#viewOf(id, savedConversation(live.manager.getBranch()) as PiMessage[], live);
     const manager = await this.#restore(id);
     const opened = this.#live.get(id);
-    if (opened) return this.#viewOf(id, opened.session.messages as PiMessage[], opened);
-    return this.#viewOf(id, manager.buildSessionContext().messages as PiMessage[], undefined, manager);
+    if (opened) return this.#viewOf(id, savedConversation(opened.manager.getBranch()) as PiMessage[], opened);
+    return this.#viewOf(id, savedConversation(manager.getBranch()) as PiMessage[], undefined, manager);
   }
 
   /** History reads and new prompts share recovery. Two managers appending from the same old leaf can hide newer messages on reopen. */
@@ -280,7 +281,7 @@ export class FusionAgent {
 
   /** Reconcile a crashed waiting step before it can be used again. A known receipt is never executed a second time. */
   async #recover(manager: SessionManager): Promise<void> {
-    const messages = manager.buildSessionContext().messages as PiMessage[];
+    const messages = savedConversation(manager.getBranch()) as PiMessage[];
     for (const recorded of this.#recorded(manager).values()) {
       const completed = messages.some(message => message.role === 'toolResult' && message.toolCallId === recorded.proposal.step_id);
       // The process can also stop after persisting the human decision but before its tool resumes and records the created scope.
@@ -298,7 +299,12 @@ export class FusionAgent {
         note: accepted ? '服务重启后已核对平台回执；没有重复执行。' : '对话服务重启，未接受的改动已终止；请重新提出。' };
       manager.appendCustomEntry(PROPOSAL_ENTRY, { ...recorded, proposal });
       if (!completed) {
-        const details = accepted && (!failed || savedCheck) && proposal.operation.startsWith('propose_structure_')
+        const savedFile = (proposal.operation === 'propose_delivery' && decision.receipt?.kind === 'delivery')
+          || (proposal.operation === 'propose_type_specification' && decision.receipt?.kind === 'specification');
+        // The file already exists on the platform. Rebuild its normal card
+        // from that receipt, so losing the tool-result write does not lose the
+        // user's preview/download entry point or request another export.
+        const details = accepted && (!failed || savedCheck) && (proposal.operation.startsWith('propose_structure_') || savedFile)
           ? await describeResult(this.#backend, proposal.operation, {}, { status: 'ok', summary: proposal.note ?? '', data: { receipt: decision.receipt }, diagnostics: [], next_actions: [] }, proposal.project_id)
           : undefined;
         const tool = (await this.#tools()).find(tool => tool.name === proposal.operation);
@@ -317,7 +323,7 @@ export class FusionAgent {
       id: call.proposal.id, session_id: live.id, step_id: call.id, project_id: call.workspace,
       operation: call.tool.name, title: call.proposal.title,
       changes: call.proposal.changes.map(change => ({ part: '平台改动', field: change.path, label: change.label,
-        before: valueText(change.before, change.unit), after: valueText(change.after, change.unit) })),
+        before: proposalValueText(change.before, change.unit), after: proposalValueText(change.after, change.unit) })),
       checks: call.proposal.checks, assumptions: call.proposal.assumptions, status: 'pending',
     }, [this.home]);
     return new Promise<ReviewDecision>(settle => {
@@ -383,7 +389,53 @@ export class FusionAgent {
     };
   }
 
-  #observe(live: Live, event: { type: string; message?: PiMessage; steering?: readonly string[]; followUp?: readonly string[] }): void {
+  #compaction(live: Live, catalog: BackendTool[]): ExtensionFactory {
+    return pi_ => {
+      pi_.on('session_before_compact', async event => {
+        if (event.reason === 'overflow' && event.willRetry) {
+          // Pi already bounds its ordinary overflow retry. Also share that
+          // allowance with the full-output-length continuation below.
+          if (live.lengthRecoveryUsed) return { cancel: true };
+          live.lengthRecoveryUsed = true;
+        }
+        return { compaction: await engineeringCompaction(event, live.session, catalog, this.#activeContext(live), [this.home]) };
+      });
+    };
+  }
+
+  /** A just-finished native checkpoint can cover a truncated attempt without
+   * another cut point. Never reuse it across new input, tools or context edits. */
+  #recentLengthCheckpoint(live: Live): string | undefined {
+    const branch = live.manager.getBranch();
+    const index = branch.findLastIndex(entry => entry.type === 'compaction');
+    if (index < 0) return undefined;
+    const checkpoint = branch[index];
+    if (checkpoint.type !== 'compaction' || !checkpoint.summary.trim()) return undefined;
+    const tail = branch.slice(index + 1);
+    const attempt = tail.find(entry => entry.type === 'message' && entry.message.role === 'assistant' && entry.message.stopReason === 'length');
+    if (!attempt || tail.some(entry => entry !== attempt && !(entry.type === 'context_edit'
+      && entry.targetId === attempt.id && entry.replacement === null))) return undefined;
+    // The saved checkpoint must still contribute to pi's current projection;
+    // finding an old summary somewhere in the append-only file is insufficient.
+    return live.manager.buildSessionProjection().entries.some(entry => entry.sourceEntry.id === checkpoint.id && entry.messages.length > 0)
+      ? checkpoint.id : undefined;
+  }
+
+  #observe(live: Live, event: { type: string; message?: PiMessage; steering?: readonly string[]; followUp?: readonly string[];
+    errorMessage?: string; aborted?: boolean; reason?: string }): void {
+    if (event.type === 'message_start' && event.message?.role === 'user') live.lengthRecoveryUsed = false;
+    if (event.type === 'compaction_end' && event.errorMessage && !event.aborted) {
+      if (event.reason === 'manual' && NO_NEW_COMPACTION.test(event.errorMessage)
+        && live.lengthRecoveryCheckpoint && this.#recentLengthCheckpoint(live) === live.lengthRecoveryCheckpoint) return;
+      live.error = /after one compact-and-retry/.test(event.errorMessage)
+        ? '上下文或输出长度仍超过模型限制；已经压缩并重试一次，本次对话未完成。请缩小本次目标后继续。'
+        : `上下文压缩失败，本次对话未完成：${failureText(event.errorMessage, [this.home])}`;
+      // Pi reports a failed threshold summary and otherwise proceeds. Stop the
+      // model run here rather than sending the same overlong context again.
+      void live.session.abort().catch(() => undefined);
+      this.#changed(live, true);
+      return;
+    }
     if (event.type === 'message_start' || event.type === 'message_update') {
       if (event.message?.role === 'assistant') live.partial = event.message;
     } else if (event.type === 'message_end') {
@@ -410,7 +462,8 @@ export class FusionAgent {
     for (const dir of [this.#cwd, this.#agentDir, this.#sessions]) mkdirSync(dir, { recursive: true });
     const manager = id ? await this.#restore(id) : SessionManager.create(this.#cwd, this.#sessions);
     const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, revision: 0,
-      adopted: { types: new Set(), studies: new Map() }, attachments: this.#storedAttachments(manager), unsubscribe: () => undefined };
+      adopted: { types: new Set(), studies: new Map() }, attachments: this.#storedAttachments(manager), lengthRecoveryUsed: false, stopped: false,
+      unsubscribe: () => undefined };
     for (const entry of manager.getEntries()) if (entry.type === 'custom') {
       if (entry.customType === CONTEXT_ENTRY) live.context = entry.data as WorkbenchContext;
       if (entry.customType === ADOPTED_ENTRY) {
@@ -418,14 +471,16 @@ export class FusionAgent {
         live.adopted = { types: new Set(saved.types), studies: new Map(saved.studies) };
       }
     }
-    const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: true, maxRetries: 2 }, enableInstallTelemetry: false });
+    const settingsManager = SettingsManager.inMemory({ compaction: compactionSettings(config.model),
+      retry: { enabled: true, maxRetries: 2 }, enableInstallTelemetry: false });
     const names = new Set(catalog.map(tool => tool.name));
     names.add('read');
     const loader = new DefaultResourceLoader({
       cwd: this.#cwd, agentDir: this.#agentDir, settingsManager,
       // Nothing is discovered: not the repository's AGENTS.md or CLAUDE.md, not a user's own extensions, skills, themes or prompts.
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-      additionalSkillPaths: [SKILLS], extensionFactories: [this.#guard(() => names, () => this.#activeContext(live))], systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
+      additionalSkillPaths: [SKILLS], extensionFactories: [this.#guard(() => names, () => this.#activeContext(live)), this.#compaction(live, catalog)],
+      systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
     });
     await loader.reload();
     const { skills } = loader.getSkills();
@@ -466,12 +521,65 @@ export class FusionAgent {
   async #conversation(id?: string): Promise<Live> {
     if (id) {
       const live = this.#live.get(id);
-      if (live) return live;
-      const opening = this.#opening.get(id) ?? this.#open(id).finally(() => this.#opening.delete(id));
+      if (live?.running || (live && this.#given)) return live;
+      const opening = this.#opening.get(id) ?? (async () => {
+        if (live) {
+          // Settings promise effect on the next message. A smaller window must
+          // never reuse a live session's old limits; pending/running work stays
+          // on its original model until the current question settles.
+          const configured = await this.#backend.model();
+          const budget = modelBudget(configured);
+          if (configured.configured && configured.model === live.session.model?.id
+            && budget.contextWindow === live.session.model.contextWindow && budget.maxTokens === live.session.model.maxTokens) return live;
+          if (live.timer) clearTimeout(live.timer);
+          live.unsubscribe();
+          live.session.dispose();
+          this.#live.delete(id);
+        }
+        return this.#open(id);
+      })().finally(() => this.#opening.delete(id));
       this.#opening.set(id, opening);
       return opening;
     }
     return this.#open();
+  }
+
+  async #prompt(live: Live, message: string): Promise<void> {
+    await live.session.prompt(message, { expandPromptTemplates: false });
+    const lastAssistant = () => savedConversation(live.manager.getBranch()).findLast(item => item.role === 'assistant');
+    const last = lastAssistant();
+    // Pi's automatic overflow recovery covers length stops below the original
+    // output limit. A response that used the entire output allowance needs the
+    // same one-time recovery, using public compact/custom-message APIs.
+    if (last?.role === 'assistant' && last.stopReason === 'length' && !live.lengthRecoveryUsed && !live.error && !live.stopped) {
+      live.lengthRecoveryUsed = true;
+      live.lengthRecoveryCheckpoint = this.#recentLengthCheckpoint(live);
+      let reusedCheckpoint: string | undefined;
+      try {
+        await live.session.compact();
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        if (!NO_NEW_COMPACTION.test(reason) || !live.lengthRecoveryCheckpoint
+          || this.#recentLengthCheckpoint(live) !== live.lengthRecoveryCheckpoint) throw error;
+        // Native overflow can omit the failed attempt and then find no new cut
+        // immediately after threshold compaction. The successful checkpoint
+        // already covers every preceding user/tool result, so use it once.
+        reusedCheckpoint = live.lengthRecoveryCheckpoint;
+      } finally {
+        live.lengthRecoveryCheckpoint = undefined;
+      }
+      if (!live.stopped && !live.error) await live.session.sendCustomMessage({ customType: 'cablesim.fusion.length-recovery', display: false,
+        content: (reusedCheckpoint
+          ? '上一响应因输出长度结束；沿用刚完成且仍有效的原生上下文摘要重试一次，期间没有新增用户或工具结果。'
+          : '上一响应因输出长度结束，已压缩上下文。')
+          + '仅续接尚未完成的原用户目标；依据已保存回执，不重复执行已完成的写入。待审提案仍由用户接受。',
+        details: { recovery: 'length', attempt: 1, ...(reusedCheckpoint ? { reused_checkpoint: reusedCheckpoint } : {}) } }, { triggerTurn: true });
+    }
+    const final = lastAssistant();
+    if (!live.stopped && final?.role === 'assistant') {
+      if (final.stopReason === 'length') live.error ??= '模型响应仍因长度结束；已经压缩并重试一次，本次对话未完成。请缩小本次目标后继续。';
+      else if (final.stopReason === 'error') live.error ??= failureText(final.errorMessage || '模型请求失败，本次对话未完成。', [this.home]);
+    }
   }
 
   /** Starts a conversation or, when one is given, adds to it. While the agent is busy a new message steers it after its current step. */
@@ -514,10 +622,14 @@ export class FusionAgent {
     }
     live.running = true;
     live.error = undefined;
+    live.stopped = false;
+    live.lengthRecoveryUsed = false;
     // A question gets sessions of its own on the platform, so the project's revision is the one in force when it was asked.
     live.scopes = this.#scopes(live, message.slice(0, 8000));
-    live.run = live.session.prompt(message, { expandPromptTemplates: false }).catch(error => {
-      live.error = failureText(error, [this.home]);
+    live.run = this.#prompt(live, message).catch(error => {
+      // A compaction event already explains why continuation stopped. Keep that
+      // contextual failure when compact() also rejects with its lower-level error.
+      live.error ??= failureText(error, [this.home]);
     }).finally(async () => {
       live.running = false;
       live.partial = undefined;
@@ -534,6 +646,7 @@ export class FusionAgent {
   async stop(id: string): Promise<void> {
     const live = this.#live.get(id);
     if (!live?.running) return;
+    live.stopped = true;
     live.session.clearQueue();
     live.queued = [];
     const aborted = live.session.abort();

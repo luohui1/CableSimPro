@@ -2,6 +2,8 @@
 // No physical result is computed here: all values, differences, states and sources must survive from the given saved record.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { AssistantMessage, Message } from '@earendil-works/pi-ai';
+import { estimateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
 import { Backend, type BackendTool, type ToolResult } from '../fusion/backend.ts';
 import { describeResult } from '../fusion/cards.ts';
 import { MODEL_RESULT_MAX_BYTES, MODEL_RESULT_MAX_CHARS, modelResult, projectHistory, resultText } from '../fusion/model-result.ts';
@@ -94,6 +96,28 @@ test('comparison observations retain saved differences and named inputs, without
   assert.equal(JSON.stringify(source), original);
 });
 
+test('the final comparison boundary retains ampacity and temperature after fifty component quantities', () => {
+  const source = comparisonFixture();
+  const difference = source.data.comparison.differences[0];
+  const critical = difference.quantities.slice(0, 2);
+  const margin = { case_id: 'case-0', condition: 'operating', key: 'temperature_margin', entity: 'cable/c1-A',
+    unit: 'K', baseline: 24.5, value: 18.5, difference: -6 };
+  difference.quantities = [...Array.from({ length: 50 }, (_, index) => ({ case_id: 'case-0', condition: 'operating',
+    key: 'ac_resistance', entity: `cable/component-${index}`, unit: 'ohm/m', baseline: 0.0000723456789, value: 0.000073456789, difference: 0.0000011111101 })),
+  ...critical, margin];
+  const original = JSON.stringify(frozen(source));
+  const { reply } = observe('study_compare', source, { workspace_id: WORKSPACE, run_ids: source.data.run_ids });
+  const saved = reply.data.comparison.differences[0];
+  assert.equal(saved.quantity_count, 53);
+  for (const expected of [...critical, margin]) {
+    const actual = saved.quantities.find((item: any) => item.key === expected.key);
+    assert.ok(actual, `the final bounded result must retain ${expected.key}`);
+    for (const [key, value] of Object.entries(expected)) assert.deepEqual(actual[key], value);
+  }
+  assert.equal(reply.detail.read.arguments.result_digest, SHA);
+  assert.equal(JSON.stringify(source), original);
+});
+
 function previewFixture(): ToolResult {
   const rows = Array.from({ length: 11 }, (_, index) => ({ row_number: index + 5, key: `size-${index}`, name: `厂家规格 ${index + 1}`,
     status: index > 8 ? 'error' : index === 8 ? 'incomplete' : 'ready',
@@ -177,6 +201,104 @@ test('an import observation keeps every created specification reference needed f
   assert.equal(reply.data.receipt.engineering_approval, false);
   assert.doesNotMatch(text, /full-reviewed-change-only/);
   assert.equal(JSON.stringify(source), original);
+});
+
+test('import success retains incomplete draft fields, including a missing field in the last created specification', () => {
+  const source = importedFixture();
+  source.data.receipt.specs[10].missing = ['20 °C 导体直流电阻', '绝缘最薄点实测'];
+  const original = JSON.stringify(frozen(source));
+  const { reply } = observe('propose_structure_import', source, { workspace_id: WORKSPACE }, 'propose');
+  assert.equal(reply.data.receipt.status, 'succeeded');
+  assert.equal(reply.data.receipt.state, 'draft');
+  assert.equal(reply.data.receipt.engineering_approval, false);
+  assert.equal(reply.data.receipt.missing_spec_count, 1);
+  assert.deepEqual(reply.data.receipt.missing_fields, source.data.receipt.specs[10].missing);
+  assert.deepEqual(reply.data.receipt.specs[10].missing, source.data.receipt.specs[10].missing);
+  assert.equal(reply.data.receipt.specs[10].workspace_id, source.data.receipt.specs[10].workspace_id);
+  assert.equal(JSON.stringify(source), original);
+});
+
+test('type check pages preserve exact saved failures, missing quantities and page-local source references', () => {
+  const data = { type_id: id(200), type_revision: 3, view: 'runs', total: 65, next_page: { after: 3, limit: 20, expected_revision: 3 },
+    object: { id: id(200), name: '厂家规格', kind: 'type', revision: 3, status: { code: 'draft', reason: null },
+      updated: '2026-11-18T00:00:00Z', parent: null, source: { kind: 'manufacturer', reviewed: false }, subtype: null,
+      validation: { status: 'missing', missing: ['minimum_thickness'] }, version: null },
+    check_details: 'source.index 指向当前页 data.sources，archive_url 指向完整保存来源。',
+    sources: [{ kind: 'saved_run', channel: 'standards', run_id: id(500), study_id: id(400), workspace_id: WORKSPACE,
+      case_id: 'case-0', workspace_revision: 3, study_revision: 2, status: 'succeeded', freshness: 'current', engineering_approval: false,
+      method: { plugin_id: 'cablesim.standard-check', version: '1.2.0', capability: 'dimensions', release_digest: SHA },
+      input_digest: SHA, output_digest: PREVIEW_DIGEST, archive_url: `/api/workspaces/${WORKSPACE}/studies/${id(400)}/runs/${id(500)}?view=full` }],
+    items: [{ section: 'checks', id: 'standards/thickness', channel: 'standards', blocking: true, excluded: false,
+      message: '绝缘最薄点：缺少实测最薄点。', result: { actual: null, actual_unrounded: null, design_actual: 4.5, limit: 3.95,
+        unit: 'mm', margin: null, satisfied: false, comparison: 'minimum', verdict: 'missing', source_status: 'verified',
+        missing_parameters: ['measurement'], basis_missing_fields: [{ field: 'measurement', label: '实测最薄点', required: true, unit: 'mm' }] }, source: { index: 0 } },
+    { section: 'checks', id: 'geometry/mass', channel: 'geometry', blocking: true, excluded: false, message: '缺少材料密度，不能给出质量。',
+      result: { status: 'missing', actual: null, limit: 0, unit: 'kg/km', missing: ['material_density'] },
+      quantities: [{ entity: 'layer/1', mass_kg_per_km: null, quantity_missing: ['材料密度'] }], source: { index: 0 } },
+    { section: 'runs', run_id: id(500), study_id: id(400), channel: 'standards', source: { run_id: id(500), study_id: id(400), channel: 'standards',
+      status: 'succeeded', workspace_revision: 3, study_revision: 2, engineering_approval: false,
+      method: { plugin_id: 'cablesim.standard-check', version: '1.2.0', capability: 'dimensions', release_digest: SHA },
+      input_digest: SHA, output_digest: PREVIEW_DIGEST, archive_url: `/api/workspaces/${WORKSPACE}/studies/${id(400)}/runs/${id(500)}?view=full` } }],
+  };
+  const source = frozen(result(data));
+  const original = JSON.stringify(source);
+  const { reply } = observe('type_read', source, { type_id: id(200), view: 'runs', after: 0, limit: 20 });
+  for (let index = 0; index < 2; index += 1) {
+    assert.deepEqual(reply.data.items[index].result, data.items[index].result);
+    assert.deepEqual(reply.data.items[index].source, { index: 0 });
+    assert.equal(reply.data.items[index].blocking, true);
+    assert.equal(reply.data.items[index].excluded, false);
+  }
+  assert.deepEqual(reply.data.items[1].quantities, data.items[1].quantities);
+  const { input_digest: _input, output_digest: _output, archive_url: _archive, ...identity } = data.sources[0];
+  assert.deepEqual(reply.data.sources, [identity]);
+  assert.deepEqual(reply.data.sources[0].method, data.sources[0].method);
+  assert.equal(reply.detail.read.arguments.result_digest, SHA);
+  assert.equal(reply.data.items[2].run_id, id(500));
+  assert.equal(reply.data.items[2].study_id, id(400));
+  assert.equal(reply.data.items[2].channel, 'standards');
+  const { input_digest: _runInput, output_digest: _runOutput, archive_url: _runArchive, run_id: _run, study_id: _study,
+    channel: _channel, ...runIdentity } = data.items[2].source;
+  assert.deepEqual(reply.data.items[2].source, runIdentity);
+  assert.doesNotMatch(reply.data.check_details, /archive_url/);
+  const { updated: _updated, parent: _parent, subtype: _subtype, version: _version, ...object } = data.object;
+  assert.deepEqual(reply.data.object, object);
+  assert.deepEqual(reply.data.next_page, data.next_page);
+  const withoutDigest = observe('type_read', result(data, { result_digest: undefined }), { type_id: id(200), view: 'runs' });
+  assert.deepEqual(withoutDigest.reply.data.sources, data.sources, 'source traces remain when no immutable response digest is available');
+  assert.deepEqual(withoutDigest.reply.data.items[2].source, data.items[2].source);
+  assert.equal(JSON.stringify(source), original);
+});
+
+test('workspace observations remove exact duplicate projection copies without changing explicit fields or conflicting metadata', () => {
+  const fields = [{ path: '/materials/material~1soil/thermal_resistivity', label: '土壤热阻率', value: 1.234567890123456, unit: 'K·m/W' },
+    { path: '/cable_types/cable_type~1ct1/cores/core~11/conductor/r20', label: '20 °C 电阻', value: 0.0000601, unit: 'ohm/m' }];
+  const objects = { materials: [{ id: 'material/soil', label: '土壤', path: '/materials/material~1soil', fields: [fields[0]] }] };
+  for (const facts of [{ fields }, { objects }]) {
+    const data = { workspace_id: WORKSPACE, workspace_revision: 4, name: '直埋线路', view: 'requested-outline',
+      coverage: { complete: false, omitted_parts: 1 }, ...facts,
+      agent_projection: { workspace_id: WORKSPACE, workspace_revision: 4, name: '直埋线路', ...facts, view: 'outline',
+        coverage: { complete: true, omitted_parts: 0 }, lock_summary: { total: 0 }, offset: 0, total_parts: 2, next_page: null } };
+    const source = frozen(result(data));
+    const original = JSON.stringify(source);
+    const { reply } = observe('workspace_read', source, { workspace_id: WORKSPACE });
+    assert.deepEqual(reply.data.agent_projection, { view: 'outline', coverage: data.agent_projection.coverage }, 'conflicting metadata must not overwrite either source value');
+    assert.equal(reply.data.view, 'requested-outline');
+    assert.deepEqual(reply.data.coverage, data.coverage);
+    assert.deepEqual(reply.data.lock_summary, { total: 0 });
+    assert.equal(reply.data.offset, 0);
+    assert.equal(reply.data.total_parts, 2);
+    assert.equal(reply.data.next_page, null);
+    assert.equal(reply.detail.read.arguments.result_digest, SHA);
+    if ('fields' in facts) {
+      assert.deepEqual(reply.data.fields[0], fields[0]);
+      assert.equal(reply.data.fields[1].value, fields[1].value);
+      assert.equal(reply.data.fields[1].unit, fields[1].unit);
+      assert.equal(reply.data.fields[1].display_value, 0.0601);
+      assert.equal(reply.data.fields[1].display_unit, 'Ω/km');
+    } else assert.deepEqual(reply.data.objects, objects);
+    assert.equal(JSON.stringify(source), original);
+  }
 });
 
 test('batch summaries distinguish execution success from missing or failed standards checks using the actual verdict contract', () => {
@@ -343,6 +465,54 @@ test('large generic results and errors remain valid bounded JSON with an authori
   assert.match(JSON.stringify(error), /原记录|保存记录/);
 });
 
+test('the generic hard boundary preserves uncertain or failed business execution even when the read itself succeeded', () => {
+  for (const status of ['failed', 'uncertain', 'interrupted']) {
+    const source = frozen(result({ verbose: 'unexpected full result branch'.repeat(20_000), receipt: {
+      status, executed: true, complete: false, may_have_written: true, engineering_approval: false,
+      error: { code: 'SAVED_ACTION_INCOMPLETE', message: '完整诊断'.repeat(12_000) }, missing: ['manufacturer_measurement'],
+      result: { status: 'failed', checks: { integrity: 'verified', engineering_approval: false } },
+    } }));
+    for (const text of [observe('resource_read', source, { workspace_id: WORKSPACE }).text, resultText(source)]) {
+      const reply = parsed(text);
+      const receipt = (reply.value ?? reply).data.receipt;
+      assert.equal((reply.value ?? reply).status, 'ok');
+      for (const key of ['status', 'executed', 'complete', 'may_have_written', 'engineering_approval'])
+        assert.equal(receipt[key], source.data.receipt[key]);
+      assert.equal(receipt.error.code, 'SAVED_ACTION_INCOMPLETE');
+      assert.equal(receipt.missing_count, 1);
+      assert.equal(receipt.result.status, 'failed');
+      assert.equal(receipt.result.checks.engineering_approval, false);
+    }
+  }
+});
+
+test('result JSON Pointers remain copyable while actual local paths in diagnostics are scrubbed', () => {
+  const data = { projection: 'result_page', source: { response_digest: SHA },
+    page: { view: '/data', items: [{ path: '/data/manufacturer~1source', value: 0.0000601 },
+      { path: '/data/receipt', omitted: true, children: ['/data/receipt/items', '/data/receipt/next_read'], total_children: 2 }], total: 3, complete: false, next_offset: 2 },
+    next_read: { tool: 'resource_read', arguments: { result_view: '/data', result_offset: 1, result_digest: SHA } },
+  };
+  const projected = modelResult(tool('resource_read'), { workspace_id: WORKSPACE, result_view: '/data', result_digest: SHA },
+    frozen(result(data, { diagnostics: [{ code: 'SOURCE_NOTE', message: 'Local failure /data/private-run/secret.json', path: '/tmp/source.json' }] })));
+  const reply = parsed(resultText(projected, ['/data/private-run']));
+  assert.equal(reply.data.page.view, '/data');
+  assert.equal(reply.data.page.items[0].path, '/data/manufacturer~1source');
+  assert.deepEqual(reply.data.page.items[1].children, ['/data/receipt/items', '/data/receipt/next_read']);
+  assert.equal(reply.data.next_read.arguments.result_view, '/data');
+  assert.equal(reply.detail.read.arguments.result_view, '');
+  assert.doesNotMatch(JSON.stringify(reply.diagnostics), /private-run|source\.json/);
+  assert.match(JSON.stringify(reply.diagnostics), /本机路径/);
+  const arbitrary = parsed(resultText({ data: {
+    ordinary: { tool: 'untrusted', arguments: { view: '/data/private-run/secret.json', result_view: '/tmp/secret.json' } },
+    namedLikeRead: { tool: 'resource_read', arguments: { view: '/data/private-run/secret.json' } },
+    next_read: { tool: 'untrusted', arguments: { view: '/data/private-run/secret.json' } },
+    ordinaryDirectory: { children: ['/data/private-run/secret.json'] },
+    ordinaryMetadata: { checks_path: '/data/private-run/secret.json', omitted_paths: ['/tmp/secret.json'] },
+  } }, ['/data/private-run']));
+  assert.doesNotMatch(JSON.stringify(arbitrary), /private-run|secret\.json/,
+    'a tool-shaped ordinary value cannot exempt local paths from scrubbing');
+});
+
 test('history projection repairs an old oversized comparison without rewriting stored content, cards, order or approval state', () => {
   const old = comparisonFixture();
   const oldText = JSON.stringify(old);
@@ -371,6 +541,352 @@ test('history projection repairs an old oversized comparison without rewriting s
   assert.equal(storedContent.text, oldText);
   assert.equal(JSON.stringify(messages), original);
   assert.deepEqual(projectHistory(projected, [tool('study_compare')], []), projected, 'a second model request must not keep changing an already bounded observation');
+});
+
+test('ended type pages keep counts, explicit missing labels and exact read references while the current turn stays complete', () => {
+  const source = result({ type_id: id(200), type_revision: 4, view: 'runs', total: 65,
+    next_page: { after: 6, limit: 20, expected_revision: 4 },
+    sources: [{ run_id: id(500), study_id: id(400), channel: 'standards', status: 'succeeded', input_digest: SHA, output_digest: PREVIEW_DIGEST }],
+    items: Array.from({ length: 6 }, (_, index) => ({ section: 'checks', id: `standards/check-${index}`, channel: 'standards',
+      blocking: true, excluded: false, message: `第 ${index + 1} 层最薄点：` + '保存标称值不能代替可追溯的厂家实测，需先补齐来源。'.repeat(8),
+      result: { actual: null, limit: 3.95, unit: 'mm', verdict: 'missing', missing_parameters: ['minimum_thickness'],
+        basis_missing_fields: [{ field: 'measurement', label: '厂家实测最薄点', required: true }] }, source: { index: 0 } })),
+  });
+  const old = observe('type_read', source, { type_id: id(200), view: 'runs', after: 0, limit: 20 });
+  const input = observe('workspace_read', result({ workspace_id: WORKSPACE, fields: [{ path: '/materials/material~1soil/thermal_resistivity',
+    label: '土壤热阻率', value: 1.234567890123456, unit: 'K·m/W' }] }), { workspace_id: WORKSPACE });
+  const toolMessage = (name: string, text: string) => ({ role: 'toolResult', toolName: name, isError: false,
+    content: [{ type: 'text', text }], details: { original: 'persistent card remains exact' } });
+  const messages = frozen([
+    { role: 'user', content: [{ type: 'text', text: '逐项核对型号。' }] },
+    toolMessage('type_read', old.text), toolMessage('workspace_read', input.text),
+    { role: 'user', content: [{ type: 'text', text: '继续改条件。' }] }, toolMessage('type_read', old.text),
+  ]);
+  const original = JSON.stringify(messages);
+  const projected = projectHistory(messages, [tool('type_read'), tool('workspace_read')], []);
+  const history = parsed(projected[1].content[0].text);
+  assert.ok(projected[1].content[0].text.length < old.text.length);
+  assert.equal(history.data.total, 65);
+  assert.equal(history.data.page_item_count, 6);
+  assert.equal(history.data.check_summary.count, 6);
+  assert.equal(history.data.check_summary.blocking_count, 6);
+  assert.equal(history.data.check_summary.missing_check_count, 6);
+  assert.deepEqual(history.data.check_summary.verdict_counts, { missing: 6 });
+  assert.deepEqual(history.data.check_summary.explicit_missing_labels, ['minimum_thickness', '厂家实测最薄点']);
+  assert.deepEqual(history.data.items, []);
+  assert.equal(history.data.sources[0].run_id, id(500));
+  assert.deepEqual(history.detail.read, old.reply.detail.read);
+  assert.equal(history.detail.original_characters, old.reply.detail.original_characters);
+  assert.equal(history.detail.history_summary, true);
+  assert.ok('details' in projected[1] && 'details' in messages[1]);
+  assert.strictEqual(projected[1].details, messages[1].details);
+  assert.strictEqual(projected[2], messages[2], 'explicit workspace fields remain available for the next exact edit');
+  assert.strictEqual(projected[4], messages[4], 'all current-turn checks, values and reasons stay byte-for-byte complete');
+  assert.equal(JSON.stringify(messages), original);
+  assert.deepEqual(projectHistory(projected, [tool('type_read'), tool('workspace_read')], []), projected);
+});
+
+test('ended saved runs shrink even above the history target without losing exact quantities, qualifications or long limitations', () => {
+  const soil = { path: '/materials/material~1soil/thermal_resistivity', label: '土壤热阻率', value: 1.234567890123456, unit: 'K·m/W' };
+  const run = { workspace_id: WORKSPACE, study_id: STUDY, run_id: id(500), status: 'succeeded', freshness: 'current',
+    input_digest: SHA, output_digest: PREVIEW_DIGEST, case_input_digest: SHA, input_fields: [soil],
+    headlines: [{ key: 'ampacity', title: '回路允许电流', entity: 'circuit/1', condition: 'rating', value: 701.4123456789, unit: 'A' },
+      { key: 'conductor_temperature', title: '导体温度', entity: 'cable/1', condition: 'operating', value: 344.6543210987, unit: 'K' }],
+    limitations: ['Limited applicability; no engineering approval. '.repeat(20)],
+    checks: { integrity: 'verified', engineering_approval: false, numerical: { status: 'passed', tolerance_k: 0.01 },
+      artifact_status: { 'case-0': { 'temperature-field': { status: 'unverified', reason: '当前工件仅供参考。' } } } },
+    assessment: [{ case_id: 'case-0', status: 'missing', meets_target: false, missing: ['target_current'], reason: '缺少目标电流，不能给出满足性结论。' }],
+    cases: Array.from({ length: 3 }, (_, index) => ({ case_id: `case-${index}`, status: index === 2 ? 'failed' : 'succeeded',
+      ...(index === 2 ? { error: { code: 'INPUT_MISSING', message: '另一个工况缺少输入。' } } : {}),
+      limitations: ['仅用于声明的边界。'],
+      results: [{ key: 'ampacity', entity: 'circuit/1', condition: 'rating', value: 701.4123456789, unit: 'A' }],
+      factors: Array.from({ length: 7 }, (_, position) => ({ key: position === 0 ? 'limiting_cable' : `loss-component-${position}`,
+        entity: 'cable/1', condition: 'rating', value: position === 0 ? 'cable/1' : position + 0.123456789, unit: position === 0 ? '1' : 'W/m',
+        statement: 'Source detail for separate component. '.repeat(2) })),
+    })),
+  };
+  const assumptions = ['Keep every declared operating limitation and source qualification. '.repeat(55)];
+  const receipt = observe('propose_study_run', result({ proposal: { id: id(7), title: '重算直埋线路', status: 'approved',
+    changes: [], checks: [], assumptions }, receipt: { kind: 'run', status: 'succeeded', executed: true,
+    run_id: run.run_id, study_id: STUDY, result: run } }), { workspace_id: WORKSPACE, study_id: STUDY }, 'propose');
+  const reading = observe('run_read', result(run), { workspace_id: WORKSPACE, study_id: STUDY, run_id: run.run_id });
+  const study = observe('study_read', result({ workspace_id: WORKSPACE, study_id: STUDY, driver: { kind: 'single' },
+    definition: { title: '直埋线路', method: { plugin_id: 'cablesim.iec60287', version: '1.2.0' }, parameters: { notes: 'Repeated parameter details. '.repeat(80) } },
+    input_fields: [soil], parameter_fields: [{ path: '/parameters/rating_mode', label: '额定口径', value: 'both' }],
+    cases: [{ case_id: 'case-0', label: '直埋', parameters: { notes: 'Repeated parameter details. '.repeat(30) } }] }),
+  { workspace_id: WORKSPACE, study_id: STUDY });
+  const message = (name: string, text: string) => ({ role: 'toolResult', toolName: name, content: [{ type: 'text', text }], details: { fullRun: run } });
+  const messages = frozen([
+    { role: 'user', content: [{ type: 'text', text: '读取并重算。' }] }, message('propose_study_run', receipt.text),
+    message('run_read', reading.text), message('study_read', study.text),
+    { role: 'user', content: [{ type: 'text', text: '将土壤热阻率改为 1.2 再比较。' }] }, message('run_read', reading.text),
+  ]);
+  const original = JSON.stringify(messages);
+  const projected = projectHistory(messages, [tool('propose_study_run', 'propose'), tool('run_read'), tool('study_read')], []);
+  assert.ok(receipt.text.length > 9000, `exercise the large real-shaped receipt, got ${receipt.text.length}`);
+  const prior = parsed(projected[1].content[0].text);
+  assert.ok(projected[1].content[0].text.length > 4000, 'all declared assumptions take precedence over the optional history target');
+  assert.ok(projected[1].content[0].text.length < receipt.text.length);
+  assert.equal(prior.detail.history_target_characters, 4000);
+  assert.equal(prior.detail.character_limit, 12000);
+  assert.equal(prior.detail.byte_limit, 18000);
+  assert.deepEqual(prior.detail.read, receipt.reply.detail.read);
+  assert.equal(prior.detail.original_characters, receipt.reply.detail.original_characters);
+  assert.deepEqual(prior.data.proposal.assumptions, assumptions);
+  for (const retained of [prior.data.receipt.result, parsed(projected[2].content[0].text).data]) {
+    assert.equal(retained.run_id, run.run_id);
+    assert.equal(retained.study_id, STUDY);
+    assert.equal(retained.checks.engineering_approval, false);
+    assert.deepEqual(retained.checks.artifact_status, run.checks.artifact_status);
+    assert.deepEqual(retained.assessment, run.assessment);
+    assert.deepEqual(retained.limitations, run.limitations);
+    assert.deepEqual(retained.input_fields, [soil]);
+    for (let index = 0; index < run.headlines.length; index += 1)
+      for (const [key, value] of Object.entries(run.headlines[index])) assert.deepEqual(retained.headlines[index][key], value);
+    assert.equal(retained.cases[2].status, 'failed');
+    assert.equal(retained.cases[2].error.code, 'INPUT_MISSING');
+    assert.equal(retained.cases[0].factors[0].value, 'cable/1');
+    assert.equal(retained.cases[0].results, undefined);
+  }
+  const priorStudy = parsed(projected[3].content[0].text);
+  assert.deepEqual(priorStudy.data.input_fields, [soil]);
+  assert.deepEqual(priorStudy.data.parameter_fields, study.reply.data.parameter_fields);
+  assert.equal(priorStudy.data.definition.parameters, undefined);
+  assert.deepEqual(priorStudy.detail.read, study.reply.detail.read);
+  assert.strictEqual(projected[5], messages[5]);
+  assert.ok('details' in projected[1] && 'details' in messages[1]);
+  assert.strictEqual(projected[1].details, messages[1].details);
+  assert.equal(JSON.stringify(messages), original);
+});
+
+test('history keeps short plain text and images untouched, bounds all text parts together, and labels long SDK diagnostics as errors', () => {
+  const short = { role: 'toolResult', toolName: 'read', content: [{ type: 'text', text: '技能正文。' }, { type: 'image', data: 'unchanged', mimeType: 'image/png' }] };
+  const sdk = { role: 'toolResult', toolName: 'read', isError: true,
+    content: [{ type: 'text', text: JSON.stringify({ code: 'SDK_VALIDATION_FAILED', message: '错误诊断📎'.repeat(15_000) }) }] };
+  const multi = { role: 'toolResult', toolName: 'read', isError: false, content: [
+    { type: 'text', text: 'A'.repeat(8_000) }, { type: 'image', data: 'unchanged', mimeType: 'image/png' },
+    { type: 'text', text: 'B'.repeat(8_000) },
+  ] };
+  const messages = frozen([{ role: 'user', content: [{ type: 'text', text: '先读取。' }] }, short, sdk, multi,
+    { role: 'user', content: [{ type: 'text', text: '继续。' }] }]);
+  const original = JSON.stringify(messages);
+  const projected = projectHistory(messages, [], []);
+  assert.strictEqual(projected[1], short);
+  const error = parsed(projected[2].content[0].text!);
+  assert.equal((error.value ?? error).status, 'error');
+  assert.equal((error.value ?? error).code, 'SDK_VALIDATION_FAILED');
+  assert.ok('isError' in projected[2]);
+  assert.equal(projected[2].isError, true);
+  const combined = projected[3].content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+  parsed(combined);
+  assert.strictEqual(projected[3].content[1], multi.content[1]);
+  assert.equal(JSON.stringify(messages), original);
+});
+
+test('a changed old tool prefix invalidates stale SDK usage and accepts the next real response without changing stored accounting', () => {
+  const body = observe('type_read', result({ type_id: id(200), type_revision: 3, view: 'runs', total: 65,
+    items: Array.from({ length: 6 }, (_, index) => ({ section: 'checks', id: `check-${index}`, blocking: true,
+      message: '完整逐项依据已在该用户回合读取。'.repeat(20), result: { status: 'missing', actual: null, unit: 'mm', missing: ['实测最薄点'] } })) }),
+  { type_id: id(200), view: 'runs' });
+  const assistant = (timestamp: number, input: number): AssistantMessage => ({ role: 'assistant', timestamp,
+    api: 'openai-completions', provider: 'test', model: 'sdk-accounting-regression', stopReason: 'stop',
+    content: [{ type: 'text', text: '已读取保存事实，缺项未当作通过。' }],
+    usage: { input, output: 10, cacheRead: 7, cacheWrite: 3, totalTokens: input + 20,
+      cost: { input: 0.1, output: 0.001, cacheRead: 0.0001, cacheWrite: 0.0002, total: 0.1013 } } });
+  for (const currentTime of [2000, 1200]) {
+    const stored: Message[] = frozen([
+      { role: 'user', timestamp: 1000, content: '逐项读取型号。' }, assistant(1100, 2000),
+      { role: 'toolResult', timestamp: 1150, toolCallId: 'saved-page', toolName: 'type_read', isError: false,
+        content: [{ type: 'text', text: body.text }], details: { card: 'persistent complete card' } },
+      { role: 'toolResult', timestamp: 1160, toolCallId: 'short-skill', toolName: 'read', isError: false,
+        content: [{ type: 'text', text: '短技能正文保持原样。' }] },
+      assistant(1200, 50_000), { role: 'user', timestamp: currentTime, content: '继续下一项工作。' },
+    ]);
+    const original = JSON.stringify(stored);
+    const before = estimateContextTokens(stored);
+    assert.equal(before.lastUsageIndex, 4);
+    assert.equal(before.usageTokens, 50_020);
+    const projected = projectHistory(stored, [tool('type_read')], []);
+    const barrier = currentTime === 1200 ? 1201 : currentTime;
+    assert.equal(projected[2].timestamp, barrier, 'equal-millisecond old responses must be strictly older than the edited prefix');
+    assert.ok('details' in projected[2] && 'details' in stored[2]);
+    assert.strictEqual(projected[2].details, stored[2].details);
+    assert.strictEqual(projected[3], stored[3], 'an unchanged old result keeps its real original timestamp');
+    assert.strictEqual(projected[4], stored[4], 'usage values and billing records are never zeroed, removed or rewritten');
+    const after = estimateContextTokens(projected);
+    assert.equal(after.lastUsageIndex, 1, 'only the older response before the changed tool remains an applicable usage anchor');
+    assert.equal(after.usageTokens, 2020);
+    assert.ok(after.tokens < before.tokens);
+    const fresh = assistant(barrier, 12_000);
+    const currentTool: Message = { role: 'toolResult', timestamp: barrier + 1, toolCallId: 'current-page', toolName: 'type_read', isError: false,
+      content: [{ type: 'text', text: body.text }], details: { card: 'current complete card' } };
+    const resumed = projectHistory(frozen([...stored, fresh, currentTool]), [tool('type_read')], []);
+    const accounted = estimateContextTokens(resumed);
+    assert.equal(accounted.lastUsageIndex, 6, 'a new actual assistant response at or after the barrier resumes normal accounting');
+    assert.equal(accounted.usageTokens, fresh.usage.totalTokens);
+    assert.strictEqual(resumed[6], fresh);
+    assert.strictEqual(resumed[7], currentTool, 'current-turn facts and timestamps remain unmodified');
+    assert.equal(JSON.stringify(stored), original);
+    assert.deepEqual(projectHistory(projected, [tool('type_read')], []), projected);
+  }
+  const untimed = frozen([{ role: 'user', content: [{ type: 'text', text: '第一问。' }] },
+    { role: 'toolResult', toolName: 'type_read', timestamp: 1150, content: [{ type: 'text', text: body.text }] },
+    { role: 'user', content: [{ type: 'text', text: '没有保存真实时间。' }] }]);
+  const projected = projectHistory(untimed, [tool('type_read')], []);
+  assert.equal(projected[1].timestamp, 1150, 'missing real user timestamps must not be replaced with a fabricated clock value');
+});
+
+test('identical old reads and complete skills reference a still-visible original, preserving each read digest and current-turn evidence', () => {
+  const source = result({ study_id: STUDY, revision: 3, input_fields: [{ path: '/materials/material~1soil/thermal_resistivity',
+    value: 1.234567890123456, unit: 'K·m/W' }], definition: { title: '直埋线路', parameters: { notes: '完整参数依据。'.repeat(120) } } });
+  const observed = observe('study_read', source, { workspace_id: WORKSPACE, study_id: STUDY });
+  const differentDigest = structuredClone(observed.reply);
+  differentDigest.detail.read.arguments.result_digest = PREVIEW_DIGEST;
+  const differentData = structuredClone(observed.reply);
+  differentData.data.input_fields[0].value = 1.5;
+  const skill = '---\nname: ampacity-rating\n---\n必须保留来源、缺项与人工审阅。\n'.repeat(20);
+  const message = (id: string, name: string, text: string) => ({ role: 'toolResult', toolCallId: id, toolName: name,
+    timestamp: 1100, isError: false, content: [{ type: 'text', text }], details: { card: 'full persistent evidence' } });
+  const messages = frozen([{ role: 'user', timestamp: 1000, content: [{ type: 'text', text: '读取研究。' }] },
+    message('study-first', 'study_read', observed.text), message('skill-first', 'read', skill),
+    { role: 'user', timestamp: 2000, content: [{ type: 'text', text: '再次核对相同研究。' }] },
+    message('study-repeat', 'study_read', observed.text), message('skill-repeat', 'read', skill),
+    message('different-digest', 'study_read', JSON.stringify(differentDigest)), message('different-data', 'study_read', JSON.stringify(differentData)),
+    { role: 'user', timestamp: 3000, content: [{ type: 'text', text: '现在继续。' }] },
+    message('study-current', 'study_read', observed.text), message('skill-current', 'read', skill)]);
+  const before = JSON.stringify(messages);
+  const projected = projectHistory(messages, [tool('study_read')], []);
+  const repeated = parsed(projected[4].content[0].text);
+  assert.deepEqual(repeated.data_ref, { tool_call_id: 'study-first', path: '/data' });
+  assert.equal(repeated.status, 'ok');
+  assert.deepEqual(repeated.detail.read, observed.reply.detail.read);
+  assert.equal(repeated.detail.original_characters, observed.reply.detail.original_characters);
+  assert.equal(parsed(projected[1].content[0].text).data.input_fields[0].value, 1.234567890123456);
+  assert.deepEqual(parsed(projected[5].content[0].text).history_ref, { tool_call_id: 'skill-first' });
+  assert.strictEqual(projected[2], messages[2], 'the one complete copy of the skill rules remains in this provider prefix');
+  assert.equal(parsed(projected[6].content[0].text).data_ref, undefined, 'different source digests cannot be folded together');
+  assert.equal(parsed(projected[7].content[0].text).data_ref, undefined, 'different exact quantities cannot be folded together');
+  assert.strictEqual(projected[9], messages[9]);
+  assert.strictEqual(projected[10], messages[10]);
+  assert.ok('details' in projected[4] && 'details' in messages[4]);
+  assert.strictEqual(projected[4].details, messages[4].details);
+  assert.equal(JSON.stringify(messages), before);
+  assert.deepEqual(projectHistory(projected, [tool('study_read')], []), projected);
+  const withoutFirst = messages.filter((_, index) => index !== 1 && index !== 2);
+  const retained = projectHistory(withoutFirst, [tool('study_read')], []);
+  const read = retained.find(message => 'toolCallId' in message && message.toolCallId === 'study-repeat')!;
+  const rules = retained.find(message => 'toolCallId' in message && message.toolCallId === 'skill-repeat')!;
+  assert.equal(parsed(read.content[0].text).data_ref, undefined, 'a removed prefix is not a usable data reference');
+  assert.equal(rules.content[0].text, skill, 'a removed first skill is replaced by the remaining full original, never a dangling reference');
+});
+
+function typeHistoryFixture(large = false) {
+  const channels = ['standards', 'electrical', 'short_circuit', 'geometry', 'cad'];
+  const origins = channels.map((channel, index) => ({ channel, run_id: id(500 + index), study_id: id(400 + index),
+    workspace_revision: 3, study_revision: 1, case_id: 'case-0', status: 'succeeded', freshness: 'current', engineering_approval: false,
+    method: { plugin_id: `cablesim.${channel}`, version: '1.2.0', capability: 'saved-check', release_digest: SHA,
+      ...(large ? { qualification: 'Complete saved method qualification. '.repeat(30) } : {}) } }));
+  const overview = { section: 'overview', construction: 'three_core',
+    base_reference: { name: '保存型号', source: large ? 'Full original engineering applicability statement. '.repeat(140)
+      : '仅为保存标称模型；标准上限不能当作厂家实测，缺项不能判为通过。'.repeat(30) },
+    source: { kind: 'saved_type_input', type_id: id(200), revision: 3, digest: SHA } };
+  const check = (index: number) => ({ section: 'checks', id: `standards/check-${index}`, channel: 'standards',
+    blocking: index !== 1, excluded: index === 1, ...(index === 2 ? { status: 'failed' } : {}),
+    message: `第 ${index + 1} 项保存核对：` + '原始标准依据与缺项说明不得推断为通过。'.repeat(6),
+    result: index === 0 ? { status: 'missing', actual: null, limit: 3.95, unit: 'mm', missing_parameters: ['minimum_thickness'] }
+      : index === 1 ? { verdict: 'uncovered', actual: 0, limit: 0, unit: 'mm', satisfied: false,
+        basis_missing_fields: [{ field: 'fault_return_path', label: '故障回流模型', required: true }] }
+      : { verdict: 'failed', actual: 4.1, limit: 4.5, margin: -0.4, unit: 'mm' }, source: { index: 0 } });
+  const chunks = [[overview, check(0)], [check(1), check(2)], origins.map(origin => ({ section: 'runs',
+    run_id: origin.run_id, study_id: origin.study_id, channel: origin.channel, source: origin }))];
+  const offsets = [0, 2, 4];
+  const pages = chunks.map((items, index) => observe('type_read', result({ object: { id: id(200), name: '保存型号', kind: 'type', revision: 3, status: { code: 'draft' } },
+    type_id: id(200), type_revision: 3, view: 'runs', total: 9, items, sources: index < 2 ? [origins[0]] : [],
+    next_page: index === 2 ? null : { type_id: id(200), view: 'runs', after: offsets[index + 1], limit: 20, expected_revision: 3 },
+  }, { result_digest: String(index + 1).repeat(64) }), { type_id: id(200), view: 'runs', limit: 20,
+    ...(index ? { after: offsets[index], expected_revision: 3 } : {}) }));
+  const messages = [{ role: 'user', timestamp: 1000, content: [{ type: 'text', text: '读全型号核对。' }] },
+    ...pages.map((page, index) => ({ role: 'toolResult', toolCallId: `page-${index}`, toolName: 'type_read', timestamp: 1100 + index,
+      isError: false, content: [{ type: 'text', text: page.text }], details: { original: page.reply.data } })),
+    { role: 'user', timestamp: 2000, content: [{ type: 'text', text: '下一项工作。' }] },
+    { role: 'toolResult', toolCallId: 'current-page', toolName: 'type_read', timestamp: 2100, isError: false,
+      content: [{ type: 'text', text: pages[0].text }], details: { original: pages[0].reply.data } }];
+  return { pages, messages };
+}
+
+test('one completed type pagination chain becomes an explicit historical read summary with all states, limitations, run identities and original readers', () => {
+  const { pages, messages } = typeHistoryFixture();
+  frozen(messages);
+  const original = JSON.stringify(messages);
+  const projected = projectHistory(messages, [tool('type_read')], []);
+  const first = parsed(projected[1].content[0].text);
+  assert.equal(first.data.history_aggregate, 'completed_type_pages');
+  assert.equal(first.data.read_complete, true);
+  assert.equal(first.data.read_page_count, 3);
+  assert.equal(first.data.read_item_count, 9);
+  assert.equal(first.data.total, 9);
+  assert.equal(first.data.check_summary.count, 3);
+  assert.equal(first.data.check_summary.blocking_count, 2);
+  assert.equal(first.data.check_summary.blocking_unknown_count, 0);
+  assert.equal(first.data.check_summary.excluded_count, 1);
+  assert.equal(first.data.check_summary.missing_check_count, 2);
+  assert.deepEqual(first.data.check_summary.check_status_counts, { failed: 1 });
+  assert.deepEqual(first.data.check_summary.result_status_counts, { missing: 1 });
+  assert.deepEqual(first.data.check_summary.verdict_counts, { uncovered: 1, failed: 1 });
+  assert.deepEqual(first.data.check_summary.explicit_missing_labels, ['minimum_thickness', '故障回流模型']);
+  assert.deepEqual(first.data.items[0], pages[0].reply.data.items[0], 'the full original applicability statement stays visible');
+  assert.deepEqual(first.data.items.slice(1), pages[2].reply.data.items, 'all five saved runs retain exact sealed methods, qualifications and revisions');
+  assert.equal(first.data.object.status.code, 'draft');
+  assert.match(first.summary, /已读完不表示工程通过/);
+  for (let index = 0; index < pages.length; index += 1) {
+    const value = parsed(projected[index + 1].content[0].text);
+    assert.deepEqual(value.detail.read, pages[index].reply.detail.read);
+    assert.equal(value.detail.original_characters, pages[index].reply.detail.original_characters);
+    if (index) assert.deepEqual(value.data_ref, { tool_call_id: 'page-0', path: '/data' });
+    const projectedMessage = projected[index + 1];
+    const originalMessage = messages[index + 1];
+    assert.ok('details' in projectedMessage && 'details' in originalMessage);
+    assert.strictEqual(projectedMessage.details, originalMessage.details);
+  }
+  assert.strictEqual(projected[5], messages[5], 'the current user turn is never aggregated');
+  assert.equal(JSON.stringify(messages), original);
+  assert.deepEqual(projectHistory(projected, [tool('type_read')], []), projected);
+});
+
+test('incomplete, reordered, changed-source, cross-turn, failed or oversized type histories are not aggregated', () => {
+  const change = (messages: ReturnType<typeof typeHistoryFixture>['messages'], index: number, edit: (value: any) => void) => {
+    const value = JSON.parse(messages[index].content[0].text);
+    edit(value);
+    messages[index].content[0].text = JSON.stringify(value);
+  };
+  const variants: [string, (messages: ReturnType<typeof typeHistoryFixture>['messages']) => void][] = [
+    ['missing page', messages => { messages.splice(2, 1); }],
+    ['reordered pages', messages => { [messages[1], messages[2]] = [messages[2], messages[1]]; }],
+    ['different revision', messages => change(messages, 2, value => { value.data.type_revision = 4; })],
+    ['invalid digest', messages => change(messages, 2, value => { value.detail.read.arguments.result_digest = 'invalid'; })],
+    ['cursor gap', messages => change(messages, 2, value => { value.detail.read.arguments.after = 3; })],
+    ['nonterminal page', messages => change(messages, 3, value => { value.data.next_page = { after: 9 }; })],
+    ['tool error', messages => change(messages, 2, value => { value.status = 'error'; })],
+    ['truncated evidence', messages => change(messages, 2, value => { value.detail.truncated = true; })],
+    ['different run', messages => change(messages, 2, value => { value.data.sources[0].run_id = id(999); })],
+    ['different sealed method', messages => change(messages, 2, value => { value.data.sources[0].method.release_digest = PREVIEW_DIGEST; })],
+    ['different freshness', messages => change(messages, 2, value => { value.data.sources[0].freshness = 'stale'; })],
+    ['separate user turns', messages => { messages.splice(2, 0, { role: 'user', timestamp: 1500, content: [{ type: 'text', text: '另一个回合。' }] }); }],
+  ];
+  for (const [label, mutate] of variants) {
+    const { messages } = typeHistoryFixture();
+    mutate(messages);
+    frozen(messages);
+    const before = JSON.stringify(messages);
+    const projected = projectHistory(messages, [tool('type_read')], []);
+    for (const message of projected.filter(message => message.role === 'toolResult'))
+      assert.equal(parsed(message.content[0].text).data?.history_aggregate, undefined, label);
+    assert.equal(JSON.stringify(messages), before, label);
+  }
+  const { messages } = typeHistoryFixture(true);
+  const projected = projectHistory(frozen(messages), [tool('type_read')], []);
+  for (const message of projected.filter(message => message.role === 'toolResult'))
+    assert.equal(parsed(message.content[0].text).data?.history_aggregate, undefined, 'a long aggregate must retain individual pages rather than truncate source limitations');
 });
 
 test('display resistance and engineering wording accompany exact SI and source facts', () => {

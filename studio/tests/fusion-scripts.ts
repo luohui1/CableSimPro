@@ -20,7 +20,11 @@ export interface FlowState {
   comparison?: Record<string, any>;
   table?: Record<string, any>[];
   refused?: boolean;
+  channelRuns?: Record<string, string>;
 }
+export const FORMAL_DOCUMENT = { organization: 'CableSimPro 隔离验收', number: 'AGENT-TEST-01', revision: 'A' };
+export const FORMAL_DOCUMENT_PROMPT = `正式文件单位为“${FORMAL_DOCUMENT.organization}”，文件编号为“${FORMAL_DOCUMENT.number}”，版次为“${FORMAL_DOCUMENT.revision}”；导出带签栏与追溯页的 PDF，保留真实草稿和签核状态。`;
+
 const call = (name: string, arguments_: Record<string, any>) => fauxAssistantMessage([fauxToolCall(name, arguments_)], { stopReason: 'toolUse' });
 const text = (value: string) => fauxAssistantMessage([fauxText(value)]);
 const data = (context: TranscriptContext): Record<string, any> => {
@@ -43,18 +47,53 @@ function advance(faux: Faux, state: FlowState, next: Reply, tool: string, args: 
   return call(tool, args);
 }
 
-export function installStudyRead(faux: Faux, input: { workspace: string; study: string; run: string }): FlowState {
+export function installStudyRead(faux: Faux, input: { workspace: string; study: string; run: string;
+  discoverRun?: boolean; inspectSavedDetail?: boolean }): FlowState {
   const state: FlowState = { done: false, study: input.study, run: input.run };
   const finish: Reply = context => {
     state.result = data(context);
     const current = state.result.headlines?.find((row: any) => row.key === 'ampacity');
     const value = current?.display_value;
     assert.equal(typeof value, 'number', 'the saved run must provide the current');
-    state.done = true;
-    return text(`保存结果的允许电流为 ${value.toFixed(1)} A。\n限制对象、负荷与温度见结果卡；数据来源和方法适用范围仍须核对。`);
+    const complete = () => {
+      state.done = true;
+      return text(`保存结果的允许电流为 ${value.toFixed(1)} A。\n限制对象、负荷与温度见结果卡；数据来源和方法适用范围仍须核对。`);
+    };
+    if (input.inspectSavedDetail) {
+      const read = JSON.parse(toolText(context)).detail?.read;
+      assert.equal(read?.tool, 'run_read', 'the production summary advertises its original authorized read tool');
+      assert.match(read.arguments.result_digest, /^[0-9a-f]{64}$/);
+      const index = state.result.headlines.indexOf(current);
+      const view = `/headlines/${index}/value`;
+      return advance(faux, state, context => {
+        const saved = data(context);
+        assert.equal(saved.projection, 'result_page');
+        assert.equal(saved.source.response_digest, read.arguments.result_digest, 'the exact saved response digest binds this detail read');
+        assert.equal(saved.page.view, view);
+        assert.equal(saved.page.complete, true);
+        assert.equal(saved.page.value, current.value, 'a real result_view resolves the original saved SI quantity exactly');
+        return complete();
+      }, read.tool, { ...read.arguments, result_view: view, result_offset: 0 });
+    }
+    return complete();
+  };
+  const afterStudy: Reply = context => {
+    data(context);
+    if (input.discoverRun) return advance(faux, state, context => {
+      const runs = data(context).items;
+      assert.ok(Array.isArray(runs), 'the actual run list must expose its saved records');
+      const current = runs.filter((item: any) => item.status === 'succeeded' && item.freshness === 'current');
+      assert.ok(current.every((item: any) => Number.isSafeInteger(item.sequence)), 'use the actual saved sequence to order current runs');
+      const saved = current.sort((left: any, right: any) => right.sequence - left.sequence)[0];
+      assert.ok(saved?.id, 'discover the latest current successful run through the actual tool');
+      assert.equal(saved.id, input.run, 'the fixture run is only an oracle for the discovered result');
+      state.run = saved.id;
+      return advance(faux, state, finish, 'run_read', { workspace_id: input.workspace, study_id: input.study, run_id: saved.id });
+    }, 'run_list', { workspace_id: input.workspace, study_id: input.study, limit: 5 });
+    return advance(faux, state, finish, 'run_read', { workspace_id: input.workspace, study_id: input.study, run_id: input.run });
   };
   faux.setResponses([() => advance(faux, state, () => advance(faux, state,
-    context => { data(context); return advance(faux, state, finish, 'run_read', { workspace_id: input.workspace, study_id: input.study, run_id: input.run }); },
+    afterStudy,
     'study_read', { workspace_id: input.workspace, study_id: input.study }), 'read', { path: 'ampacity-rating' })]);
   return state;
 }
@@ -64,6 +103,7 @@ export function installStudyWorkflow(faux: Faux, input: { workspace: string; stu
   const finish: Reply = context => {
     const result = receipt(context);
     assert.equal(result.kind, 'delivery');
+    assert.equal(result.media_type, 'application/pdf');
     state.file = result.download_url;
     state.done = true;
     return text('研究已运行，计算书已从该次保存结果生成。\n输入、方法版本和限制随记录保留，接受操作不代表工程审核通过。');
@@ -75,7 +115,7 @@ export function installStudyWorkflow(faux: Faux, input: { workspace: string; stu
       state.done = true;
       return text('直埋校核研究和本次运行均已保存；结论、输入与限制见对应结果卡。');
     }
-    return advance(faux, state, finish, 'propose_delivery', { workspace_id: input.workspace, run_ids: [state.run] });
+    return advance(faux, state, finish, 'propose_delivery', { workspace_id: input.workspace, run_ids: [state.run], document: FORMAL_DOCUMENT });
   };
   const afterRun: Reply = context => {
     const result = receipt(context);
@@ -101,11 +141,12 @@ export function installDeliveryWorkflow(faux: Faux, input: { workspace: string; 
   faux.setResponses([() => advance(faux, state, () => advance(faux, state, context => {
     const saved = receipt(context);
     assert.equal(saved.kind, 'delivery');
+    assert.equal(saved.media_type, 'application/pdf');
     assert.ok(saved.download_url, 'the answer needs the actual saved calculation book');
     state.file = saved.download_url;
     state.done = true;
     return text('已从指定的保存运行生成计算书，可从文件卡预览和下载。');
-  }, 'propose_delivery', { workspace_id: input.workspace, run_ids: [input.run] }), 'read', { path: 'spec-and-report' })]);
+  }, 'propose_delivery', { workspace_id: input.workspace, run_ids: [input.run], document: FORMAL_DOCUMENT }), 'read', { path: 'spec-and-report' })]);
   return state;
 }
 
@@ -131,7 +172,8 @@ export function installTypeRead(faux: Faux, typeId: string): FlowState {
   return state;
 }
 
-export function installConditionWorkflow(faux: Faux, input: { workspace: string; study: string; run: string; path: string; value: number }): FlowState {
+export function installConditionWorkflow(faux: Faux, input: { workspace: string; study: string; run: string; path: string;
+  value: number; requireVisibleReferences?: boolean }): FlowState {
   const state: FlowState = { done: false, study: input.study, previousRun: input.run };
   const afterCompare: Reply = context => {
     state.comparison = data(context).comparison;
@@ -147,29 +189,121 @@ export function installConditionWorkflow(faux: Faux, input: { workspace: string;
     return advance(faux, state, afterCompare, 'study_compare', { workspace_id: input.workspace, run_ids: [input.run, state.run] });
   };
   const afterChange: Reply = context => { receipt(context); return advance(faux, state, afterRun, 'propose_study_run', { workspace_id: input.workspace, study_id: input.study }); };
-  faux.setResponses([() => advance(faux, state, context => {
-    const result = data(context);
-    const field = result.fields?.find((item: any) => item.path === input.path);
-    assert.ok(field, 'the exact saved field must be read before proposing it');
-    assert.equal(typeof field.unit, 'string', 'use the display unit declared by the platform, not an assumed spelling');
-    return advance(faux, state, afterChange, 'propose_domain_changes', { workspace_id: input.workspace, title: '调整明确给定的敷设条件',
-      changes: [{ path: input.path, value: input.value, unit: field.unit }] });
-  }, 'workspace_read', { workspace_id: input.workspace, paths: [input.path] })]);
+  faux.setResponses([context => {
+    if (input.requireVisibleReferences) {
+      const visible = context.messages.map(message => typeof message.content === 'string' ? message.content
+        : message.content.filter(part => part.type === 'text').map(part => part.text).join('\n')).join('\n');
+      for (const reference of [input.path, input.study, input.run])
+        assert.ok(visible.includes(reference), 'a follow-up must retain the actual prior field/study/run identity: ' + reference);
+    }
+    return advance(faux, state, context => {
+      const result = data(context);
+      const field = result.fields?.find((item: any) => item.path === input.path);
+      assert.ok(field, 'the exact saved field must be read before proposing it');
+      assert.equal(typeof field.unit, 'string', 'use the display unit declared by the platform, not an assumed spelling');
+      return advance(faux, state, afterChange, 'propose_domain_changes', { workspace_id: input.workspace, title: '调整明确给定的敷设条件',
+        changes: [{ path: input.path, value: input.value, unit: field.unit }] });
+    }, 'workspace_read', { workspace_id: input.workspace, paths: [input.path] });
+  }]);
   return state;
 }
 
 export function installTypeWorkflow(faux: Faux, input: { workspace: string; typeId?: string; source?: { id: string; content_sha256: string }; thicknessMm: number }): FlowState {
-  const state: FlowState = { done: false, typeId: input.typeId };
+  const state: FlowState = { done: false, typeId: input.typeId, channelRuns: {} };
   const fields: any[] = [];
   let cable = '';
   let basis = '';
+  const savedStudies = new Map<string, Record<string, any>>();
+  const definitions = new Map<string, Record<string, any>>();
+  const spacedLayouts = new Set(['flat', 'air', 'ducts', 'three_core_buried_horizontal', 'three_core_ducts_horizontal']);
+  const savedRatingRows: Record<string, any>[] = [];
+  let ratingRows: Record<string, any>[] | undefined;
+  let ratingDigest: string | undefined;
+  const channel = (study: Record<string, any>): string | undefined => {
+    const method = study.method;
+    if (method?.plugin_id === 'cablesim.cable-geometry') return 'geometry';
+    if (method?.plugin_id === 'cablesim.type-electrical' && method.capability === 'electrical') return 'electrical';
+    if (method?.plugin_id === 'cablesim.type-electrical' && method.capability === 'short-circuit') return 'short_circuit';
+    if (method?.plugin_id === 'cablesim.standard-check' && method.capability === 'dimensions') return 'standards';
+    if (method?.plugin_id === 'cablesim.iec60287' && method.capability === 'steady-rating' && study.driver === 'batch') return 'rating';
+    return undefined;
+  };
   const finish: Reply = context => {
-    const result = receipt(context); assert.equal(result.kind, 'specification'); state.file = result.download_url; state.done = true;
-    return text('型号结构已保存，标准核对已运行，内部规格书已生成。\n未覆盖、缺实测与待审核项均保留，未把草稿发布为产品保证。');
+    if ((context.messages.at(-1) as { isError?: boolean }).isError) {
+      // The bridge exposes a rejected HTTP call as its actual human-readable
+      // tool error, not a successful JSON observation. Match that exact refusal.
+      const refused = toolText(context);
+      assert.match(refused, /正式规格书缺少完整保存的核对通道：/);
+      for (const label of ['结构推导', '电气参数', '载流量表', '短路容量']) assert.ok(refused.includes(label));
+      assert.ok(['geometry', 'electrical', 'rating', 'short_circuit'].some(key => !definitions.has(key)),
+        'a complete existing type must finish its actual PDF instead of accepting a new refusal');
+      assert.match(toolText(context), /正式规格书缺少完整保存的核对通道/);
+      state.done = state.refused = true;
+      return text('型号结构和标准核对已保存；正式规格书缺少其余完整保存的计算通道，尚未导出 PDF。请先明确并保存所缺方法条件，再逐项提出运行并由人接受；没有补猜工程数据。');
+    }
+    const result = receipt(context);
+    assert.equal(result.kind, 'specification');
+    assert.equal(result.media_type, 'application/pdf');
+    for (const key of ['geometry', 'electrical', 'rating', 'short_circuit', 'standards'])
+      assert.ok(state.channelRuns?.[key], 'the formal specification must use a new accepted run for ' + key);
+    state.file = result.download_url;
+    state.done = true;
+    return text('型号结构已保存，五个通道已按当前修订逐项核对，正式 PDF 规格书已生成，含签栏与追溯页。\n未覆盖、缺实测与待审核项均保留，未把草稿发布为产品保证。');
+  };
+  const exportSpecification = () => advance(faux, state, finish, 'propose_type_specification',
+    { type_id: state.typeId, audience: 'internal', document: FORMAL_DOCUMENT });
+  const afterRatingRun: Reply = context => {
+    const result = receipt(context);
+    assert.equal(result.status, 'succeeded');
+    assert.ok(result.run_id);
+    state.channelRuns!.rating = result.run_id;
+    return exportSpecification();
+  };
+  const recompileRating = () => {
+    const saved = definitions.get('rating')!;
+    const rows = ratingRows ?? saved.rating_table?.rows;
+    assert.ok(Array.isArray(rows) && rows.length > 0, 'read the actual saved rating rows through study_read; never recreate them from test fixtures');
+    assert.deepEqual(rows.map((row: any) => row.case_id), saved.cases.map((item: any) => item.case_id),
+      'every recompiled row retains the exact saved case identity');
+    assert.ok(rows.every((row: any) => typeof row.source === 'string' && row.source.length > 0 && row.rating_basis),
+      'retain each actual declared source and rating basis; no schema defaults supply engineering facts');
+    assert.ok(saved.definition.parameters && typeof saved.definition.parameters.source === 'string',
+      'reuse only method parameters and sources visible in the actual saved definition');
+    return advance(faux, state, context => {
+      const result = receipt(context);
+      assert.ok(result.study_id);
+      return advance(faux, state, afterRatingRun, 'propose_study_run', { workspace_id: state.typeId, study_id: result.study_id });
+    }, 'propose_rating_table', { type_id: state.typeId, title: 'Agent 验收 · 修改后按原明示工况重编译载流量表',
+      rows, parameters: saved.definition.parameters,
+      ...(saved.rating_table.selected_case_ids !== undefined ? { selected_case_ids: saved.rating_table.selected_case_ids } : {}) });
+  };
+  const replayChannels = ['geometry', 'electrical', 'short_circuit'];
+  let replayIndex = 0;
+  const runSavedChannel = (): ReturnType<typeof fauxAssistantMessage> => {
+    const name = replayChannels[replayIndex++];
+    if (!name) return recompileRating();
+    const saved = definitions.get(name)!;
+    assert.equal(saved.definition.input_source, 'domain', 'the existing calculation must read the current saved type input');
+    return advance(faux, state, context => {
+      const result = receipt(context);
+      assert.equal(result.status, 'succeeded', 'the reused ' + name + ' method must complete on the revised type');
+      assert.ok(result.run_id);
+      state.channelRuns![name] = result.run_id;
+      return runSavedChannel();
+    }, 'propose_study_run', { workspace_id: state.typeId, study_id: saved.study_id });
   };
   const afterRun: Reply = context => {
     const result = receipt(context); assert.equal(result.status, 'succeeded'); state.run = result.run_id; state.result = result.result;
-    return advance(faux, state, finish, 'propose_type_specification', { type_id: state.typeId, audience: 'internal' });
+    assert.ok(state.run);
+    state.channelRuns!.standards = state.run;
+    // A library-created draft has no complete old calculation definitions. Ask
+    // the formal service to identify its real missing evidence; never invent
+    // conditions just to make this isolated fixture export successfully.
+    if (['geometry', 'electrical', 'rating', 'short_circuit'].some(key => !definitions.has(key))) {
+      assert.ok(!input.typeId, 'the existing released type must expose all four reusable saved method definitions; found ' + JSON.stringify([...savedStudies]));
+      return exportSpecification();
+    }
+    return runSavedChannel();
   };
   const afterStudy: Reply = context => {
     state.study = receipt(context).study_id;
@@ -201,6 +335,90 @@ export function installTypeWorkflow(faux: Faux, input: { workspace: string; type
       return advance(faux, state, afterBasis, 'propose_type_basis', { type_id: state.typeId });
     }, 'workspace_read', { workspace_id: state.typeId, paths: fields.map(field => field.path) });
   };
+  const proposeChange = () => advance(faux, state, afterChange, 'propose_type_changes', { type_id: state.typeId,
+    reason: '按本轮明确要求调整绝缘厚度', changes: fields.map(field => ({ path: field.path, value: input.thicknessMm, unit: 'mm' })) });
+  const collectRatingInputs: Reply = context => {
+    const result = data(context);
+    const study = savedStudies.get('rating')!;
+    assert.equal(result.resource.kind, 'rating_table');
+    assert.equal(result.resource.run_id, study.latest_run_id);
+    assert.equal(result.resource.study_id, study.id);
+    assert.equal(result.resource.integrity, 'verified');
+    assert.equal(result.resource.status, 'succeeded');
+    assert.equal(result.resource.freshness, 'current', 'read the original physical conditions before changing the saved type');
+    if (ratingDigest) assert.equal(result.source.response_digest, ratingDigest, 'all original rating rows must come from the same immutable response');
+    ratingDigest = result.source.response_digest;
+    assert.match(ratingDigest!, /^[0-9a-f]{64}$/);
+    assert.equal(result.page.view, '/rows');
+    if (Array.isArray(result.page.value)) savedRatingRows.push(...result.page.value);
+    else {
+      assert.ok(Array.isArray(result.page.items), 'the saved table exposes real bounded rows');
+      for (const item of result.page.items) {
+        assert.ok(!item.omitted && item.value, 'an omitted row cannot supply engineering inputs');
+        savedRatingRows.push(item.value);
+      }
+    }
+    if (result.next_read) return advance(faux, state, collectRatingInputs, result.next_read.tool, result.next_read.arguments);
+    const original = definitions.get('rating')!.rating_table.rows as Record<string, any>[];
+    assert.deepEqual(savedRatingRows.map(row => row.case_id).sort(), original.map(row => row.case_id).sort(),
+      'the physical inputs and saved definition must name exactly the same cases');
+    ratingRows = original.map(row => {
+      const saved = savedRatingRows.find(item => item.case_id === row.case_id)!;
+      assert.equal(saved.status, '已计算');
+      assert.equal(saved.name, row.name);
+      for (const [key, value] of Object.entries(row)) {
+        const actual = saved.condition[key];
+        if (typeof value === 'number') assert.ok(typeof actual === 'number' && Math.abs(actual - value) < 1e-10,
+          'the actual saved physical condition must agree with the declared ' + key + ' in case ' + row.case_id);
+        else assert.deepEqual(actual, value, 'preserve the original declared ' + key + ' in case ' + row.case_id);
+      }
+      if (!spacedLayouts.has(row.layout) || row.spacing_m != null) return { ...row };
+      const spacing = saved.condition.actual_spacing_m;
+      assert.ok(typeof spacing === 'number' && Number.isFinite(spacing) && spacing > 0,
+        'an absent declared spacing needs an actual saved physical spacing; never infer a template default');
+      const source = `${row.source}\n本次排列间距读取自保存运行 ${study.latest_run_id} 的工况 ${row.case_id} 实际输入 condition.actual_spacing_m=${spacing} m；资源摘要 ${ratingDigest}。`;
+      assert.ok(source.length <= 1000, 'retain both the original declared source and the exact archived spacing reference in the review');
+      return { ...row, spacing_m: spacing, source };
+    });
+    return proposeChange();
+  };
+  const readDefinitions = (): ReturnType<typeof fauxAssistantMessage> => {
+    const next = [...savedStudies.entries()].find(([key]) => !definitions.has(key));
+    if (!next) {
+      const saved = definitions.get('rating');
+      if (saved) {
+        assert.ok(Array.isArray(saved.rating_table?.rows), 'read the actual rating conditions through the saved study definition');
+        if (saved.rating_table.rows.some((row: any) => spacedLayouts.has(row.layout) && row.spacing_m == null)) {
+          const study = savedStudies.get('rating')!;
+          assert.ok(study.latest_run_id, 'the original rating study must identify its saved physical result');
+          return advance(faux, state, collectRatingInputs, 'resource_read', {
+            workspace_id: state.typeId, kind: 'rating_table', run_id: study.latest_run_id, view: '/rows', limit: 1,
+          });
+        }
+      }
+      return proposeChange();
+    }
+    const [name, study] = next;
+    return advance(faux, state, context => {
+      const saved = data(context);
+      assert.equal(saved.study_id, study.id);
+      assert.equal(saved.definition.method.plugin_id, study.method.plugin_id);
+      assert.equal(saved.definition.method.capability, study.method.capability);
+      definitions.set(name, saved);
+      return readDefinitions();
+    }, 'study_read', { workspace_id: state.typeId, study_id: study.id });
+  };
+  const afterStudyList: Reply = context => {
+    const studies = data(context).studies;
+    assert.ok(Array.isArray(studies), 'discover the actual saved methods through the scoped study list');
+    for (const study of studies) {
+      const name = channel(study);
+      // The new standard study uses a freshly accepted basis query below;
+      // only these four existing definitions supply facts we actually reuse.
+      if (name && name !== 'standards') savedStudies.set(name, study);
+    }
+    return readDefinitions();
+  };
   const collect: Reply = context => {
     const result = data(context);
     assert.equal(result.view, 'input', 'editing reads saved input pages, not unrelated calculation or standard evidence');
@@ -209,10 +427,33 @@ export function installTypeWorkflow(faux: Faux, input: { workspace: string; type
     assert.ok(fields.length, 'the type must expose insulation thickness with stable field paths');
     assert.ok(fields.every(field => field.unit === 'mm'), 'the model uses exactly the tool display unit');
     cable = fields[0].path.split('/')[2].replace(/~1/g, '/').replace(/~0/g, '~');
-    return advance(faux, state, afterChange, 'propose_type_changes', { type_id: state.typeId, reason: '按本轮明确要求调整绝缘厚度',
-      changes: fields.map(field => ({ path: field.path, value: input.thicknessMm, unit: 'mm' })) });
+    return advance(faux, state, afterStudyList, 'study_list', { workspace_id: state.typeId });
   };
-  const readType = () => advance(faux, state, collect, 'type_read', { type_id: state.typeId, view: 'input', limit: 20 });
+  const inspectExisting: Reply = context => {
+    const outline = data(context);
+    assert.equal(outline.objects.cable_types.length, 1, 'the named type exposes one actual cable structure');
+    const object = outline.objects.cable_types[0];
+    const paths: string[] = object.fields.filter((field: any) => /\/conductor\/nominal_area$/.test(field.path))
+      .map((field: any) => field.path.replace('/conductor/nominal_area', '/layers/insulation/thickness'));
+    assert.ok(paths.length > 0 && paths.length <= 8, 'discover each saved core identity before requesting its insulation field');
+    return advance(faux, state, context => {
+      const saved = data(context);
+      assert.equal(saved.workspace_revision, outline.workspace_revision, 'all requested fields belong to the inspected saved revision');
+      assert.equal(saved.freshness, 'current');
+      assert.equal(saved.fields.length, paths.length);
+      for (const path of paths) {
+        const field = saved.fields.find((item: any) => item.path === path);
+        assert.ok(field && typeof field.value === 'number' && ['m', 'mm'].includes(field.unit),
+          'each proposed change starts from its actual saved value and declared unit');
+        fields.push(field);
+      }
+      cable = paths[0].split('/')[2].replace(/~1/g, '/').replace(/~0/g, '~');
+      return advance(faux, state, afterStudyList, 'study_list', { workspace_id: state.typeId });
+    }, 'workspace_read', { workspace_id: state.typeId, paths });
+  };
+  const readType = () => input.typeId
+    ? advance(faux, state, inspectExisting, 'workspace_read', { workspace_id: state.typeId })
+    : advance(faux, state, collect, 'type_read', { type_id: state.typeId, view: 'input', limit: 20 });
   const afterCreate: Reply = context => { state.typeId = receipt(context).type_id; assert.ok(state.typeId); return readType(); };
   faux.setResponses([() => advance(faux, state, () => {
     if (state.typeId) return readType();
@@ -383,7 +624,7 @@ export async function prepareGbFixture(api: PlatformRequest, typeWorkspace: stri
 
 export function gbRequest(input: GbFixture, reviewed: boolean): string {
   return `${reviewed ? '我已核对并确认' : '我尚未确认'}采用该运行完整保存的基准值（页面显示${input.baselineCurrent.toFixed(1)} A）：${input.baselineSource}；PDF SHA256 ${input.baselineDigest}。`
-    + '实际系统线电压为10 kV，电缆额定电压保持原值；按已保存30 °C同埋深单回工况做GB 50217校正并导出计算书，每步先让我接受。';
+    + '实际系统线电压为10 kV，电缆额定电压保持原值；按已保存30 °C同埋深单回工况做GB 50217校正并导出计算书，每步先让我接受。' + FORMAL_DOCUMENT_PROMPT;
 }
 
 export function installGbWorkflow(faux: Faux, input: GbFixture & { baselineReviewed: boolean }): FlowState {
@@ -394,7 +635,7 @@ export function installGbWorkflow(faux: Faux, input: GbFixture & { baselineRevie
     const current = state.result!.headlines.find((row: any) => row.key === 'ampacity').display_value;
     return text(`GB 50217 校正后允许电流为 ${current.toFixed(1)} A，计算书来自该次保存运行。\n基准是工程师明确核对的已保存IEC参考结果，不是厂家保证值；适用条件、校正系数与标准出处请在工作台核对。`); };
   const afterRead: Reply = context => { state.result = data(context); assert.equal(state.result.run_id, state.run);
-    return advance(faux, state, finish, 'propose_delivery', { workspace_id: input.workspace, run_ids: [state.run] }); };
+    return advance(faux, state, finish, 'propose_delivery', { workspace_id: input.workspace, run_ids: [state.run], document: FORMAL_DOCUMENT }); };
   const afterRun: Reply = context => {
     if (!input.baselineReviewed) {
       assert.equal((context.messages.at(-1) as { isError?: boolean }).isError, true);

@@ -10,10 +10,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { chromium, type Browser, type Frame, type Locator, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Frame, type Locator, type Page, type Response as BrowserResponse } from 'playwright';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import type { ChatView, Proposal } from '../shared/types.ts';
-import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
+import { FORMAL_DOCUMENT, FORMAL_DOCUMENT_PROMPT, gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
   installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState } from './fusion-scripts.ts';
 import { probe } from './layout-probe.ts';
 import { scriptedModel } from './support.ts';
@@ -117,6 +117,70 @@ async function json<T = any>(base: string, path: string, body?: unknown, method:
   const text = clean(await response.text(), 'setup/public-api');
   assert.ok(response.ok, `${response.status} ${path}: ${text.slice(0, 1200)}`);
   return JSON.parse(text) as T;
+}
+
+/** Inspect the actual issued bytes and embedded source model, not the file card's title. */
+async function formalPdf(response: Response, name: string, kind: 'calculation' | 'specification') {
+  assert.ok(response.ok, '正式交付文件必须可读取');
+  assert.match(response.headers.get('content-type') || '', /^application\/pdf(?:;|$)/);
+  const content = Buffer.from(await response.arrayBuffer());
+  clean(content.toString('utf8'), 'download/' + name);
+  assert.equal(content.subarray(0, 5).toString(), '%PDF-');
+  const digest = createHash('sha256').update(content).digest('hex');
+  assert.equal(digest, response.headers.get('x-artifact-sha256'), '下载字节必须符合归档摘要');
+  const path = join(out, name + '.pdf');
+  writeFileSync(path, content);
+  const label = 'inspect-' + name;
+  const inspection = launch(label, python, ['-c', [
+    'import fitz,json,sys',
+    'with fitz.open(sys.argv[1]) as pdf:',
+    ' pages = [page.get_text() for page in pdf]',
+    ' text = "\\n".join(pages)',
+    ' model = json.loads(pdf.embfile_get("formal-model.json"))',
+    ' print(json.dumps({"pages":len(pages), "kind":model["kind"], "metadata":model["metadata"],',
+    '  "signatureLabels":[label for label in ("编制与审核签栏","设计","校核","审核","批准") if label in text],',
+    '  "tracePages":[index + 1 for index,page in enumerate(pages) if "追溯记录" in page],',
+    '  "sourceDigest":model["source_digest"], "modelDigest":model["model_digest"],',
+    '  "sourceIdentity":model["source_identity"]},ensure_ascii=False))',
+  ].join('\n'), path], repo, process.env);
+  await completed(inspection, label, 30_000);
+  const inspected = JSON.parse(clean(processLogs[label], label));
+  assert.equal(inspected.kind, kind);
+  assert.deepEqual(inspected.signatureLabels, ['编制与审核签栏', '设计', '校核', '审核', '批准']);
+  assert.ok(inspected.tracePages.length > 0 && inspected.tracePages[0] > 1, '正式 PDF 须有独立追溯页');
+  assert.equal(inspected.sourceDigest, response.headers.get('x-delivery-source-sha256'));
+  assert.equal(inspected.modelDigest, response.headers.get('x-delivery-model-sha256'));
+  for (const field of ['organization', 'number', 'revision'] as const) {
+    assert.equal(inspected.metadata[field], FORMAL_DOCUMENT[field], '正式文件须采用用户明确提供的 ' + field);
+  }
+  return { file: name + '.pdf', digest, bytes: content.length, ...inspected };
+}
+
+/** Wait for Chromium's native plugin to load this PDF before capturing the preview. */
+async function nativePdfReady(page: Page, url: string, pages: number) {
+  let viewerFrame: Frame | undefined;
+  let loaded: { progress: number; pages: number; width: number; height: number } | undefined;
+  await until(async () => {
+    for (const candidate of page.frames()) {
+      const state = await candidate.evaluate(({ url, pages }) => {
+        // Pinned Chromium pdf_viewer.ts updates these from the plugin's loadProgress/documentDimensions messages.
+        const viewer = document.querySelector('pdf-viewer') as (HTMLElement & {
+          loadProgress_: number; docLength_: number; showErrorDialog: boolean;
+        }) | null;
+        const plugin = viewer?.shadowRoot?.querySelector('embed#plugin');
+        if (!viewer || !plugin || plugin.getAttribute('original-url') !== url || viewer.showErrorDialog
+          || viewer.loadProgress_ !== 100 || viewer.docLength_ !== pages) return null;
+        const bounds = plugin.getBoundingClientRect();
+        if (bounds.width <= 0 || bounds.height <= 0) return null;
+        return { progress: viewer.loadProgress_, pages: viewer.docLength_, width: bounds.width, height: bounds.height };
+      }, { url, pages }).catch(() => null);
+      if (state) { viewerFrame = candidate; loaded = state; return true; }
+    }
+    return false;
+  }, '原生 PDF 预览已加载同一归档文件、解析全部页数并显示插件');
+  assert.ok(viewerFrame && loaded);
+  await viewerFrame.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  return loaded;
 }
 
 /** Observe the browser's completed read, so a heading cannot stand in for its still-loading child data. */
@@ -312,7 +376,7 @@ async function accept(frame: Frame, proposalId?: string): Promise<void> {
   assert.equal(decision.status, 'accepted');
   await until(async () => !(await waitingReviews(frame)).some(proposal => proposal.id === id), '同一已接受提案退出实际待审队列', 90_000);
 }
-async function approveAll(frame: Frame, state: FlowState): Promise<number> {
+async function approveAll(frame: Frame, state: FlowState, beforeAccept?: (proposal: Proposal) => Promise<void>): Promise<number> {
   let count = 0;
   while (!state.done && !state.failure) {
     let review: Proposal | undefined;
@@ -325,6 +389,7 @@ async function approveAll(frame: Frame, state: FlowState): Promise<number> {
     }, '下一项实际待审提案或任务完成', 90_000);
     if (state.done || state.failure) break;
     assert.ok(review);
+    if (beforeAccept) await beforeAccept(review);
     await accept(frame, review.id);
     count += 1;
     assert.ok(count <= 10, '单项任务不应无限产生提案');
@@ -443,11 +508,12 @@ try {
     baselineA: gb.baselineCurrent, source: gb.baselineSource, pdfSha256: gb.baselineDigest, pdfPage: gb.baselinePage,
     systemVoltageV: 10000, cableRatedVoltageChanged: false });
 
-  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+  // The full Chromium new headless mode renders PDFs; the default headless shell downloads them instead.
+  browser = await chromium.launch({ channel: 'chromium', executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
-    const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
-    const page = await context.newPage();
+    const context: BrowserContext = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+    const page: Page = await context.newPage();
     const flush = await observe(page);
     try {
       stage = 'empty';
@@ -496,7 +562,7 @@ try {
       const studyBefore = await json(backendUrl, `/api/workspaces/${source.workspace}/studies`);
       const deliveriesBefore = await json(backendUrl, `/api/workspaces/${source.workspace}/deliveries`);
       const flow = installStudyWorkflow(model.faux, { workspace: source.workspace, study: source.study, title: `Agent 验收 · ${viewport.width} 直埋校核` });
-      await speak(frame, '按城南已保存工况新建一项直埋校核，算出来，再导出计算书。每个写操作先让我接受。');
+      await speak(frame, '按城南已保存工况新建一项直埋校核，算出来，再导出带签栏和追溯页的正式计算书。每个写操作先让我接受。' + FORMAL_DOCUMENT_PROMPT);
       await pending(frame);
       const studyPending = await json(backendUrl, `/api/workspaces/${source.workspace}/studies`);
       record(`${viewport.width}/unapproved-create-does-not-write`, studyPending.length === studyBefore.length, { before: studyBefore.length, pending: studyPending.length });
@@ -534,33 +600,58 @@ try {
       await accept(frame);
       await until(() => Boolean(flow.run) || Boolean(flow.failure), '真实计算后继续', 90_000);
       assert.equal(flow.failure, undefined);
-      await pending(frame);
+      const deliveryProposal = await pendingReview(frame, proposal => proposal.operation === 'propose_delivery');
       const deliveriesPending = await json(backendUrl, `/api/workspaces/${source.workspace}/deliveries`);
-      record(`${viewport.width}/unapproved-report-does-not-write`, deliveriesPending.length === deliveriesBefore.length,
-        { before: deliveriesBefore.length, pending: deliveriesPending.length });
-      await accept(frame);
+      const unapprovedFile = await fetch(backendUrl + '/api/agent/files/' + deliveryProposal.id);
+      const fileCardsPending = await frame.locator('[data-card="file"]').count();
+      record(`${viewport.width}/unapproved-report-does-not-write`, deliveriesPending.length === deliveriesBefore.length
+        && unapprovedFile.status === 404 && fileCardsPending === 0,
+      { before: deliveriesBefore.length, pending: deliveriesPending.length, proposal: deliveryProposal.id,
+        downloadStatus: unapprovedFile.status, fileCardsPending });
+      await accept(frame, deliveryProposal.id);
       await waitFlow(flow, '研究计算书');
       await frame.locator('[data-card="file"]').last().waitFor();
       const saved = await json(backendUrl, `/api/workspaces/${source.workspace}/studies/${flow.study}/runs/${flow.run}`);
+      assert.equal(flow.file, '/api/agent/files/' + deliveryProposal.id, '正式计算书使用同一已接受提案的归档文件');
       const file = await fetch(backendUrl + flow.file!);
-      const reportHtml = clean(await file.text(), 'download/report');
-      record(`${viewport.width}/study-run-report`, saved.status === 'succeeded' && file.ok && Boolean(file.headers.get('x-artifact-sha256')) && /<html[\s>]/i.test(reportHtml),
+      const report = await formalPdf(file, `${viewport.width}-calculation-book`, 'calculation');
+      assert.deepEqual(report.sourceIdentity.pins.map((pin: { run_id: string }) => pin.run_id), [flow.run]);
+      const deliveriesAfter = await json(backendUrl, `/api/workspaces/${source.workspace}/deliveries`);
+      record(`${viewport.width}/study-run-report`, saved.status === 'succeeded' && deliveriesAfter.length === deliveriesBefore.length,
         { study: flow.study, run: flow.run, runStatus: saved.status, integrity: saved.integrity, file: flow.file,
-          archiveDigest: file.headers.get('x-artifact-sha256'), downloadedBytes: Buffer.byteLength(reportHtml) });
+          report, legacyDeliveriesAdded: deliveriesAfter.length - deliveriesBefore.length });
       const fileCard = frame.locator('[data-card="file"]').last();
       await fileCard.getByRole('button', { name: '预览', exact: true }).click();
       const previewElement = frame.locator('[role="dialog"] iframe');
       await previewElement.waitFor();
-      const previewFrame = await (await previewElement.elementHandle())!.contentFrame();
-      assert.ok(previewFrame);
-      await until(() => previewFrame.locator('body').innerText().then(text => text.includes('计算书')), '打开真实计算书预览');
-      record(`${viewport.width}/report-preview`, true, { file: flow.file, previewUrlKind: new URL(previewFrame.url()).protocol,
-        sandboxed: await previewElement.getAttribute('sandbox') === '' });
+      const previewUrl = await previewElement.getAttribute('src');
+      assert.ok(previewUrl);
+      assert.match(previewUrl, /^blob:/, '预览使用浏览器实际读取的已保存 PDF');
+      const previewBytes = await frame.evaluate(async url => {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)))
+          .map(value => value.toString(16).padStart(2, '0')).join('');
+        return { type: blob.type, bytes: bytes.byteLength, magic: new TextDecoder().decode(bytes.slice(0, 5)), digest };
+      }, previewUrl);
+      record(`${viewport.width}/report-preview`, previewBytes.type === 'application/pdf' && previewBytes.magic === '%PDF-'
+        && previewBytes.digest === report.digest && previewBytes.bytes === report.bytes,
+      { file: flow.file, previewUrlKind: new URL(previewUrl).protocol, ...previewBytes,
+        sandbox: await previewElement.getAttribute('sandbox') });
+      const nativeViewer = await nativePdfReady(page, previewUrl, report.pages);
+      record(`${viewport.width}/report-preview-native-viewer`, nativeViewer.progress === 100 && nativeViewer.pages === report.pages, nativeViewer);
+      await shot(page, frame, 'formal-report-preview', { run: flow.run, report: report.file, digest: report.digest, nativeViewer });
       await frame.getByRole('button', { name: '关闭', exact: true }).click();
       const downloadEvent = page.waitForEvent('download');
       await fileCard.getByRole('button', { name: '下载', exact: true }).click();
       const downloaded = await downloadEvent;
-      record(`${viewport.width}/report-download`, await downloaded.failure() === null, { url: downloaded.url(), filename: downloaded.suggestedFilename() });
+      assert.equal(await downloaded.failure(), null);
+      const downloadPath = await downloaded.path();
+      assert.ok(downloadPath);
+      const downloadDigest = createHash('sha256').update(readFileSync(downloadPath)).digest('hex');
+      record(`${viewport.width}/report-download`, downloadDigest === report.digest && downloaded.suggestedFilename().endsWith('.pdf'),
+        { url: downloaded.url(), filename: downloaded.suggestedFilename(), digest: downloadDigest });
       await fileCard.scrollIntoViewIfNeeded();
       await shot(page, frame, 'saved-report', { run: flow.run, download: flow.file });
 
@@ -619,6 +710,31 @@ try {
           && box.bottom <= Math.min(viewport.bottom, composer.top));
       }), '比较差值完整可见且没有被输入框遮挡');
       await shot(page, frame, 'conditions-compared', { run: condition.run, originalRun: source.run });
+      const comparedRuns = [source.run, condition.run];
+      const comparisonRead: Promise<BrowserResponse> = page.waitForResponse(async response => {
+        const request = response.request();
+        return request.method() === 'POST' && new URL(response.url()).pathname === `/api/workspaces/${source.workspace}/study-comparisons`
+          && JSON.stringify(request.postDataJSON()?.run_ids) === JSON.stringify(comparedRuns) && await response.finished() === null;
+      });
+      await frame.getByRole('button', { name: /^在工作台打开 · 两次保存运行对比/ }).click();
+      await page.waitForURL(url => url.pathname.endsWith('/method-compare/results')
+        && url.searchParams.get('workspace') === source.workspace && url.searchParams.get('compare') === comparedRuns.join(','));
+      const comparisonResponse = await comparisonRead;
+      assert.equal(comparisonResponse.status(), 200, '工作台必须成功读取完整保存运行对比');
+      const openedComparison = await comparisonResponse.json();
+      assert.deepEqual(openedComparison.sources.map((item: any) => item.run_id), comparedRuns);
+      const ampacityDifference = (comparison: any) => comparison.differences[0].quantities.find((item: any) => item.key === 'ampacity' && item.unit === 'A');
+      const openedAmpacity = ampacityDifference(openedComparison), cardAmpacity = ampacityDifference(condition.comparison);
+      assert.ok(openedAmpacity && cardAmpacity);
+      for (const key of ['baseline', 'value', 'difference']) assert.equal(openedAmpacity[key], cardAmpacity[key]);
+      // The baseline becomes historical when the approved condition changes;
+      // that valid state must still show the exact saved pair and its values.
+      await until(async () => ['success', 'historical'].includes(await page.locator('.study-compare-module').getAttribute('data-module-state') || ''), '工作台读取同一对保存运行');
+      record(`${viewport.width}/comparison-workbench-link`, true, { originalRun: source.run, comparedRun: condition.run,
+        comparisonUrl: page.url(), ampacityDifference: openedAmpacity });
+      await shot(page, undefined, 'comparison-opened-in-workbench', { originalRun: source.run, comparedRun: condition.run });
+      await page.locator('.sidebar-mode').locator('button').filter({ hasText: /^Agent$/ }).click();
+      frame = await agentFrame(page);
       const changedAmpacity = condition.result!.headlines.find((row: any) => row.key === 'ampacity').display_value.toFixed(1);
       await frame.locator('[data-card="rating"]').last().getByRole('button', { name: '在工作台打开', exact: true }).click();
       await page.waitForURL(url => url.searchParams.get('run') === condition.run);
@@ -635,18 +751,28 @@ try {
       await newChat(frame);
       const typeBefore = await json(backendUrl, `/api/workspaces/${type.workspace}`);
       const typeFlow = installTypeWorkflow(model.faux, { workspace: type.workspace, typeId: type.workspace, thicknessMm: 4.7 + (viewport.width === 1920 ? 0.1 : 0) });
-      await speak(frame, `把 YJV22-8.7/15 3×300 草稿的绝缘厚度改为 ${viewport.width === 1920 ? '4.8' : '4.7'} mm，核对后出内部规格书。每一步让我接受。`);
+      await speak(frame, `把 YJV22-8.7/15 3×300 草稿的绝缘厚度改为 ${viewport.width === 1920 ? '4.8' : '4.7'} mm，按新修订重新核对标准、几何、电气、短路容量、载流量五个通道，再出带签栏和追溯页的正式规格书。每一步让我接受。` + FORMAL_DOCUMENT_PROMPT);
       await pending(frame);
       const typePending = await json(backendUrl, `/api/workspaces/${type.workspace}`);
       record(`${viewport.width}/unapproved-structure-does-not-write`, typePending.revision === typeBefore.revision,
         { type: type.workspace, revisionBefore: typeBefore.revision, revisionPending: typePending.revision });
-      const typeApprovals = await approveAll(frame, typeFlow);
+      let specificationProposal: Proposal | undefined;
+      const typeApprovals = await approveAll(frame, typeFlow, async review => {
+        if (review.operation !== 'propose_type_specification') return;
+        specificationProposal = review;
+        const unavailable = await fetch(backendUrl + '/api/agent/files/' + review.id);
+        const fileCards = await frame.locator('[data-card="file"]').count();
+        record(`${viewport.width}/unapproved-specification-does-not-write`, unavailable.status === 404 && fileCards === 0,
+          { proposal: review.id, downloadStatus: unavailable.status, fileCards });
+      });
+      assert.ok(specificationProposal, '五通道结果具备后仍须单独接受正式规格书');
       await frame.locator('[data-card="file"]').last().waitFor();
+      assert.equal(typeFlow.file, '/api/agent/files/' + specificationProposal.id);
       const specification = await fetch(backendUrl + typeFlow.file!);
-      const pdf = Buffer.from(await specification.arrayBuffer());
-      record(`${viewport.width}/type-change-check-specification`, typeApprovals === 5 && specification.ok && specification.headers.get('content-type')?.includes('application/pdf') === true && pdf.subarray(0, 5).toString() === '%PDF-',
+      const specificationPdf = await formalPdf(specification, `${viewport.width}-specification`, 'specification');
+      record(`${viewport.width}/type-change-check-specification`, typeApprovals === 10,
         { type: typeFlow.typeId, approvals: typeApprovals, study: typeFlow.study, run: typeFlow.run, file: typeFlow.file,
-          artifactDigest: specification.headers.get('x-artifact-sha256'), downloadedBytes: pdf.length });
+          report: specificationPdf });
       await frame.locator('[data-card="file"]').last().scrollIntoViewIfNeeded();
       await shot(page, frame, 'type-specification', { type: typeFlow.typeId, run: typeFlow.run, download: typeFlow.file });
 
@@ -747,11 +873,14 @@ try {
       if (await gbChanges.count()) await gbChanges.click();
       const gbApprovals = await approveAll(frame, correction);
       const correctedRun = await json(backendUrl, `/api/workspaces/${gb.workspace}/studies/${correction.study}/runs/${correction.run}?view=full`);
+      const correctionPdf = await formalPdf(await fetch(backendUrl + correction.file!), `${viewport.width}-gb-calculation-book`, 'calculation');
+      assert.deepEqual(correctionPdf.sourceIdentity.pins.map((pin: { run_id: string }) => pin.run_id), [correction.run]);
       const artifact = correctedRun.output.cases[0].artifacts['x-cablesim.gb50217-correction'];
       const gbValue = artifact.corrected_current_a.toFixed(1);
       record(`${viewport.width}/gb-correction-saved`, gbApprovals === 3 && correctedRun.status === 'succeeded' && correctedRun.integrity === 'verified'
         && artifact.total_factor === 0.96 && correctedRun.snapshot.definition.parameters.baseline_sha256 === gb.baselineDigest,
-      { run: correction.run, currentA: artifact.corrected_current_a, coefficients: artifact.coefficients, baselinePage: gb.baselinePage, baselineSha256: gb.baselineDigest, file: correction.file });
+      { run: correction.run, currentA: artifact.corrected_current_a, coefficients: artifact.coefficients, baselinePage: gb.baselinePage, baselineSha256: gb.baselineDigest, file: correction.file,
+        report: correctionPdf });
       await frame.getByRole('button', { name: '在工作台打开 · 查看已保存运行', exact: true }).last().click();
       await page.waitForURL(url => url.searchParams.get('run') === correction.run);
       await until(async () => (await page.getByLabel('GB 50217 校正结论', { exact: true }).innerText()).includes(gbValue), '旧工作台显示同一GB校正电流');
@@ -804,6 +933,11 @@ try {
           await shot(page, frame, 'import-upload-proposal', { file: workbook.filename, sha256: imported.attachment!.sha256 });
         } else if (phase === 1) {
           await expandProposal(proposal);
+          const trace = proposal.getByRole('button', { name: /^追溯信息/ });
+          assert.equal(await trace.getAttribute('aria-expanded'), 'false');
+          assert.ok(!(await proposal.innerText()).includes(imported.upload!.sha256), '摘要只在追溯信息中显示');
+          await trace.click();
+          await until(async () => (await proposal.locator('[data-proposal-trace]').innerText()).includes(imported.upload!.sha256), '展开完整原件追溯信息');
           const review = await proposal.innerText();
           record(`${viewport.width}/import-mapping-review`, review.includes(workbook.filename) && review.includes(imported.upload!.sha256),
             { file: workbook.filename, sha256: imported.upload!.sha256, operation });
@@ -912,6 +1046,11 @@ try {
           await shot(page, frame, 'import-standard-source', { field: standardFact.key, citation: standardRecord.citation });
           await firstToggle.click();
           await expandProposal(proposal);
+          const trace = proposal.getByRole('button', { name: /^追溯信息/ });
+          assert.equal(await trace.getAttribute('aria-expanded'), 'false');
+          assert.ok(!(await proposal.innerText()).includes(imported.preview!.preview_digest), '预览摘要仅放在追溯信息中');
+          await trace.click();
+          await until(async () => (await proposal.locator('[data-proposal-trace]').innerText()).includes(imported.preview!.preview_digest), '完整预览摘要仍可审阅');
           const review = await proposal.innerText();
           record(`${viewport.width}/import-fixed-digest-review`, review.includes(imported.preview!.preview_digest) && review.includes(workbook.filename),
             { previewDigest: imported.preview!.preview_digest, allRowsPreserved: true });
@@ -943,6 +1082,22 @@ try {
       record(`${viewport.width}/import-old-workbench`, true, { type: firstSpec.workspace_id, name: firstSpec.name, url: page.url(), state: 'draft' });
       await shot(page, undefined, 'imported-type-workbench', { workspace: firstSpec.workspace_id, name: firstSpec.name });
       completedImports.add(viewport.width);
+
+      stage = 'settings-model-budget';
+      const modelSettings = await json(backendUrl, '/api/agent/settings');
+      await page.goto(frontendUrl + '/settings?section=ai', { waitUntil: 'domcontentloaded' });
+      const contextInput = page.getByLabel('上下文窗口（token）', { exact: true });
+      const outputInput = page.getByLabel('最大输出（token）', { exact: true });
+      await contextInput.waitFor();
+      await until(async () => !await contextInput.isDisabled() && !await outputInput.isDisabled(), '模型设置加载完成');
+      assert.equal(await contextInput.inputValue(), modelSettings.context_window == null ? '' : String(modelSettings.context_window));
+      assert.equal(await outputInput.inputValue(), modelSettings.max_output_tokens == null ? '' : String(modelSettings.max_output_tokens));
+      assert.equal(await contextInput.getAttribute('placeholder'), '64000');
+      assert.equal(await outputInput.getAttribute('placeholder'), String(Math.min(16384, (modelSettings.context_window ?? 64000) - 8192)));
+      await contextInput.scrollIntoViewIfNeeded();
+      record(`${viewport.width}/settings-model-budget`, true, { contextWindow: modelSettings.context_window,
+        maxOutputTokens: modelSettings.max_output_tokens, defaultContextWindow: 64000, defaultMaxOutputTokens: 16384 });
+      await shot(page, undefined, 'settings-model-budget');
     } catch (error) {
       const visibleFrame = page.frames().find(item => item.url().includes('/agent-app/fusion.html'));
       await shot(page, visibleFrame, `${stage}-failed`, { error: clean(error instanceof Error ? error.message : String(error), 'browser/scenario-failure') }).catch(() => undefined);
@@ -955,8 +1110,8 @@ try {
   sidecar = undefined;
   stage = 'sidecar-down';
   for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
-    const context = await browser.newContext({ viewport });
-    const page = await context.newPage();
+    const context: BrowserContext = await browser.newContext({ viewport });
+    const page: Page = await context.newPage();
     const flush = await observe(page);
     try {
       const [spaces, types, studies, inbox] = await Promise.all([

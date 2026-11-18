@@ -4,6 +4,7 @@
 import type { CardRef } from '../shared/types.ts';
 import type { SavedRunView } from '../shared/fusion-types.ts';
 import { compact, fixed } from '../shared/format.ts';
+import { engineeringText } from '../shared/fusion-presentation.ts';
 import { resultValue } from '../shared/products.ts';
 import type { Backend, ToolResult } from './backend.ts';
 import { savedRatingTable } from './rating-table.ts';
@@ -148,7 +149,7 @@ async function savedRun(backend: Backend, workspace: string, result: ToolResult,
   const method = methods.find(item => item.method.plugin_id === IEC);
   if (!summary || !studyName || !method) return open();
 
-  const text = summary.headline ?? '';
+  const text = engineeringText(summary.headline ?? '');
   const basis = /（([^）]+)）/.exec(text)?.[1] ?? '';
   const name = /受限于(.+)$/.exec(text)?.[1]?.trim() ?? '—';
   const medium = section.medium;
@@ -182,6 +183,19 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
     if (structure) return { ...shown, card: structure };
     if (result.data.receipt?.kind === 'structure_preview' && result.data.receipt.preview_omitted === true)
       return { ...shown, notes: ['预览已保存，但完整字段尚未读取；请按保存记录的分页提示查看所需明细。当前结果卡不能据以核对全部规格。'] };
+    if (tool === 'study_compare' && workspace) {
+      const sources = result.data.comparison?.sources;
+      const requested = args.run_ids;
+      if (Array.isArray(sources) && sources.length === 2 && Array.isArray(requested) && requested.length === 2
+        && sources.every((source: any, index: number) => typeof source.run_id === 'string' && source.run_id === requested[index]
+          && source.snapshot?.workspace_id === workspace && typeof source.snapshot?.study_id === 'string')) {
+        const first = sources[0];
+        const title = first.snapshot.definition?.title;
+        return { ...shown, card: { kind: 'open', label: '两次保存运行对比' + (typeof title === 'string' && title ? ` · ${title}` : ''),
+          href: href('study_comparison', first.snapshot.study_id, { workspace, compare: sources.map((source: any) => source.run_id).join(',') }) },
+          notes: ['完整输入、方法差异和量值均来自这两条保存运行；可在工作台逐项查看并下载追溯证据。'] };
+      }
+    }
     if (tool === 'resource_read' && result.data.resource?.kind === 'rating_table' && (args.offset === undefined || args.offset === 0)) {
       const table = await savedRatingTable(backend, result.data.resource, signal);
       if (table) return { ...shown, ...table };
@@ -204,9 +218,13 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
     const receipt = result.data.receipt;
     if (receipt && ['delivery', 'specification'].includes(receipt.kind) && typeof receipt.download_url === 'string'
       && /^\/(?!\/)/.test(receipt.download_url) && typeof receipt.href === 'string' && /^\/(?!\/)/.test(receipt.href)) {
+      const source = receipt.source;
+      const openHref = receipt.kind === 'specification' ? href('type', receipt.workspace_id)
+        : source?.study_id && source?.run_id ? href('study', source.study_id, { workspace: receipt.workspace_id, run: source.run_id })
+        : href('delivery', receipt.delivery_id, { workspace });
       return { ...shown, card: { kind: 'saved_file', title: receipt.title ?? '已保存文件', document_kind: receipt.kind === 'delivery' ? '计算书' : '规格书',
         format: receipt.media_type === 'application/pdf' ? 'pdf' : 'html',
-        href: receipt.kind === 'delivery' ? href('delivery', receipt.delivery_id, { workspace }) : href('type', receipt.workspace_id), download_url: receipt.download_url,
+        href: openHref, download_url: receipt.download_url,
         ...(typeof receipt.preview_url === 'string' && /^\/(?!\/)/.test(receipt.preview_url) ? { preview_url: receipt.preview_url } : {}) },
         notes: ['文件来自平台保存的输入与证据；生成文件没有重算或发布型号。'] };
     }

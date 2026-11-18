@@ -1,4 +1,4 @@
-// Recover the precise interruption window between a platform creation and the sidecar recording its tool result. The platform is
+// Recover the precise interruption window between a platform action and the sidecar recording its tool result. The platform is
 // a small protocol stand-in; pi's session persistence, recovery, scope checks and proposal gate are the production implementation.
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -36,6 +36,8 @@ class RecoveryBackend extends Backend {
     { name: 'propose_study_run', title: '提出运行研究', kind: 'propose', scope: 'workspace', description: '下一步运行仍需接受。',
       parameters: { ...empty, properties: { study_id: { type: 'string' } }, required: ['study_id'] } },
     { name: 'propose_type_basis', title: '提出保存标准依据', kind: 'propose', scope: 'type', description: '下一步保存仍需接受。', parameters: empty },
+    { name: 'propose_delivery', title: '提出导出计算书', kind: 'propose', scope: 'workspace', description: '仅恢复已保存文件。', parameters: empty },
+    { name: 'propose_type_specification', title: '提出导出规格书', kind: 'propose', scope: 'type', description: '仅恢复已保存文件。', parameters: empty },
   ];
   proposal = async (id: string, session: string): Promise<ProposalState> => {
     assert.equal(id, 'creation'); assert.equal(session, 'original-session'); this.lookups += 1;
@@ -60,7 +62,7 @@ class RecoveryBackend extends Backend {
   };
 }
 
-async function interrupted(kind: 'study' | 'type', localStatus: 'pending' | 'accepted', status: ProposalState['status'], receipt?: Record<string, any>) {
+async function interrupted(kind: 'study' | 'type' | 'delivery' | 'specification', localStatus: 'pending' | 'accepted', status: ProposalState['status'], receipt?: Record<string, any>) {
   const home = mkdtempSync(join(tmpdir(), 'fusion-recovery-'));
   const cwd = join(home, 'agent', 'workspace');
   const sessions = join(home, 'agent', 'sessions');
@@ -69,7 +71,7 @@ async function interrupted(kind: 'study' | 'type', localStatus: 'pending' | 'acc
   const manager = SessionManager.create(cwd, sessions);
   const id = manager.getSessionId();
   const context = { workspace_id: ORIGINAL, study_id: OLD_STUDY };
-  const operation = kind === 'study' ? 'propose_study' : 'propose_type_create';
+  const operation = { study: 'propose_study', type: 'propose_type_create', delivery: 'propose_delivery', specification: 'propose_type_specification' }[kind];
   manager.appendCustomEntry('cablesim.fusion.context', context);
   manager.appendCustomEntry(CREATED_ENTRY, { types: ['earlier-type'], studies: [['earlier-workspace', 'earlier-study']] });
   manager.appendMessage({ role: 'user', content: '新建之后继续完成任务', timestamp: Date.now() });
@@ -79,7 +81,7 @@ async function interrupted(kind: 'study' | 'type', localStatus: 'pending' | 'acc
   manager.appendCustomEntry('cablesim.fusion.proposal', { proposal, scope: { session: 'original-session', turn: 'original-turn' } });
   const backend = new RecoveryBackend(status, receipt);
   const scripted = await scriptedModel();
-  const agent = new FusionAgent({ home, backend, runtime: scripted.runtime, emit: () => undefined });
+  let agent = new FusionAgent({ home, backend, runtime: scripted.runtime, emit: () => undefined });
   const savedAdoption = () => {
     const reopened = SessionManager.open(manager.getSessionFile()!, sessions, cwd);
     const entry = reopened.getEntries().findLast(entry => entry.type === 'custom' && entry.customType === CREATED_ENTRY);
@@ -87,7 +89,8 @@ async function interrupted(kind: 'study' | 'type', localStatus: 'pending' | 'acc
     return entry.data as { types: string[]; studies: [string, string][] };
   };
   const savedMessages = () => SessionManager.open(manager.getSessionFile()!, sessions, cwd).buildSessionContext().messages;
-  return { agent, backend, faux: scripted.faux, id, context, savedAdoption, savedMessages,
+  return { get agent() { return agent; }, backend, faux: scripted.faux, id, context, savedAdoption, savedMessages,
+    restart: async () => { await agent.close(); agent = new FusionAgent({ home, backend, runtime: scripted.runtime, emit: () => undefined }); },
     close: async () => { await agent.close(); rmSync(home, { recursive: true, force: true }); } };
 }
 
@@ -185,6 +188,45 @@ for (const invalid of ['failed', 'incomplete', 'unapproved'] as const) {
       assert.deepEqual(fixture.backend.opened, []);
       assert.ok(steps(await fixture.agent.view(fixture.id)).some(step => step.reason?.includes('绑定了另一个工作台对象')));
       assert.deepEqual(fixture.backend.decisions, invalid === 'unapproved' ? [{ id: 'creation', accept: false }] : []);
+    } finally { await fixture.close(); }
+  });
+}
+
+for (const kind of ['delivery', 'specification'] as const) for (const localStatus of ['pending', 'accepted'] as const) {
+  test(`recovery restores the saved formal PDF ${kind} card from a ${localStatus} local step without exporting again`, async () => {
+    // Protocol metadata only: the real PDF bytes and T4 source binding are
+    // separately verified by the backend and integration export tests.
+    const receipt = { kind, workspace_id: ORIGINAL, title: kind === 'delivery' ? '已保存计算书' : '已保存规格书',
+      download_url: '/api/agent/files/creation', href: '/api/agent/files/creation', media_type: 'application/pdf',
+      digest: 'a'.repeat(64), source_digest: 'b'.repeat(64), model_digest: 'c'.repeat(64),
+      document_kind: kind === 'delivery' ? 'calculation' : 'specification',
+      document: { organization: '协议恢复测试单位', number: 'RECOVERY-TEST', revision: 'A' },
+      source: { workspace_id: ORIGINAL, revision: 1, ...(kind === 'delivery'
+        ? { study_id: OLD_STUDY, run_id: 'saved-run' } : { type_id: ORIGINAL }) } };
+    const fixture = await interrupted(kind, localStatus, 'approved', receipt);
+    try {
+      const recovered = steps(await fixture.agent.view(fixture.id))[0];
+      assert.equal(recovered.status, 'done');
+      assert.equal(recovered.proposal?.status, 'accepted');
+      const card = recovered.card;
+      assert.ok(card?.kind === 'saved_file', 'recovery must restore the actual saved file entry point, not only a successful step');
+      assert.equal(card.format, 'pdf');
+      assert.equal(card.title, receipt.title);
+      assert.equal(card.download_url, receipt.download_url);
+      assert.equal(card.href, kind === 'delivery' ? `cablesim:study/${OLD_STUDY}?workspace=${ORIGINAL}&run=saved-run` : `cablesim:type/${ORIGINAL}`);
+      const messages = fixture.savedMessages().filter(message => message.role === 'toolResult' && message.toolCallId === 'interrupted-call');
+      assert.equal(messages.length, 1);
+      assert.ok(messages[0].role === 'toolResult');
+      const text = messages[0].content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+      assert.deepEqual(JSON.parse(text).data.receipt, receipt, 'the recovered observation retains the exact saved URL, digests and source identity');
+      await fixture.restart();
+      assert.deepEqual(steps(await fixture.agent.view(fixture.id))[0].card, card, 'the restored card is persisted across another restart');
+      await assert.rejects(fixture.agent.decide('creation', true, undefined, fixture.id), { code: 'PROPOSAL_UNKNOWN' });
+      assert.equal(fixture.backend.lookups, 1);
+      assert.deepEqual(fixture.backend.decisions, [], 'restoring or reopening a completed PDF never accepts an export again');
+      assert.deepEqual(fixture.backend.calls, [], 'the saved receipt is not a request to run another export');
+      assert.deepEqual(fixture.backend.opened, []);
+      assert.deepEqual(fixture.savedAdoption(), { types: ['earlier-type'], studies: [['earlier-workspace', 'earlier-study']] });
     } finally { await fixture.close(); }
   });
 }

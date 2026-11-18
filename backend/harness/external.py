@@ -375,6 +375,7 @@ def make_router(harness, link):
     def file(pid: UUID):
         from hashlib import sha256
         from fastapi.responses import Response
+        from urllib.parse import quote
         with harness.research.store.db() as db:
             if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_external_files'").fetchone():
                 raise HTTPException(404, '没有此已生成文件。')
@@ -386,8 +387,13 @@ def make_router(harness, link):
             raise HTTPException(403, '文件尚未完成此会话的人工接受。')
         content = bytes(row['content'])
         if sha256(content).hexdigest() != row['sha256']: raise HTTPException(409, '文件完整性校验未通过。')
-        return Response(content, media_type=row['media_type'], headers={'Content-Disposition': 'inline; filename="' + row['filename'] + '"',
-            'X-Artifact-SHA256': row['sha256'], 'Cache-Control': 'no-store'})
+        headers = {'Content-Disposition': 'inline; filename="CableSimPro.pdf"; filename*=UTF-8\'\'' + quote(row['filename'], safe=''),
+                   'X-Artifact-SHA256': row['sha256'], 'Cache-Control': 'no-store'}
+        receipt = decision.get('receipt') or {}
+        for field, header in (('source_digest', 'X-Delivery-Source-SHA256'), ('model_digest', 'X-Delivery-Model-SHA256')):
+            if receipt.get(field):
+                headers[header] = receipt[field]
+        return Response(content, media_type=row['media_type'], headers=headers)
 
     @router.post('/api/agent/external/sessions/{session}/turns/{turn}/finish', dependencies=[Depends(authorized)])
     def finish(session: UUID, turn: str):

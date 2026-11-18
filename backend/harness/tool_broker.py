@@ -363,6 +363,15 @@ class ToolBroker:
                 'driver':{key:value for key,value in definition['driver'].items() if key!='cases'},
                 'cases':[{'case_id':case['case_id'],'label':case['label'],'parameters':case.get('parameters',{})}
                     for case in definition['driver'].get('cases',[])]}
+            cases=definition['driver'].get('cases',[])
+            if definition['driver']['kind']=='batch' and cases and all(
+                case.get('metadata',{}).get('kind')=='type-rating-table'
+                and isinstance(case.get('metadata',{}).get('condition'),dict) for case in cases):
+                # These are the saved, explicitly sourced conditions. A type
+                # revision must recompile them through propose_rating_table;
+                # rerunning frozen case inputs would retain the old geometry.
+                data['rating_table']={'rows':[deepcopy(case['metadata']['condition']) for case in cases],
+                    'selected_case_ids':deepcopy(definition['driver'].get('selected_case_ids'))}
             # Units come from the selected sealed producer contract, values from
             # this saved definition. Schema defaults are never used as facts.
             _,state,_=self.proposals.source(task)

@@ -5,6 +5,7 @@ from dataclasses import replace
 import json
 from uuid import uuid4
 
+import fitz
 import pytest
 
 from backend.domain.guards import value_at
@@ -14,10 +15,36 @@ from test_harness_types import design
 from test_research import study
 
 
+DOCUMENT = {'organization': 'Agent 正式文件回归单位', 'number': 'AGENT-验收-001', 'revision': 'A'}
+
+
+def formal_pdf(client, receipt):
+    response = client.get(receipt['download_url'])
+    assert response.status_code == 200, response.text[:1000]
+    assert response.headers['content-type'] == 'application/pdf'
+    assert response.content.startswith(b'%PDF-')
+    assert response.headers['x-artifact-sha256'] == receipt['digest']
+    assert response.headers['x-delivery-source-sha256'] == receipt['source_digest']
+    assert response.headers['x-delivery-model-sha256'] == receipt['model_digest']
+    assert 'filename*=UTF-8' in response.headers['content-disposition']
+    with fitz.open(stream=response.content, filetype='pdf') as document:
+        model = json.loads(document.embfile_get('formal-model.json'))
+        text = '\n'.join(page.get_text() for page in document)
+        assert '追溯记录' in text
+        assert all(label in text for label in ('设计', '校核', '审核', '批准'))
+        assert all(model['metadata'][key] in text for key in ('organization', 'number', 'revision'))
+        assert model['model_digest'] == receipt['model_digest']
+        assert model['source_digest'] == receipt['source_digest']
+    return model, text
+
+
 def counts(client):
     with client.app.state.workspace_store.db() as db:
-        return {name: db.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
-                for name in ('workspaces', 'studies', 'study_runs', 'deliveries', 'type_creation_proposals', 'requirement_basis_queries')}
+        result = {name: db.execute('SELECT COUNT(*) FROM ' + name).fetchone()[0]
+                  for name in ('workspaces', 'studies', 'study_runs', 'deliveries', 'type_creation_proposals', 'requirement_basis_queries')}
+        result['agent_files'] = (db.execute('SELECT COUNT(*) FROM agent_external_files').fetchone()[0]
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_external_files'").fetchone() else 0)
+        return result
 
 
 def propose(client, scope, tool, arguments):
@@ -85,14 +112,18 @@ def test_create_run_export_requires_each_human_decision_and_resumes(client):
     comparison = call(client, 'study_compare', {'run_ids': [rid, latest]}, scope['session'], scope['turn']).json()
     assert comparison['status'] == 'ok' and comparison['data']['run_ids'] == [rid, latest], comparison
     rid = latest
-    delivery = propose(client, scope, 'propose_delivery', {'run_ids': [rid]})
+    delivery = propose(client, scope, 'propose_delivery', {'run_ids': [rid], 'document': DOCUMENT})
     assert counts(client)['deliveries'] == before['deliveries']
+    assert counts(client)['agent_files'] == before['agent_files']
     exported = decide(client, delivery)
     assert exported['receipt']['kind'] == 'delivery', exported
-    assert counts(client)['deliveries'] == before['deliveries'] + 1
+    assert counts(client)['deliveries'] == before['deliveries']
+    assert counts(client)['agent_files'] == before['agent_files'] + 1
     assert decide(client, delivery) == exported
-    download = client.get(exported['receipt']['download_url'])
-    assert download.status_code == 200 and rid in download.text
+    model, _ = formal_pdf(client, exported['receipt'])
+    assert model['source_identity']['pins'][0]['run_id'] == rid
+    assert exported['receipt']['source']['study_id'] == saved['study_id']
+    assert exported['receipt']['source']['run_id'] == rid
     assert client.get('/api/agent/external/proposals/' + delivery['id'], headers=AUTH,
         params={'session': scope['session']}).json()['receipt'] == exported['receipt']
 
@@ -178,7 +209,7 @@ def test_missing_real_input_refuses_execution_without_inventing_results(client, 
     assert response.status_code == 200 and response.json()['status'] == 'ok'
 
 
-def test_type_edit_and_internal_specification_are_reviewed_and_exact(client):
+def test_type_edit_requires_saved_evidence_before_formal_specification(client):
     w, path = design(client)
     scope = open_session(client, w)
     assert scope['context']['kind'] == 'type'
@@ -191,19 +222,12 @@ def test_type_edit_and_internal_specification_are_reviewed_and_exact(client):
     assert value_at(current['domain'], path) == pytest.approx(.0158)
     studies = call(client, 'study_list', {}, scope['session'], scope['turn']).json()
     assert studies['status'] == 'ok', studies
-    proposal = propose(client, scope, 'propose_type_specification', {'audience': 'internal'})
     before = counts(client)
-    assert client.get('/api/agent/files/' + proposal['id']).status_code == 404
-    exported = decide(client, proposal)
-    assert exported['receipt']['kind'] == 'specification', exported
-    assert counts(client) == before  # no hidden studies/runs/publication
-    file = client.get(exported['receipt']['download_url'])
-    assert file.status_code == 200 and file.headers['content-type'] == 'application/pdf'
-    assert file.content.startswith(b'%PDF-')
-    assert file.headers['x-artifact-sha256'] == exported['receipt']['digest']
-    assert decide(client, proposal) == exported
-    scope = resume(client, scope)
-    customer = call(client, 'propose_type_specification', {'audience': 'customer'}, scope['session'], scope['turn']).json()
+    internal = call(client, 'propose_type_specification', {'audience': 'internal', 'document': DOCUMENT}, scope['session'], scope['turn']).json()
+    assert internal['status'] == 'error' and internal['diagnostics'][0]['code'] == 'FORMAL_SPECIFICATION_INCOMPLETE', internal
+    assert all(label in internal['diagnostics'][0]['message'] for label in ('结构', '电气', '载流量', '短路', '标准'))
+    assert 'proposal' not in internal['data'] and counts(client) == before
+    customer = call(client, 'propose_type_specification', {'audience': 'customer', 'document': DOCUMENT}, scope['session'], scope['turn']).json()
     assert customer['status'] == 'error' and customer['diagnostics'][0]['code'] == 'SPECIFICATION_EVIDENCE_REQUIRED'
 
 
@@ -304,10 +328,11 @@ def test_standard_structure_type_basis_check_and_specification_use_old_services(
     checked = decide(client, execution)['receipt']
     assert checked['kind'] == 'run' and checked['status'] == 'succeeded', checked
     scope = resume(client, scope)
-    exported = propose(client, scope, 'propose_type_specification', {'audience': 'internal'})
-    receipt = decide(client, exported)['receipt']
-    assert receipt['kind'] == 'specification', receipt
-    assert client.get(receipt['download_url']).content.startswith(b'%PDF-')
+    before_export = counts(client)
+    refusal = call(client, 'propose_type_specification', {'audience': 'internal', 'document': DOCUMENT}, scope['session'], scope['turn']).json()
+    assert refusal['status'] == 'error' and refusal['diagnostics'][0]['code'] == 'FORMAL_SPECIFICATION_INCOMPLETE', refusal
+    assert '标准' not in refusal['diagnostics'][0]['message'].split('。')[0]
+    assert counts(client) == before_export
     assert client.get('/api/workspaces/' + target['id']).json()['type_lifecycle']['status'] == 'draft'
 
 

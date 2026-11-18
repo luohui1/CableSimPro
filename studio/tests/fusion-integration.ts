@@ -16,7 +16,9 @@ import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingD
   prepareGbFixture, ratingConditions, type FlowState, type GbFixture } from './fusion-scripts.ts';
 import { scriptedModel, steps, toolText } from './support.ts';
 import { importInventory, installMissingStructureSource, installStructureImport, manufacturerWorkbook } from './fusion-import-scripts.ts';
-import { budgetedModel, CONTEXT_TOKENS, OUTPUT_TOKENS, tokenCounts } from './fusion-budget.ts';
+import { verifyContextBudget } from './fusion-context-budget.ts';
+import { assertFormalPdf, formalFileCount } from './fusion-deliveries.ts';
+import { FORMAL_DOCUMENT, FORMAL_DOCUMENT_PROMPT } from './fusion-scripts.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const home = mkdtempSync(join(tmpdir(), 'cablesim-fusion-integration-'));
@@ -153,6 +155,10 @@ async function baselineFixture() {
   return gbFixture;
 }
 
+test('both passes of six maintainer workflows compact natively in one 64k conversation at the actual serialized model boundary', { timeout: 360_000 }, async t => {
+  await verifyContextBudget({ repo: REPO, home, url, token: TOKEN, fixture, manifest }, t);
+});
+
 test('a read answer and its result card use the exact saved platform figures', async () => {
   const state = installStudyRead(faux, fixture);
   const { session } = await sidecar.agent.send(undefined, '研究的结论是什么，受什么限制？');
@@ -174,7 +180,8 @@ test('a read answer and its result card use the exact saved platform figures', a
 test('create a study, run it and export its calculation book; each business write waits for its own acceptance', { timeout: 90_000 }, async () => {
   workflow = installStudyWorkflow(faux, fixture);
   const original = await api<any[]>(`/api/workspaces/${fixture.workspace}/studies`);
-  const { session } = await sidecar.agent.send(undefined, '复制城南保存工况新建直埋校核，算出来并导出计算书',
+  const originalFiles = formalFileCount(REPO, join(home, 'engineering.sqlite'), fixture.workspace);
+  const { session } = await sidecar.agent.send(undefined, '复制城南保存工况新建直埋校核，算出来并导出正式计算书 PDF。' + FORMAL_DOCUMENT_PROMPT,
     { workspace_id: fixture.workspace, study_id: fixture.study, label: '当前研究详情' });
   studyConversation = session;
   const accepted: string[] = [];
@@ -186,6 +193,8 @@ test('create a study, run it and export its calculation book; each business writ
       assert.equal(runs.items.length, 0, 'no saved run before this second acceptance');
     }
     if (proposal.operation === 'propose_delivery') {
+      assert.equal(formalFileCount(REPO, join(home, 'engineering.sqlite'), fixture.workspace), originalFiles);
+      assert.equal((await fetch(url + '/api/agent/files/' + proposal.id)).status, 404);
       const rows = await api<any[]>(`/api/workspaces/${fixture.workspace}/deliveries`);
       assert.ok(!rows.some(row => row.sources?.some((source: any) => source.run_id === workflow.run || source.run === workflow.run)), 'no delivery for the new run before this third acceptance');
     }
@@ -194,9 +203,13 @@ test('create a study, run it and export its calculation book; each business writ
   assert.equal(workflow.done, true);
   assert.deepEqual(accepted, ['propose_study', 'propose_study_run', 'propose_delivery']);
   assert.ok(steps(view).every(step => step.status === 'done'));
-  const document = await fetch(url + workflow.file!).then(response => response.text());
-  assert.match(document, /计算|电流|研究/);
-  assert.ok(steps(view).some(step => step.card?.kind === 'saved_file'));
+  const document = await assertFormalPdf(await fetch(url + workflow.file!), 'calculation', FORMAL_DOCUMENT);
+  assert.equal(document.model.source_identity.pins[0].run_id, workflow.run);
+  assert.equal(formalFileCount(REPO, join(home, 'engineering.sqlite'), fixture.workspace), originalFiles + 1);
+  const fileCard = steps(view).map(step => step.card).find(card => card?.kind === 'saved_file');
+  assert.ok(fileCard?.kind === 'saved_file');
+  assert.equal(fileCard.format, 'pdf');
+  assert.equal(fileCard.href, `cablesim:study/${workflow.study}?workspace=${fixture.workspace}&run=${workflow.run}`);
 });
 
 test('modify a saved condition, recompute and compare real runs without replacing the earlier result', { timeout: 90_000 }, async () => {
@@ -227,28 +240,26 @@ test('modify a saved condition, recompute and compare real runs without replacin
   assert.equal(previous.freshness, 'historical');
 });
 
-test('create a type, revise its insulation, run standard checks and save its internal specification through approvals', { timeout: 120_000 }, async () => {
+test('create a type and check its changed structure, then refuse a formal specification with missing evidence channels', { timeout: 120_000 }, async () => {
   const choices = await api('/api/types/creation-options');
   const source = choices.library.find((item: any) => /YJV22/.test(item.name) && /300/.test(item.name));
   assert.ok(source, 'use the real released type version, not a synthetic model');
   const state = installTypeWorkflow(faux, { workspace: fixture.workspace, source, thicknessMm: 4.6 });
-  const { session } = await sidecar.agent.send(undefined, '从保存型号建立草稿，把绝缘厚度改为4.6 mm，核对并出内部规格书');
+  const { session } = await sidecar.agent.send(undefined, '从保存型号建立草稿，把绝缘厚度改为4.6 mm，核对并出正式规格书。' + FORMAL_DOCUMENT_PROMPT);
   const view = await acceptEach(session);
   assert.equal(state.failure, undefined);
   assert.equal(state.done, true);
   assert.ok(steps(view).some(step => step.tool === 'propose_type_changes' && step.status === 'done'));
   assert.ok(steps(view).some(step => step.tool === 'propose_study_run' && step.status === 'done'));
-  const file = savedSpecification(view, state);
-  const response = await fetch(url + file.download_url);
-  assert.ok(response.ok);
-  assert.equal(response.headers.get('content-type')?.split(';')[0], 'application/pdf');
-  const pdf = Buffer.from(await response.arrayBuffer());
-  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(state.refused, true);
+  assert.equal(state.file, undefined);
+  assert.ok(steps(view).some(step => step.tool === 'propose_type_specification' && step.status === 'failed'));
+  assert.equal(formalFileCount(REPO, join(home, 'engineering.sqlite'), state.typeId!), 0);
   const type = await api(`/api/workspaces/${state.typeId}`);
   assert.equal(type.domain.cable_types[0].cores[0].layers.find((layer: any) => layer.role === 'insulation').thickness, 0.0046);
 });
 
-test('an existing type with saved calculation evidence completes input paging, revision checks and specification within the ordinary budget', { timeout: 120_000 }, async t => {
+test('an existing type uses its exact saved insulation fields, refreshes all five evidence channels and exports a formal specification within the ordinary budget', { timeout: 120_000 }, async t => {
   const source = manifest.types.find((item: any) => item.name.startsWith('YJV22') && !item.teaching);
   assert.ok(source?.workspace, 'use the same saved release type as the browser walk');
   const beforeType = await api(`/api/workspaces/${source.workspace}`);
@@ -257,13 +268,13 @@ test('an existing type with saved calculation evidence completes input paging, r
   const state = installTypeWorkflow(faux, { workspace: source.workspace, typeId: source.workspace, thicknessMm: 4.7 });
   const accepted: string[] = [];
   let linkedChanges: Proposal['changes'] = [];
-  const { session } = await sidecar.agent.send(undefined, '把已有 YJV22 三芯型号的绝缘厚度改为4.7 mm，按新修订核对后出内部规格书');
+  const { session } = await sidecar.agent.send(undefined, '把已有 YJV22 三芯型号的绝缘厚度改为4.7 mm，按新修订重新核对五个通道后出正式规格书。' + FORMAL_DOCUMENT_PROMPT);
   const view = await acceptEach(session, async proposal => {
     accepted.push(proposal.operation);
     if (proposal.operation === 'propose_type_changes') {
       const waiting = await api(`/api/workspaces/${source.workspace}`);
       assert.equal(waiting.revision, beforeType.revision);
-      assert.deepEqual(waiting.domain, beforeType.domain, 'input paging never writes the proposed thickness');
+      assert.deepEqual(waiting.domain, beforeType.domain, 'reading saved fields never writes the proposed thickness');
       const cable = beforeType.domain.cable_types[0];
       const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
       const requested = cable.cores.map((core: any) => {
@@ -281,12 +292,12 @@ test('an existing type with saved calculation evidence completes input paging, r
   });
   assert.equal(state.failure, undefined);
   assert.equal(state.done, true);
-  assert.deepEqual(accepted, ['propose_type_changes', 'propose_type_basis', 'propose_study', 'propose_study_run', 'propose_type_specification']);
+  assert.deepEqual(accepted, ['propose_type_changes', 'propose_type_basis', 'propose_study', 'propose_study_run',
+    'propose_study_run', 'propose_study_run', 'propose_study_run', 'propose_rating_table', 'propose_study_run', 'propose_type_specification']);
   const completed = steps(view);
   assert.ok(completed.every(step => step.status === 'done'));
-  const inputPages = completed.filter(step => step.tool === 'type_read').length;
-  assert.ok(inputPages > 1, 'the actual saved input exercises continuation pages');
-  assert.ok(completed.some(step => step.tool === 'workspace_read'), 'the accepted fields are read back at the adopted revision before the check');
+  const workspaceReads = completed.filter(step => step.tool === 'workspace_read').length;
+  assert.equal(workspaceReads, 3, 'discover the saved core identities, read the exact fields, then verify them at the accepted revision');
   const saved = await api(`/api/workspaces/${state.typeId}`);
   for (const core of saved.domain.cable_types[0].cores) {
     assert.equal(core.layers.find((layer: any) => layer.role === 'insulation').thickness, 0.0047);
@@ -301,11 +312,10 @@ test('an existing type with saved calculation evidence completes input paging, r
   assert.equal(run.status, 'succeeded');
   assert.equal(run.integrity, 'verified');
   const file = savedSpecification(view, state);
-  const response = await fetch(url + file.download_url);
-  assert.ok(response.ok);
-  assert.equal(response.headers.get('content-type')?.split(';')[0], 'application/pdf');
-  assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
-  t.diagnostic(JSON.stringify({ existingSavedRuns: evidence.items.length, inputPages,
+  const exported = await assertFormalPdf(await fetch(url + file.download_url), 'specification', FORMAL_DOCUMENT);
+  assert.equal(exported.model.source_identity.pins.length, 5, 'formal specification pins every required saved channel');
+  assert.deepEqual(exported.model.source_identity.pins.map((pin: any) => pin.run_id).sort(), Object.values(state.channelRuns!).sort());
+  t.diagnostic(JSON.stringify({ existingSavedRuns: evidence.items.length, workspaceReads,
     toolSteps: completed.length, approvals: accepted.length, linkedChanges, type: state.typeId, run: state.run }));
 });
 
@@ -389,9 +399,9 @@ test('GB correction uses an explicitly human-confirmed real IEC PDF baseline and
   assert.equal(baseline.snapshot.cases[0].input.sections[0].medium.surface_temperature, 298.15);
   const open = steps(view).findLast(step => step.tool === 'run_read')?.card;
   assert.ok(open?.kind === 'open' && open.href.includes(state.run!), 'GB opens its own exact saved run without pretending to be an IEC temperature card');
-  const response = await fetch(url + state.file!);
-  assert.ok(response.ok);
-  assert.match(await response.text(), /GB 50217|GB50217/);
+  const response = await assertFormalPdf(await fetch(url + state.file!), 'calculation', FORMAL_DOCUMENT);
+  assert.equal(response.model.source_identity.pins[0].run_id, state.run);
+  assert.match(response.pages.join(''), /GB\s*50217/);
 });
 
 test('unconfirmed GB baselines and omitted rating-table inputs are explicitly refused without a computed result', { timeout: 120_000 }, async () => {
@@ -530,147 +540,4 @@ test('missing engineering input or a filename without an actual attachment is re
   assert.equal((await api<any[]>(`/api/workspaces/${fixture.workspace}/studies`)).length, before_);
   assert.equal((await api('/api/index/objects?kind=type&limit=1')).total, typesBefore);
   assert.deepEqual(importInventory(REPO, join(home, 'engineering.sqlite')), importsBefore);
-});
-
-test('all six maintainer workflows finish with actual tool results under a 64k context budget', { timeout: 240_000 }, async t => {
-  const bounded = await budgetedModel();
-  await sidecar.close();
-  sidecar = createSidecar({ backendUrl: url, token: TOKEN, home: join(home, 'bounded-sidecar'), port: 8111, runtime: bounded.runtime });
-  const completed: string[] = [];
-  const finish = (phase: string, state: FlowState, view: ChatView) => {
-    assert.equal(state.failure, undefined, `${phase}: ${state.failure}`);
-    assert.equal(state.done, true, `${phase} must finish after the bounded provider receives every real tool result`);
-    assert.equal(view.running, false);
-    assert.equal(view.waiting.length, 0);
-    assert.ok(steps(view).every(step => step.status === 'done'), `${phase} contains an unfinished or rejected tool`);
-    completed.push(phase);
-  };
-  try {
-    bounded.phase('研究结论和限制');
-    const read = installStudyRead(bounded.faux, fixture);
-    const reading = await sidecar.agent.send(undefined, '这项研究的结论是什么，受什么限制？',
-      { workspace_id: fixture.workspace, study_id: fixture.study, label: '当前研究' });
-    await sidecar.agent.idle(reading.session);
-    finish('研究结论和限制', read, await sidecar.agent.view(reading.session));
-
-    bounded.phase('型号结构和主要参数');
-    const source = (await ratingSource()).type;
-    const type = installTypeRead(bounded.faux, source.workspace);
-    const typed = await sidecar.agent.send(undefined, '这个型号的结构和主要参数是什么，哪些输入还缺？',
-      { workspace_id: source.workspace, label: source.name });
-    await sidecar.agent.idle(typed.session);
-    finish('型号结构和主要参数', type, await sidecar.agent.view(typed.session));
-    assert.ok(type.result!.items.length > 20, 'the budget includes actual continuation pages, not a shortened fixture');
-
-    bounded.phase('新建直埋校核并计算');
-    const created = installStudyWorkflow(bounded.faux, { ...fixture, title: '上下文预算验收 · 直埋校核', exportBook: false });
-    const study = await sidecar.agent.send(undefined, '复制当前保存工况，新建一项直埋校核并计算。',
-      { workspace_id: fixture.workspace, study_id: fixture.study, label: '当前研究' });
-    const createApprovals: string[] = [];
-    const createdView = await acceptEach(study.session, async proposal => { createApprovals.push(proposal.operation); });
-    finish('新建直埋校核并计算', created, createdView);
-    assert.deepEqual(createApprovals, ['propose_study', 'propose_study_run']);
-    assert.ok(created.study && created.run);
-
-    bounded.phase('改条件重算并对比');
-    const workspace = await api(`/api/workspaces/${fixture.workspace}`);
-    const soil = workspace.domain.materials.find((material: any) => /soil/.test(material.id) && typeof material.thermal_resistivity === 'number');
-    assert.ok(soil, 'use the saved soil material, not an invented input path');
-    const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
-    const changed = installConditionWorkflow(bounded.faux, { workspace: fixture.workspace, study: created.study!, run: created.run!,
-      path: `/materials/${escape(soil.id)}/thermal_resistivity`, value: 1.2 });
-    // Keep the preceding creation and run in this same conversation: resetting history would conceal cumulative overflow.
-    await sidecar.agent.send(study.session, '把土壤热阻率改为1.2 K·m/W，重算并与刚才那次比较。');
-    const changeApprovals: string[] = [];
-    const changedView = await acceptEach(study.session, async proposal => { changeApprovals.push(proposal.operation); });
-    finish('改条件重算并对比', changed, changedView);
-    assert.deepEqual(changeApprovals, ['propose_domain_changes', 'propose_study_run']);
-    assert.notEqual(changed.run, created.run);
-    const comparison = await api(`/api/workspaces/${fixture.workspace}/study-comparisons`, { run_ids: [created.run, changed.run] });
-    assert.ok(Math.max(...Object.values(tokenCounts(JSON.stringify(comparison)))) > CONTEXT_TOKENS,
-      'the real unsummarized comparison must exceed the context window even before the prompt, schemas and history');
-    for (const quantity of changed.comparison!.differences[0].quantities) {
-      const saved = comparison.differences[0].quantities.find((row: any) => row.key === quantity.key && row.entity === quantity.entity
-        && row.case_id === quantity.case_id && row.condition === quantity.condition && row.unit === quantity.unit);
-      assert.ok(saved, 'a model-facing difference must have a corresponding saved comparison quantity');
-      assert.equal(quantity.baseline, saved.baseline);
-      assert.equal(quantity.value, saved.value);
-      assert.equal(quantity.difference, saved.difference);
-    }
-
-    bounded.phase('导出计算书');
-    const delivery = installDeliveryWorkflow(bounded.faux, { workspace: fixture.workspace, run: changed.run! });
-    await sidecar.agent.send(study.session, '把刚才重算的结果导出计算书。');
-    const deliveryApprovals: string[] = [];
-    const deliveryView = await acceptEach(study.session, async proposal => { deliveryApprovals.push(proposal.operation); });
-    finish('导出计算书', delivery, deliveryView);
-    assert.deepEqual(deliveryApprovals, ['propose_delivery']);
-    const document = await fetch(url + delivery.file!);
-    assert.ok(document.ok);
-    assert.match(await document.text(), /计算|电流|研究/);
-    assert.ok(steps(deliveryView).some(step => step.card?.kind === 'saved_file'));
-
-    bounded.phase('厂家表导入并核对');
-    const workbook = manufacturerWorkbook(REPO);
-    const imported = installStructureImport(bounded.faux, { workspace: fixture.workspace, seriesName: '上下文预算验收 · 人民电器三芯结构表' });
-    const importing = await sidecar.agent.send(undefined, '将附上的厂家结构表导入为型号草稿并逐项核对，每次写入都先给我审阅。',
-      { workspace_id: fixture.workspace, label: '当前工程' }, [{ filename: workbook.filename, content_base64: workbook.content_base64 }]);
-    const importApprovals: string[] = [];
-    let fullImportReviewCharacters = 0;
-    const importedView = await acceptEach(importing.session, async proposal => {
-      importApprovals.push(proposal.operation);
-      if (proposal.operation === 'propose_structure_import') fullImportReviewCharacters = JSON.stringify(proposal.changes).length;
-    });
-    finish('厂家表导入并核对', imported, importedView);
-    assert.deepEqual(importApprovals, ['propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check']);
-    assert.ok(fullImportReviewCharacters > 12_000, 'complete immutable import changes must still reach the person reviewing them');
-    const cards = steps(importedView).map(step => step.card);
-    const preview = cards.find(card => card?.kind === 'structure_preview');
-    assert.ok(preview?.kind === 'structure_preview');
-    assert.equal(preview.view.rows.length, 11);
-    assert.equal(preview.view.complete, true);
-    assert.ok(preview.view.rows.every(row => row.values.length > 0 && row.values.every(value => value.source)), 'all source facts remain on the card');
-    const checked = cards.find(card => card?.kind === 'structure_check');
-    assert.ok(checked?.kind === 'structure_check');
-    assert.equal(checked.view.items.length, 11);
-    const series = await api(`/api/type-library/series/${imported.imported!.series_id}`);
-    assert.equal(series.specs.length, 11);
-    for (const item of imported.checked!.items) {
-      const run = await api(`/api/workspaces/${item.workspace_id}/studies/${item.study_id}/runs/${item.run_id}`);
-      assert.equal(run.status, 'succeeded');
-      assert.equal(run.integrity, 'verified');
-      assert.equal(run.input_digest, item.input_digest);
-      assert.equal(run.output_digest, item.output_digest);
-    }
-
-    assert.equal(completed.length, 6);
-    assert.equal(new Set(bounded.requests.map(request => request.phase)).size, 6);
-    assert.equal(bounded.requests.length, bounded.faux.state.callCount, 'every provider request, including continuations, is budgeted');
-    assert.ok(bounded.requests.every(request => request.systemBytes > 0 && request.toolSchemaBytes > 0 && request.historyBytes > 0));
-    assert.ok(bounded.requests.every(request => request.totalTokens <= CONTEXT_TOKENS && request.reservedOutput === OUTPUT_TOKENS));
-    const results = [...bounded.toolResults.values()];
-    assert.ok(results.every(result => result.characters <= 12_000), 'every model tool result obeys the shared hard character limit');
-    for (const name of ['study_compare', 'propose_structure_preview', 'propose_structure_import']) {
-      const result = results.find(result => result.tool === name);
-      assert.ok(result, `the budgeted model actually received ${name}`);
-      const value = JSON.parse(result.text);
-      assert.ok(!value.data?.proposal?.changes, 'full approval changes belong to cards and saved records');
-      if (name === 'propose_structure_preview') assert.equal(value.data.receipt.preview, undefined);
-    }
-  } finally {
-    if (completed.length !== 6) t.diagnostic(JSON.stringify({ backendExit: process_.exitCode, backendSignal: process_.signalCode,
-      backendLog: serverLog.slice(-18_000) }));
-    t.diagnostic(JSON.stringify({ completed, contextTokens: CONTEXT_TOKENS, reservedOutput: OUTPUT_TOKENS,
-      requests: bounded.requests.length, highestBudget: bounded.requests.toSorted((a, b) => b.totalTokens - a.totalTokens)[0],
-      phases: Object.fromEntries([...new Set(bounded.requests.map(request => request.phase))].map(phase => {
-        const requests = bounded.requests.filter(request => request.phase === phase);
-        return [phase, { requests: requests.length, largestInputTokens: Math.max(...requests.map(request => request.inputTokens)),
-          largestTotalTokens: Math.max(...requests.map(request => request.totalTokens)) }];
-      })),
-      largestResults: [...bounded.toolResults.values()].toSorted((a, b) => b.characters - a.characters).slice(0, 6)
-        .map(({ tool, characters }) => ({ tool, characters })),
-      regressionResults: [...bounded.toolResults.values()].filter(result =>
-        ['study_compare', 'propose_structure_preview', 'propose_structure_import'].includes(result.tool))
-        .map(({ tool, characters }) => ({ tool, characters })) }));
-  }
 });

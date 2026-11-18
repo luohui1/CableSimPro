@@ -6,7 +6,6 @@ the normal workspace/research/type services still enforce revisions and scope.
 """
 from copy import deepcopy
 import getpass
-from hashlib import sha256
 import json
 from time import time
 from uuid import UUID, uuid4
@@ -25,6 +24,7 @@ from .session_scope import is_type
 from .tool_registry import Tool, TEXT, object_schema
 from .external_parameters import review_points
 from .external_imports import ACTION_SCOPES as IMPORT_ACTIONS, READ_SCOPES as IMPORT_READS, StructureImports
+from .external_deliveries import AgentFormalDeliveries, document_schema
 
 
 READ_SCOPES = {
@@ -60,7 +60,7 @@ def tools():
         ('propose_study_run', '提出运行研究', 'propose', '提出对当前保存修订预检并运行一次；接受后调用原研究执行服务。缺数据或范围不适用则拒绝，无结果替代；不支持本机原生求解。', object_schema({
             'study_id': TEXT, 'module': {'type': 'string', 'pattern': '^[a-z][a-z0-9-]{0,63}$'},
         }, ['study_id'])),
-        ('propose_delivery', '提出导出计算书', 'propose', '从本工程指定的当前有效运行生成计算书；接受前不生成交付，接受后不重算。', object_schema({'run_ids': RUN_IDS}, ['run_ids'])),
+        ('propose_delivery', '提出导出计算书', 'propose', '从本工程一条当前有效运行预览正式计算书；须提供用户明确给定的单位、文件编号和版次。人接受后导出含四个签栏与追溯页的 PDF，不重新计算、不自动签核。', object_schema({'run_ids': {**RUN_IDS, 'maxItems': 1}, 'document': document_schema()}, ['run_ids', 'document'])),
         ('propose_type_create', '提出新建型号', 'propose', '从已读取的准确库版本、已接受的标准结构提案或空白结构创建型号草稿。接受前不建型号；接受不发布、不核实厂家数据。', object_schema({
             'name': {'type': 'string', 'minLength': 1, 'maxLength': 80},
             'origin': {'enum': ['library', 'standard', 'blank']}, 'resource_id': TEXT,
@@ -69,7 +69,7 @@ def tools():
         }, ['name', 'origin'])),
         ('propose_standard_structure', '提出按标准生成结构', 'propose', '按 type_creation_options 的真实标准结构契约计算并保存一个结构提案。缺数据不推测；接受后仍只是结构提案，新建型号须另行接受。', object_schema({'input': {'type': 'object'}}, ['input'])),
         ('propose_type_basis', '提出查询型号标准依据', 'propose', '按当前型号声明的标准查询封签依据并保存查询回执；不批准标准要求、不修改结构、不运行核对研究。', object_schema()),
-        ('propose_type_specification', '提出导出规格书', 'propose', '只用当前型号的保存结构及真实保存运行导出 PDF。客户版缺证据拒绝；内部版保留缺项。不会暗中建研究、重算或发布。', object_schema({'audience': {'enum': ['internal', 'customer']}}, ['audience'])),
+        ('propose_type_specification', '提出导出规格书', 'propose', '用当前型号五个通道的完整保存运行预览正式规格书；须提供用户明确给定的单位、文件编号和版次。人接受后导出含签栏与追溯页的 PDF；缺证据拒绝，草稿状态如实保留，不暗中建研究、重算或发布。', object_schema({'audience': {'enum': ['internal', 'customer']}, 'document': document_schema()}, ['audience', 'document'])),
     ]
     return {**{entry[0]: Tool(*entry) for entry in definitions}, **import_tools()}
 
@@ -96,10 +96,11 @@ class ExternalActions:
     def types(self):
         return self.broker.platform.app.state.types
 
-    def current(self, task):
+    def current(self, task, *, mutable=True):
         with self.store.db() as db:
             row, state = self.store.load(db, task['workspace_id'], task['workspace_revision'], allow_domain=True)
-            self.store.assert_mutable(db, task['workspace_id'])
+            if mutable:
+                self.store.assert_mutable(db, task['workspace_id'])
         return row, state
 
     def study(self, task, sid, module=None):
@@ -142,7 +143,7 @@ class ExternalActions:
             fail('TOOL_NOT_ALLOWED', '此动作不在已审查白名单。', '/tool', 403)
         if name in IMPORT_ACTIONS:
             return StructureImports(self).prepare(task, name, args)
-        _, state = self.current(task)
+        _, state = self.current(task, mutable=name not in ('propose_delivery', 'propose_type_specification'))
         if ACTION_SCOPES[name] == 'type' and not is_type(task):
             fail('SCOPE_VIOLATION', '此动作须在目标型号的会话中提出。', '/workspace_id')
         pid = str(uuid4())
@@ -210,7 +211,12 @@ class ExternalActions:
             if task.get('study_id') and any(run['study'] != task['study_id'] for run in runs):
                 fail('SCOPE_VIOLATION', '交付来源不在此会话研究范围内。', '/run_ids')
             action['sources'] = [{'run_id': run['id'], 'input_digest': run['input_digest'], 'output_digest': run['output_digest']} for run in runs]
+            action['source_study_id'] = runs[0]['study']
+            action.update(AgentFormalDeliveries(self).prepare(task, 'calculation', args['document'], runs=action['sources']))
             change('交付内容', '已选择的 ' + str(len(runs)) + ' 条保存运行')
+            for run in runs:
+                change('来源研究', run['snapshot']['definition']['title'])
+            AgentFormalDeliveries.review(action, change, checks)
             checks.append('计算书引用所选运行的输入、数值及限制，不重算、不混入当前未保存输入。')
         elif name == 'propose_type_create':
             request = NewType.model_validate({**args, 'request_id': pid})
@@ -255,8 +261,10 @@ class ExternalActions:
             spec = self.types.specification(task['workspace_id'], args['audience'])
             self.check_specification(task, spec, args['audience'])
             action['specification_digest'] = spec['digest']
-            change('文件', '内部规格书（含缺项）' if args['audience'] == 'internal' else '客户规格书')
+            action.update(AgentFormalDeliveries(self).prepare(task, 'specification', args['document'], specification_digest=spec['digest']))
+            change('文件用途', '内部审阅' if args['audience'] == 'internal' else '客户交付')
             change('型号', spec['payload']['name'])
+            AgentFormalDeliveries.review(action, change, checks)
             checks.extend(str(row['message']) for row in spec['payload']['checks'] if row.get('blocking'))
             checks.append('只读取已保存证据；不自动创建研究、求解或发布型号。')
         proposal = {'id': pid, 'kind': 'external_action', 'action': name,
@@ -271,12 +279,21 @@ class ExternalActions:
     def check_specification(self, task, spec, audience):
         if spec['payload']['revision'] != task['workspace_revision']:
             fail('PROPOSAL_STALE', '型号修订已变化，请重新读取后提出导出。', status=409)
+        from backend.kernel.specification_generation import generation_gap, ORDER
+        from backend.kernel.type_specification import CHANNEL_NAMES
+        saved = {item['channel'] for item in spec['payload']['sources']}
+        missing = [channel for channel in ORDER if channel not in saved or channel not in spec['payload']['results']]
+        if missing:
+            raise HTTPException(422, {'code': 'SPECIFICATION_EVIDENCE_REQUIRED' if audience == 'customer' else 'FORMAL_SPECIFICATION_INCOMPLETE',
+                'message': '正式规格书缺少完整保存的核对通道：' + '、'.join(CHANNEL_NAMES[channel] for channel in missing)
+                    + '。请先读取已保存的方法条件，再逐项提出研究与运行并由人接受；导出不会代为补算。',
+                'missing_channels': [{'channel': channel, 'label': CHANNEL_NAMES[channel]} for channel in missing],
+                'workbench_path': '/types/' + task['workspace_id']})
         if audience == 'customer':
-            from backend.kernel.specification_generation import generation_gap, ORDER
             _, _, channels, _ = self.types.evidence(task['workspace_id'])
             for channel in ORDER:
                 gap = generation_gap(channel, channels.get(channel), spec['payload'].get('release_exclusions', []))
-                if gap: fail('SPECIFICATION_EVIDENCE_REQUIRED', '客户规格书缺少保存证据：' + gap)
+                if gap: fail('SPECIFICATION_EVIDENCE_REQUIRED', '客户规格书缺少保存证据：' + CHANNEL_NAMES[channel] + '：' + gap)
 
     def complete(self, task, proposal, decision, marker, receipt, db):
         fresh = self.tasks.load(db, task['id'])
@@ -348,6 +365,10 @@ class ExternalActions:
                     run = self.research.get_run(wid, row['id'])
                     return self.run_receipt(task, proposal, run)
             elif name == 'propose_delivery':
+                if 'formal_request' in args:
+                    return AgentFormalDeliveries(self).recover(task, proposal, db)
+                # Preserve completed files issued before the formal export
+                # adapter; an unexecuted old card must obtain a new preview.
                 row = db.execute('SELECT d.id,d.digest FROM deliveries d JOIN delivery_requests r ON r.delivery=d.id WHERE r.workspace=? AND r.request_id=?', (wid, pid)).fetchone()
                 if row:
                     return {'workspace_id': wid, 'delivery_id': row['id'], 'run_ids': args['run_ids'], 'kind': 'delivery', 'title': '计算书',
@@ -372,6 +393,8 @@ class ExternalActions:
                     if fingerprint(result) != row['digest']: fail('BASIS_INTEGRITY_FAILED', '依据查询回执摘要不一致。')
                     return {'kind': 'basis', 'workspace_id': wid, 'basis_request_id': pid, **result}
             elif name == 'propose_type_specification' and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_external_files'").fetchone():
+                if 'formal_request' in args:
+                    return AgentFormalDeliveries(self).recover(task, proposal, db)
                 row = db.execute('SELECT sha256 FROM agent_external_files WHERE proposal_id=? AND workspace=?', (pid, wid)).fetchone()
                 if row: return self.specification_receipt(wid, pid, args['audience'], row['sha256'])
         return None
@@ -395,7 +418,7 @@ class ExternalActions:
             with self.store.db(True) as db: return self.complete(task, proposal, 'approved', marker, existing, db)
         if decision == 'rejected':
             with self.store.db(True) as db: return self.complete(task, proposal, decision, marker, {}, db)
-        self.current(task)
+        self.current(task, mutable=proposal['action'] not in ('propose_delivery', 'propose_type_specification'))
         name, args, wid = proposal['action'], proposal['arguments'], task['workspace_id']
         if name not in ACTION_SCOPES: fail('ACTION_NOT_ALLOWED', '此方案的操作不在已审查白名单。', status=403)
         if name in IMPORT_ACTIONS:
@@ -430,11 +453,7 @@ class ExternalActions:
             runs = self.research.verified_runs(wid, args['run_ids'])
             sources = [{'run_id': run['id'], 'input_digest': run['input_digest'], 'output_digest': run['output_digest']} for run in runs]
             if sources != args['sources']: fail('DELIVERY_SOURCE_CHANGED', '保存运行来源摘要变化，未导出。', status=409)
-            delivery = self.research.deliver(wid, args['run_ids'], request_id=UUID(pid), current_only=True)
-            receipt = {'workspace_id': wid, 'delivery_id': delivery['id'], 'run_ids': args['run_ids'],
-                       'kind': 'delivery', 'title': '计算书', 'href': '/deliveries?workspace=' + wid,
-                       'download_url': f'/api/workspaces/{wid}/deliveries/{delivery["id"]}/file',
-                       'media_type': 'text/html', 'digest': delivery['digest']}
+            receipt = AgentFormalDeliveries(self).execute(task, proposal)
         elif name == 'propose_type_create':
             request = {**args['request'], 'human_confirmed': args['request']['origin'] == 'standard'}
             # This method is reachable only from the existing human decision
@@ -457,14 +476,6 @@ class ExternalActions:
             self.check_specification(task, spec, args['audience'])
             if spec['digest'] != args['specification_digest']:
                 fail('SPECIFICATION_CHANGED', '规格书内容在审阅期间变化，未导出。', status=409)
-            from backend.kernel.specification_pdf import render_pdf
-            content = render_pdf(spec, args['audience'])
-            initialize(self.store)
-            digest = sha256(content).hexdigest()
-            with self.store.db(True) as db:
-                self.store.load(db, wid, task['workspace_revision'], allow_domain=True)
-                db.execute('INSERT OR IGNORE INTO agent_external_files VALUES (?,?,?,?,?,?,?)',
-                    (pid, wid, 'cable-specification.pdf', 'application/pdf', digest, content, stamp()))
-            receipt = self.specification_receipt(wid, pid, args['audience'], digest)
+            receipt = AgentFormalDeliveries(self).execute(task, proposal)
         else: fail('ACTION_NOT_ALLOWED', '没有可执行的已接受动作。', status=403)
         with self.store.db(True) as db: return self.complete(task, proposal, decision, marker, receipt, db)

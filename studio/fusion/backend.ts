@@ -17,7 +17,11 @@ export interface ToolResult {
 export type Scope = 'global' | 'workspace' | 'type';
 export interface BackendTool { name: string; title: string; kind: string; scope: Scope; description: string; parameters: Schema }
 export interface Opened { session: string; turn: string; context: { kind: 'project' | 'type'; id: string } }
-export interface BackendModel { configured: boolean; source: string; model: string | null; provider: string | null }
+export interface BackendModel {
+  configured: boolean; source: string; model: string | null; provider: string | null;
+  context_window?: number | null;
+  max_output_tokens?: number | null;
+}
 export interface BackendProposal {
   id: string;
   title: string;

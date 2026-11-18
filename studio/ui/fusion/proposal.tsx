@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { ChatStep, Proposal } from '@shared/types';
+import { isTraceChange } from '@shared/fusion-presentation';
 import { ProposalCard, RefusalCard, type ProposalPhase } from '@/kit/chat/cards';
 import { ChatNotice } from '@/kit/chat/empty';
 import { Disclosure } from '@/kit/disclosure';
@@ -40,14 +41,17 @@ export function ProposalBlock({ proposal, step }: { proposal: Proposal; step: Ch
   }
   const executing = proposal.status === 'accepted' && step.status === 'running';
   const phase: ProposalPhase = proposal.status === 'pending' ? (rejecting ? 'rejecting' : 'pending') : proposal.status;
+  const changes = proposal.changes.filter(change => !isTraceChange(change));
+  const trace = proposal.changes.filter(isTraceChange);
   return <>
     <ProposalCard proposalId={proposal.id} action={action} subject={subject} phase={phase} busy={decide.isPending || executing || !sessionId} collapseChangesAfter={8}
-      changes={proposal.changes.map((change, index) => ({ id: `${index}/${change.part}/${change.field}`, label: change.label, before: change.before, after: change.after }))}
-      consequence={proposal.checks?.length || proposal.assumptions?.length ? <>
+      changes={changes.map((change, index) => ({ id: `${index}/${change.part}/${change.field}`, label: change.label, before: change.before, after: change.after }))}
+      consequence={proposal.checks?.length || proposal.assumptions?.length || trace.length ? <>
         {proposal.checks?.length ? <ul className="m-0 list-disc space-y-1 pl-4">{proposal.checks.map((check, index) => <li key={index}>{check}</li>)}</ul> : null}
         {proposal.assumptions?.length ? <Disclosure title="方法适用范围与限制" aside={<span className="text-sm text-ink-2">{proposal.assumptions.length} 项</span>} className="-mx-3 mt-2 border-t border-line">
           <ul className="m-0 list-disc space-y-2 pr-4 pb-3 pl-8">{proposal.assumptions.map((limit, index) => <li key={index}>{limit}</li>)}</ul>
         </Disclosure> : null}
+        {trace.length > 0 && <ProposalTrace changes={trace} />}
       </> : undefined}
       note={proposal.status === 'rejected' ? proposal.note : note} onNoteChange={setNote}
       onAccept={() => decide.mutate({ accept: true })} onReject={() => setRejecting(true)} onCancelReject={() => setRejecting(false)}
@@ -55,4 +59,16 @@ export function ProposalBlock({ proposal, step }: { proposal: Proposal; step: Ch
     {executing && <p role="status" className="m-0 text-sm text-ink-2">已接受，正在执行；完成后继续处理下一步。</p>}
     {decide.isError && <ChatNotice tone="error">{decide.error.message}</ChatNotice>}
   </>;
+}
+
+/** Identity and digest values are retained in full, separately from the readable engineering changes. */
+export function ProposalTrace({ changes }: { changes: Proposal['changes'] }) {
+  return <Disclosure title="追溯信息" aside={<span className="text-sm text-ink-2">{changes.length} 项</span>} className="-mx-3 mt-2 border-t border-line">
+    <dl data-proposal-trace className="m-0 grid gap-3 px-3 pb-3 text-xs">
+      {changes.map((change, index) => <div key={`${index}/${change.field}`}>
+        <dt className="text-ink-2">{change.label}</dt>
+        <dd className="m-0 whitespace-pre-wrap break-all text-ink">{change.before !== '—' && <>原值：{change.before}<br /></>}保存值：{change.after}</dd>
+      </div>)}
+    </dl>
+  </Disclosure>;
 }

@@ -9,7 +9,7 @@ from backend.foundation.contracts import AssetParameter, AssetRelease, Quantity,
 from backend.schemas import Scenario
 from test_gb50217_correction import example as correction_example
 from test_harness_external import AUTH, client, call, open_session
-from test_harness_external_actions import counts, decide, propose, resume
+from test_harness_external_actions import DOCUMENT, counts, decide, formal_pdf, propose, resume
 from test_type_rating import PARAMETERS, type_workspace
 
 
@@ -51,10 +51,10 @@ def test_gb50217_local_formal_method_runs_only_after_acceptance(client):
     assert trace['corrected_current_a'] == pytest.approx(326.4)
     assert run['integrity'] == 'verified'
     scope = resume(client, scope)
-    export = propose(client, scope, 'propose_delivery', {'run_ids': [run['id']]})
+    export = propose(client, scope, 'propose_delivery', {'run_ids': [run['id']], 'document': DOCUMENT})
     delivery = decide(client, export)['receipt']
-    html = client.get(delivery['download_url']).text
-    assert '326.4' in html and 'GB 50217' in html
+    _, text = formal_pdf(client, delivery)
+    assert '326.4' in text and 'GB 50217' in text
 
 
 def test_gb50217_unconfirmed_baseline_refuses_without_a_run(client):

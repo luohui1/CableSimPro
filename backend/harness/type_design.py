@@ -90,6 +90,61 @@ def candidate(state, changes, proposal_id):
     return resolved, edits, differences
 
 
+def check_summary(check, channels, workspace):
+    """Project saved checks, never their nested provenance or geometry archive.
+
+    A check is one paginated item. Copying an entire input-source receipt or CAD
+    layer into that item makes even a one-item page unreadable. Exact reported
+    facts and missing-input identities remain here; the original run stays in
+    the ordinary saved archive and is not edited by this projection.
+    """
+    def pick(value, keys):
+        return {key: deepcopy(value[key]) for key in keys if key in value}
+
+    brief = pick(check, ('id', 'channel', 'message', 'blocking', 'excluded', 'exclusion_reason',
+                         'path', 'label', 'status', 'reason', 'missing'))
+    result = check.get('result')
+    if isinstance(result, dict):
+        brief['result'] = pick(result, (
+            'id', 'title', 'target', 'standard', 'clause',
+            'actual', 'actual_unrounded', 'design_actual', 'limit', 'value', 'unit', 'margin', 'comparison',
+            'verdict', 'status', 'satisfied', 'reason', 'basis', 'source_status',
+            'missing', 'missing_parameters',
+        ))
+        # Keep the complete check sentence once. Only demonstrably identical
+        # labels/reasons/identities are removed; numbers, nulls and missing facts
+        # are never coalesced or inferred from one another.
+        message = check.get('message', '')
+        if isinstance(message, str):
+            title = result.get('title')
+            if isinstance(title, str) and message.startswith(title + '：'):
+                brief['result'].pop('title', None)
+            reason = result.get('reason')
+            if isinstance(reason, str) and message.rstrip('。').endswith(reason.rstrip('。')):
+                brief['result'].pop('reason', None)
+        if isinstance(check.get('channel'), str) and isinstance(result.get('id'), str) \
+                and check.get('id') == check['channel'] + '/' + result['id']:
+            brief['result'].pop('id', None)
+        if 'basis_missing_fields' in result:
+            brief['result']['basis_missing_fields'] = [
+                pick(item, ('field', 'label', 'unit', 'type', 'storage', 'required', 'status', 'reason'))
+                if isinstance(item, dict) else deepcopy(item) for item in result['basis_missing_fields']]
+    if isinstance(check.get('quantities'), list):
+        brief['quantities'] = [pick(item, ('entity', 'core_id', 'role', 'material', 'material_label',
+            'mass_kg_per_km', 'density_kg_m3', 'quantity_missing'))
+            for item in check['quantities'] if isinstance(item, dict)]
+    channel = check.get('channel')
+    if channel in channels:
+        origin = Types._source(channel, channels[channel])
+        brief['source'] = pick(origin, ('channel', 'run_id', 'study_id', 'input_digest', 'output_digest',
+            'workspace_revision', 'study_revision', 'method', 'freshness', 'status'))
+        if channels[channel].get('case_id') is not None:
+            brief['source']['case_id'] = channels[channel]['case_id']
+        brief['source']['archive_url'] = (f'/api/workspaces/{workspace}/studies/{origin["study_id"]}'
+                                          f'/runs/{origin["run_id"]}?view=full')
+    return brief
+
+
 def read(research, task, args):
     wid = args.get('type_id',task['workspace_id']); view = args.get('view', 'summary')
     types = Types(research, None)
@@ -156,7 +211,7 @@ def read(research, task, args):
         if evidence_row['revision'] != row['revision'] or fingerprint(evidence_state['domain']) != source['digest']:
             raise HTTPException(409, {'code':'TYPE_REVISION_CONFLICT','path':'/type_id','message':'读取期间型号输入变化，请刷新后重读。'})
         check_results(channels, checks)
-        for check in checks: add('checks', **check)
+        for check in checks: add('checks', **check_summary(check, channels, wid))
         for channel, item in channels.items():
             run = item['run']; origin = types._source(channel, item)
             add('runs', run_id=run['id'], study_id=run['study'], channel=channel, source=origin)
@@ -173,15 +228,32 @@ def read(research, task, args):
                         for key in ('inner_diameter_m','outer_diameter_m','thickness_m') if key in layer])
     after = args.get('after',0); limit = args.get('limit',20)
     data = {'object':card,'type_id':wid,'type_revision':row['revision'],'view':view,'total':len(entries),'items':[], 'next_page':None}
+    if view in ('summary','structure','requirements','runs','review'):
+        data['check_details'] = '核对项仅含保存事实、状态和缺项摘要；source.index 指向当前页 data.sources。完整来源、标准依据及几何明细保留在型号工作台和来源 archive_url 指向的原保存运行。'
     summary = ('已读取保存型号输入与草稿缺项；未读取已有运行或标准核对，输入完整不代表计算或符合性通过。'
                if view == 'input' else '已读取保存型号输入及已有运行；缺项、历史结果与标准未覆盖均未推算为通过。')
     result = ToolResult(status='ok', summary=summary, data=data)
     count = 0
     for entry in entries[after:after+limit]:
+        source_count = len(result.data.get('sources', []))
+        # Checks from one channel share the same immutable run identity. Keep a
+        # page-local table instead of charging hundreds of duplicate bytes for
+        # each check; established input/requirement/run sources stay unchanged.
+        if entry['section'] == 'checks' and entry.get('source', {}).get('archive_url'):
+            sources = result.data.setdefault('sources', [])
+            origin = entry['source']
+            if origin not in sources:
+                sources.append(origin)
+            entry = {**entry, 'source': {'index': sources.index(origin)}}
         result.data['items'].append(entry)
         result.data['next_page']={'type_id':wid,'view':view,'after':after+count+1,'limit':limit,'expected_revision':row['revision']} if after+count+1<len(entries) else None
         if not fits(result.model_dump(mode='json'), 6*1024-256):
-            result.data['items'].pop(); break
+            result.data['items'].pop()
+            if 'sources' in result.data:
+                del result.data['sources'][source_count:]
+                if not result.data['sources']:
+                    result.data.pop('sources')
+            break
         count += 1
     result.data['next_page']={'type_id':wid,'view':view,'after':after+count,'limit':limit,'expected_revision':row['revision']} if after+count<len(entries) else None
     if after<len(entries) and not count:

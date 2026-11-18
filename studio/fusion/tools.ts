@@ -180,7 +180,7 @@ export function backendTools(backend: Backend, catalog: readonly BackendTool[], 
         }
         const shown = await describeResult(backend, tool.name, rest, result, workspace, signal);
         // Method discovery must retain the exact sealed identity the next tool requires; result-only prose uses method names.
-        const keepIdentity = result.data.projection === 'result_page' || ['method_list', 'plugin_inspect', 'plugin_query', 'study_read', 'structure_import_read',
+        const keepIdentity = result.data.projection === 'result_page' || ['method_list', 'plugin_inspect', 'plugin_query', 'study_list', 'study_read', 'type_read', 'structure_import_read',
           'propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check'].includes(tool.name);
         const projected = modelResult(tool, params, result, shown);
         // Pagination arguments are exact tool inputs; naming a sealed method must never rewrite those identities.

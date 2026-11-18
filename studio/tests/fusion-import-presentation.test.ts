@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 import { importFieldSource, importFieldValue, importSiValue } from '../ui/fusion/import-facts.ts';
 
-const catalogue = JSON.parse(readFileSync(new URL('../core/studio_core/catalogues/people_mv_xlpe.json', import.meta.url), 'utf8'));
+const catalogue = JSON.parse(readFileSync(new URL('../../backend/kernel/catalogue_core/catalogues/people_mv_xlpe.json', import.meta.url), 'utf8'));
 const associatedUpload = { file: '人民电器公开结构表.xlsx', sheet: '表2 YJV', row: 5, column: null, reviewed: false };
 
 test('import field source presentation distinguishes actual table cells from declarations and standard lookups', async t => {

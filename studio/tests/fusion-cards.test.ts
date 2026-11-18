@@ -170,3 +170,23 @@ test('saved type cards display resistance in Ω/km while leaving the exact saved
     assert.deepEqual(result, original, 'display conversion must not rewrite the saved SI value, its source or stable path');
   }
 });
+
+test('a saved comparison opens the exact two runs in the existing workbench comparison', async () => {
+  const backend = new Backend('http://127.0.0.1:9', 'unused');
+  const runIds = ['baseline-run', 'changed-run'];
+  const result: ToolResult = { status: 'ok', summary: '已比较保存运行。', diagnostics: [], next_actions: [], data: {
+    comparison: { sources: runIds.map(run_id => ({ run_id, snapshot: { workspace_id: WORKSPACE, study_id: STUDY,
+      definition: { title: '保存的直埋校核' } } })) },
+  } };
+  const original = JSON.stringify(result);
+  const shown = await describeResult(backend, 'study_compare', { run_ids: runIds }, result, WORKSPACE);
+  assert.deepEqual(shown.card, { kind: 'open', label: '两次保存运行对比 · 保存的直埋校核',
+    href: `cablesim:study_comparison/${STUDY}?workspace=${WORKSPACE}&compare=baseline-run%2Cchanged-run` });
+  assert.equal(JSON.stringify(result), original);
+  result.data.comparison.sources[1].snapshot.workspace_id = 'another-workspace';
+  assert.equal((await describeResult(backend, 'study_compare', { run_ids: runIds }, result, WORKSPACE)).card, undefined,
+    'mismatched saved ownership cannot become a comparison link');
+  result.data.comparison.sources[1].snapshot.workspace_id = WORKSPACE;
+  assert.equal((await describeResult(backend, 'study_compare', { run_ids: [...runIds].reverse() }, result, WORKSPACE)).card, undefined,
+    'the comparison must preserve baseline and comparison order');
+});

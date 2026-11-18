@@ -55,7 +55,7 @@ function artifactUrl(value: string | undefined): string | undefined {
 function SavedFile({ card }: { card: Extract<CardRef, { kind: 'saved_file' }> }) {
   const open = useOpen();
   const [previewing, setPreviewing] = useState(false);
-  const [file, setFile] = useState<{ url?: string; error?: string }>({});
+  const [file, setFile] = useState<{ url?: string; pdf?: boolean; error?: string }>({});
   const download = artifactUrl(card.download_url);
   const preview = artifactUrl(card.preview_url) || download;
   useEffect(() => {
@@ -66,12 +66,15 @@ function SavedFile({ card }: { card: Extract<CardRef, { kind: 'saved_file' }> })
     void fetch(preview, { signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error('保存文件暂时无法读取，请在工作台检查交付记录。');
       const blob = await response.blob();
+      const pdf = card.format === 'pdf';
+      if (pdf && (blob.type.split(';')[0] !== 'application/pdf' || await blob.slice(0, 5).text() !== '%PDF-'))
+        throw new Error('保存文件不是有效的 PDF，无法预览；请核对文件记录。');
       if (controller.signal.aborted) return;
       objectUrl = URL.createObjectURL(blob);
-      setFile({ url: objectUrl });
+      setFile({ url: objectUrl, pdf });
     }).catch(error => { if (!controller.signal.aborted) setFile({ error: error instanceof Error ? error.message : '文件未能打开。' }); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [preview, previewing]);
+  }, [preview, previewing, card.format]);
   return <>
     <FileCard title={card.title} kind={card.document_kind} format={card.format === 'pdf' ? 'PDF' : 'HTML'}
       onPreview={preview ? () => setPreviewing(true) : undefined}
@@ -80,7 +83,9 @@ function SavedFile({ card }: { card: Extract<CardRef, { kind: 'saved_file' }> })
     {preview && <Dialog open={previewing} onOpenChange={setPreviewing}>
       <DialogContent className="flex h-5/6 flex-col gap-3 sm:max-w-5xl">
         <DialogTitle>{card.title}</DialogTitle>
-        {file.url ? <iframe title={card.title} src={file.url} sandbox="" className="min-h-0 w-full flex-1 rounded-lg border border-line bg-surface" />
+        {/* Chromium's native PDF viewer is a plugin and cannot render inside a sandboxed frame. Only validated host PDF bytes
+            use that viewer; historical HTML stays in the script-free sandbox. */}
+        {file.url ? <iframe title={card.title} src={file.url} sandbox={file.pdf ? undefined : ''} className="min-h-0 w-full flex-1 rounded-lg border border-line bg-surface" />
           : <p role="status" className="m-0 text-sm text-ink-2">{file.error || '正在打开保存的文件…'}</p>}
       </DialogContent>
     </Dialog>}

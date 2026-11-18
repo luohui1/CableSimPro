@@ -64,9 +64,10 @@ export function AgentEmbed({ theme, workspaceId, studyId, context, compact = fal
       const query = new URLSearchParams(match[3] || '');
       // Navigation also covers restored conversations and writes made by another session.
       // Invalidation marks every dependency synchronously, before route loaders read it.
-      if (['study', 'project', 'type', 'type_rating', 'delivery'].includes(match[1]))
+      if (['study', 'study_comparison', 'project', 'type', 'type_rating', 'delivery'].includes(match[1]))
         void refreshAgentFacts(queries, ['project', 'type', 'type_rating'].includes(match[1]) ? id : query.get('workspace') || undefined);
       if (match[1] === 'study') void navigate({ to: '/studies/$sid', params: { sid: id }, search: { theme, workspace: query.get('workspace') || '', run: query.get('run') || '', delivery: '' } });
+      else if (match[1] === 'study_comparison') void navigate({ to: '/studies/$sid/$module/$tab', params: { sid: id, module: 'method-compare', tab: 'results' }, search: { theme, workspace: query.get('workspace') || '', compare: query.get('compare') || '', run: '', delivery: '' } });
       else if (match[1] === 'project') void navigate({ to: '/studies', search: { theme, workspace: id } });
       else if (match[1] === 'type') void navigate({ to: '/types/$wid/$module/$tab', params: { wid: id, module: 'structure', tab: 'section' }, search: { theme } });
       else if (match[1] === 'type_rating') void navigate({ to: '/types/$wid/$module/$tab', params: { wid: id, module: 'rating-table', tab: 'results' }, search: { theme, run: query.get('run') || undefined } });
