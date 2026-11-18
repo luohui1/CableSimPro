@@ -10,6 +10,7 @@ import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 import { walkShortBasis } from './short-basis-walk.mjs';
 import { walkManufacturer } from './manufacturer-walk.mjs';
 import { walkResources } from './resource-walk.mjs';
+import { walkResourceApplications } from './resource-application-walk.mjs';
 import { exportResourceExchange, safeRequestHeaders, saveRawResponse } from './resource-exchange-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
@@ -1025,6 +1026,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       previousCalculation: { request: ratedResponse.request().postDataJSON(), response: rated } });
     const resourceAudit = JSON.parse(await fs.readFile(path.join(out, `${viewport.width}-resources-summary.json`), 'utf8'));
     exchangeTasks.push(await exportResourceExchange({ page, base, viewport, out, root, expect, capture, readApi, resourceAudit, report }));
+    await walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report });
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

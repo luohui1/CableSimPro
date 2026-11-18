@@ -16,6 +16,7 @@ import { CatalogueComparison } from './comparison';
 import { ValueTable } from './value-table';
 import { ExchangeImport } from './exchange';
 import { ReferenceResources } from './reference-resources';
+import { ResourceApplications } from './resource-applications';
 import { LibraryDialog } from './dialog';
 import { displayUnit } from '@/lib/display-names';
 import { displayLibraryText, issueText, libraryPost, libraryRequest, methodText, normalizeSeriesDeclaration, tableHeaderText, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
@@ -34,11 +35,12 @@ export function LibraryImportPage() {
   };
   return <CatalogShell title="结构表导入与系列" path="电缆型号库" actions={<Button asChild><a href="/resources/cables">电缆型号版本</a></Button>}>
     <Tabs value={tab} onValueChange={setTab} className="library-import-page">
-      <TabsList aria-label="型号库操作"><TabsTrigger value="import">导入结构表</TabsTrigger><TabsTrigger value="series">系列与规格</TabsTrigger><TabsTrigger value="comparison">公开样本对照</TabsTrigger><TabsTrigger value="reference">材料与环境</TabsTrigger><TabsTrigger value="exchange">数据交换</TabsTrigger></TabsList>
+      <TabsList aria-label="型号库操作"><TabsTrigger value="import">导入结构表</TabsTrigger><TabsTrigger value="series">系列与规格</TabsTrigger><TabsTrigger value="comparison">公开样本对照</TabsTrigger><TabsTrigger value="reference">材料与环境</TabsTrigger><TabsTrigger value="applications">部件与研究模板</TabsTrigger><TabsTrigger value="exchange">数据交换</TabsTrigger></TabsList>
       <TabsContent value="import" forceMount><ImportWizard onOpenSeries={openSeries} /></TabsContent>
       <TabsContent value="series"><SeriesLibrary selected={search.item} onSelect={openSeries} onImport={() => setTab('import')} /></TabsContent>
       <TabsContent value="comparison"><CatalogueComparison /></TabsContent>
       <TabsContent value="reference"><ReferenceResources /></TabsContent>
+      <TabsContent value="applications"><ResourceApplications /></TabsContent>
       <TabsContent value="exchange"><ExchangeImport onOpenSeries={openSeries} /></TabsContent>
     </Tabs>
   </CatalogShell>;
