@@ -7,7 +7,7 @@
 ## 结构表导入
 
 1. `POST /api/type-library/imports/upload`：multipart `file`，支持 XLSX、CSV 和旧 XLS；非空原件不超过 10 MiB，界面与接口使用相同限制。返回 `upload_id`、原件 SHA-256、工作表、表头与建议列映射。仅完全匹配随附样本内容摘要时提供样本声明。
-2. `GET /api/type-library/vocabulary`：字段单位、建模参数及其参考出处；参考值必须由操作者明确选用。
+2. `GET /api/type-library/vocabulary`：字段单位、建模参数及其参考出处；参考值必须由操作者明确选用。界面的“补充尚未声明的参考参数”只填原来没有的项目，全部已有值、单位和出处保留，包括厂家声明的列示精度与许可温限；改值须明确编辑对应字段。
 3. `GET/POST /api/type-library/mappings`：保存和复用 `{name,mapping,headers}`。列索引从 0 开始，不允许两字段映射同一列。
 4. `POST /api/type-library/imports/preview`：`{upload_id,sheet,first_data_row,mapping,series}`，起始行从 1 开始。返回固定的 `preview_id` / `preview_digest`、每行数值、错误单元格、缺项、来源与结构闭合说明。公式不求值，不使用缓存值；规范型号模型的范围错误也返回原表单元格，保留原数与其余正确行，不变成整表 500。
 5. `POST /api/type-library/imports/commit`：`{preview_id,preview_digest,request_id,human_confirmed:true,skip_errors:false}`，要求 `X-CableSim-Actor: human`。预览、原件或请求摘要不一致会拒绝；预览固定的标准查询发行或封签改变时返回 `409 / IMPORT_STANDARDS_CHANGED`，必须重新预览和人工确认，不静默换版。存在错误行默认整批拒绝。只有明确选择 `skip_errors:true` 才跳过已显示的错误行。
@@ -56,6 +56,8 @@
 来源按 JSON Pointer 转义后的稳定路径保存，`core/1` 在路径中写为 `core~11`。每条来源为 `kind:user`、`reviewed:false`，其 `reference` JSON 固定完整声明、字段、`confidence:reference` 和“明示额定条件映射”方法 `1.0.0`；温限的用途为 `permitted_temperature_limit`，类别为 `declared_conductor_class`。预览 `derivation.rating_mapping` 同时列出实际目标路径、值、单位和映射方法。没有声明不添加这类映射或出处；原单芯入口及不完整草稿路径不扩展，缺项草稿仍只在系列声明中保留这些输入，不因此补造结构。
 
 人民电器样本的 `series.reference.published_operating_limits` 使用 `cablesim.published-operating-limits/1`，保存原 PDF 第 1 页／印刷 043 页“使用特性”第 3、4 项的正常最高 90℃、短路最高 250℃及最长 5 s 三个事实，均为 `criterion:maximum`，并保留固定原件 URL/SHA、`semantic:manufacturer_limit`、`usage:permitted_limits_only`、`confidence:reference`、`reviewed:false`。转录方法为 `cablesim.catalogue-operating-limits-transcription`／“人民电器公开使用特性转录” `1.0.0`。仅两个温限以“摄氏温度换算开尔文” `1.0.0` 转成 363.15 K 与 523.15 K；最长 5 s 随短路温限的完整出处保留为适用条件，不写入实际 `duration_s`，不创建研究运行或审批。
+
+声明页只读展示实际已给出的温限与导体类别、原值、单位和完整出处；没有声明的字段不显示为已有值。公开手册的许可上限另外列出供核对，并显示方法版本、可信分档、审核状态、原件页码及完整摘要。普通出处保持原文，结构化公开出处以可读字段展示并可下载原始文本；显示或下载来源不等于产品审核，也不会生成研究工况。
 
 入库继续要求原预览摘要、人工头与明确确认。系列 JSON/XLSX 继续通过 `/api/type-library/exchange/export|preview|import` 搬运完整声明、型号值和逐字段出处；目标独立草稿，不继承审核或生成计算结果。原件校验脚本方法 `1.2.0` 在固定 SHA 的 PDF 原页指定区域独立提取完整条件句；三个许可事实单独计数，原 877 个数值、88 个指南数值和 46 个未发表 R20 的口径不变。机制测试或来源记录不能替代真实原 PDF 字节的校验。
 

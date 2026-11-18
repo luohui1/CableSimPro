@@ -79,7 +79,13 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     const response = await afterAction(page.waitForResponse(item => new URL(item.url()).pathname === endpoint
       && item.request().method() === 'POST', { timeout: 180000 }), action);
     const body = await response.json(), raw = await recordResponse('material-import-' + label, response, body);
-    audit.responses.push({ label, status: response.status(), request: response.request().postDataJSON(), response: body, raw });
+    const requestBytes = response.request().postDataBuffer();
+    assert.ok(requestBytes?.length, '保留同一个实际 POST 的原始请求字节');
+    const requestFile = `${viewport.width}-material-import-${label}-request.json`;
+    await fs.writeFile(path.join(out, requestFile), requestBytes);
+    audit.responses.push({ label, status: response.status(), request: response.request().postDataJSON(), response: body, raw,
+      request_id: requestId(response.request()), request_headers: safeRequestHeaders(response.request()),
+      request_raw: { file: requestFile, size: requestBytes.length, sha256: hash(requestBytes) } });
     assert.equal(await response.finished(), null, '材料导入响应必须完整结束');
     assert.equal(response.status(), expected, JSON.stringify(body));
     return body;
@@ -165,6 +171,54 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     assert.equal(await response.finished(), null); assert.equal(response.status(), 201); assert.equal(inspection.sha256, hash(bytes));
     const declaration = inspection.declarations.find(item => item.table === 'three-core');
     assert.ok(declaration, '须使用真实 People 三芯无铠装结构表');
+    const originalFile = 'backend/kernel/catalogue_core/catalogues/people_mv_xlpe.json';
+    const originalBytes = await fs.readFile(path.join(root, originalFile)), original = JSON.parse(originalBytes);
+    assert.equal(original.source.sha256, 'c60b53c188478b55f424f49ca31506c5f7c100d2c876f91aab65622e86ddba4a');
+    const source = { ...original.source, url: 'https://www.chinapeople.com/pdf/sh/dxdl/8.7-10kV.pdf',
+      dataset_manufacturer_label: original.manufacturer, location: '使用特性第 3、4 项', pdf_page: 1, printed_page: 43 };
+    const method = { id: 'cablesim.catalogue-operating-limits-transcription', name: '人民电器公开使用特性转录', version: '1.0.0' };
+    const limits = { normal_temperature: { value: 90, unit: 'degC', criterion: 'maximum' },
+      short_circuit_temperature: { value: 250, unit: 'degC', criterion: 'maximum' },
+      short_circuit_duration: { value: 5, unit: 's', criterion: 'maximum' } };
+    const limitations = ['厂家声明的使用温限及最长短路时限，非实际运行温度、故障持续时间或实测结果；研究参数须另行明确，不能自动采用这些上限。'];
+    const published = { schema: 'cablesim.published-operating-limits/1', source, semantic: 'manufacturer_limit',
+      usage: 'permitted_limits_only', method, confidence: 'reference', reviewed: false, limits, limitations };
+    assert.deepEqual(declaration.series.reference.published_operating_limits, published);
+    const originalModelling = structuredClone(declaration.series.modelling);
+    const ratingFields = [['normal_temperature_k', 'normal', 363.15], ['short_circuit_temperature_k', 'short_circuit', 523.15]];
+    assert.equal(Object.hasOwn(originalModelling, 'conductor_class'), false, '原手册未声明导体类别，不制造厂家类别声明');
+    assert.equal(originalModelling.diameter_rounding.value, 0.0005);
+    assert.deepEqual(originalModelling.diameter_rounding, original.import_declaration.diameter_rounding);
+    for (const [key, field, value] of ratingFields) {
+      assert.equal(originalModelling[key].value, value); assert.equal(originalModelling[key].unit, 'K');
+      const quantity = field === 'normal' ? 'normal_temperature' : 'short_circuit_temperature';
+      assert.deepEqual(JSON.parse(originalModelling[key].reference), { source, semantic: 'manufacturer_limit', method,
+        quantity, ...limits[quantity], conversion: { name: '摄氏温度换算开尔文', version: '1.0.0', expression: 'T/K = t/degC + 273.15' },
+        limitations, ...(field === 'short_circuit' ? { conditions: { short_circuit_duration: limits.short_circuit_duration } } : {}) });
+    }
+    const vocabulary = await read('/api/type-library/vocabulary', 'reference-vocabulary');
+    const selectedModelling = { ...vocabulary.reference_modelling, ...originalModelling };
+    audit.rating_retention = { original_file: originalFile, original_sha256: hash(originalBytes), original_modelling: originalModelling,
+      selected_modelling: selectedModelling, published, source_checks: [], series_checks: [], source_downloads: [] };
+    function verifySeries(series, stage) {
+      assert.deepEqual(series.modelling, selectedModelling, `${stage}须只补充已明确选择且原来缺少的参考参数`);
+      for (const [key, declared] of Object.entries(originalModelling)) assert.deepEqual(series.modelling[key], declared, `${stage}须保留${key}的原值、单位与完整出处`);
+      assert.deepEqual(series.reference.published_operating_limits, published);
+      assert.equal(Object.hasOwn(series.modelling, 'conductor_class'), false);
+      assert.ok(Object.keys(series.modelling).every(key => !key.includes('duration')), '≤5s仅是适用限制，不能变成研究故障时长');
+      audit.rating_retention.series_checks.push({ stage, modelling_sha256: hash(canonical(series.modelling)), source_sha256: hash(canonical(series.reference.published_operating_limits)) });
+    }
+    function verifyRatings(payload, stage) {
+      for (const [key, field, value] of ratingFields) {
+        assert.equal(payload.cable_type.rating.max_conductor_temperature[field], value);
+        const fieldPath = pointer('cable_type', 'rating', 'max_conductor_temperature', field), actual = payload.sources[fieldPath];
+        assert.equal(actual.kind, 'user'); assert.equal(actual.reviewed, false);
+        assert.deepEqual(JSON.parse(actual.reference), { kind: 'user', method: { name: '明示额定条件映射', version: '1.0.0' },
+          confidence: 'reference', reviewed: false, field: key, evidence: originalModelling[key], usage: 'permitted_temperature_limit' });
+        audit.rating_retention.source_checks.push({ stage, field: key, path: fieldPath, value,
+          source_sha256: hash(canonical(actual)), original_reference_sha256: hash(originalModelling[key].reference) });
+      }
+    }
     const sheet = inspection.sheets.find(item => item.name === declaration.sheet);
     await select('工作表', `${sheet.name} · ${sheet.data_rows ?? sheet.rows} 行`);
     await shot('真实工作表与原列');
@@ -179,15 +233,68 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await page.getByRole('button', { name: '填写系列声明', exact: true }).click();
     const name = `人民公开三芯结构 · 明示文献参考 ${viewport.width} ${Date.now()}`;
     await page.getByRole('form', { name: '系列声明', exact: true }).getByLabel('系列名称', { exact: true }).fill(name);
+    const ratings = page.getByRole('region', { name: '已声明的额定条件', exact: true });
+    const normalValue = ratings.getByText('正常运行许可温限：363.15 K', { exact: true });
+    const shortValue = ratings.getByText('短路许可温限：523.15 K', { exact: true });
+    await expect(normalValue).toBeVisible(); await expect(shortValue).toBeVisible();
+    await expect(ratings.getByText(/^导体类别：/)).toHaveCount(0);
+    await expect(ratings).toContainText('许可温限不是研究实际运行温度，最长短路时限不是本次故障持续时间');
+    await normalValue.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(normalValue).toBeInViewport({ ratio: 1 }); await expect(shortValue).toBeInViewport({ ratio: 1 });
+    await shot('上传温限保持原值单位并区分研究工况');
+    const publishedView = ratings.getByRole('region', { name: '公开手册许可上限', exact: true });
+    for (const fact of ['正常运行温限：≤ 90 °C', '短路温限：≤ 250 °C', '最长短路时限：≤ 5 s']) await expect(publishedView.getByText(fact, { exact: true })).toBeVisible();
+    await expect(publishedView).toContainText('人民电器公开使用特性转录 · 1.0.0');
+    await expect(publishedView).toContainText('可信分档：参考 · 尚未人工审核');
+    for (const limitation of limitations) await expect(publishedView).toContainText(limitation);
+    await publishedView.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(publishedView).toBeInViewport({ ratio: 1 }); await shot('原手册九十度二百五十度与最长五秒只作许可上限');
+    const originalDetails = publishedView.locator('details');
+    await originalDetails.locator('summary').click(); await expect(originalDetails).toHaveJSProperty('open', true);
+    await expect(originalDetails).toContainText('印刷第 43 页 · PDF 第 1 页');
+    const sourceDigest = originalDetails.locator('code'); await expect(sourceDigest).toHaveText(source.sha256);
+    await originalDetails.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(sourceDigest).toBeInViewport({ ratio: 1 }); await shot('手册许可限值原件页码与完整摘要');
+    await originalDetails.locator('summary').click();
+    const shortDetails = ratings.locator('details').filter({ has: page.locator('summary', { hasText: /^短路许可温限完整出处$/ }) });
+    await shortDetails.locator('summary').click(); await expect(shortDetails).toHaveJSProperty('open', true);
+    await expect(shortDetails).toContainText('原文适用条件：最长短路时限 ≤ 5 s');
+    await expect(shortDetails).toContainText('摄氏温度换算开尔文 · 1.0.0');
+    const downloadPromise = page.waitForEvent('download');
+    await shortDetails.getByRole('button', { name: '下载完整声明出处', exact: true }).click();
+    const sourceDownload = await downloadPromise, sourceFile = `${viewport.width}-short-circuit-declared-source.txt`;
+    await sourceDownload.saveAs(path.join(out, sourceFile));
+    assert.equal(await sourceDownload.failure(), null);
+    const sourceBytes = await fs.readFile(path.join(out, sourceFile));
+    assert.equal(sourceBytes.toString('utf8'), originalModelling.short_circuit_temperature_k.reference);
+    audit.rating_retention.source_downloads.push({ file: sourceFile, size: sourceBytes.length, sha256: hash(sourceBytes) });
+    const shortCondition = shortDetails.getByText('原文适用条件：最长短路时限 ≤ 5 s。', { exact: true });
+    await shortCondition.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(shortCondition).toBeInViewport({ ratio: 1 });
+    await expect(shortDetails.locator('code')).toBeInViewport({ ratio: 1 }); await shot('短路温限完整出处与原文下载');
+    await shortDetails.locator('summary').click();
+    const modellingDetails = page.locator('details').filter({ has: page.locator('summary', { hasText: /^计算参数与来源$/ }) });
+    await modellingDetails.locator('summary').click(); await expect(modellingDetails).toHaveJSProperty('open', true);
+    const addReferences = modellingDetails.getByRole('button', { name: '补充尚未声明的参考参数', exact: true });
+    await addReferences.click();
+    await expect(modellingDetails).toContainText('只补充未声明项目，已有数值与出处全部保留');
+    await expect(modellingDetails.getByLabel('参数外径列示精度的半个单位', { exact: true })).toHaveValue('0.0005');
+    await expect(modellingDetails.getByLabel('外径列示精度的半个单位参数依据', { exact: true })).toHaveValue(originalModelling.diameter_rounding.reference);
+    await expect(addReferences).toBeInViewport({ ratio: 1 }); await shot('明确点击只补缺少参考参数');
+    await normalValue.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(normalValue).toBeInViewport({ ratio: 1 }); await expect(shortValue).toBeInViewport({ ratio: 1 });
+    await shot('补充参考后两温限原值仍在');
     const materialSection = page.getByRole('region', { name: '明示材料物性', exact: true });
     await expect(materialSection.getByRole('status')).toHaveText('尚未声明材料物性；不会自动填入参考值。');
     await materialSection.getByRole('heading', { name: '明示材料物性', exact: true }).scrollIntoViewIfNeeded();
     await shot('空值起步');
     const baseline = await preview('baseline');
+    verifySeries(audit.responses.at(-1).request.series, 'baseline-request'); verifySeries(baseline.series, 'baseline-response');
     assert.deepEqual([baseline.rows.length, baseline.valid_count, baseline.error_count, baseline.incomplete_count], [11, 11, 0, 0]);
     assert.deepEqual(baseline.mapping, declaration.mapping);
     assert.equal(Object.keys(baseline.series.material_properties ?? {}).length, 0);
     for (const row of baseline.rows) assert.ok(row.payload.materials.every(item => item.density === null && item.volumetric_heat_capacity === null));
+    for (const row of baseline.rows) verifyRatings(row.payload, `baseline-row-${row.row_number}`);
     await page.getByRole('button', { name: '返回修改声明', exact: true }).click();
     await fill(1, '导体', '密度', density.declaration);
     await fill(2, '绝缘', '体积热容', wrongUnitDeclarations.insulation.volumetric_heat_capacity);
@@ -237,6 +344,7 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await expect(rowAt(3)).toHaveCount(0);
 
     const denied = await preview('wrong-unit');
+    verifySeries(audit.responses.at(-1).request.series, 'wrong-unit-request'); verifySeries(denied.series, 'wrong-unit-response');
     assert.deepEqual(audit.responses.at(-1).request.series.material_properties, wrongUnitDeclarations);
     assert.deepEqual(denied.series.material_properties, wrongUnitDeclarations);
     audit.expected_row_refusal = { status: 200, field: 'material_properties.insulation.volumetric_heat_capacity', rows: denied.rows.map(item => item.row_number) };
@@ -264,10 +372,12 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await expectDeclaration(capacityRow, '绝缘', '体积热容', capacity.declaration);
     await capacityRow.getByRole('heading').scrollIntoViewIfNeeded(); await shot('纠正热容单位并保留出处');
     const accepted = await preview('corrected');
+    verifySeries(audit.responses.at(-1).request.series, 'corrected-request'); verifySeries(accepted.series, 'corrected-response');
     assert.deepEqual(audit.responses.at(-1).request.series.material_properties, declarations);
     assert.deepEqual([accepted.valid_count, accepted.error_count, accepted.incomplete_count], [11, 0, 0]);
     assert.deepEqual(accepted.series.material_properties, declarations);
     for (const [index, row] of accepted.rows.entries()) {
+      verifyRatings(row.payload, `corrected-row-${row.row_number}`);
       const before = baseline.rows[index].payload, after = row.payload;
       const originalMaterials = new Map(before.materials.map(item => [item.id, item]));
       const materials = new Map(after.materials.map(item => [item.id, item]));
@@ -299,6 +409,13 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
       const current = await read(`/api/types/${spec.workspace_id}/workspace`, `type-${index + 1}`);
       assert.deepEqual(current.domain.materials, accepted.rows[index].payload.materials);
       assert.deepEqual(current.domain.cable_types, [accepted.rows[index].payload.cable_type]);
+      for (const [_key, field, value] of ratingFields) {
+        const cable = current.domain.cable_types[0], payloadPath = pointer('cable_type', 'rating', 'max_conductor_temperature', field);
+        const savedPath = pointer('cable_types', cable.id, 'rating', 'max_conductor_temperature', field);
+        assert.equal(cable.rating.max_conductor_temperature[field], value);
+        assert.deepEqual(current.domain.provenance[savedPath], accepted.rows[index].payload.sources[payloadPath]);
+        audit.rating_retention.source_checks.push({ stage: `saved-type-${index + 1}`, path: savedPath, value, source_sha256: hash(canonical(current.domain.provenance[savedPath])) });
+      }
       for (const [field, source] of Object.entries(accepted.rows[index].payload.sources)) if (field.startsWith('/materials/'))
         assert.deepEqual(current.domain.provenance[field], source);
       for (const core of current.domain.cable_types[0].cores) {
@@ -319,6 +436,7 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     assert.equal(refreshed.status(), 200); assert.equal(await refreshed.finished(), null);
     const refreshedRaw = await saveRawResponse(refreshed, path.join(out, `${viewport.width}-material-import-refreshed-series-raw.json`));
     audit.refreshed_series = { response: refreshedBody, raw: refreshedRaw };
+    verifySeries(refreshedBody.declaration, 'refreshed-series');
     assert.deepEqual(refreshedBody.declaration.material_properties, declarations);
     assert.equal(refreshedBody.specs.length, 11); assert.ok(refreshedBody.specs.every(item => item.state === 'draft' && !item.submission && !item.results.length));
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
@@ -329,6 +447,7 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     assert.equal(audit.requests.filter(item => item.method === 'POST' && /\/runs(?:\?|$)/.test(item.url)).length, 0);
     assert.deepEqual(audit.failed_requests, []); assert.deepEqual(audit.console_errors, []); assert.deepEqual(audit.network_errors, []);
     audit.outcome = 'passed';
+    report.checks.push(`${viewport.width}：人民原手册90/250°C及≤5s按许可上限只读呈现；明确补充参考参数后，原有全部值/单位/出处和0.0005m列示精度不变，11规格两温限及完整来源经预览请求、入库Types和刷新系列逐项回读，未制造厂家导体类别或研究故障时长。`);
     report.checks.push(`${viewport.width}：真实人民三芯表通过可见控件录入导体铜密度和XLPE热容文献参考；空值与重复项明确处理，错误单位11行拒绝且未入库，纠正后11规格人工保存并经旧Types回读；屏蔽密度仍空、纵向电阻不变、逐字段出处完整，刷新后仍为草稿且未自动运行计算。`);
   } catch (error) {
     try {
