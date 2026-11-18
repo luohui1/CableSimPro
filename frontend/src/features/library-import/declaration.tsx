@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { optionalRecord, text } from '@/api/client';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { displayUnit } from '@/lib/display-names';
+import { displayName, displayUnit } from '@/lib/display-names';
 import { confidenceText, methodText, sourceLocationText, type Field, type SeriesDeclaration, type Vocabulary } from './api';
 import { MaterialDeclarations } from './material-declaration';
 
@@ -30,6 +30,22 @@ const limitText = (value: unknown) => {
   return `${item.criterion === 'maximum' ? '≤ ' : ''}${typeof item.value === 'number' && Number.isFinite(item.value) ? item.value : '数值未声明'} ${ratingUnit(item.unit)}`;
 };
 const limitationsOf = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+function ParameterValue({ field, value, children }: { field: string; value?: number | string; children: ReactNode }) {
+  const [editing, setEditing] = useState(false);
+  const known = typeof value === 'string' && (
+    field === 'conductor_form' && ['solid_round', 'stranded_round', 'stranded_round_compacted'].includes(value)
+    || field === 'screen_model' && ['continuous_contact', 'given_r20'].includes(value)
+  );
+  if (!known && !editing) return children;
+  return <div className="library-import-stack">
+    <p>{known ? displayName(value) : value}</p>
+    <details className="library-import-explanation" open={editing} onToggle={event => setEditing(event.currentTarget.open)}>
+      <summary>编辑原始声明</summary>
+      {children}
+    </details>
+  </div>;
+}
 
 function RatingSource({ value }: { value: unknown }) {
   const source = optionalRecord(value), url = text(source.url);
@@ -191,12 +207,14 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
         <div><Button type="button" onClick={() => set({ modelling: { ...structuredClone(vocabulary.reference_modelling), ...value.modelling } })}>补充尚未声明的参考参数</Button></div>
         {vocabulary.modelling.map(field => <div className="library-import-value" key={field.key}>
           <label htmlFor={`library-model-${field.key}`}>{field.label}<span className="unit"> / {displayUnit(field.unit)}</span></label>
+          <ParameterValue field={field.key} value={value.modelling[field.key]?.value}>
           <Input id={`library-model-${field.key}`} aria-label={`参数${field.label}`} value={value.modelling[field.key]?.value ?? ''} onChange={event => {
             const modelling = { ...value.modelling }, raw = event.target.value;
             if (raw === '') delete modelling[field.key];
             else modelling[field.key] = { value: numberOf(raw) ?? raw, reference: modelling[field.key]?.reference || '' };
             set({ modelling });
           }} />
+          </ParameterValue>
           <Textarea aria-label={`${field.label}参数依据`} required={!!value.modelling[field.key]} placeholder="参数的出处与适用条件" value={value.modelling[field.key]?.reference || ''} onChange={event => {
             const current = value.modelling[field.key];
             if (current) set({ modelling: { ...value.modelling, [field.key]: { ...current, reference: event.target.value } } });
