@@ -10,28 +10,834 @@ const trayFields = ['tray_kind', 'tray_layout_source', 'tray_layout_confirmed'];
 const artifactType = 'x-cablesim.gb50217-correction';
 const releaseDigest = '0d15c0740489df0fab5a65bf66a18542c2fd9e8825327d02d694caceb02bdf78';
 
-// This calls only the existing, explicitly synthetic input constructor. It
-// neither checks/runs the correction method nor starts a service or solver.
+// Fixed synthetic values captured from tray_example(kind, 1) at the exact
+// test-source SHA checked below. Both kinds use this same seven-cable Domain;
+// only the explicit tray-kind declaration differs. These are mechanism inputs,
+// never manufacturer data. Runtime preparation reads no test module and runs no
+// correction method, service or solver.
+const fixedSyntheticInput = String.raw`{
+  "domain": {
+    "schema_version": "cablesim.domain/1",
+    "name": "D.0.6 合成机制核验，不是厂家或真实线路示例",
+    "materials": [
+      {
+        "id": "material/conductor",
+        "label": "copper",
+        "category": "conductor",
+        "standard_kind": null,
+        "thermal_resistivity": null,
+        "volumetric_heat_capacity": null,
+        "electrical_resistivity_20": null,
+        "temperature_coefficient_20": null,
+        "relative_permittivity": null,
+        "loss_tangent": null,
+        "relative_permeability": null,
+        "emissivity": null,
+        "solar_absorptivity": null,
+        "dry_thermal_resistivity": null,
+        "critical_temperature_rise": null,
+        "density": null
+      },
+      {
+        "id": "material/semicon",
+        "label": "v0 semiconductor",
+        "category": "semiconductor",
+        "standard_kind": null,
+        "thermal_resistivity": 2.5,
+        "volumetric_heat_capacity": null,
+        "electrical_resistivity_20": null,
+        "temperature_coefficient_20": null,
+        "relative_permittivity": null,
+        "loss_tangent": null,
+        "relative_permeability": null,
+        "emissivity": null,
+        "solar_absorptivity": null,
+        "dry_thermal_resistivity": null,
+        "critical_temperature_rise": null,
+        "density": null
+      },
+      {
+        "id": "material/insulation",
+        "label": "v0 insulation",
+        "category": "insulation",
+        "standard_kind": null,
+        "thermal_resistivity": 3.5,
+        "volumetric_heat_capacity": null,
+        "electrical_resistivity_20": null,
+        "temperature_coefficient_20": null,
+        "relative_permittivity": 2.3,
+        "loss_tangent": 0.0004,
+        "relative_permeability": null,
+        "emissivity": null,
+        "solar_absorptivity": null,
+        "dry_thermal_resistivity": null,
+        "critical_temperature_rise": null,
+        "density": null
+      },
+      {
+        "id": "material/screen",
+        "label": "v0 screen, construction unspecified",
+        "category": "metal",
+        "standard_kind": null,
+        "thermal_resistivity": null,
+        "volumetric_heat_capacity": null,
+        "electrical_resistivity_20": null,
+        "temperature_coefficient_20": null,
+        "relative_permittivity": null,
+        "loss_tangent": null,
+        "relative_permeability": null,
+        "emissivity": null,
+        "solar_absorptivity": null,
+        "dry_thermal_resistivity": null,
+        "critical_temperature_rise": null,
+        "density": null
+      },
+      {
+        "id": "material/jacket",
+        "label": "v0 oversheath",
+        "category": "polymer",
+        "standard_kind": null,
+        "thermal_resistivity": 3.5,
+        "volumetric_heat_capacity": null,
+        "electrical_resistivity_20": null,
+        "temperature_coefficient_20": null,
+        "relative_permittivity": null,
+        "loss_tangent": null,
+        "relative_permeability": null,
+        "emissivity": null,
+        "solar_absorptivity": null,
+        "dry_thermal_resistivity": null,
+        "critical_temperature_rise": null,
+        "density": null
+      },
+      {
+        "id": "material/soil",
+        "label": "v0 soil",
+        "category": "soil",
+        "standard_kind": null,
+        "thermal_resistivity": 1.2,
+        "volumetric_heat_capacity": null,
+        "electrical_resistivity_20": null,
+        "temperature_coefficient_20": null,
+        "relative_permittivity": null,
+        "loss_tangent": null,
+        "relative_permeability": null,
+        "emissivity": null,
+        "solar_absorptivity": null,
+        "dry_thermal_resistivity": null,
+        "critical_temperature_rise": null,
+        "density": null
+      }
+    ],
+    "cable_types": [
+      {
+        "id": "cable_type/ct1",
+        "label": "演示 · Cu / XLPE 12/20 kV · 1×240",
+        "construction": "three_core",
+        "rating": {
+          "u0": 12000.0,
+          "u": null,
+          "um": null,
+          "max_conductor_temperature": {
+            "normal": 363.15
+          }
+        },
+        "cores": [
+          {
+            "id": "core/k0",
+            "conductor": {
+              "material": "material/conductor",
+              "form": "unspecified",
+              "nominal_area": 0.00023999999999999998,
+              "diameter": 0.01822496766671072,
+              "sector_angle_deg": null,
+              "sector_rotation_deg": null,
+              "r20": null,
+              "conductor_class": null,
+              "r20_basis": null,
+              "inner_diameter": null,
+              "segments": null,
+              "wire_count": null,
+              "insulated_wires": null,
+              "wire_diameter": null,
+              "lay_length": null,
+              "lay_direction": null,
+              "lay_factor": null
+            },
+            "layers": [
+              {
+                "role": "insulation",
+                "material": "material/insulation",
+                "thickness": 0.0055,
+                "form": null,
+                "corrugation_depth": null,
+                "corrugation_pitch": null,
+                "wire_count": null,
+                "wire_diameter": null,
+                "lay_length": null,
+                "overlap": null,
+                "mean_wire_diameter": null,
+                "padding_thickness": null,
+                "tape_width": null,
+                "lay_direction": null,
+                "minimum_thickness": null,
+                "maximum_thickness": null,
+                "mean_thickness": null,
+                "nominal_tape_thickness": null,
+                "tape_count": null,
+                "tape_application": null,
+                "minimum_overlap": null,
+                "reverse_binder_thickness": null,
+                "reverse_binder_width": null,
+                "reverse_binder_count": null,
+                "screen_inner_diameter": null,
+                "minimum_tape_thickness": null,
+                "longitudinal_r20": null,
+                "longitudinal_resistance_basis": null,
+                "longitudinal_resistance_frequency": null,
+                "tape_gap": null
+              }
+            ],
+            "x": -0.04,
+            "z": 0.0
+          },
+          {
+            "id": "core/k1",
+            "conductor": {
+              "material": "material/conductor",
+              "form": "unspecified",
+              "nominal_area": 0.00023999999999999998,
+              "diameter": 0.01822496766671072,
+              "sector_angle_deg": null,
+              "sector_rotation_deg": null,
+              "r20": null,
+              "conductor_class": null,
+              "r20_basis": null,
+              "inner_diameter": null,
+              "segments": null,
+              "wire_count": null,
+              "insulated_wires": null,
+              "wire_diameter": null,
+              "lay_length": null,
+              "lay_direction": null,
+              "lay_factor": null
+            },
+            "layers": [
+              {
+                "role": "insulation",
+                "material": "material/insulation",
+                "thickness": 0.0055,
+                "form": null,
+                "corrugation_depth": null,
+                "corrugation_pitch": null,
+                "wire_count": null,
+                "wire_diameter": null,
+                "lay_length": null,
+                "overlap": null,
+                "mean_wire_diameter": null,
+                "padding_thickness": null,
+                "tape_width": null,
+                "lay_direction": null,
+                "minimum_thickness": null,
+                "maximum_thickness": null,
+                "mean_thickness": null,
+                "nominal_tape_thickness": null,
+                "tape_count": null,
+                "tape_application": null,
+                "minimum_overlap": null,
+                "reverse_binder_thickness": null,
+                "reverse_binder_width": null,
+                "reverse_binder_count": null,
+                "screen_inner_diameter": null,
+                "minimum_tape_thickness": null,
+                "longitudinal_r20": null,
+                "longitudinal_resistance_basis": null,
+                "longitudinal_resistance_frequency": null,
+                "tape_gap": null
+              }
+            ],
+            "x": 0.04,
+            "z": 0.0
+          },
+          {
+            "id": "core/k2",
+            "conductor": {
+              "material": "material/conductor",
+              "form": "unspecified",
+              "nominal_area": 0.00023999999999999998,
+              "diameter": 0.01822496766671072,
+              "sector_angle_deg": null,
+              "sector_rotation_deg": null,
+              "r20": null,
+              "conductor_class": null,
+              "r20_basis": null,
+              "inner_diameter": null,
+              "segments": null,
+              "wire_count": null,
+              "insulated_wires": null,
+              "wire_diameter": null,
+              "lay_length": null,
+              "lay_direction": null,
+              "lay_factor": null
+            },
+            "layers": [
+              {
+                "role": "insulation",
+                "material": "material/insulation",
+                "thickness": 0.0055,
+                "form": null,
+                "corrugation_depth": null,
+                "corrugation_pitch": null,
+                "wire_count": null,
+                "wire_diameter": null,
+                "lay_length": null,
+                "overlap": null,
+                "mean_wire_diameter": null,
+                "padding_thickness": null,
+                "tape_width": null,
+                "lay_direction": null,
+                "minimum_thickness": null,
+                "maximum_thickness": null,
+                "mean_thickness": null,
+                "nominal_tape_thickness": null,
+                "tape_count": null,
+                "tape_application": null,
+                "minimum_overlap": null,
+                "reverse_binder_thickness": null,
+                "reverse_binder_width": null,
+                "reverse_binder_count": null,
+                "screen_inner_diameter": null,
+                "minimum_tape_thickness": null,
+                "longitudinal_r20": null,
+                "longitudinal_resistance_basis": null,
+                "longitudinal_resistance_frequency": null,
+                "tape_gap": null
+              }
+            ],
+            "x": 0.0,
+            "z": 0.07
+          }
+        ],
+        "common_layers": [
+          {
+            "role": "conductor_screen",
+            "material": "material/semicon",
+            "thickness": 0.0006,
+            "form": null,
+            "corrugation_depth": null,
+            "corrugation_pitch": null,
+            "wire_count": null,
+            "wire_diameter": null,
+            "lay_length": null,
+            "overlap": null,
+            "mean_wire_diameter": null,
+            "padding_thickness": null,
+            "tape_width": null,
+            "lay_direction": null,
+            "minimum_thickness": null,
+            "maximum_thickness": null,
+            "mean_thickness": null,
+            "nominal_tape_thickness": null,
+            "tape_count": null,
+            "tape_application": null,
+            "minimum_overlap": null,
+            "reverse_binder_thickness": null,
+            "reverse_binder_width": null,
+            "reverse_binder_count": null,
+            "screen_inner_diameter": null,
+            "minimum_tape_thickness": null,
+            "longitudinal_r20": null,
+            "longitudinal_resistance_basis": null,
+            "longitudinal_resistance_frequency": null,
+            "tape_gap": null
+          },
+          {
+            "role": "insulation_screen",
+            "material": "material/semicon",
+            "thickness": 0.0007,
+            "form": null,
+            "corrugation_depth": null,
+            "corrugation_pitch": null,
+            "wire_count": null,
+            "wire_diameter": null,
+            "lay_length": null,
+            "overlap": null,
+            "mean_wire_diameter": null,
+            "padding_thickness": null,
+            "tape_width": null,
+            "lay_direction": null,
+            "minimum_thickness": null,
+            "maximum_thickness": null,
+            "mean_thickness": null,
+            "nominal_tape_thickness": null,
+            "tape_count": null,
+            "tape_application": null,
+            "minimum_overlap": null,
+            "reverse_binder_thickness": null,
+            "reverse_binder_width": null,
+            "reverse_binder_count": null,
+            "screen_inner_diameter": null,
+            "minimum_tape_thickness": null,
+            "longitudinal_r20": null,
+            "longitudinal_resistance_basis": null,
+            "longitudinal_resistance_frequency": null,
+            "tape_gap": null
+          },
+          {
+            "role": "metallic_screen",
+            "material": "material/screen",
+            "thickness": 0.0005,
+            "form": "unspecified",
+            "corrugation_depth": null,
+            "corrugation_pitch": null,
+            "wire_count": null,
+            "wire_diameter": null,
+            "lay_length": null,
+            "overlap": null,
+            "mean_wire_diameter": null,
+            "padding_thickness": null,
+            "tape_width": null,
+            "lay_direction": null,
+            "minimum_thickness": null,
+            "maximum_thickness": null,
+            "mean_thickness": null,
+            "nominal_tape_thickness": null,
+            "tape_count": null,
+            "tape_application": null,
+            "minimum_overlap": null,
+            "reverse_binder_thickness": null,
+            "reverse_binder_width": null,
+            "reverse_binder_count": null,
+            "screen_inner_diameter": null,
+            "minimum_tape_thickness": null,
+            "longitudinal_r20": null,
+            "longitudinal_resistance_basis": null,
+            "longitudinal_resistance_frequency": null,
+            "tape_gap": null
+          },
+          {
+            "role": "oversheath",
+            "material": "material/jacket",
+            "thickness": 0.0025,
+            "form": null,
+            "corrugation_depth": null,
+            "corrugation_pitch": null,
+            "wire_count": null,
+            "wire_diameter": null,
+            "lay_length": null,
+            "overlap": null,
+            "mean_wire_diameter": null,
+            "padding_thickness": null,
+            "tape_width": null,
+            "lay_direction": null,
+            "minimum_thickness": null,
+            "maximum_thickness": null,
+            "mean_thickness": null,
+            "nominal_tape_thickness": null,
+            "tape_count": null,
+            "tape_application": null,
+            "minimum_overlap": null,
+            "reverse_binder_thickness": null,
+            "reverse_binder_width": null,
+            "reverse_binder_count": null,
+            "screen_inner_diameter": null,
+            "minimum_tape_thickness": null,
+            "longitudinal_r20": null,
+            "longitudinal_resistance_basis": null,
+            "longitudinal_resistance_frequency": null,
+            "tape_gap": null
+          }
+        ],
+        "core_lay_length": null
+      }
+    ],
+    "circuits": [
+      {
+        "id": "circuit/c1",
+        "label": "回路 1",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p1",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      },
+      {
+        "id": "circuit/c2",
+        "label": "回路 2",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p2",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      },
+      {
+        "id": "circuit/c3",
+        "label": "回路 3",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p3",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      },
+      {
+        "id": "circuit/c4",
+        "label": "回路 4",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p4",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      },
+      {
+        "id": "circuit/c5",
+        "label": "回路 5",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p5",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      },
+      {
+        "id": "circuit/c6",
+        "label": "回路 6",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p6",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      },
+      {
+        "id": "circuit/c7",
+        "label": "回路 7",
+        "system": {
+          "kind": "ac_three_phase",
+          "frequency": 50.0,
+          "voltage": 10000.0
+        },
+        "cable_type": "cable_type/ct1",
+        "cables": [
+          {
+            "id": "cable/p7",
+            "phase": "L1L2L3",
+            "parallel_index": 1
+          }
+        ],
+        "bonding": {
+          "kind": "unspecified",
+          "minor_section_lengths": [],
+          "transposed": false,
+          "section_permutations": [],
+          "source": null
+        },
+        "electrical_topology": null
+      }
+    ],
+    "sections": [
+      {
+        "id": "section/s1",
+        "label": "v0 buried section",
+        "kind": "air",
+        "length": 1000.0,
+        "medium": {
+          "material": "material/soil",
+          "surface_temperature": null,
+          "air_temperature": 313.15,
+          "wind_speed": 0.0,
+          "solar_irradiance": 0.0,
+          "ventilation": "natural"
+        },
+        "enclosures": [
+          {
+            "id": "enclosure/tray1",
+            "type": "tray",
+            "x": 0.0,
+            "z": 0.0,
+            "material": null,
+            "inner_diameter": null,
+            "outer_diameter": null,
+            "width": null,
+            "height": null,
+            "contains": [
+              "cable/p1",
+              "cable/p2",
+              "cable/p3",
+              "cable/p4",
+              "cable/p5",
+              "cable/p6",
+              "cable/p7"
+            ]
+          }
+        ],
+        "placements": [
+          {
+            "cable": "cable/p1",
+            "x": 0.0,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          },
+          {
+            "cable": "cable/p2",
+            "x": 0.17782496766671074,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          },
+          {
+            "cable": "cable/p3",
+            "x": 0.3556499353334215,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          },
+          {
+            "cable": "cable/p4",
+            "x": 0.5334749030001322,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          },
+          {
+            "cable": "cable/p5",
+            "x": 0.711299870666843,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          },
+          {
+            "cable": "cable/p6",
+            "x": 0.8891248383335537,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          },
+          {
+            "cable": "cable/p7",
+            "x": 1.0669498060002645,
+            "z": 0.0,
+            "enclosure": "enclosure/tray1"
+          }
+        ],
+        "layout_template": {
+          "kind": "flat",
+          "depth": 0.8,
+          "spacing": 0.12
+        },
+        "backfill": null,
+        "soil_layers": []
+      }
+    ],
+    "load_cases": [
+      {
+        "id": "load/steady",
+        "kind": "steady",
+        "currents": {
+          "circuit/c1": 300.0,
+          "circuit/c2": 300.0,
+          "circuit/c3": 300.0,
+          "circuit/c4": 300.0,
+          "circuit/c5": 300.0,
+          "circuit/c6": 300.0,
+          "circuit/c7": 300.0
+        },
+        "profile": {},
+        "base_current": {},
+        "duration": null,
+        "period": null,
+        "preload": null,
+        "initial": null
+      }
+    ],
+    "criteria": {
+      "max_conductor_temperature": 363.15
+    },
+    "provenance": {
+      "/cable_types/cable_type~1ct1": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c1": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c2": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c3": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c4": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c5": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c6": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/circuits/circuit~1c7": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      },
+      "/sections/section~1s1": {
+        "kind": "demo",
+        "reference": "D.0.6 合成机制输入 v1：明确几何、空气40℃、正常温限90℃、10kV；不是厂家或现场数据",
+        "reviewed": false
+      }
+    },
+    "measurements": []
+  },
+  "parameters_without_tray": {
+    "baseline_current_a": 400.0,
+    "baseline_ambient_k": 313.15,
+    "baseline_soil_rho": 1.2,
+    "baseline_kind": "manufacturer",
+    "baseline_source": "手算核验用人工给定基准；单根、同温限及埋深；不是厂家额定值",
+    "baseline_sha256": "c7e9203a6da0c126bb5833a16d4b412b1152babd34631e963a2b90f572a17ce3",
+    "baseline_page": 1,
+    "baseline_depth_m": 0.8,
+    "baseline_reviewed": true,
+    "basis_release_digest": "1babba59486ce48b4581ee0d1b4058cff93b58b6ab7230b4794c81f85f6be743"
+  },
+  "tray_layout_source": "D.0.6 合成机制布局 v1；人工声明桥架类别和各层实际位置；不是工程或厂家凭证",
+  "tray_layout_confirmed": true
+}`;
+
 const fixtureSource = String.raw`
-import hashlib,json,runpy,sys
+import hashlib,json,sys
 from pathlib import Path
 from cablesim_sdk.domain import DomainDocument
+from backend.plugin_host.registry import Registry
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
 source=Path('tests/test_gb50217_correction.py')
-module=runpy.run_path(str(source))
-document,complete=module['tray_example'](sys.argv[1],1)
-document=DomainDocument.model_validate(document).model_dump(mode='json')
+source_sha256=hashlib.sha256(source.read_bytes()).hexdigest()
+assert source_sha256=='222c5fc5c8feea2609454eb6c65fcdcafe054e73c986dc93a036c45b30be5b3c', 'Frozen synthetic input source changed; compare every value before recapturing'
+assert sys.argv[1] in ('ladder','tray')
+fixed=json.load(sys.stdin)
+document=DomainDocument.model_validate(fixed['domain']).model_dump(mode='json')
+assert document==fixed['domain'], 'Frozen synthetic Domain must already be complete'
+parameters=fixed['parameters_without_tray']
 keys=('tray_kind','tray_layout_source','tray_layout_confirmed')
-parameters={key:value for key,value in complete.items() if key not in keys}
+assert not any(key in parameters for key in keys)
 baseline=json.dumps({'synthetic_baseline_a':400},sort_keys=True,ensure_ascii=False,separators=(',',':'))
 assert hashlib.sha256(baseline.encode()).hexdigest()==parameters['baseline_sha256']
-manifest=module['Registry'](plugin_id='cablesim.gb50217-correction').get('cablesim.gb50217-correction').manifest
+basis=Registry(plugin_id='cablesim.standards-basis').get('cablesim.standards-basis').manifest
+assert digest(basis.model_dump(mode='json',by_alias=True))==parameters['basis_release_digest'], 'Frozen synthetic baseline basis pin changed'
+manifest=Registry(plugin_id='cablesim.gb50217-correction').get('cablesim.gb50217-correction').manifest
 print(json.dumps(dict(purpose='400 A 合成机制核验；不是厂家额定值或真实线路验收',
- source=dict(file=str(source),size=source.stat().st_size,sha256=hashlib.sha256(source.read_bytes()).hexdigest()),
- domain=document,domain_sha256=module['digest'](document),parameters_without_tray=parameters,
- tray_declarations={key:complete[key] for key in keys},baseline_original=baseline,
+ source=dict(file=str(source),size=source.stat().st_size,sha256=source_sha256),
+ preparation=dict(kind='fixed_synthetic_input',original_fixture='tray_example(kind, 1)',fixed_input_sha256=digest(fixed)),
+ domain=document,domain_sha256=digest(document),parameters_without_tray=parameters,
+ tray_declarations=dict(tray_kind=sys.argv[1],tray_layout_source=fixed['tray_layout_source'],tray_layout_confirmed=fixed['tray_layout_confirmed']),baseline_original=baseline,
  diameter_m=DomainDocument.model_validate(document).cable_types[0].radius()*2,
  method=dict(plugin_id=manifest.id,version=manifest.version,capability='steady-rating',
- release_digest=module['digest'](manifest.model_dump(mode='json',by_alias=True)))),ensure_ascii=False,allow_nan=False))
+ release_digest=digest(manifest.model_dump(mode='json',by_alias=True)))),ensure_ascii=False,allow_nan=False))
 `;
 
 function atPointer(value, pointer) {
@@ -109,7 +915,7 @@ export async function walkGbTray({ page, base, viewport, out, root, expect, capt
   await write();
   try {
     const python = process.env.E2E_PYTHON || path.join(root, '.venv', 'bin', 'python');
-    const bytes = execFileSync(python, ['-c', fixtureSource, kind], { cwd: root, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+    const bytes = execFileSync(python, ['-c', fixtureSource, kind], { cwd: root, input: fixedSyntheticInput, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
     await fs.writeFile(path.join(out, prefix + '-synthetic-input.json'), bytes);
     const fixture = JSON.parse(bytes.toString('utf8'));
     evidence.fixture = { file: prefix + '-synthetic-input.json', size: bytes.length, sha256: hash(bytes), source: fixture.source };
