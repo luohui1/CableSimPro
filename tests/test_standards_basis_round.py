@@ -174,7 +174,7 @@ def test_third_batch_manual_full_page_anchors_and_boundaries():
     for ident,(value,printed,pdf) in anchors.items():
         r=records[ident]
         assert (r['value'],r['printed_page'],r['pdf_page'])==(value,printed,pdf)
-    assert len(records)==4342
+    assert len(records)==4406  # 64 verified GB/T 18890.2 numeric records, with exact scope.
     assert records['gb50217-5-5-2/r8/bracket_or_hanger']['value_details']['execution_status']=='not_implemented'
     for column in ('bracket_or_hanger','ladder_or_tray'):
         formula=records['gb50217-5-5-2/r8/'+column]

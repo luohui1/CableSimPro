@@ -1,16 +1,21 @@
-"""Cable Studio computing core: runs the verified plugins, holds no algorithm of its own."""
-from pathlib import Path
+"""Studio compatibility imports for the single, packaged catalogue runtime.
 
-REPO = Path(__file__).resolve().parents[3]
-PLUGINS = REPO / 'plugins'
+The CLI and its Studio-only modules stay here. Shared modules are registered
+under this package's actual import spelling so both historical namespaces use
+the canonical module objects and the same CoreError class.
+"""
+from importlib import import_module as _import_module
+import sys as _sys
 
+from backend.kernel.catalogue_core import CoreError, PLUGINS, REPO
 
-class CoreError(Exception):
-    """A refusal with a stable code, a message for the engineer and the field it concerns."""
+_MODULES = ('basis', 'catalogue', 'designation', 'library', 'runner', 'structure',
+            'tables', 'product', 'methods', 'scene', 'study', 'layouts')
+__all__ = ['CoreError', 'PLUGINS', 'REPO', *_MODULES]
 
-    def __init__(self, code, message, path=None):
-        super().__init__(message)
-        self.code, self.message, self.path = code, message, path
+for _name in _MODULES:
+    _module = _import_module('backend.kernel.catalogue_core.' + _name)
+    globals()[_name] = _module
+    _sys.modules[__name__ + '.' + _name] = _module
 
-    def as_dict(self):
-        return {'code': self.code, 'message': self.message, **({'path': self.path} if self.path else {})}
+del _name, _module

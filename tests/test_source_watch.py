@@ -1,9 +1,71 @@
 import os
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+
+@pytest.mark.skipif(not sys.platform.startswith('linux'), reason='Linux source notifications')
+def test_linux_sources_invalidate_after_replacement_with_preserved_timestamps(tmp_path):
+    from backend.kernel.source_watch import SourceWatch
+    directory = tmp_path / 'backend'
+    directory.mkdir()
+    source = directory / 'source.py'
+    source.write_text('before')
+    original = source.stat()
+    watch = SourceWatch(tmp_path)
+    try:
+        before = watch.snapshot()
+        assert before is not None and watch.snapshot() == before
+        replacement = directory / 'replacement.py'
+        replacement.write_text('after!')
+        os.utime(replacement, ns=(original.st_atime_ns, original.st_mtime_ns))
+        replacement.replace(source)
+        after = watch.snapshot()
+        assert after is not None and after != before and watch.snapshot() == after
+        nested = directory / 'nested'
+        nested.mkdir()
+        (nested / 'data.py').write_text('first')
+        created = watch.snapshot()
+        assert created != after
+        (nested / 'data.py').write_text('later')
+        assert watch.snapshot() != created
+    finally:
+        watch.close()
+
+
+@pytest.mark.skipif(not sys.platform.startswith('linux'), reason='Linux source notifications')
+def test_linux_release_receipts_ignore_unsealed_host_code_but_track_dependencies(tmp_path):
+    from backend.kernel.source_watch import SourceWatch
+    backend = tmp_path / 'backend'
+    backend.mkdir()
+    plugin = tmp_path / 'plugins' / 'example'
+    (plugin / 'src').mkdir(parents=True)
+    (plugin / 'plugin.json').write_text('{}')
+    (plugin / 'src' / 'host-dependencies.json').write_text(json.dumps([{'path': 'backend/shared.py'}]))
+    shared = backend / 'shared.py'
+    shared.write_text('first')
+    host = backend / 'only-host.py'
+    host.write_text('first')
+    watch = SourceWatch(tmp_path, release_only=True)
+    try:
+        before = watch.snapshot()
+        assert before is not None
+        host.write_text('later')
+        assert watch.snapshot() == before
+        shared.write_text('later')
+        changed = watch.snapshot()
+        assert changed is not None and changed != before
+        cache = backend / '__pycache__'
+        cache.mkdir()
+        (cache / 'shared.pyc').write_bytes(b'bytecode')
+        assert watch.snapshot() == changed
+        (plugin / 'plugin.json').write_text('{"updated":true}')
+        assert watch.snapshot() != changed
+    finally:
+        watch.close()
 
 ROOT = Path(__file__).resolve().parents[1]
 

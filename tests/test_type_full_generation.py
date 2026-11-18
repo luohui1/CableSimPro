@@ -44,23 +44,83 @@ def test_full_structure_uses_live_annex_and_keeps_manufacturing_missing(tmp_path
         assert all(step['record']['printed_page'] and step['record']['pdf_page'] for step in reference['trace'])
         assert all(layer.get('minimum_thickness') is None for layer in layers.values())
         assert client.get('/api/design/type-workspaces').json()==[]
+        made=client.post('/api/types',json={'request_id':str(uuid4()),'origin':'standard','name':'护层实算核验',
+            'proposal_id':result['id'],'content_sha256':result['content_sha256'],'human_confirmed':True},headers={'X-CableSim-Actor':'human'})
+        assert made.status_code==201,made.text
+        workspace=made.json();document=workspace['domain'];wid=workspace['id']
+        executor=Executor()
+        def checked():
+            answer=client.post('/api/design/type-workspaces/'+wid+'/requirements/basis',json={'request_id':str(uuid4()),'expected_revision':workspace['revision']})
+            assert answer.status_code==200,answer.text
+            # Compare the same persisted, normalized revision the host queried.
+            current=client.get('/api/workspaces/'+wid).json()['domain']
+            case=executor.run('cablesim.standard-check','dimensions',[{'case_id':'design','input':current,
+                'parameters':{'cable_type_id':current['cable_types'][0]['id'],**answer.json()['parameters']}}]).cases[0]
+            assert case.status=='succeeded',case.error
+            return case.artifacts['x-cablesim.standard-check']
+        def save():
+            saved=client.put('/api/workspaces/'+wid+'/domain',json={'expected_revision':workspace['revision'],'document':document})
+            assert saved.status_code==200,saved.text
+            workspace['revision']=saved.json()['revision']
+        initial=checked()
+        if voltage=='600/1000':
+            minimums=[row for row in initial['rows'] if row['id'].endswith(':insulation-minimum')]
+            assert len(minimums)==4
+            assert all(row['basis_reference']['record']['id']=='lv-rule-16.5.2/r1/value' and
+                       row['limit']==pytest.approx(.89) and row['verdict']=='missing' for row in minimums)
+        # Imported structures have no saved complete-proposal receipt. The
+        # exact same declared construction must still query the live Annex chain.
+        document['provenance']={key:value for key,value in document['provenance'].items() if not key.endswith('/annex_basis')}
+        save()
+        imported=checked()
+        for key,limit in [('bedding-nominal',expected[1]*1000),('oversheath-nominal',expected[3]*1000)]:
+            actual=next(row for row in imported['rows'] if row['id'].endswith(':'+key))
+            assert actual['verdict']=='passed' and actual['limit']==pytest.approx(limit)
+            assert actual['actual']==pytest.approx(limit) and actual['target']['role']
+            assert actual['basis_reference']['calculation_steps']
+        assert imported['fictitious_diameter_trace']==initial['fictitious_diameter_trace']
+        # A deliberately thinner design cannot lower the standard's measured-
+        # minimum criterion. The actual measurement lies between those limits.
+        common={layer['role']:layer for layer in document['cable_types'][0]['common_layers']}
+        common['oversheath']['thickness']=expected[3]-.0003
+        common['oversheath']['minimum_thickness']=.8*common['oversheath']['thickness']-.0001
         if voltage=='8700/15000':
-            # Human accepts the real proposal, resolves the saved design's basis,
-            # then edits all three equal insulation layers. The sealed method
-            # must recalculate Annex A from this revision, not reuse the proposal.
-            made=client.post('/api/types',json={'request_id':str(uuid4()),'origin':'standard','name':'护层实算核验',
-                'proposal_id':result['id'],'content_sha256':result['content_sha256'],'human_confirmed':True},headers={'X-CableSim-Actor':'human'})
-            assert made.status_code==201,made.text
-            workspace=made.json();document=workspace['domain'];wid=workspace['id']
-            executor=Executor()
-            def checked():
-                answer=client.post('/api/design/type-workspaces/'+wid+'/requirements/basis',json={'request_id':str(uuid4()),'expected_revision':workspace['revision']})
-                assert answer.status_code==200,answer.text
-                case=executor.run('cablesim.standard-check','dimensions',[{'case_id':'design','input':document,
-                    'parameters':{'cable_type_id':document['cable_types'][0]['id'],**answer.json()['parameters']}}]).cases[0]
-                assert case.status=='succeeded',case.error
-                return case.artifacts['x-cablesim.standard-check']
-            initial=checked()
+            common['bedding']['thickness']=.0015
+            common['bedding']['minimum_thickness']=.0011
+        save()
+        thinned=checked()
+        minimum=next(row for row in thinned['rows'] if row['id'].endswith(':oversheath-minimum'))
+        assert minimum['verdict']=='failed'
+        assert minimum['formula_inputs']['t_n_standard_min_mm']==pytest.approx(expected[3]*1000)
+        assert minimum['limit']==pytest.approx(.8*expected[3]*1000-.2)
+        if voltage=='600/1000':
+            assert minimum['basis_reference']['record']['id']=='lv-rule-16.5.3/r1/value'
+        if voltage=='8700/15000':
+            minimum=next(row for row in thinned['rows'] if row['id'].endswith(':bedding-minimum'))
+            assert minimum['verdict']=='failed' and minimum['limit']==pytest.approx(1.24)
+            common['bedding']['thickness']=expected[1]
+            common['bedding'].pop('minimum_thickness')
+        common['oversheath']['thickness']=expected[3]
+        common['oversheath'].pop('minimum_thickness')
+        save()
+        if voltage=='8700/15000':
+            screens=[next(layer for layer in core['layers'] if layer['role']=='metallic_screen')
+                     for core in document['cable_types'][0]['cores']]
+            for screen in screens:screen.pop('tape_width')
+            save()
+            incomplete=checked()
+            nominal=next(row for row in incomplete['rows'] if row['id'].endswith(':oversheath-nominal'))
+            assert nominal['verdict']=='uncovered' and nominal['limit'] is None and '铜带' in nominal['reason']
+            for screen in screens:screen['tape_width']=.1
+            layers=document['cable_types'][0]['common_layers']
+            bedding_index=next(i for i,layer in enumerate(layers) if layer['role']=='bedding')
+            bedding=layers.pop(bedding_index)
+            save()
+            incomplete=checked()
+            nominal=next(row for row in incomplete['rows'] if row['id'].endswith(':oversheath-nominal'))
+            assert nominal['verdict']=='uncovered' and nominal['limit'] is None and '内衬' in nominal['reason']
+            layers.insert(bedding_index,bedding)
+            save()
             assert initial['counts']['passed']>=9
             copper=[r for r in initial['rows'] if r['id'].endswith(':screen-tape-nominal')]
             assert all(r['verdict']=='passed' and r['printed_page']==10 for r in copper)

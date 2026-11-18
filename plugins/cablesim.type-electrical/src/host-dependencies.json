@@ -51,8 +51,8 @@
   },
   {
     "path": "plugins/cablesim.standards-basis/src/cablesim_standards_basis/library.py",
-    "sha256": "c937403b3c530fe590b52fec6fba41d037cc47502608175c27bced4493fe9226",
-    "size_bytes": 15546
+    "sha256": "7541cc761d13b0b1f43396d4c71852ba78ca68ae871c1a479029e3916e22a1d6",
+    "size_bytes": 15649
   },
   {
     "path": "plugins/cablesim.standards-basis/src/cablesim_standards_basis/soil_capacity.py",

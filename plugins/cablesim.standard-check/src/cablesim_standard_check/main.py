@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.6.0'
+VERSION = '1.8.4'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -72,6 +72,8 @@ def prepare(document, parameters):
         raise ValueError('四芯标准核对当前只覆盖 GB/T 12706.1 的低压绝缘线芯；其他电压未覆盖。')
     if family == 'hv' and len(cores) != 1:
         raise ValueError(root + '.construction：GB/T 11017.2 的本实现只支持单芯 64/110 kV。')
+    if family == 'ehv' and len(cores) != 1:
+        raise ValueError(root + '.construction：GB/T 18890.2 的本实现只支持单芯 127/220 kV。')
     materials = {m['id']: m for m in document.get('materials', [])}
     for i, core in enumerate(cores):
         c, p = core['conductor'], root + f'.cores.{i}.conductor'
@@ -800,8 +802,11 @@ class _Check:
             actual=int(bool(underlayer) and underlayer.get('form') in ('smooth','tape')),
             reason=None if underlayer else '铠装前须有内衬层；符合13.3.3的挤包隔离套可代替内衬层。')
         if self.family=='mv2':
-            self.row('armour-separation','金属层间挤包隔离套适用条件',lp+'.form',unit='1',
+            self.row('armour-separation','金属层间隔离套适用条件',lp+'.form',unit='1',
                 rule_key='armour-underlayer',reason='请明确金属层、纵向阻水及隔离层材料条件。')
+            if any(value['role']=='separator' for value, _ in common):
+                self.row('armour-separation-relation','隔离套与内衬的配置关系',lp+'.form',unit='1',
+                    rule_key='armour-underlayer',reason='隔离套可替代内衬或与其同时设置；须另行核对隔离套符合性。')
         declared = layer.get(form['field'])
         declared_mm = declared*1000 if declared is not None else None
         details = {'wires':self.armour_wires,'tape':self.armour_tapes}
@@ -885,7 +890,11 @@ class _Check:
             # diameter. Keep covering requirements until executable references
             # and the actual covering construction are both available.
             why = '四芯及 3+1 护层假设直径尚未接入完整附录依据；请补齐内衬、铠装和外护套构造，不能用实体外径代替标准假设直径。'
-            row('bedding-nominal', '内衬层标称厚度 / 省略条件', root + '.common_layers', uncovered=True, reason=why, rule_key='bedding-missing')
+            bedding, bedding_path = find_layer(common, 'bedding')
+            row('bedding-nominal', '内衬层标称厚度 / 省略条件',
+                bedding_path + '.thickness' if bedding else root + '.common_layers',
+                actual=bedding['thickness']*1000 if bedding.get('thickness') is not None else None,
+                uncovered=True, reason=why, rule_key='bedding-missing')
             sheath, path = find_layer(common, 'oversheath')
             row('oversheath-nominal', '外护套标称厚度', path + '.thickness', actual=sheath.get('thickness')*1000 if sheath.get('thickness') is not None else None, uncovered=True, reason=why, inputs={'D_os_mm': None})
             row('oversheath-minimum', '外护套最薄点', path + '.minimum_thickness', actual=sheath.get('minimum_thickness')*1000 if sheath.get('minimum_thickness') is not None else None, uncovered=True, reason=why, basis='measurement', inputs={'t_n_mm': None})
@@ -958,7 +967,7 @@ class _Check:
             'label': cable['label'],
             'method_version': VERSION,
             'input_sha256': sha256(json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()).hexdigest(),
-            'sources': [SOURCES[k] for k in (family, 'conductor')],
+            'sources': [SOURCES[k] for k in ((family, 'ehv-scope', 'ehv-screens', 'ehv-metal', 'ehv-coverings', 'ehv-tests') if family == 'ehv' else (family, 'conductor'))],
             'rows': rows,
             'not_applicable': self.not_applicable,
             'fictitious_diameter_trace': trace,
@@ -977,6 +986,15 @@ class _Check:
 
 def check(document, parameters):
     report = _Check(document, parameters)
+    if report.family == 'ehv':
+        from cablesim_standard_check.extra_high import populate
+        from cablesim_standard_check.basis import apply, digest
+        from cablesim_standard_check.manufacturing import finish
+        populate(report)
+        apply(report, parameters)
+        finish(report)
+        return {**report.result(), 'basis_auxiliary_queries': {},
+                'basis_cable_sha256': digest(report.cable)}
     cable, root = report.cable, report.root
     family, trace = report.family, report.trace
     core_diameters = [report.core(core, i) for i, core in enumerate(cable['cores'])]
@@ -985,35 +1003,72 @@ def check(document, parameters):
     else:
         common = [(layer, root + f'.common_layers.{i}') for i, layer in enumerate(cable['common_layers'])]
         report.mv_common(common, core_diameters)
-    from cablesim_standard_check.basis import apply, digest
-    apply(report, parameters)
+    from cablesim_standard_check.basis import apply, digest, BasisIntegrityError
     annex_queries = {}
-    # A saved complete proposal supplies receipt identities, never reusable
-    # limits. Recalculate from today's geometry and request fresh condition refs.
-    if family != 'hv' and any(key.endswith('/annex_basis') for key in document.get('provenance',{})):
-        from cablesim_standard_check.coverings import calculate, from_cable, NeedQueries
+    calculated, annex_error, other_construction = None, None, False
+    # Eligibility is established by the current declared structure. A complete
+    # imported model need not have a historical proposal receipt; an old receipt
+    # never supplies reusable limits or missing construction parameters.
+    if family != 'hv':
+        from cablesim_standard_check.coverings import calculate, from_cable, NeedQueries, OtherCoveringConstruction
         try:
-            calculated = calculate(from_cable(cable,report.materials),family,parameters.get('basis_references',{}))
-            trace[:] = calculated['trace']
-            for row in report.rows:
-                key=row['id'].rsplit(':',1)[-1]
-                source_key={'bedding-nominal':'annex_bedding','oversheath-nominal':'annex_oversheath','armour-tape-nominal':'annex_armour'}.get(key)
-                if source_key:
-                    ref=parameters['basis_references'][source_key]
-                    limit=calculated[{'bedding-nominal':'bedding','oversheath-nominal':'oversheath','armour-tape-nominal':'armour'}[key]]
-                    record=ref['record']; actual=row['actual']
-                    row.update(limit=limit,margin=None if actual is None else actual-limit,comparison='>=',
-                        verdict='missing' if actual is None else 'passed' if actual>=limit-1e-12 else 'failed',
-                        reason=None if actual is not None else '缺字段：实际标称尺寸。',
-                        basis_query=calculated['queries'][source_key],basis_reference={**ref,'calculation_steps':calculated['trace']},
-                        citation=record['citation'],source_status='original-verified',standard=record['standard']+'—'+record['edition'],
-                        printed_page=record['printed_page'],pdf_page=record['pdf_page'],clause=record['table'] or record['clause'],source_digest=record['source_sha256'])
+            values = from_cable(cable,report.materials)
+            calculated = calculate(values,family,parameters.get('basis_references',{}))
         except NeedQueries as pending:
             annex_queries = pending.queries
+        except BasisIntegrityError:
+            raise
+        except OtherCoveringConstruction as error:
+            annex_error, other_construction = str(error), True
         except (ValueError,KeyError) as error:
-            for row in report.rows:
-                if row['id'].rsplit(':',1)[-1] in ('bedding-nominal','oversheath-nominal','armour-tape-nominal'):
-                    row.update(verdict='uncovered',limit=None,margin=None,reason=str(error))
+            annex_error = str(error)
+    if calculated:
+        # Feed the same fresh nominal requirement to the existing measured-
+        # minimum criteria. A thinner declaration must not lower its threshold.
+        common = {layer['role']:layer for layer in cable['common_layers']}
+        for row in report.rows:
+            role = {'bedding-minimum':'bedding','oversheath-minimum':'oversheath'}.get(row['id'].rsplit(':',1)[-1])
+            if role:
+                declared = common[role].get('thickness')
+                declared = declared*1000 if declared is not None else None
+                nominal = calculated[role]
+                row['formula_inputs'] = {'t_n_declared_mm':declared,'t_n_standard_min_mm':nominal,
+                                        't_n_mm':max(declared,nominal) if declared is not None else None}
+    apply(report, parameters)
+    if calculated:
+        trace[:] = calculated['trace']
+        for row in report.rows:
+            key=row['id'].rsplit(':',1)[-1]
+            source_key={'bedding-nominal':'annex_bedding','oversheath-nominal':'annex_oversheath','armour-tape-nominal':'annex_armour'}.get(key)
+            if source_key:
+                ref=parameters['basis_references'][source_key]
+                limit=calculated[{'bedding-nominal':'bedding','oversheath-nominal':'oversheath','armour-tape-nominal':'armour'}[key]]
+                record=ref['record']; actual=row['actual']
+                row.update(limit=limit,margin=None if actual is None else actual-limit,comparison='>=',
+                    verdict='missing' if actual is None else 'passed' if actual>=limit-1e-12 else 'failed',
+                    reason=None if actual is not None else '缺字段：实际标称尺寸。',
+                    basis_query=calculated['queries'][source_key],basis_reference={**ref,'calculation_steps':calculated['trace']},
+                    citation=record['citation'],source_status='original-verified',standard=record['standard']+'—'+record['edition'],
+                    printed_page=record['printed_page'],pdf_page=record['pdf_page'],clause=record['table'] or record['clause'],source_digest=record['source_sha256'])
+    elif annex_error:
+        # Other existing constructions (for example declared wrapped bedding)
+        # retain their own covered rules. The complete extruded branch must not
+        # erase them, nor supply a value when either branch lacks its inputs.
+        prerequisites = {'screen-tape-nominal','screen-overlap','screen-dimensions','bedding-filled',
+                         'armour-tape-count','armour-tape-gap','armour-padding','armour-padding-total'}
+        conditions_present = all(row['verdict']=='passed' for row in report.rows
+                                 if row['id'].rsplit(':',1)[-1] in prerequisites)
+        screens = [layer for core in cable['cores'] for layer in core['layers'] if layer['role']=='metallic_screen']
+        screens += [layer for layer in cable['common_layers'] if layer['role']=='metallic_screen']
+        tape_inputs_present = all(all(layer.get(key) is not None for key in
+                                      ('tape_count','nominal_tape_thickness','tape_width','overlap'))
+                                  and layer.get('tape_application')=='helical_overlap'
+                                  for layer in screens if layer.get('form')=='tape')
+        preserve_other = other_construction and conditions_present and tape_inputs_present
+        for row in report.rows:
+            if (row['id'].rsplit(':',1)[-1] in ('bedding-nominal','oversheath-nominal','armour-tape-nominal')
+                    and (not preserve_other or row['limit'] is None or row['source_status']!='original-verified')):
+                row.update(verdict='uncovered',limit=None,margin=None,reason=annex_error)
     from cablesim_standard_check.manufacturing import finish
     finish(report)
     result = report.result()

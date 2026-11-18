@@ -1,0 +1,77 @@
+.reference-resources,
+.reference-evidence {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reference-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.reference-toolbar > .select-field {
+  min-width: 240px;
+  max-width: 100%;
+}
+
+.reference-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.reference-section {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+.reference-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.reference-facts > div,
+.reference-condition {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.reference-facts dt {
+  color: var(--muted-foreground);
+}
+
+.reference-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.reference-limitations {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-6);
+}
+
+.reference-limitations li + li {
+  margin-top: var(--space-2);
+}
+
+.reference-rating-fields {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+@media (max-width: 1000px) {
+  .reference-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

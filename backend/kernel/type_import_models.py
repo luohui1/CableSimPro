@@ -9,12 +9,12 @@ import json
 import math
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from backend.schemas import StrictModel
 from .candidates import CableModelVersion
 from . import factory_tables as tables
-from studio.core.studio_core import CoreError, designation, structure
+from .catalogue_core import CoreError, designation, structure
 
 
 class DeclaredParameter(StrictModel):
@@ -33,7 +33,7 @@ class SeriesDeclaration(StrictModel):
     name: str = Field(min_length=1, max_length=120)
     manufacturer: str = Field(min_length=1, max_length=120)
     designation: str = Field(min_length=1, max_length=40)
-    cores: int = Field(ge=1, le=16)
+    cores: int = Field(ge=1, le=16, strict=True)
     u0_v: float = Field(gt=0, le=500000, allow_inf_nan=False)
     u_v: float = Field(gt=0, le=1000000, allow_inf_nan=False)
     um_v: float | None = Field(default=None, gt=0, le=1000000, allow_inf_nan=False)
@@ -53,8 +53,17 @@ class SeriesDeclaration(StrictModel):
     outer_diameter_precision_mm: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     material_properties: dict[str, dict[str, DeclaredParameter]] = Field(default_factory=dict)
 
+    @field_validator('cores', mode='before')
+    @classmethod
+    def supported_cores(cls, value):
+        if type(value) is not int or not 1 <= value <= 16:
+            raise ValueError('结构表芯数须为 1 至 16 的整数；多芯草稿保留未声明的尺寸和坐标，不补造几何。')
+        return value
+
     @model_validator(mode='after')
     def stated(self):
+        from .published_guidance import validate_published_guidance
+        validate_published_guidance(self.reference)
         for key in ('name', 'manufacturer', 'designation'):
             value = getattr(self, key).strip()
             if not value:
@@ -104,6 +113,9 @@ def source_record(upload, sheet, row, key, series, mapping, origin='table'):
               'field': key, 'origin': origin, 'catalogue': deepcopy(series.get('source') or {}),
               'reference': series.get('common_basis', {}).get(key) if origin == 'series' else None,
               'method': tables.IMPORT_METHOD, 'confidence': 'reference', 'reviewed': False}
+    if key in tables.SOURCE_ONLY_FIELDS:
+        source['usage'] = 'catalogue_result'
+        source['conditions'] = deepcopy(series.get('reference', {}).get('conditions', {}))
     if series.get('origin') == 'demo':
         source['kind'] = 'demo'
     return source
@@ -123,6 +135,8 @@ def numeric_facts(upload, sheet, row, series, mapping):
         facts.append({'key': key, 'label': label, 'value': value * scale, 'unit': tables.SI_UNITS[unit],
                       'display_value': value, 'display_unit': unit, 'source': source_record(upload, sheet, row['row_number'], key, series, mapping, origin),
                       'method': tables.IMPORT_METHOD, 'confidence': 'reference'})
+        if key in tables.SOURCE_ONLY_FIELDS:
+            facts[-1]['usage'] = 'catalogue_result'
         if key in row.get('_standard_values', {}):
             reference = row['_standard_values'][key]
             facts[-1]['source'].update(kind='standard', origin='standard', column=None, reference=reference)
@@ -137,7 +151,7 @@ def _incomplete_payload(series, parts, name, facts, missing):
     values, sources = {}, {}
     for item in facts:
         sources[item['key']] = candidate_source(item['source'])
-        if item['key'] in ('area', 'ampacity'):
+        if item['key'] == 'area' or item['key'] in tables.SOURCE_ONLY_FIELDS:
             continue
         key = aliases.get(item['key'], item['key'])
         values[key] = {'value': item['value'], 'unit': item['unit'], 'source': item['key'],
@@ -146,7 +160,7 @@ def _incomplete_payload(series, parts, name, facts, missing):
         return None
     return {'name': name, 'version': '1', 'confirmed': False, 'materials': [],
             'specification': {'manufacturer': series['manufacturer'], 'designation': series['designation'],
-                'u0_v': series['u0_v'], 'voltage_v': series['u_v'], 'cores': series['cores'],
+                'u0_v': series['u0_v'], 'voltage_v': series['u_v'], 'um_v': series.get('um_v'), 'cores': series['cores'],
                 'area_m2': next(item['value'] for item in facts if item['key'] == 'area'),
                 'conductor': 'copper_bare' if parts['conductor'] == 'copper' else 'aluminium',
                 'values': values, 'missing': missing or ['尚未形成完整工程结构，请补齐层结构与材料物性。']}, 'sources': sources}
@@ -178,11 +192,66 @@ def _full_sources(payload, facts, series, derivation):
     return sources
 
 
+def _validation_issues(item, error, mapping):
+    """Translate canonical model failures back to the source row and cell.
+
+    Incomplete published specifications use field-level limits as well as
+    model-level unit checks. Both must remain reviewable row errors; a single
+    malformed specification must never discard the other manufacturer's rows.
+    """
+    from openpyxl.utils import get_column_letter
+    aliases = {'area_m2': 'area', 'nominal_area': 'area',
+               'metallic_screen_tape_thickness': 'screen_tape_thickness',
+               'metallic_screen_tape_width': 'screen_tape_width',
+               'binder_tape_thickness': 'binder_thickness'}
+    facts = {fact['key']: fact for fact in item['values']}
+    issues = []
+    for problem in error.errors(include_input=False, include_url=False):
+        location = problem['loc']
+        message = problem['msg'].removeprefix('Value error, ')
+        field = aliases.get(str(location[-1]), str(location[-1])) if location else ''
+        if field not in facts:
+            # PublishedSpecification's cross-field validators name the source
+            # field before the Chinese colon rather than in the Pydantic loc.
+            prefix = message.split('：', 1)[0]
+            field = aliases.get(prefix, prefix)
+        if field not in facts:
+            source = item['payload'].get('sources', {}).get('/' + '/'.join(map(str, location)))
+            if source:
+                try:
+                    reference = json.loads(source.get('reference') or '{}')
+                    field = reference.get('field') or reference.get('evidence', {}).get('field', '')
+                except (ValueError, TypeError, AttributeError):
+                    field = ''
+        fact = facts.get(field)
+        label = fact['label'] if fact else '型号结构'
+        bounds = {'less_than_equal': ('le', '不大于'), 'less_than': ('lt', '小于'),
+                  'greater_than_equal': ('ge', '不小于'), 'greater_than': ('gt', '大于')}
+        if fact and problem['type'] in bounds:
+            key, relation = bounds[problem['type']]
+            scale = .001 if fact['display_unit'] == 'kg/km' else tables.FIELDS[field][2]
+            limit = problem['ctx'][key] / scale
+            message = f'{label}须{relation} {limit:g} {fact["display_unit"]}；原表值为 {fact["display_value"]:g} {fact["display_unit"]}。'
+        elif problem['type'] == 'value_error':
+            for key in sorted({**aliases, **tables.FIELDS}, key=len, reverse=True):
+                target = aliases.get(key, key)
+                if target in tables.FIELDS:
+                    message = message.replace(key, tables.FIELDS[target][0])
+            message = f'{label}校验未通过：{message}'
+        else:
+            message = f'{label}不符合型号数据约束，请核对原始资料的数值、单位和结构。'
+        column = (f'{get_column_letter(mapping[field] + 1)}{item["row_number"]}'
+                  if fact and fact['source'].get('origin') == 'table' and field in mapping else '')
+        issues.append({'column': column, 'field': field if fact else 'structure',
+                       'code': 'TABLE_MODEL_INVALID', 'message': message})
+    return issues
+
+
 def build_rows(upload, sheet, rows, series, mapping):
     parts = parts_of(series)
     rows = deepcopy(rows)
     if series.get('resistance_basis') == 'standard_limit':
-        from studio.core.studio_core import basis
+        from .catalogue_core import basis
         queries = {str(index): {'schema_version': 'cablesim.standards-query/1', 'standard': 'GB/T 3956', 'edition': '2008',
             'locator': '表 2', 'quantity': 'resistance_20_max', 'conditions': {
                 'area_m2': row['values']['area'] * 1e-6, 'conductor_class': 2,
@@ -232,13 +301,15 @@ def build_rows(upload, sheet, rows, series, mapping):
         item['payload'] = payload
         if series['cores'] == 1 and (parts.get('metal_sheath') or series['u_v'] <= 3000):
             from .stated_single_core import build
-            stated = build(series, parts, name, facts)
+            stated = build(series, parts, name, [fact for fact in facts if fact['key'] not in tables.SOURCE_ONLY_FIELDS])
             item['missing'] = list(dict.fromkeys(missing + stated['missing']))
             item['issues'].extend(stated['issues'])
             item['closure'], item['derivation'], item['warnings'] = stated['closure'], stated['derivation'], stated['warnings']
             if item['issues']:
                 item['status'] = 'error'
             elif stated['payload'] is not None and not item['missing']:
+                stated['payload']['sources'].update({fact['key']: candidate_source(fact['source'])
+                    for fact in facts if fact['key'] in tables.SOURCE_ONLY_FIELDS})
                 item.update(payload=stated['payload'], status='ready')
             else:
                 payload['specification']['missing'] = item['missing'] or ['完整结构尚未形成，请核对声明。']
@@ -282,5 +353,16 @@ def build_rows(upload, sheet, rows, series, mapping):
                                'sources': _full_sources(payload, item['values'], series, row['derivation'])}
     for item in result:
         if item['payload']:
-            item['payload'] = CableModelVersion.model_validate(item['payload']).model_dump(mode='json')
+            try:
+                item['payload'] = CableModelVersion.model_validate(item['payload']).model_dump(mode='json')
+            except ValidationError as error:
+                item['issues'].extend(_validation_issues(item, error, mapping))
+                item.update(status='error', payload=None)
+        facts = {fact['key']: fact for fact in item['values']}
+        for issue in item['issues']:
+            field = issue.get('field')
+            fact = facts.get(field)
+            if field in mapping and (fact is None or fact['source'].get('origin') == 'table'):
+                from openpyxl.utils import get_column_letter
+                issue['column'] = f'{get_column_letter(mapping[field] + 1)}{item["row_number"]}'
     return result

@@ -1,14 +1,20 @@
-import { useEffect } from 'react';
-import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteComponent, type AnyRootRoute } from '@tanstack/react-router';
+import { lazy, useEffect } from 'react';
+import { createRoute, Outlet, useNavigate, useParams, useSearch, type AnyRootRoute } from '@tanstack/react-router';
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
 import { queryClient } from '@/lib/query-client';
 import { loadWorkspace, typeEvidence, moduleMethods, runArtifact, typeRequirements } from './api';
 import { typeSpecification } from './version-api';
 import {preloadTypeModule} from './module-loader';
-const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
-const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
-const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
+// React.lazy preserves the same suspension path across the initial render and
+// resolution. TanStack's lazyRouteComponent uses React.use() here and can
+// violate the React 19 thenable contract during a cold nested route load.
+const loadTypeListPage = () => import('./list-page');
+const loadTypeProvider = () => import('./provider');
+const loadTypeWorkspace = () => import('./workspace');
+const TypeListPage = lazy(() => loadTypeListPage().then(module => ({ default: module.TypeListPage })));
+const TypeProvider = lazy(() => loadTypeProvider().then(module => ({ default: module.TypeProvider })));
+const TypeWorkspace = lazy(() => loadTypeWorkspace().then(module => ({ default: module.TypeWorkspace })));
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
   create: value.create === '1' || value.create === 1 || value.create === true ? true : undefined,
@@ -25,22 +31,20 @@ function Navigation({ children, location }: { children: React.ReactNode; locatio
 }
 /** The public router owner adds these children to the existing root. No second production shell. */
 export function createTypeRoutes(root: AnyRootRoute) {
-  const list = createRoute({ getParentRoute: () => root, path: '/types', validateSearch: typeSearch,
-    beforeLoad: async () => { await TypeListPage.preload?.(); }, component: function TypeIndexRoute() {
+  const list = createRoute({ getParentRoute: () => root, path: '/types', validateSearch: typeSearch, component: function TypeIndexRoute() {
     const search = useSearch({ strict: false });
     const location = { module: 'list', tab: '', ...typeSearch(search as Record<string, unknown>) };
     return <Navigation location={location}><TypeListPage /></Navigation>;
   } });
-  const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, beforeLoad: async ({ params, search, location }) => {
+  const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, beforeLoad: ({ params, search, location }) => {
     // Start the selected saved input together with both route bundles, rather
     // than waiting for the provider bundle before issuing the first read.
     void queryClient.prefetchQuery({ queryKey: ['type-workspace', params.wid, search.revision, search.run],
       queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run), staleTime: 0 });
     const module=location.pathname.split('/')[3]||'structure';
     if(module!=='structure')void preloadTypeModule(module);
-    // These components sit inside route wrappers, so the router cannot await
-    // their preload hooks itself. Start both now and await before rendering.
-    const components = Promise.all([TypeProvider.preload?.(), TypeWorkspace.preload?.()]);
+    void loadTypeProvider();
+    void loadTypeWorkspace();
     if(module!=='structure') {
       // Start the actual module and its saved evidence alongside the workspace,
       // instead of downloading them only after the shell has mounted.
@@ -62,7 +66,6 @@ export function createTypeRoutes(root: AnyRootRoute) {
       if(module==='specification')void queryClient.prefetchQuery({queryKey:['type-specification',params.wid,'customer'],
         queryFn:({signal})=>typeSpecification(params.wid,signal,'customer'),staleTime:30000});
     }
-    await components;
   }, component: function TypeWorkspaceRoute() {
     const params = useParams({ strict: false }) as Record<string, string | undefined>;
     const search = typeSearch(useSearch({ strict: false }) as Record<string, unknown>);

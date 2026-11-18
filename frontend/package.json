@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:library-import": "node scripts/isolated-e2e.mjs library-import-walk.mjs",
     "test:real-use": "node scripts/isolated-e2e.mjs verify-real-use.mjs",
     "test:forms-real-use": "node scripts/isolated-e2e.mjs verify-form-real-use.mjs",
     "test:client-real-use": "node scripts/isolated-e2e.mjs verify-client-real-use.mjs",

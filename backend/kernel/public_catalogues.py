@@ -18,7 +18,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from studio.core.studio_core import catalogue
+from .catalogue_core import catalogue
+from .factory_tables import SOURCE_ONLY_FIELDS
 
 
 SAMPLES = {
@@ -48,7 +49,7 @@ BAHRA_LABELS = {
 BAHRA_FIELDS = {'r_dc_20': 'r20', 'lead_sheath_thickness': 'metallic_sheath_thickness',
                 'rating_ground_trefoil': 'ampacity'}
 IMPORT_FIELDS = {'area', 'conductor_diameter', 'insulation_thickness', 'oversheath_thickness',
-                 'outer_diameter', 'weight', 'r20', 'metallic_sheath_thickness', 'ampacity'}
+                 'outer_diameter', 'weight', 'r20', 'metallic_sheath_thickness'} | SOURCE_ONLY_FIELDS
 
 
 def _data(name):
@@ -107,6 +108,7 @@ def _declarations(name):
                         'oversheath': 'PVC', 'source': source,
                         'common': {}, 'common_basis': {},
                         'reference': {'conditions': data['conditions'],
+                                      'published_guidance': deepcopy(data['published_guidance']),
                                       'missing': data['not_in_the_catalogue'],
                                       'note': '原始导入未采用目录对照中的屏蔽层厚度假设；缺项保留。'}}}]
 

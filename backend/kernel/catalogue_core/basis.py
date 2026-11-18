@@ -34,7 +34,7 @@ def resolve(queries):
                     'schema': 'cablesim.standard-basis-ref/1', 'plugin_id': answer['plugin_id'], 'record_id': record['id'],
                     'record_sha256': record['record_sha256'], 'standard': record['standard'], 'edition': record['edition'],
                     'locator': record['table'] or record['clause'], 'printed_page': record['printed_page'], 'pdf_page': record['pdf_page'],
-                    'source_sha256': record['source_sha256'], 'record': record, 'release_digest': run['manifest_sha256'], **common}
+                    'source_sha256': record['source_sha256'], 'record': record, 'release_digest': run['release_digest'], **common}
             else:
                 missing.append({'key': key, 'query': queries[key], 'reason': answer.get('reason', '标准依据库暂未收录这一条件。')})
     return references, missing

@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from jsonschema import Draft202012Validator
 
+from backend.plugin_host.manifest import Manifest
 from cablesim_sdk.parameter_units import translate
 from . import CoreError, PLUGINS, REPO
 
@@ -172,6 +173,15 @@ def run(plugin_id, capability_id, cases, *, phase='run', jobs_root=None):
             not isinstance(i, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', i) for i in ids):
         raise CoreError('CASES_INVALID', '请求至少包含一个工况，最多 100 个，且 case_id 唯一。')
     seal = verify(plugin_id)
+    # Keep the exact file receipt distinct from the normalized release identity
+    # used by the existing API and sealed standard-reference consumers.
+    manifest_bytes = (root / 'plugin.json').read_bytes()
+    if sha256(manifest_bytes).hexdigest() != manifest_sha:
+        raise CoreError('RELEASE_CHANGED', f'{plugin_id} 的清单在准备期间改变；请重新读取后运行。')
+    try:
+        release_digest = digest(Manifest.model_validate_json(manifest_bytes).model_dump(mode='json', by_alias=True))
+    except ValueError:
+        raise CoreError('PLUGIN_MANIFEST_INVALID', f'{plugin_id} 的清单不符合现行发行契约；未运行。') from None
     rejected, accepted = {}, []
     for case in cases:
         try:
@@ -185,7 +195,7 @@ def run(plugin_id, capability_id, cases, *, phase='run', jobs_root=None):
     run_id = str(uuid4())
     identity = {'run_id': run_id, 'plugin_id': plugin_id, 'plugin_version': data['version'], 'capability': capability_id,
                 'method_version': spec['method_version'], 'manifest_sha256': manifest_sha, 'sealed_files': seal['files'],
-                'phase': phase}
+                'release_digest': release_digest, 'phase': phase}
     if not accepted:
         return {**identity, 'request_sha256': digest(cases), 'environment': {'executed': False},
                 'cases': [rejected[i] for i in ids]}

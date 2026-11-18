@@ -32,6 +32,8 @@ SYSTEM_LIBRARIES = frozenset({
     "libutil.so.1", "libresolv.so.2", "libanl.so.1", "ld-linux-x86-64.so.2",
 })
 METADATA = "runtime/native-manifest.json"
+# The bundled Python interpreter and its metadata are owned by another step.
+NATIVE_OUTPUTS = ("runtime/linux-libs", METADATA, "runtime/licenses")
 
 
 def command(arguments: list[str]) -> str:
@@ -227,8 +229,8 @@ def bundle_native_runtime(payload: Path) -> dict | None:
     distribution = platform.freedesktop_os_release()
     if distribution.get("ID") not in {"debian", "ubuntu"}:
         raise RuntimeError("Linux 原生库构建须使用可核对 dpkg 包来源的 Debian/Ubuntu。")
-    if (payload / "runtime").exists():
-        raise RuntimeError("发行原生运行库目录已存在；拒绝混合不同构建。")
+    if any((payload / name).exists() or (payload / name).is_symlink() for name in NATIVE_OUTPUTS):
+        raise RuntimeError("发行原生运行库文件已存在；拒绝混合不同构建。")
     libraries, system = dependency_closure()
     records, notices = [], {}
     for name, library in sorted(libraries.items()):
@@ -272,6 +274,13 @@ def bundle_native_runtime(payload: Path) -> dict | None:
                                        "size_bytes": output.stat().st_size})
         (payload / METADATA).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
     except BaseException:
-        shutil.rmtree(payload / "runtime")
+        # Roll back only the paths this step owns. In particular, NEVER remove
+        # runtime/python or runtime/python-runtime.json from the Python step.
+        for name in NATIVE_OUTPUTS:
+            output = payload / name
+            if output.is_dir() and not output.is_symlink():
+                shutil.rmtree(output)
+            else:
+                output.unlink(missing_ok=True)
         raise
     return result

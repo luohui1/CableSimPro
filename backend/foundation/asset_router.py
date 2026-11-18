@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Header, Query
 from pydantic import Field
 
 from .assets import AssetRepository
@@ -17,10 +17,12 @@ Action = Literal['review', 'publish', 'return_to_draft', 'deprecate']
 class ImportAsset(Contract):
     schema_version: Literal['csp-asset/0.1'] = 'csp-asset/0.1'
     release: AssetRelease
+    human_confirmed: bool = Field(default=False, strict=True)
 
 
 class AssetRevision(Contract):
     expected_revision: int = Field(ge=1, strict=True)
+    human_confirmed: bool = Field(default=False, strict=True)
 
 
 class EditAsset(AssetRevision):
@@ -54,25 +56,28 @@ def make_router(assets: AssetRepository, workspaces) -> APIRouter:
         return assets.list(kind=kind, status=status, query=q, limit=limit, offset=offset)
 
     @router.post('/assets/import', status_code=201)
-    def import_asset(body: ImportAsset):
-        return assets.create(body.release)
+    def import_asset(body: ImportAsset, x_cablesim_actor: str | None = Header(default=None)):
+        return assets.create(body.release, actor=x_cablesim_actor, human_confirmed=body.human_confirmed)
 
     @router.get('/assets/{rid}')
     def asset_detail(rid: str):
         return assets.get(rid)
 
     @router.put('/assets/{rid}')
-    def edit_asset(rid: str, body: EditAsset):
-        return assets.update(rid, body.expected_revision, body.release)
+    def edit_asset(rid: str, body: EditAsset, x_cablesim_actor: str | None = Header(default=None)):
+        return assets.update(rid, body.expected_revision, body.release,
+                             actor=x_cablesim_actor, human_confirmed=body.human_confirmed)
 
     @router.post('/assets/{rid}/transition')
-    def transition_asset(rid: str, body: TransitionAsset):
+    def transition_asset(rid: str, body: TransitionAsset, x_cablesim_actor: str | None = Header(default=None)):
         return assets.transition(rid, body.expected_revision, body.content_sha256,
-                                 body.action, body.note, body.acknowledge_sources)
+                                 body.action, body.note, body.acknowledge_sources,
+                                 actor=x_cablesim_actor, human_confirmed=body.human_confirmed)
 
     @router.post('/assets/{rid}/derive', status_code=201)
-    def derive_asset(rid: str, body: DeriveAsset):
-        return assets.derive(rid, body.expected_revision, body.content_sha256, body.new_version)
+    def derive_asset(rid: str, body: DeriveAsset, x_cablesim_actor: str | None = Header(default=None)):
+        return assets.derive(rid, body.expected_revision, body.content_sha256, body.new_version,
+                             actor=x_cablesim_actor, human_confirmed=body.human_confirmed)
 
     @router.post('/workspaces/{wid}/assets/capture', status_code=201)
     def capture_asset(wid: str, body: CaptureAsset):

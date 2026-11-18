@@ -1,7 +1,12 @@
-"""Executable IEC60949 branches consume pinned, Executor-issued snapshots."""
-from hashlib import sha256
+"""Executable IEC60949 branches consume pinned standard-reference content.
+
+Content and issuer receipts are sealed here. A request SHA identifies a whole
+Executor batch, including its random run ID; it remains an opaque trace receipt,
+not proof that this consumer revalidated that execution.
+"""
 from pathlib import Path
 import json
+from .basis_identity import SCHEMA, content_digest
 
 CATALOG = json.loads(Path(__file__).with_name('short-basis-catalog.json').read_text('utf-8'))
 
@@ -12,15 +17,30 @@ def queries():
 
 def record(parameters, key):
     reference = parameters.get('basis_references',{}).get(key)
-    if not reference: return None
+    if reference is None: return None
+    message = '标准依据快照与已封签的判据不一致，请重新查询当前发行。'
+    if not isinstance(reference, dict) or not isinstance(reference.get('record'), dict):
+        raise ValueError(message)
     r = reference.get('record',{})
     data = {k:v for k,v in r.items() if k not in ('record_sha256','citation')}
-    digest = sha256(json.dumps(data,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False).encode()).hexdigest()
+    digest = content_digest(data)
+    # A browser may serialize 3450000.0 as 3450000 without changing its value.
+    # The issuer's original SHA and version stay pinned; the separate content
+    # SHA is generated from that verified record and sealed with this consumer.
     if (reference.get('schema')!='cablesim.standard-basis-ref/1' or reference.get('plugin_id')!='cablesim.standards-basis' or reference.get('plugin_version')!=CATALOG[key]['plugin_version'] or r.get('id')!=key or
         reference.get('record_sha256')!=CATALOG[key]['digest'] or r.get('record_sha256')!=CATALOG[key]['digest'] or
-        digest!=CATALOG[key]['digest'] or reference.get('query')!=queries()[key] or
+        CATALOG[key].get('content_digest_schema')!=SCHEMA or digest!=CATALOG[key].get('content_sha256') or
+        content_digest(reference.get('query'))!=content_digest(queries()[key]) or
         r.get('verification',{}).get('status')!='verified'):
-        raise ValueError('标准依据快照与已封签的判据不一致，请重新查询当前发行。')
+        raise ValueError(message)
+    if (any(reference.get(field) != CATALOG[key][field]
+            for field in ('data_sha256', 'query_sha256', 'release_digest', 'artifact_digest'))
+            or r.get('citation') != CATALOG[key]['citation']):
+        raise ValueError(message)
+    expected_metadata = {field:r.get(field) for field in ('standard','edition','printed_page','pdf_page')}
+    expected_metadata.update(record_id=key, source_sha256=r.get('source_sha256'), locator=r.get('table') or r.get('clause'))
+    if content_digest({field:reference.get(field) for field in expected_metadata}) != content_digest(expected_metadata):
+        raise ValueError(message)
     return reference
 
 

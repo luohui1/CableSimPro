@@ -266,11 +266,18 @@ def candidate_design_document(payload, name):
         document['materials'] = deepcopy(payload['materials'])
     else:
         spec = payload['specification']
-        if spec['cores'] not in (1, 3, 4):
-            raise HTTPException(422, '当前资料草稿入口覆盖单芯、三芯和四芯；其他结构尚未覆盖。')
-        document = skeleton({1: 'single_core', 3: 'three_core', 4: 'four_core'}[spec['cores']], name)
+        if not 1 <= spec['cores'] <= 16:
+            raise HTTPException(422, '当前资料草稿入口覆盖 1 至 16 芯；超出范围的结构尚未覆盖。')
+        document = skeleton({1: 'single_core', 3: 'three_core'}.get(spec['cores'], 'four_core'), name)
         cable = document['cable_types'][0]
-        cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'])
+        if spec['cores'] not in (1, 3, 4):
+            # Domain/1 already has multi_core and type-draft/2 permits unknown
+            # coordinates. Copy empty core records only; never arrange cores
+            # or infer conductor diameters/phase roles from their count.
+            template = cable['cores'][0]
+            cable['cores'] = [{**deepcopy(template), 'id': f'core/{index + 1}'}
+                              for index in range(spec['cores'])]
+        cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'], um=spec.get('um_v'))
         document['materials'][0].update(label='铜' if spec['conductor'].startswith('copper') else '铝', standard_kind=spec['conductor'])
         for core in cable['cores']:
             core['conductor']['nominal_area'] = spec['area_m2']
@@ -512,6 +519,10 @@ def compare_material(document, material, resource):
                          and not isinstance(r['value'], bool) and isfinite(r['value']) and finite_record(r)], 'status': status, 'reason': reason,
                      'delta': delta, 'percent': percent,
                      'design_source': source, 'adoptable': reference is not None and status in ('different', 'design_missing')})
+    if resource['release'].get('reference_evidence'):
+        from .material_references import evidence_rows
+        references = evidence_rows(document, material, resource)
+        rows = [references.get(row['id'], row) for row in rows]
     return rows
 
 
@@ -1185,6 +1196,9 @@ class Types:
             item = next((r for r in compare_material(state['domain'], material, resource) if r['id'] == body.property), None) if material else None
             if not item or not item['adoptable']:
                 raise HTTPException(422, {'field': item['path'] if item else body.material_id, 'message': item['reason'] or '该值已一致，无需新建修订。' if item else '请选择可核对的物性；不替换缺项或条件不符的值。'})
+            if item['reference'].get('resource_reference'):
+                from .material_references import verify_material_adoption
+                verify_material_adoption(self, db, row, state, body)
             document = deepcopy(state['domain'])
             saved = next(m for m in document['materials'] if m['id'] == body.material_id)
             saved[body.property] = item['reference']['value']

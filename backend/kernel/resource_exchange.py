@@ -27,12 +27,16 @@ from pydantic import Field, ValidationError, model_validator
 from backend.domain.models import DomainDocument
 from backend.foundation.contracts import AssetRelease, content_hash
 from backend.schemas import Scenario, StrictModel
+from .project_exchange import prepare_reference, validate_reference
 from .workspace import fingerprint, stamp
 
 
 SCHEMA = 'cablesim.library-exchange/1'
 MAX_BYTES = 8 * 1024 * 1024
-PROJECT_LIMIT = 120 * 1024
+# Complete release examples carry per-field provenance and pinned model proofs.
+# Keep these inputs intact while bounding each project and the whole bundle.
+PROJECT_LIMIT = 1024 * 1024
+PROJECT_MAX_LOCKS = 4096
 TRANSFER_SHEET = '传输内容（勿修改）'
 PROJECT_KEYS = {'scenario', 'domain', 'locks', 'sources', 'domain_conversion',
                 'study_cable_reference', 'engineering_model_reference'}
@@ -66,7 +70,7 @@ def _project_inputs(value):
     if not isinstance(value, dict) or set(value) - PROJECT_KEYS or not {'scenario', 'locks', 'sources'} <= set(value):
         fail('EXCHANGE_PROJECT_FIELDS', '工程输入字段不完整或包含运行、审批等不允许导入的字段。')
     if len(encoded(value)) > PROJECT_LIMIT:
-        fail('EXCHANGE_PROJECT_TOO_LARGE', '单个工程输入超过 120 KB；完整工程请使用数据库备份恢复。', 413)
+        fail('EXCHANGE_PROJECT_TOO_LARGE', '单个工程输入超过 1 MiB；请使用数据库备份恢复，不能删减来源或锁记录。', 413)
     scenario = Scenario.model_validate(value['scenario']).model_dump(mode='json')
     if scenario != value['scenario']:
         fail('EXCHANGE_INCOMPLETE_INPUT', '工程输入缺少明确字段；导入不采用演示默认值。')
@@ -74,16 +78,16 @@ def _project_inputs(value):
         document = DomainDocument.model_validate(value['domain']).model_dump(mode='json')
         if document != value['domain']:
             fail('EXCHANGE_INCOMPLETE_INPUT', '领域文档缺少明确字段；请从已保存工程重新导出。')
-    if not isinstance(value['locks'], list) or len(value['locks']) > 500 or any(not isinstance(v, str) for v in value['locks']):
+    if (not isinstance(value['locks'], list) or len(value['locks']) > PROJECT_MAX_LOCKS
+            or any(not isinstance(v, str) for v in value['locks'])):
         fail('EXCHANGE_PROJECT_LOCKS', '工程锁记录格式无效。')
     if not isinstance(value['sources'], list):
         fail('EXCHANGE_PROJECT_SOURCES', '工程来源必须为列表。')
     binding = value.get('study_cable_reference')
     if binding is not None:
-        if (not isinstance(value.get('domain'), dict) or not isinstance(binding, dict)
-                or not isinstance(binding.get('payload'), dict)
-                or binding.get('content_sha256') != fingerprint(binding['payload'])):
-            fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照不完整或摘要不一致。')
+        if not isinstance(value.get('domain'), dict):
+            fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照缺少完整领域输入。')
+        validate_reference(binding)
         # Existing reference guards enforce the exact original bound inputs.
         from backend.domain.guards import check_locks
         check_locks(value, value['domain'])
@@ -267,6 +271,7 @@ class ResourceExchange:
             for identifier in body.workspace_ids:
                 row, state = self.store.load(db, identifier)
                 inputs = {key: deepcopy(value) for key, value in state.items() if key in PROJECT_KEYS}
+                prepare_reference(db, inputs)
                 _project_inputs(inputs)
                 projects.append({'origin_id': identifier, 'origin_revision': row['revision'],
                                  'inputs': inputs, 'input_sha256': fingerprint(inputs)})
@@ -301,6 +306,8 @@ class ResourceExchange:
                 'requires_human_confirmation': True, 'approval_inherited': False,
                 'limitations': ['仅搬运已保存输入和资源定义；不复制运行、审核、原始资料或交付历史。',
                                 '资源原始来源记录原样保留，属于来源方的核对声明；本机审核状态为草稿。',
+                                '候选型号保留原始内容摘要、完整来源快照与原标识；工程绑定独立快照，不关联本机同名或同标识型号。',
+                                '已发布型号引用的完整发行证明链不在输入交换范围内，请使用数据库备份恢复。',
                                 '需要完整历史时使用数据库备份恢复。']}
 
     def preview(self, bundle):

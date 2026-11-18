@@ -17,12 +17,11 @@ import zipfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.release_support import FORMAT, MANIFEST, ROOT, digest, target, utf8_output
 from scripts import release_native
+from scripts import release_python_runtime
 
 SOURCE_ROOTS = {"backend", "cablesim_sdk", "plugin-spec", "plugins"}
-# Include the complete canonical manufacturer-structure Python package, including
-# new modules and JSON catalogues, without bundling the standalone Studio app.
-SOURCE_PACKAGE_PREFIXES = ("studio/core/studio_core/",)
-SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh")
+SCRIPTS = ("release_support.py", "install_release.py", "run_release.py", "workspace_db.py", "release_python.sh",
+           "release_python_runtime.py", "python_runtime.lock.json")
 SEED_SCRIPTS = ("seed-engineering-demo.py", "engineering_resources.py")
 
 
@@ -54,8 +53,7 @@ def wheel_lock(wheels: Path) -> str:
 def copy_sources(root: Path, destination: Path) -> None:
     tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
     for name in tracked:
-        if not name or (name.split("/")[0] not in SOURCE_ROOTS
-                        and not any(name.startswith(prefix) for prefix in SOURCE_PACKAGE_PREFIXES)):
+        if not name or name.split("/")[0] not in SOURCE_ROOTS:
             continue
         source = root / name
         if not source.is_file() or source.is_symlink():
@@ -82,6 +80,36 @@ def copy_sources(root: Path, destination: Path) -> None:
     shutil.copy2(root / "docs/architecture/database-operations.md", documentation.with_name("database-operations.md"))
 
 
+def payload_files(root: Path, *, platform_name: str) -> dict:
+    """Enumerate once; preserve POSIX case-distinct files, reject Windows aliases.
+
+    Use directory entries, not a case-normalized glob cache. A repeated parent
+    is normal; only two *different* spellings for one Windows identity collide.
+    All entries are regular files/directories, with no symlink traversal.
+    """
+    result: dict = {}
+    spellings: dict[str, str] = {}
+    for directory, directories, files in os.walk(root, followlinks=False):
+        directories.sort()
+        files.sort()
+        for name in directories + files:
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink() or not (path.is_dir() or path.is_file()):
+                raise RuntimeError("Unsupported release payload entry: " + relative)
+            if platform_name == "win32":
+                identity = relative.casefold()
+                previous = spellings.get(identity)
+                if previous is not None and previous != relative:
+                    raise RuntimeError("Windows release path aliases: " + previous + " / " + relative)
+                spellings[identity] = relative
+            if path.is_file() and relative != "release.toml":
+                if relative in result:
+                    raise RuntimeError("Repeated release payload file: " + relative)
+                result[relative] = {"size_bytes": path.stat().st_size, "sha256": digest(path)}
+    return dict(sorted(result.items()))
+
+
 def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> dict:
     if sys.version_info[:2] != (3, 12) or target()["pointer_bits"] != 64 or sys.platform not in {"linux", "win32"}:
         raise RuntimeError("发行构建使用 Windows/Linux 的 64 位 CPython 3.12。")
@@ -93,6 +121,11 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
     lock = wheel_lock(wheels)
     subprocess.run([sys.executable, str(root / "scripts/plugin_sdk.py"), "verify"], cwd=root, check=True)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    print(json.dumps({"stage": "release-builder", "git_commit": commit,
+                      "platform": sys.platform, "interpreter": sys.executable,
+                      "source_sha256": {name: digest(root / "scripts" / name) for name in
+                                        ("build_release.py", "release_support.py", "release_python_runtime.py")}},
+                     sort_keys=True), flush=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="cablesim-package-", dir=output.parent) as scratch:
         staged = Path(scratch) / "CableSimPro"
@@ -100,6 +133,7 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
         copy_sources(root, staged)
         shutil.copytree(frontend, staged / "frontend/dist")
         shutil.copytree(wheels, staged / "wheelhouse")
+        runtime = release_python_runtime.bundle_runtime(staged, cache=root / ".data/python-downloads")
         native = release_native.bundle_native_runtime(staged)
         subprocess.run([sys.executable, str(root / "scripts/third_party_notices.py"),
                         "--wheelhouse", str(staged / "wheelhouse"),
@@ -114,10 +148,22 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
                 notices.write("Full package copyright and referenced licenses: runtime/licenses/\n"
                               "Binary provenance, SHA256 and GLIBC requirement: " + release_native.METADATA + "\n")
         (staged / "requirements.lock").write_text(lock, encoding="utf-8", newline="\n")
-        files = {path.relative_to(staged).as_posix(): {"size_bytes": path.stat().st_size, "sha256": digest(path)}
-                 for path in sorted(staged.rglob("*")) if path.is_file() and path.name != "release.toml"}
+        # Resolve the complete lock using the shipped interpreter, not merely
+        # the builder's ABI tags. Do not install into the immutable base runtime.
+        subprocess.run([str(release_python_runtime.runtime_path(staged)), "-I", "-B", "-m", "pip", "install",
+                        "--dry-run", "--ignore-installed", "--no-index", "--no-cache-dir", "--require-hashes",
+                        "--find-links", str(staged / "wheelhouse"), "-r", str(staged / "requirements.lock")],
+                       env=release_python_runtime.clean_python_environment(), check=True)
+        with (staged / "THIRD_PARTY_NOTICES.txt").open("a", encoding="utf-8") as notices:
+            notices.write("\nCPython " + runtime["version"] + " / " + runtime["distribution"] + "\n")
+            notices.write(runtime["url"] + "\nSHA256 " + runtime["sha256"] + "\n")
+            notices.write("Original runtime and dependency notices (preserved verbatim):\n"
+                          + "\n".join(runtime["license_files"]) + "\n")
+        release_python_runtime.prune_bytecode(staged / "runtime/python")
+        files = payload_files(staged, platform_name=sys.platform)
         value = {"format": FORMAT, "target": target(), "git_commit": commit,
                  "includes_prebuilt_frontend": True, "includes_geometry_dependencies": True,
+                 "python_runtime": runtime,
                  "native_runtime": {"manifest": release_native.METADATA, "minimum_glibc": native["minimum_glibc"]}
                  if native else None, "files": files}
         value["build_id"] = sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -128,7 +174,12 @@ def build(frontend: Path, wheels: Path, output: Path, *, root: Path = ROOT) -> d
                 if path.is_file():
                     archive.write(path, "CableSimPro/" + path.relative_to(staged).as_posix())
         os.replace(partial, output)
-    receipt = {"archive": str(output), "sha256": digest(output), "size_bytes": output.stat().st_size,
+    source_archive = output.with_suffix(".source.zip")
+    subprocess.run(["git", "archive", "--format=zip", "--prefix=CableSimPro-source/",
+                    "--output=" + str(source_archive.resolve()), commit], cwd=root, check=True)
+    receipt = {"source_archive": {"name": source_archive.name, "sha256": digest(source_archive),
+                                  "size_bytes": source_archive.stat().st_size, "git_commit": commit},
+               "archive": str(output), "sha256": digest(output), "size_bytes": output.stat().st_size,
                "build_id": value["build_id"], "git_commit": commit, "target": target()}
     output.with_suffix(output.suffix + ".json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     return receipt
@@ -160,5 +211,6 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        print("发行构建失败：" + str(error), file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         raise SystemExit(1)

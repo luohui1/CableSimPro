@@ -30,6 +30,7 @@ class PublishedSpecification(StrictModel):
     designation: str = Field(min_length=1, max_length=40)
     voltage_v: float = Field(gt=0, le=1000000)
     u0_v: float = Field(gt=0, le=1000000)
+    um_v: float | None = Field(default=None, gt=0, le=1000000, allow_inf_nan=False)
     cores: int = Field(ge=1, le=100)
     area_m2: float = Field(gt=0, le=.01)
     conductor: Literal['copper_bare', 'copper_coated', 'aluminium']
@@ -159,6 +160,17 @@ def make_router(store):
                 raise HTTPException(409,'型号摘要已变化，请重新读取。')
             if item['state']=='reviewed':
                 raise HTTPException(409,'已核对型号须保留版本。')
+            tables={row['name'] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if ('type_series_versions' in tables and db.execute(
+                    'SELECT 1 FROM type_series_versions WHERE model=? LIMIT 1',(cid,)).fetchone()):
+                raise HTTPException(409,'型号已被系列版本引用，须保留原始型号及逐项来源。')
+            if ('workspaces' in tables and db.execute(
+                    "SELECT 1 FROM workspaces WHERE json_extract(state,'$.type_creation.source.id')=? "
+                    "OR json_extract(state,'$.type_origin_reference.id')=? LIMIT 1",(cid,cid)).fetchone()):
+                raise HTTPException(409,'型号已被型号设计引用，须保留原始来源版本。')
+            if ('document_proposals' in tables and db.execute(
+                    'SELECT 1 FROM document_proposals WHERE new_model=? LIMIT 1',(cid,)).fetchone()):
+                raise HTTPException(409,'型号已被资料提案引用，须保留原始资料与批准记录。')
             if any(db.execute('SELECT 1 FROM '+table+' WHERE instr('+column+',?)>0 LIMIT 1',(cid,)).fetchone()
                    for table,column in [('study_versions','definition'),('study_runs','snapshot')]):
                 raise HTTPException(409,'型号已被研究引用，须保留原始版本。')

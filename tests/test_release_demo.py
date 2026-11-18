@@ -147,7 +147,59 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     from backend.kernel.hpc_evidence import evidence_index
     has_chengnan=bool(evidence_index()[0].get('supplementary_receipts'))
     imported_chengnan=receipt['identity']['chengnan_engineering_evidence_imported']
-    assert receipt['complete'] and len(receipt['studies']) == 4+int(has_chengnan) and len(receipt['types']) == 3
+    assert receipt['complete'] and len(receipt['studies']) == 5+int(has_chengnan) and len(receipt['types']) == 3
+    public_specs = sum(len(item['specs']) for item in receipt['public_catalogues'])
+    assert public_specs == 59 and len(receipt['public_catalogues']) == 5
+    factory = receipt['factory_series_calculations']
+    assert factory['specifications'] == 11
+    assert len(factory['specification_drafts']) == 11
+    assert all(item['snapshot']['lifecycle']['approval'] is None and item['blockers']
+               for item in factory['specification_drafts'])
+    assert all(item['generation']['status'] == 'blocked' and item['generation']['channel'] == 'geometry'
+               for item in factory['specification_drafts'])
+    assert len(factory['generation_runs']) == 33
+    assert len(factory['analysis_runs']) == 22
+    assert all(item['status'] == 'succeeded' and item['run_id'] for item in factory['analysis_runs'])
+    for draft in factory['specification_drafts']:
+        payload = draft['snapshot']['payload']
+        assert {'electrical/missing', 'short_circuit/missing'}.isdisjoint(check['id'] for check in draft['blockers'])
+        assert any(check['id'] == 'geometry/mass' for check in draft['blockers'])
+        electrical = payload['results']['electrical']['artifact']['rows']
+        for core in payload['document']['cable_types'][0]['cores']:
+            resistance = next(row for row in electrical if row['id'] == core['id'] + ':r20')
+            assert resistance['value'] == core['conductor']['r20'] and resistance['input_source']
+            capacitance = next(row for row in electrical if row['id'] == core['id'] + ':capacitance')
+            assert capacitance['status'] == 'available' and capacitance['value'] > 0
+        dc = next(row for row in electrical if row['id'].endswith(':dc'))
+        assert dc['value'] is None and {'temperature_k', 'r20_length_basis'} <= set(dc['missing_parameters'])
+        charging = next(row for row in electrical if row['id'].endswith(':charging'))
+        assert charging['value'] is None and charging['missing_parameters'] == ['phase_voltage_v']
+        short = payload['results']['short_circuit']['artifact']
+        conductor = next(row for row in short['rows'] if row['id'].endswith(':conductor-adiabatic'))
+        assert conductor['value'] is None and conductor['status'] == 'missing'
+        assert {'duration_s', 'initial_temperature_k', 'final_temperature_k'} <= set(conductor['missing_parameters'])
+        # The detail projection links the immutable records instead of repeating
+        # them. Verify the actual saved artifact against that link's digest.
+        from backend.kernel.workspace import fingerprint
+        source = next(row for row in payload['sources'] if row['channel'] == 'short_circuit')
+        with closing(sqlite3.connect(database)) as connection:
+            output = json.loads(connection.execute('SELECT output FROM study_runs WHERE id=?', (source['run_id'],)).fetchone()[0])
+        archived = output['cases'][0]['artifacts']['x-cablesim.type-short-circuit']['rows']
+        references = next(row for row in archived if row['id'] == conductor['id'])['basis_references']
+        assert conductor['basis_records_ref'] == {
+            'url': f'/api/types/{draft["workspace_id"]}/specification?audience=internal&view=full',
+            'sha256': fingerprint(references)}
+        assert references and all(ref['plugin_version'] == receipt['identity']['plugins']['cablesim.standards-basis']['version']
+                                  for ref in references)
+        assert all(row['value'] is None for row in short['rows'] if row['unit'] == 'A')
+        assert all(value is None for line in short['curve']['series'] for value in line['values_a'])
+        assert all(source['freshness'] == 'current' for source in payload['sources'])
+    factory_runs = [item for operation in ('check', 'calculate') for item in factory[operation]['items']]
+    assert len(factory_runs) == 22 and all(item['status'] == 'succeeded' and item['run_id'] for item in factory_runs)
+    assert receipt['examples']['factory']['series_ids']
+    assert receipt['examples']['institute']['fem_available'] is imported_chengnan
+    hv_sweep = next(row for row in receipt['studies'] if row['title'] == '城南线路 · 110 kV 土壤热阻率扫描')
+    assert hv_sweep['run'] and hv_sweep['status'] == 'succeeded'
     assert receipt['identity'] == seed.release_identity()
     assert receipt['identity']['engineering_resources']
     assert len(receipt['engineering_resources']) == 28
@@ -160,7 +212,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         assert not without['engineering_evidence_imported']
         assert without['engineering_evidence']==receipt['identity']['engineering_evidence']
         assert without!=receipt['identity']
-    assert sum(bool(row.get('run')) for row in receipt['studies']) == (4 if with_evidence else 3)+int(imported_chengnan)
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == (5 if with_evidence else 4)+int(imported_chengnan)
     type_runs=[module for item in receipt['types'] for module in item['modules'] if module.get('run')]
     assert len(type_runs)>=6
     assert all(item['status'] in ('succeeded','partial') for item in type_runs)
@@ -186,7 +238,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
-        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (6 if with_evidence else 5)
+        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (6 if with_evidence else 5)+public_specs
         teaching_state = json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?',(teaching['workspace'],)).fetchone()[0])
         assert len(teaching_state['domain']['measurements']) == 12
         assert all(json.loads(item['source']['reference'])['label']=='教学示例实测' for item in teaching_state['domain']['measurements'])
@@ -194,7 +246,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
                   if key.startswith('/factory_measurements/') and key.endswith('/minimum_overlap')]
         assert len(overlaps)==3 and all(json.loads(item['reference'])['label']=='教学示例实测' for item in overlaps)
         assert connection.execute('SELECT COUNT(*) FROM engineering_type_releases WHERE workspace=?',(teaching['workspace'],)).fetchone()[0] == 0
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 4+len(type_runs)+len(factory_runs)+len(factory['generation_runs'])+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
         if has_chengnan:
             single=next(s for s in receipt['studies'] if '波纹品字形有限元' in s['title'])
             if imported_chengnan:
@@ -234,8 +286,11 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='rule' AND status='published'").fetchone()[0] == 7
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
         public=[c for c in candidates if c.get('specification')]
-        assert len(public)==10 and len(candidates)==12
-        assert all(c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700 for c in public)
+        assert len(public)==23 and len(candidates)==12+public_specs
+        huayuan=[c for c in public if c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700]
+        bahra=[c for c in public if c['specification']['designation']=='CU/XLPE/LC/PVC']
+        assert len(huayuan)==10 and len(bahra)==13
+        assert all(c['specification']['missing'] for c in bahra)
         assert not any(c['confirmed'] for c in candidates)
         hv_run=json.loads(connection.execute('SELECT output FROM study_runs WHERE id=?',(hv['run'],)).fetchone()[0])
         quantities=hv_run['cases'][0]['results']
@@ -268,7 +323,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert development.read_bytes() == b'development database sentinel'
 
 
-@pytest.mark.parametrize('change', ['plugins', 'models', 'engineering_resources'])
+@pytest.mark.parametrize('change', ['plugins', 'models', 'engineering_resources', 'public_catalogues'])
 def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, monkeypatch, change):
     spec=importlib.util.spec_from_file_location('upgraded_seed',Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py')
     seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)
@@ -282,7 +337,26 @@ def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, 
         db.execute("INSERT INTO user_data VALUES ('keep in backup')")
         db.execute("INSERT INTO agent_settings VALUES ('model','\"deepseek-flash\"','2026-10-07T14:55:28')")
     identity=seed.release_identity()
-    old=json.loads(json.dumps(identity));old[change]={}
+    old=json.loads(json.dumps(identity))
+    if change == 'public_catalogues':
+        from backend.kernel import public_catalogues
+        current_declarations = public_catalogues._declarations
+        def old_mapping(name):
+            declarations = current_declarations(name)
+            if name == 'bahra-mv':
+                retained = {'area', 'conductor_diameter', 'insulation_thickness', 'oversheath_thickness',
+                            'outer_diameter', 'weight', 'r20', 'metallic_sheath_thickness', 'ampacity'}
+                declarations[0]['mapping'] = {key: value for key, value in declarations[0]['mapping'].items() if key in retained}
+            return declarations
+        with monkeypatch.context() as previous_mapping:
+            previous_mapping.setattr(public_catalogues, '_declarations', old_mapping)
+            old = seed.release_identity()
+        old_sample, current_sample = old[change]['bahra-mv'], identity[change]['bahra-mv']
+        assert old_sample['workbook_sha256'] == current_sample['workbook_sha256']
+        assert old_sample['source_sha256'] == current_sample['source_sha256']
+        assert old_sample['declarations_sha256'] != current_sample['declarations_sha256']
+    else:
+        old[change]={}
     receipt={'complete':True,'identity':old,'user_note':'keep this too'}
     database.with_suffix('.seed.json').write_text(json.dumps(receipt),encoding='utf-8')
     def build(staged, target, versions):

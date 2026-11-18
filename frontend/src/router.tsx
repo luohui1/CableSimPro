@@ -213,6 +213,7 @@ const sampleEntryRoute = createRoute({
 });
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
+    (() => { const route = createRoute({ getParentRoute: () => rootRoute, path: '/resources/cables/structure-import', validateSearch: itemSearch, component: lazyRouteComponent(() => import('./features/library-import/page'), 'LibraryImportPage') }); return route; })(),
     homeRoute,
     cableVersionsRoute, documentsRoute, assetGroupRoute, runsRoute, deliveriesRoute, inboxRoute,
     pluginsRoute, pluginDetailRoute, settingsRoute, computeSettingsRoute, agentRoute,
