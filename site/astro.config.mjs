@@ -79,6 +79,7 @@ export default defineConfig({
             apiGroup,
           ],
         },
+        { label: '常见问题与术语', items: [{ autogenerate: { directory: 'reference' } }] },
         { label: '发布说明与已知限制', items: [{ autogenerate: { directory: 'releases' } }] },
       ],
     }),

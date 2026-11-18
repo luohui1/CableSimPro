@@ -7,9 +7,7 @@ sidebar:
 
 Agent 通过 **OpenAI 兼容的 Chat Completions 接口**（`<服务地址>/chat/completions`，Bearer 密钥）调用模型。不配置模型时，除 Agent 对话外的全部功能照常可用；计算和导出从不依赖模型。
 
-:::caution[离线安装包暂不含 Agent 对话]
-当前的离线安装包不打包、也不启动 Agent 对话服务。在安装包中可以保存模型设置，但没有对话界面；Agent 对话目前只在[从源码运行](../#从源码运行开发与评估)的一键演示中提供。
-:::
+模型只需配置一处：平台按“设置 → AI 模型” > `release.toml [model]` 或环境变量 `CABLESIM_LLM_*` > 环境变量 `CABLE_STUDIO_MODEL_*` 的顺序确定使用哪个模型。Agent 对话服务本身拿不到密钥，模型请求由平台加上密钥后发出。详见 [Agent 对话服务](../agent/#模型只需配置一处)。
 
 :::note[Agent 的权限边界]
 无论接入哪个模型，Agent 都只能读取和提出方案；保存修改、运行计算、批准和发布都要由人确认。详见 [Agent 的用法和边界](../../guide/agent/)。
@@ -57,6 +55,12 @@ export CABLESIM_LLM_API_KEY='<你的密钥>'
 ```
 
 界面中保存过的设置优先于 release.toml；界面只改了模型名、服务地址不变时，继续使用环境变量里的密钥。无论哪种方式，密钥都只从系统凭据或环境变量读取。
+
+也可以不写 `[model]`，直接设置三个环境变量 `CABLESIM_LLM_BASE_URL`、`CABLESIM_LLM_MODEL`、`CABLESIM_LLM_API_KEY`；从源码运行时使用的 `CABLE_STUDIO_MODEL_BASE_URL`、`CABLE_STUDIO_MODEL_ID`、`CABLE_STUDIO_MODEL_API_KEY` 优先级最低。服务地址、模型名和密钥须来自同一来源，不会混用。
+
+## 没有配置模型时
+
+Agent 页显示“还没有配置 AI 模型：在‘设置 · AI 模型’里填写……”，发送消息会被拒绝，不调用任何服务，也不产生任何结果。型号、计算、仿真、交付等其余功能不依赖模型。
 
 ## 私有化部署的模型
 
