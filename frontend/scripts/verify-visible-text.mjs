@@ -6,7 +6,7 @@ import { openHeadlessBrowser, repositoryRoot } from './browser.mjs';
 import { moduleDefinitions, moduleBehavior } from '../src/pages/study-modules.ts';
 import { typeModules } from '../src/features/type/module-definitions.ts';
 import { categories, identifyText, exceptionFor, whitelist, findingOwner, readOnlyPost } from './visible-text-policy.mjs';
-import { cableSeriesLabelSelector } from './visible-names.mjs';
+import { cableSeriesLabelSelector, resourceSourceReferenceSelector, resourceSourceReferenceException } from './visible-names.mjs';
 import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
 import { performance as monotonicClock } from 'node:perf_hooks';
 
@@ -64,7 +64,7 @@ async function settled() {
 
 /** Read only painted viewport text; clipped scroll text is scanned at its later scroll position. */
 async function entries(layer = 'ordinary') {
-  return page.evaluate(({ layer, cableSeriesLabelSelector }) => {
+  return page.evaluate(({ layer, cableSeriesLabelSelector, resourceSourceReferenceSelector }) => {
     const result = [];
     const selector = element => {
       const parts = []; let e = element;
@@ -76,7 +76,7 @@ async function entries(layer = 'ordinary') {
       }
       return parts.join(' > ');
     };
-    const metadata = element => ({ selector: selector(element), cableSeriesLabel: element.matches(cableSeriesLabelSelector), agentAnswer: !!element.closest('.agent-answer,.agent-user-message,.agent-step-list'), field: !!element.closest('[data-field-page],.field-results,.hpc-job-list'), standard: !!element.closest('.basis-page,.standards-browser'), cad: !!element.closest('.type-page,.drawing-panel') });
+    const metadata = element => ({ selector: selector(element), cableSeriesLabel: element.matches(cableSeriesLabelSelector), resourceSourceReference: element.matches(resourceSourceReferenceSelector), sourceReferenceSummary: element.matches(resourceSourceReferenceSelector) ? element.parentElement.querySelector(':scope > summary')?.textContent.trim() : undefined, agentAnswer: !!element.closest('.agent-answer,.agent-user-message,.agent-step-list'), field: !!element.closest('[data-field-page],.field-results,.hpc-job-list'), standard: !!element.closest('.basis-page,.standards-browser'), cad: !!element.closest('.type-page,.drawing-panel') });
     function visibleBox(element, original) {
       if (!element.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return null;
       let left = Math.max(0, original.left), top = Math.max(0, original.top), right = Math.min(innerWidth, original.right), bottom = Math.min(innerHeight, original.bottom);
@@ -116,17 +116,18 @@ async function entries(layer = 'ordinary') {
       if (rect) result.push({ text: e.alt, layer, rect, ...metadata(e) }); // Browser-painted fallback when an image fails.
     }
     return result;
-  }, { layer, cableSeriesLabelSelector });
+  }, { layer, cableSeriesLabelSelector, resourceSourceReferenceSelector });
 }
 async function record(surface, size, layer = 'ordinary') {
   if (regularity) { await regularity.record(surface, size, layer); if (!withVisibleText) return; }
   for (const node of await entries(layer)) for (const match of identifyText(node.text)) {
-    const hit = { page: surface.route, label: surface.label, ...size, text: node.text.slice(0, 1000), ...match, categoryLabel: categories[match.category], layer: node.layer, summary: node.summary, selector: node.selector, cableSeriesLabel: node.cableSeriesLabel, rect: node.rect, owner: findingOwner(surface, node) };
+    const sourceLayer = resourceSourceReferenceException({ ...node, page: surface.route }) ? 'technical' : node.layer;
+    const hit = { page: surface.route, label: surface.label, ...size, text: node.text.slice(0, 1000), ...match, categoryLabel: categories[match.category], layer: sourceLayer, summary: node.summary, selector: node.selector, cableSeriesLabel: node.cableSeriesLabel, resourceSourceReference: node.resourceSourceReference, sourceReferenceSummary: node.sourceReferenceSummary, rect: node.rect, owner: findingOwner(surface, node) };
     const exception = exceptionFor(hit);
-    const key = [surface.route, layer, node.layer, node.selector, node.text, match.category, match.token, size.width].join('|');
+    const key = [surface.route, layer, hit.layer, node.selector, node.text, match.category, match.token, size.width].join('|');
     if (exception) {
       if (secondaryKeys.has(key)) continue; secondaryKeys.add(key);
-      (node.layer === 'ordinary' ? report.allowed : report.secondary).push({ ...hit, exception: exception.id, reason: exception.reason });
+      (hit.layer === 'ordinary' ? report.allowed : report.secondary).push({ ...hit, exception: exception.id, reason: exception.reason });
     } else {
       if (issueKeys.has(key)) continue; issueKeys.add(key);
       if (node.rect) {

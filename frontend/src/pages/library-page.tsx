@@ -26,6 +26,7 @@ import { AssetActionButtons, DeriveAssetDialog, pendingAssetDerivation } from '@
 import { ResourceOperationsDialog, pendingResourceOperation, type ResourceOperation } from '@/features/resources/batch-actions';
 import { getAsset, saveAsset, uncertainWrite } from '@/features/resources/api';
 import { assetActions, assetUnit, sourceKinds, type Asset } from '@/features/resources/definitions';
+import { ResourceSourceReference } from '@/features/resources/source-reference';
 import '@/features/resources/resources.css';
 
 type AssetKind = components["schemas"]["AssetRelease"]["kind"];
@@ -60,7 +61,7 @@ const unitOf = (unit: string) => unit === "1" ? undefined : assetUnit(unit);
 
 /**
  * 资源详情的属性分组：名片 → 参考物性 / 标准版本 → 适用条件 → 缺项 → 审核记录。
- * 标准摘录按 lib/reference-data 解析，不显示原始 JSON；不是摘录格式的出处原样列出。
+ * 标准摘录按 lib/reference-data 解析；其他出处保留全文，结构化内容主动展开核对。
  */
 function assetGroups(asset: Record<string, unknown>): PropertyGroup[] {
   const release = optionalRecord(asset.release);
@@ -105,7 +106,7 @@ function assetGroups(asset: Record<string, unknown>): PropertyGroup[] {
     label: "计算参数",
     items: parameters.map((row) => {
       const quantity = optionalRecord(row.quantity), value = numeric(quantity.value);
-      return { label: propertyLabel(text(row.name)), value: value === null ? "未提供" : referenceNumber(value), unit: unitOf(text(quantity.unit)), stacked: true };
+      return { label: propertyLabel(text(row.name)), value: value === null ? "未提供" : referenceNumber(value), unit: assetUnit(text(quantity.unit)), stacked: true };
     }),
   });
   if (data.gaps.length) groups.push({
@@ -114,7 +115,7 @@ function assetGroups(asset: Record<string, unknown>): PropertyGroup[] {
   });
   if (data.other.length) groups.push({
     label: "其他出处",
-    items: data.other.map((row, index) => ({ label: `出处 ${index + 1} · ${row.reviewed ? '已核对' : '待核对'}`, value: row.reference || "未提供", source: sourceKinds[row.kind as keyof typeof sourceKinds]?.badge })),
+    items: data.other.map((row, index) => ({ label: `出处 ${index + 1} · ${row.reviewed ? '已核对' : '待核对'}`, value: <ResourceSourceReference reference={row.reference} label={`出处 ${index + 1}`} />, source: sourceKinds[row.kind as keyof typeof sourceKinds]?.badge, stacked: true })),
   });
   const events = (Array.isArray(asset.events) ? asset.events : []).map(optionalRecord);
   if (events.length) groups.push({

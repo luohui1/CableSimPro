@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -345,15 +346,6 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await choose('来源类别 1', '工程师填写', dialog);
     await dialog.getByRole('textbox', { name: '来源说明 1', exact: true }).fill('隔离浏览器验收手工输入，用于验证表单、单位和版本操作；不是厂家、标准或工程推荐数据。');
     await capture(`${group}-typed-definition`);
-    if (kind === 'material') {
-      const limitation = dialog.getByText(/密度、电阻率及无量纲参数暂不能录入/);
-      await limitation.scrollIntoViewIfNeeded();
-      const shot = await capture('material-host-quantity-limit');
-      report.handoffs ||= [];
-      report.handoffs.push({ label: '材料密度、电阻率及无量纲参数的 typed 录入', status: '未通过', owner: 'T3 资源参数契约', screenshot: shot.screenshot,
-        detail: '宿主 Quantity 契约没有这些量纲，T1 表单不改名伪装；已有来源摘录保留。' });
-      check('完整材料物性可通过 typed 参数录入', false, { owner: 'T3', screenshot: shot.screenshot, actual: await limitation.innerText() }, { fatal: false });
-    }
     await dialog.getByRole('button', { name: '保存资源草稿', exact: true }).click();
     await expect(dialog).toBeHidden();
     const saved = await inspectSelectedResource(name);
@@ -362,6 +354,187 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       saved.release.parameters[0].quantity.unit === parameter.quantity.unit && saved.release.sources[0].kind === 'project_input' && saved.release.sources[0].reviewed === false,
     { id: saved.id, status: saved.status, parameters: saved.release.parameters, sources: saved.release.sources });
     return saved;
+  }
+
+  async function verifyMaterialQuantity(spec) {
+    // Read a fixed installed source record, then type/import its exact value in
+    // the visible UI. These isolated drafts never become engineering inputs.
+    const tablePath = '/api/library/resources/table?category=materials&table_id=' + encodeURIComponent(spec.table);
+    const table = await api(tablePath), source = table.rows.find(row => row.id === spec.record);
+    expect(source, '发布资料库须包含指定物性及完整出处').toBeTruthy();
+    expect(source.quantity).toMatchObject({ key: spec.parameter, dimension: spec.dimension, unit: spec.sourceUnit });
+    expect(Number.isFinite(source.value)).toBe(true);
+    expect(source.source_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(source.record_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(source.citation.trim()).not.toBe('');
+    const provenance = { record_id: source.id, source_sha256: source.source_sha256, record_sha256: source.record_sha256, conditions: source.conditions };
+    const sources = [
+      { kind: spec.sourceKind, reviewed: false, reference: source.citation + '; 原值: ' + source.value + '; 原单位: ' + source.quantity.unit },
+      { kind: 'project_input', reviewed: false, reference: JSON.stringify(provenance) },
+      ...(source.limitations || []).map(reference => ({ kind: 'project_input', reviewed: false, reference: '原资料适用限制：' + reference })),
+      { kind: 'project_input', reviewed: false, reference: '隔离浏览器验收：仅将上列真实资料值手工录入独立参考草稿，保留原单位和条件；未核准用于工程，未应用到研究，不补齐其他物性。' },
+    ];
+    for (const item of sources) expect(item.reference.length, '原出处须完整落入来源栏，不能截短').toBeLessThanOrEqual(512);
+    const beforeWorkspaces = await api('/api/workspaces'), writesBefore = report.writes.length, identities = new Set();
+    (report.materialQuantitySources ||= []).push({ width: size.width, table: spec.table, release_digest: table.release_digest,
+      data_sha256: table.data_sha256, record: source, intendedUse: 'reference_only', appliedToWorkspace: false });
+
+    async function readDraft(name, unit) {
+      const saved = await inspectSelectedResource(name);
+      expect(saved.status).toBe('draft');
+      expect(saved.reviewed_sha256).toBeNull();
+      expect(saved.release.parameters).toEqual([{ name: spec.parameter,
+        quantity: { value: source.value, unit, dimension: spec.dimension }, overridable: false }]);
+      expect(saved.release.sources).toEqual(sources);
+      const row = properties.locator('section').filter({ has: page.getByRole('heading', { name: '计算参数', exact: true }) })
+        .locator('.property-row').filter({ has: page.getByText(spec.label, { exact: true }) });
+      await expect(row).toHaveCount(1);
+      await row.scrollIntoViewIfNeeded();
+      await expect(row).toContainText(spec.displayUnit);
+      return saved;
+    }
+
+    async function verifyOriginalSource(label) {
+      const citation = properties.locator('.property-row').filter({ has: page.getByText('出处 1 · 待核对', { exact: true }) });
+      await expect(citation).toContainText(sources[0].reference);
+      const original = properties.locator('pre[data-source-reference="raw"][aria-label="出处 2 原文"]');
+      const disclosure = original.locator('..'), summary = disclosure.locator(':scope > summary');
+      await expect(summary).toHaveText('查看结构化出处原文');
+      await expect(original).toBeHidden();
+      await summary.scrollIntoViewIfNeeded();
+      if (size.width === 1366) {
+        await summary.focus(); await page.keyboard.press('Enter');
+        await expect(original).toBeVisible();
+        await page.keyboard.press('Tab'); await expect(original).toBeFocused();
+      } else {
+        await summary.click(); await expect(original).toBeVisible();
+      }
+      await expect(disclosure).toHaveAttribute('open', '');
+      await original.scrollIntoViewIfNeeded();
+      expect(await original.textContent(), '出处原文不经翻译、替换或截短').toBe(sources[1].reference);
+      expect(JSON.parse(await original.textContent())).toEqual(provenance);
+      const bounds = await original.evaluate(element => {
+        const box = element.getBoundingClientRect(), css = getComputedStyle(element);
+        let left = 0, top = 0, right = innerWidth, bottom = innerHeight;
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          const style = getComputedStyle(parent), rect = parent.getBoundingClientRect();
+          if (/(hidden|clip|auto|scroll)/.test(style.overflowX)) { left = Math.max(left, rect.left); right = Math.min(right, rect.right); }
+          if (/(hidden|clip|auto|scroll)/.test(style.overflowY)) { top = Math.max(top, rect.top); bottom = Math.min(bottom, rect.bottom); }
+        }
+        return { width: box.width, height: box.height, fontSize: parseFloat(css.fontSize), whiteSpace: css.whiteSpace,
+          scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight,
+          fullyVisible: box.width > 0 && box.height > 0 && box.left >= left - 1 && box.right <= right + 1 && box.top >= top - 1 && box.bottom <= bottom + 1 };
+      });
+      const shot = await capture('material-quantity-' + spec.dimension + '-' + label + '-expanded-source');
+      check('结构化出处原文完整可见且能以鼠标或键盘展开收起', bounds.fullyVisible && bounds.fontSize >= 13 && bounds.whiteSpace === 'pre-wrap'
+        && bounds.scrollWidth <= bounds.clientWidth + 1 && bounds.scrollHeight <= bounds.clientHeight + 1,
+      { dimension: spec.dimension, source: source.id, screenshot: shot.screenshot, interaction: size.width === 1366 ? 'keyboard' : 'mouse', bounds });
+      expect(shot.layoutError, '明确原文层之外仍执行全部界面断言').toBeUndefined();
+      if (size.width === 1366) {
+        await expect(original).toBeFocused();
+        await page.keyboard.press('Shift+Tab'); await expect(summary).toBeFocused();
+        await page.keyboard.press('Enter');
+      } else await summary.click();
+      await expect(disclosure).not.toHaveAttribute('open', '');
+      await expect(original).toBeHidden();
+    }
+
+    async function editAndReload(saved, unit, label) {
+      await properties.getByRole('button', { name: '编辑资源草稿', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '编辑资源草稿', exact: true });
+      await expect(dialog.getByRole('combobox', { name: '参数 1', exact: true })).toContainText(spec.label);
+      const value = dialog.getByRole('textbox', { name: '参数数值 1', exact: true });
+      await expect(value).toHaveValue(String(source.value));
+      const units = dialog.getByRole('combobox', { name: '单位 1', exact: true });
+      await expect(units).toContainText(spec.displayUnit);
+      await units.focus(); await units.press('Enter');
+      await expect(page.getByRole('option', { name: spec.displayUnit, exact: true })).toHaveCount(1);
+      await page.keyboard.press('Escape');
+      // A real keyboard edit changes only the draft name. The original unit
+      // spelling, value, provenance and conditions must survive this PUT.
+      const editedName = saved.name + '-编辑';
+      await dialog.getByRole('textbox', { name: '资源名称', exact: true }).fill(editedName);
+      await value.fill(String(source.value));
+      await value.scrollIntoViewIfNeeded();
+      await capture('material-quantity-' + spec.dimension + '-' + label + '-editor');
+      await dialog.getByRole('button', { name: '保存资源草稿', exact: true }).click();
+      await expect(dialog).toBeHidden();
+      const edited = await readDraft(editedName, unit);
+      expect(edited.id).toBe(saved.id);
+      expect(edited.revision).toBe(saved.revision + 1);
+      expect(edited.release.sources).toEqual(saved.release.sources);
+      expect(edited.release.parameters).toEqual(saved.release.parameters);
+      const readOnlyStart = report.writes.length;
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const loaded = await readDraft(editedName, unit);
+      expect(loaded.id).toBe(edited.id);
+      expect(loaded.revision).toBe(edited.revision);
+      expect(loaded.content_sha256).toBe(edited.content_sha256);
+      expect(loaded.release).toEqual(edited.release);
+      expect(report.writes.slice(readOnlyStart)).toEqual([]);
+      await verifyOriginalSource(label);
+      expect(report.writes.slice(readOnlyStart)).toEqual([]);
+      await capture('material-quantity-' + spec.dimension + '-' + label + '-reloaded');
+      return loaded;
+    }
+
+    await openGroup('materials');
+    await page.locator('.topbar-actions').getByRole('button', { name: '新建资源', exact: true }).click();
+    let dialog = page.getByRole('dialog', { name: '新建资源', exact: true });
+    const name = '隔离验收-资料物性-' + spec.label + '-' + marker;
+    await dialog.getByRole('textbox', { name: '资源名称', exact: true }).fill(name);
+    await choose('资源类别', '材料', dialog);
+    await dialog.getByRole('button', { name: '新增参数', exact: true }).click();
+    await choose('参数 1', spec.label, dialog);
+    const value = dialog.getByRole('textbox', { name: '参数数值 1', exact: true });
+    await expect(value).toHaveValue('');
+    await value.fill(String(source.value));
+    await expect(dialog.getByRole('combobox', { name: '单位 1', exact: true })).toContainText(spec.displayUnit);
+    for (const [index, item] of sources.entries()) {
+      if (index) await dialog.getByRole('button', { name: '新增来源', exact: true }).click();
+      await choose('来源类别 ' + (index + 1), { standard: '标准依据', literature: '文献资料', project_input: '工程师填写' }[item.kind], dialog);
+      await dialog.getByRole('textbox', { name: '来源说明 ' + (index + 1), exact: true }).fill(item.reference);
+    }
+    await dialog.getByRole('button', { name: '保存资源草稿', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    const typed = await readDraft(name, spec.unit);
+    identities.add(typed.id);
+    const typedReloaded = await editAndReload(typed, spec.unit, 'typed');
+
+    // Import the same source into a separate, explicitly labelled draft using
+    // its original unit spelling. Do not overwrite the typed draft or a seed.
+    await openGroup('materials');
+    const sourceName = '隔离验收-原文单位-' + spec.label + '-' + marker;
+    const definition = { schema_version: 'csp-asset/0.1', release: {
+      asset_id: 't1.quantity.source.' + spec.dimension + '.' + marker, version: '1.0.0', kind: 'material', name: sourceName,
+      parameters: [{ name: spec.parameter, quantity: { value: source.value, unit: source.quantity.unit, dimension: spec.dimension }, overridable: false }],
+      sources,
+    } };
+    const filename = path.join(out, 'material-quantity-' + spec.dimension + '-source-unit-' + size.width + '.json');
+    await fs.writeFile(filename, JSON.stringify(definition, null, 2) + '\n');
+    await page.locator('.topbar-actions').getByRole('button', { name: '导入资源草稿', exact: true }).click();
+    dialog = page.getByRole('dialog', { name: '导入资源草稿', exact: true });
+    await dialog.locator('input[type=file]').setInputFiles(filename);
+    await expect(dialog.getByRole('textbox', { name: '定义内容', exact: true })).toHaveValue(await fs.readFile(filename, 'utf8'));
+    await dialog.getByRole('button', { name: '校验并导入', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    const imported = await readDraft(sourceName, spec.sourceUnit);
+    identities.add(imported.id);
+    expect(imported.id).not.toBe(typed.id);
+    const originalUnitReloaded = await editAndReload(imported, spec.sourceUnit, 'source-unit');
+    expect(originalUnitReloaded.release.parameters[0].quantity.value).toBe(typedReloaded.release.parameters[0].quantity.value);
+    expect(originalUnitReloaded.release.parameters[0].quantity.unit).toBe(source.quantity.unit);
+    const sourceAfter = (await api(tablePath)).rows.find(row => row.id === source.id);
+    expect(sourceAfter).toEqual(source);
+    expect(await api('/api/workspaces')).toEqual(beforeWorkspaces);
+    const writes = report.writes.slice(writesBefore);
+    check('四类物性可用真实表单录入并保留原文单位来源且不改工程', writes.length === 4 && writes.every(write =>
+      write.method === 'POST' && write.path === '/api/foundation/assets/import'
+      || write.method === 'PUT' && [...identities].some(id => write.path === '/api/foundation/assets/' + id)),
+    { dimension: spec.dimension, source: source.id, value: source.value, canonicalUnit: spec.unit, sourceUnit: spec.sourceUnit,
+      typed: { id: typedReloaded.id, revision: typedReloaded.revision, content_sha256: typedReloaded.content_sha256 },
+      imported: { id: originalUnitReloaded.id, revision: originalUnitReloaded.revision, content_sha256: originalUnitReloaded.content_sha256 },
+      writes, sourceUnchanged: true, workspacesUnchanged: true });
   }
 
   async function transition(group, saved, action, label, standard) {
@@ -1067,6 +1240,7 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
   }
 
   await branch('厂家结构表与 PDF 分流并实传 CSV', async () => {
+    const startWrites = report.writes.length;
     await openCableVersions();
     await page.locator('.topbar-actions').getByRole('button', { name: '导入厂家结构表', exact: true }).click();
     await expect(page).toHaveURL(/\/resources\/cables\/structure-import(?:\?|$)/);
@@ -1080,21 +1254,321 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await capture('manufacturer-structure-entry');
     // Real published-source fixture; this is the actual browser multipart request
     // on a fresh isolated library, not a test-created API response or OCR output.
+    const metadata = JSON.parse(await fs.readFile(new URL('../../tests/fixtures/jiangnan_yjv22.json', import.meta.url), 'utf8'));
     const bytes = await fs.readFile(new URL('../../tests/fixtures/jiangnan_yjv22.csv', import.meta.url));
+    const originalTable = await fs.readFile(new URL('../../tests/fixtures/jiangnan_yjv22_source.html', import.meta.url));
+    const originalTableDigest = createHash('sha256').update(originalTable).digest('hex');
+    assert.equal(originalTableDigest, metadata.source.original_table_sha256, '原始网页数据表字节必须与来源摘要一致');
+    const source = { ...metadata.source, transcription_method: metadata.transcription_method,
+      confidence: metadata.confidence, reviewed: false, limitations: metadata.limitations,
+      published_standards_text: metadata.published_standards_text };
+    const originalRows = bytes.toString('utf8').trim().split(/\r?\n/).slice(1).map(row => row.split(',').map(Number));
+    assert.equal(originalRows.length, 9);
+    assert.deepEqual(originalRows[2], [95, 3, 10.5, 86.3, 11050], '公开原表异常不为走查改写');
+    const mapping = { area: 0, insulation_thickness: 2, outer_diameter: 3, weight: 4 };
+    const units = { area: ['mm²', 'm2', 1e-6], insulation_thickness: ['mm', 'm', .001], outer_diameter: ['mm', 'm', .001], weight: ['kg/km', 'kg/m', .001] };
+    const declaration = metadata.declaration;
+    assert.equal(declaration.origin, 'public');
+    assert.equal(declaration.armour_material, 'steel_tape', '原件只明确钢带，不能猜具体钢材类别');
+    assert.ok(originalRows.every(row => row[1] === declaration.cores));
+    assert.equal(source.rows.length, originalRows.length);
+    for (const [index, row] of source.rows.entries()) {
+      assert.deepEqual([row.csv_row, row.area_mm2, row.cores], [index + 2, originalRows[index][0], originalRows[index][1]]);
+    }
+    const uploadName = 'T1-已公开结构表.csv';
     const expectedDigest = createHash('sha256').update(bytes).digest('hex');
+    assert.equal(expectedDigest, metadata.source.csv_sha256, '实际上传 CSV 必须匹配公开资料转录件摘要');
     const [uploaded] = await Promise.all([
       page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/upload')
         && response.request().method() === 'POST', { timeout: 60000 }),
-      picker.setInputFiles({ name: 'T1-已公开结构表.csv', mimeType: 'text/csv', buffer: bytes }),
+      picker.setInputFiles({ name: uploadName, mimeType: 'text/csv', buffer: bytes }),
     ]);
-    const receipt = await uploaded.json();
+    const inspection = await uploaded.json();
     await check('实际 CSV 字节与来源摘要经后端验收', uploaded.status() === 201 &&
-      receipt.sha256 === expectedDigest && receipt.sheets?.some(sheet => sheet.data_rows >= 1),
-      { status: uploaded.status(), uploadedDigest: receipt.sha256, originalDigest: expectedDigest,
-        sheets: receipt.sheets?.map(sheet => ({ name: sheet.name, rows: sheet.data_rows })) });
+      inspection.sha256 === expectedDigest && inspection.sheets?.some(sheet => sheet.data_rows >= 1),
+      { status: uploaded.status(), uploadedDigest: inspection.sha256, originalDigest: expectedDigest,
+        sheets: inspection.sheets?.map(sheet => ({ name: sheet.name, rows: sheet.data_rows })) });
     await expect(page.getByRole('heading', { name: '选择工作表', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: '工作表', exact: true })).toBeVisible();
     await capture('manufacturer-structure-upload');
+
+    // Reuse the current wizard receipt. The 1366 journey operates its selects
+    // with the keyboard; the 1920 journey uses their visible pointer controls.
+    async function selectManufacturer(label, option) {
+      if (size.width === 1920) return choose(label, option);
+      const field = page.getByRole('combobox', { name: label, exact: true });
+      await expect(field).toBeEnabled();
+      await field.focus();
+      await expect(field).toBeFocused();
+      await field.press('Enter');
+      const choices = page.getByRole('option');
+      await expect(page.getByRole('option', { name: option, exact: true })).toBeVisible();
+      const index = await choices.evaluateAll((items, label) => items.findIndex(item => item.textContent.replace(/✓/g, '').trim() === label), option);
+      assert.ok(index >= 0, '键盘选择缺少选项：' + label + ' / ' + option);
+      await page.keyboard.press('Home');
+      await expect(choices.first()).toBeFocused();
+      for (let i = 1; i <= index; i++) {
+        await page.keyboard.press('ArrowDown');
+        await expect(choices.nth(i)).toBeFocused();
+      }
+      await page.keyboard.press('Enter');
+      await expect(field).toHaveText(option);
+      await expect(field).toBeFocused();
+    }
+    async function activateManufacturer(control) {
+      if (size.width === 1366) { await control.focus(); await expect(control).toBeFocused(); await control.press('Enter'); }
+      else await control.click();
+    }
+    async function manufacturerAction(waiter, action) {
+      const [result] = await Promise.all([waiter, Promise.resolve().then(action)]);
+      return result;
+    }
+    async function recordManufacturerResponse(label, response, body) {
+      const raw = await response.body();
+      const filename = size.width + '-' + label;
+      await fs.writeFile(path.join(out, filename + '-response.json'), raw);
+      await fs.writeFile(path.join(out, filename + '-request.json'), JSON.stringify({
+        method: response.request().method(), path: new URL(response.url()).pathname,
+        request: response.request().postDataJSON(), status: response.status(),
+        response_bytes: raw.length, response_sha256: createHash('sha256').update(raw).digest('hex'),
+      }, null, 2));
+      assert.deepEqual(JSON.parse(new TextDecoder().decode(raw)), body, '归档的响应原字节须与实际断言对象一致');
+    }
+    async function positionManufacturerSource(locator) {
+      await page.waitForFunction(() => [...document.querySelectorAll('.dialog-stage')].every(stage => Number(getComputedStyle(stage).opacity) >= .999));
+      const position = await locator.evaluate(element => {
+        const container = element.closest('.library-import-dialog-body');
+        if (!(container instanceof HTMLElement)) throw new Error('来源内容没有对应的对话框滚动区域');
+        const inset = Number.parseFloat(getComputedStyle(container).getPropertyValue('--space-2'));
+        if (!Number.isFinite(inset) || inset <= 0) throw new Error('缺少对话框内容的显示间距');
+        const before = element.getBoundingClientRect();
+        const bounds = container.getBoundingClientRect();
+        // Move only the real scroll region. Keep the whole row inside its top
+        // edge instead of asking every ancestor to align to a fractional pixel.
+        container.scrollTo({ top: Math.floor(container.scrollTop + before.top - bounds.top - inset), behavior: 'instant' });
+        const after = element.getBoundingClientRect();
+        return { label: element.getAttribute('aria-label') || element.textContent?.trim().slice(0, 120),
+          before: { top: before.top, bottom: before.bottom, height: before.height },
+          after: { top: after.top, bottom: after.bottom, height: after.height },
+          container: { top: bounds.top, bottom: bounds.bottom, height: bounds.height }, inset };
+      });
+      (report.manufacturerDialogPositions ||= []).push({ viewport: size.width, ...position });
+    }
+
+    assert.equal(inspection.sha256, expectedDigest, '原 CSV 字节不得为走查改写');
+    assert.equal(inspection.file, uploadName);
+    assert.equal(inspection.declarations?.length || 0, 0, '自有 CSV 不应偷偷注入内置样本声明');
+    const sheet = inspection.sheets.find(item => item.name === uploadName.replace(/\.[^.]+$/, ''));
+    assert.ok(sheet);
+    assert.deepEqual([sheet.first_data_row, sheet.data_rows, sheet.columns.length], [2, 9, 5]);
+    assert.equal(sheet.columns[4].header, '电缆最大重量（kg/km）');
+    await selectManufacturer('工作表', `${sheet.name} · 9 行`);
+    await capture('江南真实CSV上传与原始五列');
+    await activateManufacturer(page.getByRole('button', { name: '确认工作表，设置列映射', exact: true }));
+    await expect(page.getByRole('heading', { name: '确认列映射', exact: true })).toBeVisible();
+    for (const column of sheet.columns) {
+      const key = Object.keys(mapping).find(key => mapping[key] === column.index);
+      const field = inspection.fields.find(item => item.key === key);
+      if (key) assert.equal(field.unit, units[key][0]);
+      await selectManufacturer(`${column.letter} 列对应`, key ? `${field.label} / ${units[key][0]}` : '不导入此列');
+    }
+    await page.getByRole('combobox', { name: 'E 列对应', exact: true }).scrollIntoViewIfNeeded();
+    await capture('江南最大重量原列映射');
+    await activateManufacturer(page.getByRole('button', { name: '填写系列声明', exact: true }));
+    const form = page.getByRole('form', { name: '系列声明', exact: true });
+    const seriesName = `江南公开三芯35千伏-${marker}`;
+    for (const [label, value] of [['系列名称', seriesName], ['制造商', metadata.manufacturer], ['型号', declaration.designation], ['额定相电压 kV', String(declaration.u0_v / 1000)], ['额定线电压 kV', String(declaration.u_v / 1000)]]) await form.getByLabel(label, { exact: true }).fill(value);
+    const materialLabels = { copper: '铜', aluminium: '铝', XLPE: '交联聚乙烯', PVC: '聚氯乙烯', PE: '聚乙烯' };
+    assert.equal(declaration.resistance_basis, 'stated');
+    for (const [label, value] of [['芯数', declaration.cores + ' 芯'], ['数据身份', '公开厂家资料'], ['导体材料', materialLabels[declaration.conductor]], ['绝缘材料', materialLabels[declaration.insulation]], ['外护套材料', materialLabels[declaration.oversheath]], ['铠装材料类别', '未声明具体钢材'], ['原表缺少导体电阻时', '保留缺项，等待厂家提供']]) await selectManufacturer(label, value);
+    await expect(form.getByLabel('最高系统电压 kV', { exact: true })).toHaveValue('');
+    await expect(form.getByLabel('执行标准', { exact: true })).toHaveValue('');
+    await form.getByText('补充原列口径与原件定位', { exact: true }).click();
+    const sourceInput = form.getByLabel('来源说明 JSON 文件', { exact: true });
+    await sourceInput.setInputFiles({ name: '损坏来源.json', mimeType: 'application/json', buffer: Buffer.from('{"url":') });
+    const error = form.getByRole('alert');
+    await expect(error).toHaveText('来源说明不是有效 JSON，请检查文件格式。');
+    await error.scrollIntoViewIfNeeded();
+    assert.equal(report.writes.slice(startWrites).some(item => item.path === '/api/type-library/imports/preview' || item.path === '/api/type-library/imports/commit'), false, '坏来源文件不得创建预览或入库');
+    await capture('江南来源说明坏JSON明确拒绝');
+    const sourceBytes = Buffer.from(JSON.stringify(source, null, 2));
+    await fs.writeFile(path.join(out, `${size.width}-jiangnan-source-input.json`), sourceBytes);
+    await sourceInput.setInputFiles({ name: '江南来源说明.json', mimeType: 'application/json', buffer: sourceBytes });
+    await expect(error).toHaveCount(0);
+    const loaded = form.getByRole('status').filter({ hasText: '已加载“江南来源说明.json”' });
+    await expect(loaded).toBeVisible();
+    await loaded.scrollIntoViewIfNeeded();
+    await capture('江南加载完整原列口径与原件定位');
+    const previewResponse = await manufacturerAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/preview') && response.request().method() === 'POST', { timeout: 180000 }),
+      () => activateManufacturer(page.getByRole('button', { name: '逐行校验并预览', exact: true })));
+    assert.equal(previewResponse.status(), 200, await previewResponse.text());
+    const request = previewResponse.request().postDataJSON(), preview = await previewResponse.json();
+    await recordManufacturerResponse('jiangnan-preview', previewResponse, preview);
+    assert.deepEqual(request.mapping, mapping);
+    assert.deepEqual(request.series.source, source, '来源附件必须经实际表单保存到预览请求');
+    assert.deepEqual([request.series.u0_v, request.series.u_v, request.series.cores, request.series.origin, request.series.resistance_basis], [declaration.u0_v, declaration.u_v, declaration.cores, declaration.origin, declaration.resistance_basis]);
+    assert.equal(preview.series.resistance_basis, 'stated', '预览必须保留选择的电阻缺项策略');
+    assert.equal(request.series.um_v ?? null, null);
+    assert.equal(request.series.armour_material ?? null, null, '原文只称钢带，不猜镀锌钢等具体类别');
+    for (const key of ['common', 'common_basis', 'modelling']) assert.deepEqual(request.series[key], {}, '加载来源不得填充结构或工况');
+    assert.deepEqual(request.series.standards, []);
+    assert.deepEqual([preview.rows.length, preview.valid_count, preview.error_count, preview.incomplete_count], [9, 9, 0, 9]);
+    assert.deepEqual(preview.execution_standards.items, []);
+    for (const [index, row] of preview.rows.entries()) {
+      assert.equal(row.status, 'incomplete');
+      assert.equal(row.row_number, index + 2);
+      assert.ok(row.missing.includes('20 °C 导体直流电阻'));
+      assert.deepEqual(row.payload.materials, []);
+      assert.equal(row.payload.cable_type, null);
+      assert.deepEqual(row.values.map(value => value.key).sort(), Object.keys(mapping).sort());
+      for (const fact of row.values) {
+        const [displayUnit, siUnit, scale] = units[fact.key], original = originalRows[index][mapping[fact.key]];
+        assert.equal(fact.display_value, original); assert.equal(fact.display_unit, displayUnit); assert.equal(fact.unit, siUnit);
+        assert.ok(Math.abs(fact.value - original * scale) < 1e-12);
+        assert.equal(fact.confidence, 'reference');
+        assert.deepEqual(fact.method, { name: '厂家结构表导入', version: '1.1.0' });
+        assert.deepEqual(fact.source.catalogue, source);
+        assert.deepEqual([fact.source.file, fact.source.file_sha256, fact.source.sheet, fact.source.row, fact.source.column],
+          [uploadName, expectedDigest, sheet.name, index + 2, String.fromCharCode(65 + mapping[fact.key])]);
+      }
+    }
+    await expect(page.getByRole('heading', { name: '核对入库预览', exact: true })).toBeVisible();
+    await capture('江南九规格真实原值与缺项预览');
+    const commit = page.getByRole('button', { name: '确认入库 9 个规格', exact: true });
+    await expect(commit).toBeDisabled();
+    const confirmed = page.getByRole('checkbox', { name: '确认来源与系列声明', exact: true });
+    if (size.width === 1366) { await confirmed.focus(); await expect(confirmed).toBeFocused(); await confirmed.press('Space'); }
+    else await confirmed.check();
+    await expect(confirmed).toBeChecked();
+    const commitResponse = await manufacturerAction(page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/commit') && response.request().method() === 'POST', { timeout: 180000 }), () => activateManufacturer(commit));
+    assert.equal(commitResponse.status(), 201, await commitResponse.text());
+    const receipt = await commitResponse.json();
+    await recordManufacturerResponse('jiangnan-commit', commitResponse, receipt);
+    assert.equal(receipt.created, 9);
+    assert.equal(commitResponse.request().postDataJSON().human_confirmed, true);
+    await expect(page.getByRole('heading', { name: '已保存 9 个规格草稿', exact: true })).toBeVisible();
+    await capture('江南九规格人工确认保存草稿');
+    await activateManufacturer(page.getByRole('button', { name: '打开系列，核对与计算', exact: true }));
+    const series = await api('/api/type-library/series/' + receipt.series_id);
+    assert.equal(series.specs.length, 9);
+    const readbacks = await Promise.all(series.specs.map(spec => api('/api/type-library/specs/' + spec.id)));
+    for (const detail of readbacks) {
+      const expected = preview.rows.find(row => Math.abs(row.area_m2 - detail.spec.area_m2) < 1e-14);
+      assert.ok(expected);
+      assert.deepEqual(detail.values, expected.values, '入库逐值来源必须与人工确认的预览一致');
+      assert.equal(detail.spec.state, 'draft');
+    }
+    await fs.writeFile(path.join(out, `${size.width}-jiangnan-imported-values.json`), JSON.stringify({
+      fixture_csv: 'tests/fixtures/jiangnan_yjv22.csv', uploaded_name: uploadName, csv_sha256: expectedDigest,
+      source_input_sha256: createHash('sha256').update(sourceBytes).digest('hex'), source, series, specifications: readbacks,
+    }, null, 2));
+    const specification = series.specs.find(spec => Math.abs(spec.area_m2 * 1e6 - 95) < 1e-9);
+    assert.ok(specification);
+    await page.getByRole('table', { name: '系列规格', exact: true }).getByRole('button', { name: specification.name, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: specification.name, exact: true });
+    const values = dialog.getByRole('table', { name: '逐项来源', exact: true });
+    await expect(values.getByRole('row')).toHaveCount(5);
+    for (const [key, label] of [['weight', '江南最大重量口径与原件网址'], ['outer_diameter', '江南三乘95原刊86点3毫米外径']]) {
+      const fact = specification.values.find(value => value.key === key), original = source.column_meanings[key];
+      const row = values.getByRole('row', { name: fact.label, exact: true });
+      await expect(row).toContainText('原列口径：' + original.quantity);
+      await expect(row).toContainText('原列单位：' + original.unit);
+      await expect(row.getByRole('cell').nth(1)).toHaveText(`${fact.display_value} ${fact.display_unit}`);
+      await expect(row.getByRole('cell').nth(2)).toContainText(source.locator);
+      const link = row.getByRole('link', { name: '查看来源原件', exact: true });
+      await expect(link).toHaveAttribute('href', source.url);
+      await expect(link).toHaveAttribute('title', source.url);
+      await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      await positionManufacturerSource(row);
+      await expect(row).toBeInViewport({ ratio: 1 });
+      await expect(link).toBeInViewport({ ratio: 1 });
+      await capture(label);
+    }
+    await dialog.getByText('原件声明与限制', { exact: true }).click();
+    const anomaly = metadata.limitations.find(note => note.includes('86.3'));
+    assert.equal(anomaly, '原表3×95 mm²近似外径为86.3 mm，小于相邻规格，按原值保留，须厂家复核。');
+    const note = dialog.getByText(anomaly, { exact: true });
+    await positionManufacturerSource(note);
+    await expect(note).toBeInViewport({ ratio: 1 });
+    await capture('江南86点3原值与来源复核说明');
+    await page.keyboard.press('Escape'); await expect(dialog).toBeHidden();
+
+    // Leave the receipt, locate the saved series through the real library list,
+    // then reload its public address so no in-memory wizard preview can supply it.
+    await activateManufacturer(page.getByRole('button', { name: '全部系列', exact: true }));
+    const seriesSearch = page.getByRole('textbox', { name: '查找系列', exact: true });
+    await seriesSearch.fill(seriesName);
+    const seriesEntry = page.getByRole('table', { name: '型号系列', exact: true })
+      .getByRole('button', { name: seriesName, exact: true });
+    await expect(seriesEntry).toBeVisible();
+    if (size.width === 1366) { await seriesEntry.focus(); await seriesEntry.press('Enter'); }
+    else await seriesEntry.click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBe(receipt.series_id);
+    const savedTable = page.getByRole('table', { name: '系列规格', exact: true });
+    await expect(savedTable.getByRole('row')).toHaveCount(10);
+    await expect(savedTable).toContainText('20 °C 导体直流电阻');
+    await capture('manufacturer-saved-series-reopened');
+    const readPath = '/api/type-library/series/' + encodeURIComponent(receipt.series_id);
+    const [coldResponse] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === readPath && response.request().method() === 'GET', { timeout: 90000 }),
+      page.reload({ waitUntil: 'domcontentloaded' }),
+    ]);
+    assert.equal(coldResponse.status(), 200);
+    const coldSeries = await coldResponse.json();
+    assert.deepEqual(coldSeries, series, '冷刷新实际 GET 必须返回同一系列、九行缺项草稿与原来源');
+    await expect(page.getByRole('tab', { name: '系列与规格', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: seriesName, exact: true })).toBeVisible();
+    await expect(savedTable.getByRole('row')).toHaveCount(10);
+    await capture('manufacturer-saved-series-cold-reload');
+    const coldReadbacks = await Promise.all(series.specs.map(spec => api('/api/type-library/specs/' + encodeURIComponent(spec.id))));
+    assert.deepEqual(coldReadbacks, readbacks, '冷刷新后九个规格原值、SI、单位、草稿版本与来源必须逐项一致');
+    await savedTable.getByRole('button', { name: specification.name, exact: true }).click();
+    const coldDialog = page.getByRole('dialog', { name: specification.name, exact: true });
+    const coldValues = coldDialog.getByRole('table', { name: '逐项来源', exact: true });
+    await expect(coldValues.getByRole('row')).toHaveCount(5);
+    for (const key of Object.keys(mapping)) {
+      const fact = specification.values.find(value => value.key === key);
+      const original = source.column_meanings[key];
+      const row = coldValues.getByRole('row', { name: fact.label, exact: true });
+      await expect(row.getByRole('cell').nth(1)).toHaveText(fact.display_value + ' ' + fact.display_unit);
+      await expect(row).toContainText('原列口径：' + original.quantity);
+      await expect(row).toContainText('原列单位：' + original.unit);
+      await expect(row.getByRole('cell').nth(2)).toContainText(source.locator);
+      await expect(row.getByRole('cell').nth(2)).toContainText(uploadName);
+      await expect(row.getByRole('cell').nth(2)).toContainText('第 4 行');
+      const link = row.getByRole('link', { name: '查看来源原件', exact: true });
+      await expect(link).toHaveAttribute('href', source.url);
+      await expect(link).toHaveAttribute('title', source.url);
+      await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      await positionManufacturerSource(row);
+      await expect(row).toBeInViewport({ ratio: 1 });
+      await expect(link).toBeInViewport({ ratio: 1 });
+      await capture('manufacturer-cold-source-' + key);
+    }
+    await coldDialog.getByText('原件声明与限制', { exact: true }).click();
+    const coldAnomaly = coldDialog.getByText(anomaly, { exact: true });
+    await positionManufacturerSource(coldAnomaly);
+    await expect(coldAnomaly).toBeInViewport({ ratio: 1 });
+    await capture('manufacturer-cold-original-anomaly');
+    await page.keyboard.press('Escape');
+    await expect(coldDialog).toBeHidden();
+    const importWrites = report.writes.slice(startWrites);
+    assert.deepEqual(importWrites, [
+      { method: 'POST', path: '/api/type-library/imports/upload' },
+      { method: 'POST', path: '/api/type-library/imports/preview' },
+      { method: 'POST', path: '/api/type-library/imports/commit' },
+    ], '结构表五步只允许真实上传、预览和确认入库；重开与冷刷新不得计算、批准或另写版本');
+    (report.manufacturerImports ||= []).push({
+      width: size.width, upload: { name: uploadName, sha256: expectedDigest, originalTableSha256: originalTableDigest },
+      source, uploadInspection: inspection, request, preview, receipt, series, readbacks, coldSeries, coldReadbacks, writes: importWrites,
+    });
+    await check('公开厂家 CSV 五步入库后从系列库重开及冷刷新逐值来源一致', true, {
+      fileSha256: expectedDigest, originalTableSha256: originalTableDigest, locator: source.locator,
+      rows: preview.rows.length, incomplete: preview.incomplete_count, errors: preview.error_count,
+      seriesId: receipt.series_id, specificationIds: series.specs.map(spec => spec.id),
+      original95mm2: originalRows[2], missingR20: true, states: readbacks.map(detail => detail.spec.state), writes: importWrites,
+    });
+
     // Distinct PDF intake remains accessible; do not confuse it with CSV/XLS.
     await page.locator('.topbar-actions').getByRole('link', { name: '电缆型号版本', exact: true }).click();
     await expect(page.getByRole('heading', { name: '电缆型号版本', exact: true, level: 1 })).toBeVisible();
@@ -1301,6 +1775,17 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
   }
 
   if (after) {
+    for (const spec of [
+      { table: 'huang-TableA1', record: 'huang-TableA1/r1/density', parameter: 'mass_density', dimension: 'mass_density',
+        label: '密度', unit: 'kg/m3', sourceUnit: 'kg/m³', displayUnit: 'kg/m³', sourceKind: 'literature' },
+      { table: 'iec60287-1-1-table1', record: 'iec60287-1-1-table1/r1/c1', parameter: 'resistivity_20_ohm_m', dimension: 'resistivity',
+        label: '20 °C 电阻率', unit: 'ohm.m', sourceUnit: 'Ω·m', displayUnit: 'Ω·m', sourceKind: 'standard' },
+      { table: 'nielsen-Table1', record: 'nielsen-Table1/r1/capacity', parameter: 'volumetric_heat_capacity', dimension: 'volumetric_heat_capacity',
+        label: '体积热容', unit: 'J/(m3.K)', sourceUnit: 'J/(m³·K)', displayUnit: 'J/(m³·K)', sourceKind: 'literature' },
+      { table: 'iec60287-1-1-table3', record: 'iec60287-1-1-table3/r1/relative_permittivity', parameter: 'relative_permittivity', dimension: 'dimensionless',
+        label: '相对介电常数', unit: '1', sourceUnit: '1', displayUnit: '1（无量纲）', sourceKind: 'standard' },
+    ]) await branch('资料物性 typed 录入与原文单位回读：' + spec.label, () => verifyMaterialQuantity(spec));
+
     const standard = await branch('由真实型号条件声明执行标准并核对原始来源', declareSourcedStandard);
     if (standard) {
       const versionBase = standard.source.version.split('-')[0];

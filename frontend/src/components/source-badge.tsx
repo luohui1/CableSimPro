@@ -9,6 +9,7 @@ export const sourceKinds = {
   calculation: { label: '计算', icon: 'run/run' },
   document: { label: '厂家', icon: 'source/from-document' },
   standard: { label: '标准', icon: 'source/from-standard' },
+  literature: { label: '文献', icon: 'source/from-document' },
   derived: { label: '推导', icon: 'source/derived' },
   library: { label: '引用', icon: 'source/from-library' },
   measurement: { label: '实测', icon: 'source/from-document' },

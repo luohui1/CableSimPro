@@ -48,3 +48,5 @@
 @media (max-width: 700px) {
   .resource-form-grid { grid-template-columns: minmax(0, 1fr); }
 }
+.resource-source-reference { min-width: 0; width: 100%; }
+.resource-source-reference pre { margin: 0; padding: var(--space-2); border: 1px solid var(--line); max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

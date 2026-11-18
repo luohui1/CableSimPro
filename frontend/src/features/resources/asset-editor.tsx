@@ -44,6 +44,16 @@ function parameterRows(release: AssetRelease): Parameter[] {
 }
 const units: Record<string, [number, number]> = { m: [1, 0], mm: [0.001, 0], m2: [1, 0], mm2: [0.000001, 0],
   K: [1, 0], degC: [1, 273.15], delta_K: [1, 0], delta_degC: [1, 0], 'ohm/m': [1, 0], 'ohm/km': [0.001, 0] };
+function unitOptions(dimension: Dimension, selected: string) {
+  // The host accepts canonical and source spellings of the same SI unit. Keep
+  // an imported spelling without presenting indistinguishable duplicate options.
+  const options = new Map<string, string>();
+  for (const unit of quantityKinds[dimension].units) {
+    const label = assetUnit(unit);
+    if (!options.has(label) || unit === selected) options.set(label, unit);
+  }
+  return [...options].map(([label, value]) => ({ label, value }));
+}
 function convert(value: string, from: string, to: string) {
   if (!value.trim() || !Number.isFinite(Number(value))) return value;
   const [a, b] = units[from] || [1, 0], [c, d] = units[to] || [1, 0];
@@ -159,12 +169,12 @@ export function AssetEditor({ open, onClose, onSaved, kinds, asset, resume }: {
             {!preset && <label className="text-field">参数标识<Input aria-label={`参数标识 ${index + 1}`} value={row.name} disabled={locked} maxLength={128} placeholder="字母、数字及点、下划线等" onChange={event => changeParameter(row.key, { name: event.target.value })} /></label>}
             {!preset && <Select label={`量纲 ${index + 1}`} value={row.dimension} disabled={locked} onChange={value => { const dimension = value as Dimension; changeParameter(row.key, { dimension, unit: quantityKinds[dimension].units[0], value: '' }); }} options={Object.entries(quantityKinds).map(([value, detail]) => ({ value, label: detail.label }))} />}
             <label className="text-field">数值<Input aria-label={`参数数值 ${index + 1}`} inputMode="decimal" value={row.value} disabled={locked} onChange={event => changeParameter(row.key, { value: event.target.value })} /></label>
-            <Select label={`单位 ${index + 1}`} value={row.unit} disabled={locked} onChange={value => changeParameter(row.key, { unit: value, value: convert(row.value, row.unit, value) })} options={quantityKinds[row.dimension].units.map(value => ({ value, label: assetUnit(value) }))} />
+            <Select label={`单位 ${index + 1}`} value={row.unit} disabled={locked} onChange={value => changeParameter(row.key, { unit: value, value: convert(row.value, row.unit, value) })} options={unitOptions(row.dimension, row.unit)} />
           </div><div className="resource-form-row"><label><Checkbox checked={row.overridable} disabled={locked} onCheckedChange={value => changeParameter(row.key, { overridable: value === true })} aria-label={`允许研究覆盖参数 ${index + 1}`} /> 允许引用方显式覆盖</label>
             <Button size="compact" disabled={locked} onClick={() => setParameters(rows => rows.filter(item => item.key !== row.key))}>移除参数 {index + 1}</Button></div></fieldset>;
         })}
         <Button size="compact" disabled={locked || parameters.length >= 256} onClick={addParameter}>新增参数</Button>
-        <p className="muted">切换同量纲单位会换算数值并保持物理量。当前版本可录入长度、面积、温度、温差、线电阻、热阻率、热导率、电流和频率；密度、电阻率及无量纲参数暂不能录入。</p>
+        <p className="muted">切换同量纲单位会换算数值并保持物理量。可录入长度、面积、温度、温差、线电阻、热阻率、热导率、电流、频率、密度、电阻率、体积热容和无量纲参数。请逐项填写数值与来源；适用条件不会自动补齐。</p>
       </section>
       <section aria-label="资源来源" className="resource-form-section"><h3>来源</h3>{sources.map((source, index) => {
         const references = referenceData([source]);

@@ -1,4 +1,4 @@
-import { cableSeriesException, engineeringReferenceException, internalTokens } from './visible-names.mjs';
+import { cableSeriesException, engineeringReferenceException, internalTokens, resourceSourceReferenceException } from './visible-names.mjs';
 import { STATUS_WORDS, TASK_NAMES } from '../src/lib/status-vocabulary.ts';
 
 export const categories = { uuid: 'UUID', hash: '长十六进制摘要', pointer: 'JSON 路径', snake: '内部键名', enum: '英文枚举码', edition: '标准版次', internal: '内部标识' };
@@ -10,6 +10,7 @@ export const whitelist = [
   { id: 'hover', reason: '悬停详情不占普通界面，保留定位与核对所需原始标识。' },
   { id: 'folded', reason: '默认折叠内容单独计数；需用户主动展开才可见，不算首层露出。' },
   { id: 'technical', reason: '用户主动进入“技术信息”或“追溯”页签，原始发行身份用于核对。' },
+  { id: 'resource-source-reference', reason: '仅允许材料、模板或标准资源属性中主动展开的结构化出处原文。页面、属性面板、展开容器、原文节点及有效 JSON 对象或数组均须匹配；保留全部匹配作技术追溯记录，周围摘要和其他位置仍检查。' },
   { id: 'original-filename', reason: '原件文件名保留以便工程师辨认和下载同一原件；仅允许文件名内部键名，UUID、摘要仍需追溯层。' },
   { id: 'cable-series-label', reason: '仅允许电缆型号版本目录的厂家系列分组标题 CU/XLPE/LC/PVC；按页面、表格和分组标题 DOM 限定，普通文本、其他页面、扩展路径与内部枚举仍检查。' },
   { id: 'engineering-notation', reason: 'GB/T 标准号、电缆型号与额定电压、SI 单位、量符号属于工程信息；沿用 visible-names.mjs 的窄工程记号规则，不作内部标识。' },
@@ -44,6 +45,8 @@ export function identifyText(text) {
   return matches.sort((a, b) => a.offset - b.offset);
 }
 export function exceptionFor(hit) {
+  const sourceReference = resourceSourceReferenceException(hit);
+  if (sourceReference) return whitelist.find(item => item.id === sourceReference);
   if (['hover', 'folded', 'technical'].includes(hit.layer)) return whitelist.find(item => item.id === hit.layer);
   if (/^\/settings\/compute(?:\?|$)/.test(hit.page || '') && ['#hpc-directory', '#hpc-environment'].includes(hit.selector) && /^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\/?$/.test(hit.text)) return whitelist.find(item => item.id === 'connection-directory');
   if (hit.category === 'internal' && /^(?:A|W)\/km$/.test(hit.token)) return whitelist.find(item => item.id === 'engineering-notation');
