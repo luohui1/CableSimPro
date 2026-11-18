@@ -36,13 +36,24 @@ from test_formal_contracts import reference_model
     (1.2355, 'ohm/km', 'quantity', '1.236', 'Ω/km'),
     (0.00393, '1/K', 'quantity', '0.00393', '1/°C'),
     (-0.0001, 'A', 'quantity', '0', 'A'),
-    (1.234567891234e-12, 'F/m', 'quantity', '1.235E-12', 'F/m'),
+    # Thermal compounds keep K as written in IEC 60287, never °C·m/W.
+    (1.2, 'K·m/W', 'quantity', '1.2', 'K·m/W'),
+    (0.3549, 'K*m/W', 'quantity', '0.3549', 'K·m/W'),
+    (2.0e6, 'J/(m³·K)', 'quantity', '2000000', 'J/(m³·K)'),
+    # Customary per-length units; a customer document never shows E notation.
+    (2.198e-10, 'F/m', 'quantity', '0.2198', 'μF/km'),
+    (1.234567891234e-12, 'F/m', 'quantity', '0.001235', 'μF/km'),
+    (4.123e-7, 'H/m', 'quantity', '0.4123', 'mH/km'),
+    (1.7241e-8, 'Ω·m', 'quantity', '0.01724', 'Ω·mm²/m'),
+    (0.0004, '1', 'quantity', '0.0004', '1'),
+    (3.2e-9, '1', 'quantity', '0.0000000032', '1'),
 ])
 def test_explicit_engineering_conversion_examples(value, unit, role, text, target):
     original = raw_text(value)
     display = number_display(value, unit, role)
     assert (display['text'], display['unit']) == (text, target)
     assert display['rounding'] == 'ROUND_HALF_EVEN'
+    assert 'E' not in display['text']
     assert raw_text(value) == original
 
 
