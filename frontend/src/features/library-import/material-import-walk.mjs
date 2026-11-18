@@ -8,6 +8,80 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const pointer = (...parts) => '/' + parts.map(part => String(part).replaceAll('~', '~0').replaceAll('/', '~1')).join('/');
 const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
   ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+const observed = () => ({ at: new Date().toISOString(), monotonic_ms: performance.now() });
+
+/** A cold development document may cancel the first StrictMode subscription.
+ * Every such cancellation remains in the raw ledger and needs its own complete,
+ * same-document replacement. This is deliberately limited to these three reads. */
+export function verifyMaterialReload(audit, expectedReads) {
+  const reload = audit.reload;
+  assert.equal(expectedReads.length, 3);
+  assert.equal(new Set(expectedReads.map(item => item.url)).size, 3);
+  assert.equal(typeof reload.series_id, 'string'); assert.ok(reload.series_id);
+  assert.deepEqual(expectedReads.map(item => item.url), ['/api/type-library/vocabulary', '/api/type-library/series',
+    `/api/type-library/series/${encodeURIComponent(reload.series_id)}`].map(endpoint => new URL(endpoint, reload.before.url).href));
+  assert.deepEqual(reload.before.pending_requests, []);
+  assert.deepEqual(reload.before.failed_request_ids, []);
+  assert.equal(reload.after.document_epoch, reload.before.document_epoch + 1);
+  assert.ok(reload.after.time_origin > reload.before.time_origin, '刷新必须创建新的真实文档');
+  assert.equal(reload.after.url, reload.before.url);
+  const navigations = audit.navigation_requests.filter(item => item.phase === 'series-reload');
+  assert.equal(navigations.length, 1, '刷新仅对应一个主文档请求');
+  const navigation = navigations[0];
+  assert.equal(navigation.url, reload.before.url);
+  assert.equal(navigation.document_epoch, reload.before.document_epoch);
+  assert.ok(navigation.started.monotonic_ms >= reload.before.observed.monotonic_ms);
+  assert.equal(navigation.document_epoch_after, reload.after.document_epoch);
+  assert.ok(navigation.committed?.monotonic_ms >= reload.before.observed.monotonic_ms);
+  assert.ok(navigation.finished, '新文档请求必须实际完成');
+  assert.equal(navigation.failed, undefined);
+  const receipts = [], reads = [];
+  for (const expected of expectedReads) {
+    const requests = audit.requests.filter(item => item.phase === 'series-reload'
+      && item.document_epoch === reload.after.document_epoch && item.method === 'GET' && item.url === expected.url);
+    const cancelled = audit.failed_requests.filter(item => requests.some(request => request.id === item.id));
+    assert.ok(cancelled.length <= 1, '同一读取不允许反复取消');
+    assert.equal(requests.length, 1 + cancelled.length, '每条读取只能有一个完整请求及至多一次可解释的开发挂载取消');
+    const replacements = requests.filter(item => !cancelled.some(failure => failure.id === item.id));
+    assert.equal(replacements.length, 1);
+    const replacement = replacements[0];
+    assert.equal(replacement.status, 200);
+    assert.ok(replacement.started && replacement.headers_received && replacement.finished);
+    assert.ok(replacement.started.monotonic_ms >= navigation.committed.monotonic_ms);
+    assert.ok(replacement.headers_received.monotonic_ms >= replacement.started.monotonic_ms);
+    assert.ok(replacement.finished.monotonic_ms >= replacement.started.monotonic_ms);
+    assert.equal(replacement.failed, undefined);
+    assert.equal(replacement.body_error, undefined);
+    assert.equal(replacement.response_finished_error, null);
+    assert.ok(replacement.body_observed && replacement.raw?.size > 0);
+    assert.match(replacement.raw.sha256, /^[a-f0-9]{64}$/);
+    const response = audit.reload_responses.filter(item => item.request_id === replacement.id);
+    assert.equal(response.length, 1, '正文必须关联同一个实际 Request');
+    assert.deepEqual(response[0].raw, replacement.raw);
+    assert.deepEqual(response[0].body, expected.body, `刷新后的${expected.label}须与此前真实读取的完整内容一致`);
+    reads.push({ label: expected.label, request_id: replacement.id, url: expected.url, raw: replacement.raw });
+    if (cancelled.length) {
+      assert.equal(reload.development_mode, true, '只有明确启用的开发模式才允许这组三条读取的生命周期取消');
+      const failure = cancelled[0], original = requests.find(item => item.id === failure.id);
+      assert.equal(failure.error, 'net::ERR_ABORTED');
+      assert.equal(failure.method, 'GET'); assert.equal(failure.url, expected.url);
+      assert.equal(failure.phase, 'series-reload'); assert.equal(failure.document_epoch, reload.after.document_epoch);
+      assert.ok(original.started && original.failed && !original.finished);
+      assert.deepEqual(failure.started, original.started); assert.deepEqual(failure.failed, original.failed);
+      assert.ok(original.failed.monotonic_ms >= original.started.monotonic_ms);
+      assert.ok(original.started.monotonic_ms >= navigation.committed.monotonic_ms);
+      assert.ok(replacement.id > original.id && replacement.started.monotonic_ms >= original.started.monotonic_ms);
+      receipts.push({ cancelled: failure, replacement_request_id: replacement.id, replacement_raw: replacement.raw,
+        document_epoch: reload.after.document_epoch, navigation_request_id: navigation.id, url: expected.url,
+        reason: '新文档开发挂载的首个读取取消，唯一同文档替代读取已完整结束并逐项核对正文' });
+    }
+  }
+  // Preserve original failure order; an extra URL, document, method or failure
+  // cannot disappear merely because a later request for a similar URL succeeds.
+  receipts.sort((a, b) => audit.failed_requests.indexOf(a.cancelled) - audit.failed_requests.indexOf(b.cancelled));
+  assert.deepEqual(audit.failed_requests, receipts.map(item => item.cancelled));
+  return { lifecycle_cancellations: receipts, verified_reads: reads };
+}
 
 async function declaredReference(root, filename, id, expectedSource, expectedRecord, role, property, title) {
   const plugin = path.join(root, 'plugins/cablesim.standards-basis');
@@ -48,22 +122,61 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
   const wrongUnitDeclarations = { ...declarations, insulation: { volumetric_heat_capacity: {
     ...capacity.declaration, unit: density.declaration.unit,
   } } };
-  const audit = { references: [density, capacity], responses: [], requests: [], failed_requests: [], console_errors: [], network_errors: [], readbacks: [], screenshots: [] };
-  const tasks = [], pending = new Set(), requestIds = new WeakMap();
-  let sequence = 0;
+  const audit = { references: [density, capacity], responses: [], requests: [], failed_requests: [], console_errors: [], network_errors: [], readbacks: [], screenshots: [],
+    navigation_requests: [], document_events: [], reload_responses: [], lifecycle_cancellations: [] };
+  const tasks = [], pending = new Set(), bodyPending = new Set(), requestIds = new WeakMap(), requestRecords = new WeakMap();
+  let sequence = 0, documentEpoch = 0, phase = 'material-import', navigationRequest;
+  let reloadURLs = new Set();
   const requestId = request => { if (!requestIds.has(request)) requestIds.set(request, ++sequence); return requestIds.get(request); };
   const onRequest = request => {
-    if (!new URL(request.url()).pathname.startsWith('/api/')) return;
-    const id = requestId(request); pending.add(id);
-    audit.requests.push({ id, method: request.method(), url: request.url() });
+    const record = { id: requestId(request), method: request.method(), url: request.url(), started: observed(),
+      phase, document_epoch: documentEpoch, resource_type: request.resourceType(), navigation: request.isNavigationRequest() };
+    requestRecords.set(request, record);
+    if (record.navigation && request.frame() === page.mainFrame()) {
+      navigationRequest = record; audit.navigation_requests.push(record);
+    }
+    if (!new URL(record.url).pathname.startsWith('/api/')) return;
+    pending.add(record.id); audit.requests.push(record);
   };
-  const onFinished = request => pending.delete(requestId(request));
+  const onFrameNavigated = frame => {
+    if (frame !== page.mainFrame()) return;
+    const event = { observed: observed(), url: frame.url(), phase, document_epoch: documentEpoch, same_document: !navigationRequest };
+    if (navigationRequest) {
+      documentEpoch++;
+      navigationRequest.document_epoch_after = documentEpoch;
+      navigationRequest.committed = event.observed;
+      event.document_epoch = documentEpoch; event.navigation_request_id = navigationRequest.id;
+      navigationRequest = undefined;
+    }
+    audit.document_events.push(event);
+  };
+  const onFinished = request => {
+    const record = requestRecords.get(request);
+    if (record) { record.finished = observed(); record.timing = request.timing(); pending.delete(record.id); }
+  };
   const onFailed = request => {
-    pending.delete(requestId(request));
-    audit.failed_requests.push({ id: requestId(request), method: request.method(), url: request.url(), error: request.failure()?.errorText });
+    const record = requestRecords.get(request), failed = observed();
+    if (record) { record.failed = failed; record.timing = request.timing(); pending.delete(record.id); }
+    audit.failed_requests.push({ id: requestId(request), method: request.method(), url: request.url(), error: request.failure()?.errorText,
+      phase: record?.phase ?? null, document_epoch: record?.document_epoch ?? null, started: record?.started ?? null, failed });
   };
   const onConsole = entry => { if (entry.type() === 'error') audit.console_errors.push({ message: entry.text(), location: entry.location() }); };
   const onResponse = response => {
+    const record = requestRecords.get(response.request());
+    if (record) { record.status = response.status(); record.headers_received = observed(); }
+    if (record?.phase === 'series-reload' && record.method === 'GET' && reloadURLs.has(record.url)) {
+      bodyPending.add(record.id);
+      tasks.push((async () => {
+        const bytes = await response.body(); record.body_observed = observed();
+        const finished = await response.finished();
+        record.response_finished_observed = observed(); record.response_finished_error = finished ? String(finished) : null;
+        if (finished) { record.body_error = String(finished); return; }
+        const raw = await saveRawResponse(response, path.join(out, `${viewport.width}-material-import-reload-read-${record.id}-raw.json`));
+        assert.equal(raw.sha256, hash(bytes)); assert.equal(raw.size, bytes.length);
+        record.raw = raw;
+        audit.reload_responses.push({ request_id: record.id, raw, body: JSON.parse(bytes.toString('utf8')) });
+      })().catch(error => { record.body_error = String(error); }).finally(() => bodyPending.delete(record.id)));
+    }
     if (!new URL(response.url()).pathname.startsWith('/api/') || response.status() < 400) return;
     tasks.push((async () => {
       const raw = await saveRawResponse(response, path.join(out, `${viewport.width}-material-import-http-error-${requestId(response.request())}.json`));
@@ -155,8 +268,9 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
   }
   await page.goto(base + '/resources/cables/structure-import');
   await expect(page.getByRole('button', { name: '选择结构表文件', exact: true })).toBeEnabled();
+  audit.initial_document = { ...await page.evaluate(() => ({ url: location.href, time_origin: performance.timeOrigin })), document_epoch: documentEpoch, observed: observed() };
   page.on('request', onRequest); page.on('requestfinished', onFinished); page.on('requestfailed', onFailed);
-  page.on('console', onConsole); page.on('response', onResponse);
+  page.on('console', onConsole); page.on('response', onResponse); page.on('framenavigated', onFrameNavigated);
   try {
     // Reuse the original workbook already downloaded through the main walk's
     // visible sample link. The server independently recognizes its byte hash.
@@ -430,8 +544,31 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await page.getByRole('button', { name: '打开系列，核对与计算', exact: true }).click();
     await expect(page.getByRole('table', { name: '系列规格', exact: true }).getByRole('row')).toHaveCount(12);
     await expect.poll(() => pending.size).toBe(0);
-    const refreshed = await afterAction(page.waitForResponse(item => new URL(item.url()).pathname === `/api/type-library/series/${saved.series_id}`
-      && item.request().method() === 'GET'), () => page.reload());
+    assert.deepEqual(audit.failed_requests, []);
+    const beforeList = await read('/api/type-library/series', 'before-reload-list');
+    const beforeDetail = await read(`/api/type-library/series/${saved.series_id}`, 'before-reload-series');
+    const expectedReads = [
+      { label: '词表', url: base + '/api/type-library/vocabulary', body: vocabulary },
+      { label: '系列列表', url: base + '/api/type-library/series', body: beforeList },
+      { label: '系列详情', url: base + `/api/type-library/series/${saved.series_id}`, body: beforeDetail },
+    ];
+    assert.equal(beforeList.items.filter(item => item.id === saved.series_id).length, 1);
+    assert.equal(beforeList.items.find(item => item.id === saved.series_id).spec_count, saved.created);
+    assert.deepEqual(beforeDetail.specs.map(item => item.id), saved.specs.map(item => item.id));
+    audit.reload = { series_id: saved.series_id, development_mode: process.env.E2E_DEV === '1', before: { ...await page.evaluate(() => ({ url: location.href, time_origin: performance.timeOrigin })),
+      document_epoch: documentEpoch, observed: observed(), pending_requests: [...pending], failed_request_ids: audit.failed_requests.map(item => item.id) } };
+    assert.equal(audit.reload.before.time_origin, audit.initial_document.time_origin);
+    phase = 'series-reload'; reloadURLs = new Set(expectedReads.map(item => item.url));
+    // A response-header event alone can belong to the cancelled subscription.
+    // Wait for the real completed Request, then retain that same response body.
+    const refreshedRequest = await afterAction(page.waitForEvent('requestfinished', { predicate: request => {
+      const record = requestRecords.get(request);
+      return record?.phase === 'series-reload' && record.document_epoch === audit.reload.before.document_epoch + 1
+        && request.url() === base + `/api/type-library/series/${saved.series_id}` && request.method() === 'GET';
+    } }), () => page.reload());
+    audit.reload.after = { ...await page.evaluate(() => ({ url: location.href, time_origin: performance.timeOrigin })),
+      document_epoch: documentEpoch, observed: observed() };
+    const refreshed = await refreshedRequest.response(); assert.ok(refreshed);
     const refreshedBody = await refreshed.json();
     assert.equal(refreshed.status(), 200); assert.equal(await refreshed.finished(), null);
     const refreshedRaw = await saveRawResponse(refreshed, path.join(out, `${viewport.width}-material-import-refreshed-series-raw.json`));
@@ -442,10 +579,14 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
     await expect(page.getByRole('table', { name: '系列规格', exact: true }).getByRole('row')).toHaveCount(12);
     await shot('刷新系列仍为未发布草稿');
-    await expect.poll(() => pending.size).toBe(0); await Promise.all(tasks);
+    await expect.poll(() => pending.size).toBe(0);
+    await expect.poll(() => bodyPending.size).toBe(0); await Promise.all(tasks);
+    const lifecycle = verifyMaterialReload(audit, expectedReads);
+    audit.lifecycle_cancellations = lifecycle.lifecycle_cancellations; audit.reload.verified_reads = lifecycle.verified_reads;
     assert.equal(audit.requests.filter(item => item.method === 'POST' && item.url.endsWith('/imports/commit')).length, 1);
     assert.equal(audit.requests.filter(item => item.method === 'POST' && /\/runs(?:\?|$)/.test(item.url)).length, 0);
-    assert.deepEqual(audit.failed_requests, []); assert.deepEqual(audit.console_errors, []); assert.deepEqual(audit.network_errors, []);
+    assert.deepEqual(audit.failed_requests, audit.lifecycle_cancellations.map(item => item.cancelled));
+    assert.deepEqual(audit.console_errors, []); assert.deepEqual(audit.network_errors, []);
     audit.outcome = 'passed';
     report.checks.push(`${viewport.width}：人民原手册90/250°C及≤5s按许可上限只读呈现；明确补充参考参数后，原有全部值/单位/出处和0.0005m列示精度不变，11规格两温限及完整来源经预览请求、入库Types和刷新系列逐项回读，未制造厂家导体类别或研究故障时长。`);
     report.checks.push(`${viewport.width}：真实人民三芯表通过可见控件录入导体铜密度和XLPE热容文献参考；空值与重复项明确处理，错误单位11行拒绝且未入库，纠正后11规格人工保存并经旧Types回读；屏蔽密度仍空、纵向电阻不变、逐字段出处完整，刷新后仍为草稿且未自动运行计算。`);
@@ -480,6 +621,6 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     audit.pending_requests = [...pending];
     await fs.writeFile(path.join(out, `${viewport.width}-material-import-summary.json`), JSON.stringify(audit, null, 2));
     page.off('request', onRequest); page.off('requestfinished', onFinished); page.off('requestfailed', onFailed);
-    page.off('console', onConsole); page.off('response', onResponse);
+    page.off('console', onConsole); page.off('response', onResponse); page.off('framenavigated', onFrameNavigated);
   }
 }
