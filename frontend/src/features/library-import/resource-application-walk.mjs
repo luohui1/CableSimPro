@@ -241,7 +241,7 @@ export async function observeStudyOpening({ page, base, viewport, out, write, wo
  * capture, review, publication, preview and adoption goes through visible UI. */
 export async function walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
-  const audit = { scope: '真实保存输入的部件与研究模板；参考分档，不授予工程批准', setup: [], http: [], read_only_checks: [], components: [], study: null, study_opening: null };
+  const audit = { scope: '真实保存输入的部件与研究模板；参考分档，不授予工程批准', setup: [], http: [], read_only_checks: [], focus_outcomes: [], components: [], study: null, study_opening: null };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-applications-${name}.json`), JSON.stringify(value, null, 2));
   async function decoded(response, endpoint, method) {
     const body = await response.body();
@@ -270,6 +270,25 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
     assert.equal(response.request().headers()['x-cablesim-actor'], 'human');
     const value = await response.json(); await recordResponse(`applications-${name}`, response, value);
     return { request: response.request().postDataJSON(), value };
+  }
+  async function adoptedNotice(revision, label, study = false) {
+    const notice = page.getByRole('status', { name: '采用结果回执', exact: true });
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toContainText(study ? `工程输入仍为修订 ${revision}；没有启动计算。` : `已采用到型号输入修订 ${revision}，固定来源与逐字段变化已保存。`);
+    await expect(notice).toBeFocused();
+    await expect(notice).toBeInViewport({ ratio: 1 });
+    const actual = await notice.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { focused: document.activeElement === element, text: element.innerText,
+        position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        viewport: { width: innerWidth, height: innerHeight } };
+    });
+    assert.equal(actual.focused, true);
+    assert.ok(actual.position.x >= 0 && actual.position.y >= 0
+      && actual.position.x + actual.position.width <= actual.viewport.width
+      && actual.position.y + actual.position.height <= actual.viewport.height);
+    audit.focus_outcomes.push({ label, revision, ...actual, passed: true });
+    await write('focus-outcomes', audit.focus_outcomes);
   }
   async function projects() {
     const rows = [];
@@ -446,6 +465,13 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
         assert.deepEqual(after.domain.provenance[pathname], targetBefore.domain.provenance[pathname], '未选对象的出处不变：' + pathname);
     }
     assert.deepEqual((await readApi(`/api/library/resources/applications/${frozen.asset.id}/evidence`)).source, frozen.evidence.source);
+    await adoptedNotice(after.revision, label);
+    await expect(page.getByRole('combobox', { name: '采用目标型号', exact: true })).toContainText(`输入修订 ${after.revision}`);
+    await expect(page.getByText('此材料标识已存在。请另取独立标识，或明确选择复用并核对全部材料内容。', { exact: true })).toHaveCount(0);
+    if (preview.value.material_action === 'create') {
+      await expect(page.getByText(`此独立材料已在本次采用中创建，并已回读输入修订 ${after.revision}。再次采用仍需选择其他独立标识或明确复用。`, { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: '预览目标采用变化', exact: true })).toBeDisabled();
+    }
     await capture(label + '人工采用后保存回读');
     await page.getByRole('link', { name: '打开目标型号并核对或撤销', exact: true }).click();
     const undo = page.getByRole('button', { name: '撤销', exact: true }); await expect(undo).toBeEnabled();
@@ -551,6 +577,7 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       assert.deepEqual(saved.definition, preview.value.definition);
       const savedRuns = await readApi(`/api/workspaces/${target.id}/studies/${saved.id}/runs?view=summary&after=0&limit=20`);
       assert.deepEqual(savedRuns.items, []); assert.equal(savedRuns.next_cursor, null);
+      await adoptedNotice(target.revision, '研究模板', true);
       await capture('研究模板仅保存研究而未运行');
       const openStudy = page.getByRole('button', { name: '打开新保存研究', exact: true });
       await expect(openStudy).toBeEnabled();
