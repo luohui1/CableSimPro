@@ -2,9 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { walkthrough } from './verify-workbench-support.mjs';
+import { walkResourceApplications } from '../src/features/library-import/resource-application-walk.mjs';
 
 // Operate the real isolated application. API reads only corroborate what was
-// selected or imported in the UI; no seed repair, mocked responses or API writes.
+// selected or imported in the UI; no seed repair or mocked responses. The reused
+// saved-input application walk separately records its isolated target setup.
 await walkthrough('resources', async ({ page, expect, base, api, choose, capture, step, check, size, tag, out, report }) => {
   const after = report.phase === 'after';
   const marker = `${tag}-${size.width}`.replace(/[^A-Za-z0-9_.:/-]/g, '-');
@@ -30,6 +32,182 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       finally { page.off('dialog', leave); }
       return undefined;
     }
+  }
+
+  async function savedInputApplications() {
+    // The imported T3 walk prepares separate blank/copy targets through existing
+    // APIs and records that setup explicitly. Every new resource capture,
+    // review, publication, adoption and undo below is a real visible UI action.
+    const entryWrites = report.writes.length;
+    const beforeEntry = referenceWorkspace ? await api('/api/workspaces/' + referenceWorkspace.id) : null;
+    for (const group of ['materials', 'templates']) {
+      await openGroup(group);
+      const entry = main.getByRole('link', { name: '从保存输入建立与应用资源', exact: true });
+      await expect(entry).toBeVisible();
+      const entrySource = new URL(page.url());
+      const expectedTheme = entrySource.searchParams.get('theme') || await page.locator('html').getAttribute('data-theme');
+      check('应用入口沿用当前已显示主题', ['light', 'dark'].includes(expectedTheme),
+        { group, source: page.url(), theme: expectedTheme });
+      const href = await entry.getAttribute('href'), destination = new URL(href, page.url());
+      check('应用入口链接保留主题且不携带目录选择', destination.origin === new URL(base).origin &&
+        destination.pathname === '/resources/cables/structure-import' &&
+        destination.searchParams.get('theme') === expectedTheme && !destination.searchParams.has('item'),
+        { group, href, sourceItem: entrySource.searchParams.get('item'), theme: expectedTheme });
+      await capture(group + '-saved-input-application-entry');
+      if (size.width === 1366) { await entry.focus(); await entry.press('Enter'); }
+      else await entry.click();
+      await expect(page).toHaveURL(/\/resources\/cables\/structure-import(?:\?|$)/);
+      const opened = new URL(page.url());
+      check('实际应用入口保留主题且未带入旧资源', opened.searchParams.get('theme') === expectedTheme &&
+        !opened.searchParams.has('item'), { group, url: page.url(), sourceItem: entrySource.searchParams.get('item'),
+          input: size.width === 1366 ? 'keyboard' : 'mouse', theme: expectedTheme });
+      const tab = page.getByRole('tab', { name: '部件与研究模板', exact: true });
+      if (size.width === 1366) { await tab.focus(); await tab.press('Enter'); }
+      else await tab.click();
+      await expect(tab).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: '从保存输入创建参考草稿', exact: true })).toBeVisible();
+      await capture(group + '-saved-input-application-ready');
+    }
+    const afterEntry = beforeEntry ? await api('/api/workspaces/' + referenceWorkspace.id) : null;
+    check('材料与模板入口只打开真实应用工作区，不代替选择或改写型号',
+      report.writes.length === entryWrites && JSON.stringify(afterEntry) === JSON.stringify(beforeEntry),
+      { writes: report.writes.slice(entryWrites), workspace: referenceWorkspace?.id ?? null });
+    const afterAction = async (waiter, action) => {
+      const [response] = await Promise.all([waiter, Promise.resolve().then(action)]);
+      return response;
+    };
+    const select = async (label, option) => {
+      if (size.width === 1920) { await choose(label, option); return; }
+      const field = page.getByRole('combobox', { name: label, exact: true });
+      await expect(field).toBeEnabled();
+      await field.focus(); await expect(field).toBeFocused(); await field.press('Enter');
+      const choices = page.getByRole('option');
+      await expect(page.getByRole('option', { name: option, exact: true })).toBeVisible();
+      await expect(page.locator('[role="option"]:focus')).toHaveCount(1);
+      const index = await choices.evaluateAll((items, text) =>
+        items.findIndex(item => item.textContent.replace(/✓/g, '').trim() === text), option);
+      check('应用资源键盘选择包含真实目标', index >= 0, { label, option, index });
+      await page.keyboard.press('Home'); await expect(choices.first()).toBeFocused();
+      for (let i = 1; i <= index; i++) {
+        await page.keyboard.press('ArrowDown'); await expect(choices.nth(i)).toBeFocused();
+      }
+      await page.keyboard.press('Enter');
+      await expect(field).toHaveText(option); await expect(field).toBeFocused();
+    };
+    const responseIndex = [];
+    const recordResponse = async (name, response, value) => {
+      const raw = await response.body();
+      const file = String(size.width) + '-' + name.replace(/[\/\\]/g, '-') + '-raw.json';
+      await fs.writeFile(path.join(out, file), raw);
+      const request = response.request(), headers = request.headers();
+      const record = { name, endpoint: new URL(response.url()).pathname, method: request.method(),
+        request: request.postDataJSON(), request_headers: Object.fromEntries(
+          ['content-type', 'x-cablesim-actor'].filter(key => headers[key] !== undefined).map(key => [key, headers[key]])),
+        status: response.status(), response: value,
+        raw_response: { file, bytes: raw.length, sha256: createHash('sha256').update(raw).digest('hex') } };
+      responseIndex.push(record);
+      await fs.writeFile(path.join(out, String(size.width) + '-applications-visible-response-index.json'),
+        JSON.stringify(responseIndex, null, 2));
+    };
+    const applicationReport = { checks: [] };
+    const applicationCapture = async label => {
+      await page.waitForFunction(() => [...document.querySelectorAll('.dialog-stage')]
+        .every(stage => Number(getComputedStyle(stage).opacity) >= .999));
+      const shot = await capture('saved-input-application-' + label);
+      for (const dialog of await page.getByRole('dialog').all()) {
+        await expect(dialog.locator('.dialog-title')).toBeInViewport({ ratio: 1 });
+        for (const button of await dialog.locator('.dialog-actions button').all())
+          await expect(button).toBeInViewport({ ratio: 1 });
+      }
+      return shot;
+    };
+    // The upstream helper records successful UI responses and API fixture
+    // readback bodies. Observe failed page responses here before its status assertion can
+    // throw; this observer never replaces a request, response or application state.
+    const failedResponses = [], failedResponseTasks = [], observerErrors = [];
+    const onFailedResponse = response => {
+      const url = new URL(response.url());
+      if (response.status() < 400 || url.origin !== new URL(base).origin || !url.pathname.startsWith('/api/')) return;
+      const record = { sequence: failedResponses.length + 1, endpoint: url.pathname,
+        query: url.search, status: response.status(), statusText: response.statusText() };
+      failedResponses.push(record);
+      const task = (async () => {
+        let stage = 'request';
+        try {
+          const request = response.request(), requestHeaders = request.headers(), responseHeaders = response.headers();
+          const safeHeaders = headers => Object.fromEntries(
+            ['content-type', 'content-length', 'x-cablesim-actor'].filter(key => headers[key] !== undefined).map(key => [key, headers[key]]));
+          const prefix = String(size.width) + '-applications-failed-http-' + String(record.sequence).padStart(3, '0');
+          const requestBody = request.postDataBuffer();
+          record.method = request.method();
+          record.request_headers = safeHeaders(requestHeaders);
+          record.response_headers = safeHeaders(responseHeaders);
+          record.request_body = { available: requestBody !== null };
+          if (requestBody !== null) {
+            stage = 'write_request_body';
+            const file = prefix + '-request.body';
+            await fs.writeFile(path.join(out, file), requestBody);
+            record.request_body = { available: true, file, bytes: requestBody.length,
+              sha256: createHash('sha256').update(requestBody).digest('hex') };
+          }
+          stage = 'response_body';
+          const raw = await response.body(), file = prefix + '-response.body';
+          stage = 'write_response_body';
+          await fs.writeFile(path.join(out, file), raw);
+          record.raw_response = { file, bytes: raw.length, sha256: createHash('sha256').update(raw).digest('hex') };
+        } catch (error) {
+          record.observer_error = { stage, message: error instanceof Error ? error.message : String(error) };
+          observerErrors.push(new Error('应用失败响应存证 ' + record.sequence + ' / ' + stage + ': ' + record.observer_error.message, { cause: error }));
+        }
+      })();
+      failedResponseTasks.push(task);
+    };
+    let applicationError, applicationFailed = false;
+    page.on('response', onFailedResponse);
+    try {
+      await walkResourceApplications({ page, base, viewport: size, out, expect,
+        capture: applicationCapture, select, afterAction, recordResponse, report: applicationReport });
+    } catch (error) {
+      applicationFailed = true; applicationError = error;
+    } finally {
+      page.off('response', onFailedResponse);
+      await Promise.all(failedResponseTasks);
+      try {
+        await fs.writeFile(path.join(out, String(size.width) + '-applications-failed-http-index.json'),
+          JSON.stringify({ scope: 'Same-origin failed page API responses during the real saved-input application walk; API fixture evidence remains in the upstream setup and HTTP indexes.',
+            responses: failedResponses, observerErrors: observerErrors.map(error => error.message) }, null, 2));
+      } catch (error) {
+        observerErrors.push(new Error('应用失败响应索引写盘: ' + (error instanceof Error ? error.message : String(error)), { cause: error }));
+      }
+    }
+    if (observerErrors.length) {
+      const errors = applicationFailed ? [applicationError, ...observerErrors] : observerErrors;
+      throw new AggregateError(errors, errors.map(error => error instanceof Error ? error.message : String(error)).join('\n'));
+    }
+    if (applicationFailed) throw applicationError;
+    const summaryFile = String(size.width) + '-applications-summary.json';
+    const summary = JSON.parse(await fs.readFile(path.join(out, summaryFile), 'utf8'));
+    const parts = summary.components.map(item => item.capture.evidence.selection.part).sort();
+    check('三类真实部件完成捕获发布、目标字段采用与原型号界面撤销',
+      JSON.stringify(parts) === JSON.stringify(['common_layer', 'conductor', 'core_layer']) &&
+      summary.components.every(item => item.capture.asset.status === 'published' &&
+        item.restored.revision === item.readback.revision + 1 &&
+        JSON.stringify(item.restored.domain) === JSON.stringify(item.target_before.domain)),
+      { summaryFile, parts, componentCount: summary.components.length });
+    const study = summary.study;
+    check('保存研究模板完成固定来源发布、明确映射采用与原研究入口回读，未自动运行',
+      applicationReport.checks.length > 0 && !!study &&
+      study.capture.asset.status === 'published' && study.adopted.value.run_started === false &&
+      study.adopted.value.approval === 'not_granted' && study.automatic_run_requests.length === 0 &&
+      study.opened_runs.items.length === 0 && study.opened_runs.next_cursor === null &&
+      JSON.stringify(study.opened_target.domain) === JSON.stringify(study.target_before.domain) &&
+      JSON.stringify(study.opened_study.definition) === JSON.stringify(study.saved.definition) &&
+      summary.study_opening?.outcome === 'passed',
+      { summaryFile, openedUrl: study?.opened_url, runRequests: study?.automatic_run_requests,
+        source: study?.capture.evidence.source, setupIsFixtureOnly: true });
+    report.resourceApplications ||= [];
+    report.resourceApplications.push({ ...size, summaryFile, checks: applicationReport.checks,
+      responseCount: responseIndex.length, setupIsFixtureOnly: true });
   }
 
   async function openCableVersions() {
@@ -1084,13 +1262,41 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     if (after && versions && kind === 'material') await branch(`${groupTitles[group]}历史固定引用与新版本资格`, () => verifyPinnedHistory(group, versions));
     if (after && group === 'templates') await branch('核对组织模板应用契约边界', async () => {
       await openGroup(group);
+      const writesBefore = report.writes.length;
+      const genericId = versions?.derived.id || typed?.id || imported?.id;
+      check('普通组织模板边界使用本轮真实建立的版本', !!genericId);
+      check('普通组织模板边界有真实隔离目标', !!referenceWorkspace,
+        '型号创建步骤未完成，不能用空目标证明原工程不变。');
+      const generic = await api('/api/foundation/assets/' + genericId);
+      const targetBefore = await api('/api/workspaces/' + referenceWorkspace.id);
+      const selected = await searchResource(group, generic.name, generic.version);
+      check('普通模板负向检查选中准确版本', selected?.id === genericId &&
+        ['installation', 'study_template'].includes(selected.kind) &&
+        JSON.stringify(selected) === JSON.stringify(generic), { expected: genericId, selected: selected?.id });
       await main.locator('summary').filter({ hasText: '模板作用域' }).click();
-      await expect(main).toContainText('当前版本暂不能将组织模板应用到工程布置或研究参数');
-      const shot = await capture('organization-template-application-unavailable');
-      report.handoffs ||= [];
-      report.handoffs.push({ label: '组织资源模板真实应用到工程或研究', status: '未通过', owner: 'T3 模板应用契约', screenshot: shot.screenshot,
-        detail: '页面可管理版本；研究内置布置预设是另一条路径，不计为本资源已应用。' });
-      check('组织资源模板可实际应用到工程或研究', false, { owner: 'T3', screenshot: shot.screenshot }, { fatal: false });
+      await expect(main).toContainText('这些定义不含从保存输入捕获的应用内容，不能直接应用到工程布置或研究参数');
+      await expect(main.getByRole('link', { name: '从保存输入建立与应用资源', exact: true })).toBeVisible();
+      const creation = await api('/api/types/creation-options');
+      const bindings = await api('/api/types/' + referenceWorkspace.id + '/resources');
+      const application = properties.getByRole('button', { name: /应用到工程|应用到研究|加入工程结构|引用到型号|绑定部件|绑定结构|采用.*模板/ });
+      const shot = await capture('organization-template-application-contract-boundary');
+      const current = await api('/api/foundation/assets/' + genericId);
+      const targetAfter = await api('/api/workspaces/' + referenceWorkspace.id);
+      const detail = { id: genericId, kind: generic.kind, screenshot: shot.screenshot,
+        target: referenceWorkspace.id, visibleApplicationActions: await application.count(),
+        inTypeCreation: creation.library.some(item => item.id === genericId),
+        inTypeBindings: bindings.resources.some(item => item.id === genericId),
+        targetUnchanged: JSON.stringify(targetAfter) === JSON.stringify(targetBefore),
+        directApplicationSupported: false, writes: report.writes.slice(writesBefore),
+        positiveApplicationJourney: '保存输入部件与研究模板真实应用闭环' };
+      check('普通目录模板明确应用边界并提供保存输入应用入口',
+        generic.release.application == null && detail.visibleApplicationActions === 0 &&
+        detail.inTypeCreation === false && detail.inTypeBindings === false &&
+        JSON.stringify(current) === JSON.stringify(generic) && detail.targetUnchanged &&
+        report.writes.length === writesBefore, detail);
+      report.contractBoundaries ||= [];
+      report.contractBoundaries.push({ ...size, ...detail,
+        detail: '普通目录定义没有应用内容；其发布不算工程引用。另行真实走查从保存输入捕获的固定资源。' });
     });
   }
 
@@ -1349,19 +1555,35 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       let asset = await importResource('materials', kind, []);
       asset = await transition('materials', asset, 'review', '核对来源');
       asset = await transition('materials', asset, 'publish', '发布');
-      await searchResource('materials', asset.name, asset.version);
+      check('普通部件或结构边界有真实隔离目标', !!referenceWorkspace,
+        '型号创建步骤未完成，不能用空目标证明原工程不变。');
+      const boundaryWrites = report.writes.length;
+      const targetBefore = await api('/api/workspaces/' + referenceWorkspace.id);
+      const selected = await searchResource('materials', asset.name, asset.version);
+      check('普通部件或结构负向检查选中准确版本', selected?.id === asset.id &&
+        JSON.stringify(selected) === JSON.stringify(asset), { expected: asset.id, selected: selected?.id });
       await expect(properties).toContainText('暂不能将普通部件或结构版本直接应用到工程');
       const creation = await api('/api/types/creation-options');
-      const bindings = referenceWorkspace ? await api(`/api/types/${referenceWorkspace.id}/resources`) : null;
+      const bindings = await api(`/api/types/${referenceWorkspace.id}/resources`);
       const application = properties.getByRole('button', { name: /应用到工程|加入工程结构|引用到型号|绑定部件|绑定结构/ });
       const shot = await capture(`${kind}-engineering-reference-unavailable`);
       const detail = { id: asset.id, kind, assetStatus: asset.status, version: asset.version, digest: asset.content_sha256,
         visibleApplicationActions: await application.count(), inTypeCreation: creation.library.some(item => item.id === asset.id),
-        inTypeBindings: bindings ? bindings.resources.some(item => item.id === asset.id) : null,
+        inTypeBindings: bindings.resources.some(item => item.id === asset.id),
         detail: '真实UI已建立并发布隔离定义；当前界面不能把此普通资源固定应用到工程结构，资源间依赖不算工程引用。', screenshot: shot.screenshot };
-      report.handoffs ||= [];
-      report.handoffs.push({ label: `${knownKindLabels[kind]}发布版本固定引用到工程或型号`, status: '未通过', owner: 'T3 部件/结构应用契约', ...detail });
-      check(`${knownKindLabels[kind]}发布版本可固定引用到工程或型号`, false, detail, { fatal: false });
+      const unchanged = await api('/api/foundation/assets/' + asset.id);
+      const targetAfter = await api('/api/workspaces/' + referenceWorkspace.id);
+      await expect(main.getByRole('link', { name: '从保存输入建立与应用资源', exact: true })).toBeVisible();
+      check(`${knownKindLabels[kind]}普通目录版本不会伪装为可应用的工程结构`,
+        asset.release.application == null && detail.visibleApplicationActions === 0 &&
+        detail.inTypeCreation === false && detail.inTypeBindings === false &&
+        JSON.stringify(unchanged) === JSON.stringify(asset) &&
+        JSON.stringify(targetAfter) === JSON.stringify(targetBefore) && report.writes.length === boundaryWrites,
+        { ...detail, target: referenceWorkspace.id, writes: report.writes.slice(boundaryWrites),
+          targetUnchanged: JSON.stringify(targetAfter) === JSON.stringify(targetBefore) });
+      report.contractBoundaries ||= [];
+      report.contractBoundaries.push({ ...size, ...detail, directApplicationSupported: false,
+        positiveApplicationJourney: '保存输入部件与研究模板真实应用闭环' });
     });
 
     await branch('型号管理的结构版本从原型号建立方案', async () => {
@@ -1414,6 +1636,8 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       await capture('managed-type-plan-created');
     });
   }
+
+  if (after) await branch('保存输入部件与研究模板真实应用闭环', savedInputApplications);
 
   await branch('浏览标准依据并检查搜索空态', async () => {
     await openGroup('standards');

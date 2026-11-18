@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { assetCatalog, assetDetail } from "@/api/catalogs";
 import { message, numeric, optionalRecord, text } from "@/api/client";
@@ -340,7 +340,11 @@ export function AssetsPage() {
         ) : undefined
       }
     >
-      {groupId === 'templates' && <details className="resource-scope"><summary>模板作用域 · 适用对象与修改影响</summary><p>本页可建立、编辑、核对和发布组织资源版本。当前版本暂不能将组织模板应用到工程布置或研究参数。</p><p>研究内的内置布置模板是独立的局部入口。资源发布不会自动替换既有引用；已有运行与历史交付保留原版本。</p></details>}
+      {(groupId === 'materials' || groupId === 'templates') && <div className="resource-batch-toolbar" aria-label="保存输入资源应用">
+        <span>从已保存输入捕获部件与研究模板；进入“部件与研究模板”后核对并应用固定版本。</span>
+        <Button asChild variant="outline" size="compact"><Link to="/resources/cables/structure-import" search={(previous) => ({ theme: previous.theme === 'dark' ? 'dark' : 'light' })}>从保存输入建立与应用资源</Link></Button>
+      </div>}
+      {groupId === 'templates' && <details className="resource-scope"><summary>模板作用域 · 适用对象与修改影响</summary><p>本页可建立、编辑、核对和发布普通组织模板版本。这些定义不含从保存输入捕获的应用内容，不能直接应用到工程布置或研究参数。</p><p>需应用已保存输入时，使用上方入口进入“部件与研究模板”，从真实保存输入捕获、核对和发布固定版本后再应用。研究内置布置模板仍是独立的局部入口；资源发布不会自动替换既有引用，已有运行与历史交付保留原版本。</p></details>}
       {groupId === 'materials' && <details className="resource-scope"><summary>物性覆盖口径 · 已登记项</summary><p>比例统计本资源登记的数值物性与明确缺项，按物性名称去重；参考摘录不等于计算参数。未登记项不纳入分母，不代表满足所有计算方法。适用条件和来源在详情中核对。</p></details>}
       {browsingBasis ? <StandardsBrowser /> : (
         <>
