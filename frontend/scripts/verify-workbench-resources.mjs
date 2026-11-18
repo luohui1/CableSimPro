@@ -2170,7 +2170,9 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
       await installHelp.hover();
       await expect(installTooltip).toHaveText(installReason);
       await capture('plugin-install-disabled-mouse');
-      await page.mouse.move(0, 0);
+      // Hoverable Radix content starts a grace area on pointerleave and
+      // closes after subsequent pointermove events leave that area.
+      await page.mouse.move(0, 0, { steps: 12 });
       await expect(installTooltip).toBeHidden();
 
       // Start at the real navigation entry and Tab to the explanation.
