@@ -8,7 +8,7 @@
   "scripts": {
     "content": "node scripts/prepare-content.mjs",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/flatten-prefetch.mjs",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
