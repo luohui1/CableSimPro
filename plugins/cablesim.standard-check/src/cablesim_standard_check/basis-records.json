@@ -1,6 +1,6 @@
 {
-  "plugin_version": "0.9.0",
-  "data_sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+  "plugin_version": "0.9.1",
+  "data_sha256": "a0a1652bd9f7f5274b9c5e77232dbf70d4720bd3f89f3984fc1d235e69e985f5",
   "records": {
     "lv-表6/r1/c1": "a12f2101ab21d0cd4bd4227d72b72befce71349137d150332cec2b142b57b0e6",
     "lv-表6/r1/c2": "e1245325a57d2565e2bd3900b04cb5234f15bedbf9916160c8255e1e43b50ed5",

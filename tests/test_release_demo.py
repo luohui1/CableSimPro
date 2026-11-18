@@ -1,6 +1,7 @@
 """Release isolation and API/static routing, without installing or building packages."""
 import importlib.util
 from contextlib import closing
+from copy import deepcopy
 import json
 from pathlib import Path
 import sqlite3
@@ -113,6 +114,52 @@ def test_completed_release_seed_keeps_user_data_and_unfinished_seed_is_refused(t
     monkeypatch.setattr(seed,'build_release_seed',lambda *_a: pytest.fail('Unchanged release must preserve user edits'))
     seed.seed_release(database)
     assert database.read_bytes() == before
+
+
+def test_release_study_source_cleanup_preserves_used_materials_and_indexed_sources():
+    from backend.domain.migration import convert
+    from backend.domain.guards import pointer
+    from backend.kernel.presets import presets
+    from backend.kernel.scenarios import attach_model, system_models
+    from backend.kernel.resource_applications import source_for
+    path = Path(__file__).resolve().parents[1] / 'frontend/scripts/seed-engineering-demo.py'
+    spec = importlib.util.spec_from_file_location('release_input_sources', path)
+    seed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seed)
+    document = convert(next(p['scenario'] for p in presets() if p['id'] == 'copper-400'))['document']
+    original = deepcopy(document)
+    # These same scaffold IDs are real references before model attachment. They
+    # must survive cleanup; an ID alone is not a reason to delete a material.
+    kept = seed.release_study_document(document)
+    assert kept['materials'] == original['materials'] and document == original
+    state = {'domain': document, 'locks': []}
+    model = next(m for m in system_models() if m['id'] == 'system.specification-yjv22-300')
+    attach_model(state, model)
+    document = state['domain']
+    soil_index = next(i for i, item in enumerate(document['materials']) if item['id'] == 'material/soil')
+    soil_source = {'kind': 'demo', 'reviewed': False, 'reference': '原 v0 迁移场景保存的土壤研究输入；非现场测量。'}
+    document['provenance'][f'/materials/{soil_index}/thermal_resistivity'] = soil_source
+    stale = {'kind': 'demo', 'reviewed': False, 'reference': '被型号替换的迁移脚手架材料来源。'}
+    document['provenance']['/materials/1/thermal_resistivity'] = stale
+    document['provenance'][pointer('materials', 'material/jacket', 'thermal_resistivity')] = stale
+    before = deepcopy(document)
+    after = seed.release_study_document(document)
+    removed = {'material/conductor', 'material/semicon', 'material/insulation', 'material/screen', 'material/jacket'}
+    assert document == before
+    assert after['materials'] == [item for item in before['materials'] if item['id'] not in removed]
+    assert {k: v for k, v in after.items() if k not in ('materials', 'provenance')} == {
+        k: v for k, v in before.items() if k not in ('materials', 'provenance')}
+    new_soil_index = next(i for i, item in enumerate(after['materials']) if item['id'] == 'material/soil')
+    assert new_soil_index != soil_index
+    assert after['provenance'][f'/materials/{new_soil_index}/thermal_resistivity'] == soil_source
+    assert stale not in after['provenance'].values()
+    for index, material in enumerate(after['materials']):
+        old_index = next(i for i, item in enumerate(before['materials']) if item['id'] == material['id'])
+        for field in material:
+            stable = pointer('materials', material['id'], field)
+            assert source_for(before['provenance'], stable, f'/materials/{old_index}/{field}')[0] == source_for(
+                after['provenance'], stable, f'/materials/{index}/{field}')[0]
+    assert seed.release_study_document(after) == after
 
 
 @pytest.mark.parametrize('with_evidence', [True, False], ids=['saved-engineering-evidence','waiting-for-slurm'])
@@ -238,6 +285,32 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
+        from backend.kernel.resource_applications import require_domain_sources
+        from backend.domain.guards import pointer
+        for title in ('城北变电站 · 10 kV 三回排管询价', '城南线路 · 110 kV 直埋单回校核'):
+            saved = next(row for row in receipt['studies'] if row['title'] == title)
+            project = json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?', (saved['workspace'],)).fetchone()[0])
+            domain = project['domain']
+            require_domain_sources(domain)
+            assert {'material/conductor', 'material/semicon', 'material/insulation', 'material/screen', 'material/jacket'}.isdisjoint(
+                material['id'] for material in domain['materials'])
+            assert seed.release_study_document(domain) == domain
+            for circuit in domain['circuits']:
+                assert circuit['system']['frequency'] == 50
+                fields = [pointer('circuits', circuit['id'], 'system', 'frequency')]
+                fields += [pointer('circuits', circuit['id'], 'cables', cable['id'], 'parallel_index') for cable in circuit['cables']]
+                assert all(cable['parallel_index'] == 1 for cable in circuit['cables'])
+                for field in fields:
+                    declaration = domain['provenance'][field]
+                    assert declaration['kind'] == 'user' and declaration['reviewed'] is False
+                    assert domain['name'] in declaration['reference']
+                    assert 'seed_revision ' + str(receipt['identity']['seed_revision']) in declaration['reference']
+            frozen = json.loads(connection.execute('SELECT snapshot FROM study_runs WHERE id=?', (saved['run'],)).fetchone()[0])
+            assert frozen['workspace_state']['domain'] == domain
+            if '城北' in title:
+                duct_source = domain['provenance'][pointer('materials', 'material/duct', 'thermal_resistivity')]
+                assert duct_source['kind'] == 'demo' and duct_source['reviewed'] is False
+                assert '教学设计假设' in duct_source['reference'] and 'apply_three_core_layout' in duct_source['reference']
         assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (6 if with_evidence else 5)+public_specs
         teaching_state = json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?',(teaching['workspace'],)).fetchone()[0])
         assert len(teaching_state['domain']['measurements']) == 12
@@ -323,7 +396,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert development.read_bytes() == b'development database sentinel'
 
 
-@pytest.mark.parametrize('change', ['plugins', 'models', 'engineering_resources', 'public_catalogues'])
+@pytest.mark.parametrize('change', ['seed_revision', 'plugins', 'models', 'engineering_resources', 'public_catalogues'])
 def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, monkeypatch, change):
     spec=importlib.util.spec_from_file_location('upgraded_seed',Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py')
     seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)
@@ -355,6 +428,8 @@ def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, 
         assert old_sample['workbook_sha256'] == current_sample['workbook_sha256']
         assert old_sample['source_sha256'] == current_sample['source_sha256']
         assert old_sample['declarations_sha256'] != current_sample['declarations_sha256']
+    elif change == 'seed_revision':
+        old[change] = identity[change] - 1
     else:
         old[change]={}
     receipt={'complete':True,'identity':old,'user_note':'keep this too'}

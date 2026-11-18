@@ -209,13 +209,13 @@ def test_real_requirement_basis_and_executor_use_220kv_tables_without_pass_claim
         assert len(references) == 8
         assert {ref['record']['standard'] for ref in references.values()} == {'GB/T 18890.2'}
         assert {ref['record']['table'] for ref in references.values()} == {'表 2', '表 3', '表 4', ''}
-        assert {ref['plugin_version'] for ref in references.values()} == {'0.9.0'}
+        assert {ref['plugin_version'] for ref in references.values()} == {'0.9.1'}
 
         def execute(document, parameters):
             result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
                 {'case_id': 'extra-high', 'input': document, 'parameters': parameters}])
             assert result.cases[0].status == 'succeeded', result.cases[0].error
-            assert result.plugin_version == result.method_version == '1.8.4'
+            assert (result.plugin_version, result.method_version) == ('1.8.5', '1.8.4')
             return result.cases[0].artifacts['x-cablesim.standard-check']
 
         checked = execute(document, parameters)
@@ -295,7 +295,7 @@ def test_live_220kv_manufacturing_limits_use_exact_records_and_independent_input
         cases.append(('standard-construction', borrowed))
         result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
             {'case_id': name, 'input': value, 'parameters': parameters} for name, value in cases])
-        assert result.plugin_version == result.method_version == '1.8.4'
+        assert (result.plugin_version, result.method_version) == ('1.8.5', '1.8.4')
         assert len(result.cases) == len(cases)
         outputs = {output.case_id: output for output in result.cases}
         for case_name, inputs in cases[:4]:
@@ -315,7 +315,7 @@ def test_live_220kv_manufacturing_limits_use_exact_records_and_independent_input
                 assert reference['record_id'] == record_id
                 assert reference['record']['value'] == original_value
                 assert reference['record']['quantity']['unit'] == original_unit
-                assert reference['plugin_version'] == '0.9.0'
+                assert reference['plugin_version'] == '0.9.1'
                 assert reference['record']['verification']['status'] == 'verified'
                 actual_source = inputs['provenance'][manufacturing_field(role, name)]
                 assert row['engineering_sources'][manufacturing_field(role, name)] == actual_source

@@ -238,6 +238,68 @@ class CircularRecipe(Contract):
         return self
 
 
+class ResourceApplication(Contract):
+    """Frozen input reference, never an executable or an approval certificate.
+
+    The application services additionally validate the typed payload against the
+    frozen input and the installed method before it can be adopted. Transport
+    keeps the complete source rather than a display-only source sentence.
+    """
+    schema_version: Literal["cablesim.resource-application/1"] = "cablesim.resource-application/1"
+    capture_version: Literal["1.0.0"] = "1.0.0"
+    kind: Literal["component", "study_template"]
+    method: dict[str, JsonValue]
+    source: dict[str, JsonValue]
+    payload: dict[str, JsonValue]
+    payload_sha256: Digest
+
+    @model_validator(mode="after")
+    def frozen_identity(self) -> ResourceApplication:
+        source, snapshot = self.source, self.source.get("snapshot")
+        if (not isinstance(snapshot, dict) or not isinstance(snapshot.get("domain"), dict)
+                or not isinstance(source.get("workspace_id"), str)
+                or type(source.get("revision")) is not int or source["revision"] < 1
+                or not isinstance(source.get("name"), str) or not source["name"].strip()
+                or source.get("snapshot_sha256") != content_hash(snapshot)
+                or source.get("document_sha256") != content_hash(snapshot["domain"])
+                or self.payload_sha256 != content_hash(self.payload)
+                or any(not isinstance(self.method.get(k), str) or not self.method[k].strip()
+                       for k in ("name", "version"))):
+            raise ValueError("RESOURCE_APPLICATION_IDENTITY")
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False,
+                          allow_nan=False).encode("utf-8")) > 2 * 1024 * 1024:
+            raise ValueError("RESOURCE_APPLICATION_TOO_LARGE")
+        return self
+
+
+def frozen_application_dependencies(snapshot: dict) -> tuple[AssetRef, ...]:
+    """Preserve every exact resource pin in the saved input evidence."""
+    found: dict[tuple[str, str], AssetRef] = {}
+    identity = {'asset_id', 'version', 'content_sha256'}
+
+    def visit(node):
+        if isinstance(node, list):
+            for item in node:
+                visit(item)
+        elif isinstance(node, dict):
+            if identity & set(node):
+                if not identity <= set(node):
+                    raise ValueError('RESOURCE_APPLICATION_DEPENDENCY_INCOMPLETE')
+                reference = AssetRef.model_validate({key: node[key] for key in identity})
+                key = (reference.asset_id, reference.version)
+                if key in found and found[key] != reference:
+                    raise ValueError('RESOURCE_APPLICATION_DEPENDENCY_CONFLICT')
+                found[key] = reference
+            else:
+                for value in node.values():
+                    visit(value)
+    bindings = snapshot.get('type_resource_bindings', {})
+    if not isinstance(bindings, dict):
+        raise ValueError('RESOURCE_APPLICATION_DEPENDENCY_INCOMPLETE')
+    visit(bindings)
+    return tuple(found[key] for key in sorted(found))
+
+
 class AssetRelease(Contract):
     asset_id: Identifier
     version: Version
@@ -249,12 +311,15 @@ class AssetRelease(Contract):
     sources: tuple[SourceReference, ...] = Field(min_length=1, max_length=64)
     geometry_recipe: CircularRecipe | None = None
     reference_evidence: tuple[ReferenceEvidence, ...] = Field(default=(), max_length=64)
+    application: ResourceApplication | None = None
 
     @model_serializer(mode="wrap")
     def omit_absent_reference_evidence(self, handler):
         value = handler(self)
         if not self.reference_evidence:
             value.pop("reference_evidence", None)
+        if self.application is None:
+            value.pop("application", None)
         return value
 
     @model_validator(mode="after")
@@ -263,12 +328,19 @@ class AssetRelease(Contract):
             raise ValueError("EMPTY_ASSET_TEXT")
         if self.geometry_recipe is not None and self.kind not in ("component", "assembly"):
             raise ValueError("GEOMETRY_REQUIRES_COMPONENT_OR_ASSEMBLY")
+        if self.application is not None and self.kind != self.application.kind:
+            raise ValueError("RESOURCE_APPLICATION_KIND")
         groups = [tuple(p.name for p in self.parameters),
                   tuple(f.path.casefold() for f in self.files),
                   tuple((d.asset_id, d.version) for d in self.dependencies),
                   tuple(item.parameter for item in self.reference_evidence)]
         if any(len(g) != len(set(g)) for g in groups):
             raise ValueError("DUPLICATE_ASSET_MEMBER")
+        if self.application is not None:
+            declared = {(ref.asset_id, ref.version): ref for ref in self.dependencies}
+            if any(declared.get((ref.asset_id, ref.version)) != ref
+                   for ref in frozen_application_dependencies(self.application.source['snapshot'])):
+                raise ValueError('RESOURCE_APPLICATION_DEPENDENCIES_MISMATCH')
         parameters = {p.name: p for p in self.parameters}
         if any(item.parameter not in parameters or parameters[item.parameter].quantity.si() != item.quantity
                for item in self.reference_evidence):

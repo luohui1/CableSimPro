@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standards-basis",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "name": "标准依据库",
   "icon": "assets/icon.svg",
   "description": "离线只读查询已逐格核验的标准尺寸、电阻和试验数值，返回适用条件、原页出处与摘要；查询不会批准工程要求。",
@@ -43,7 +43,7 @@
       "id": "lookup",
       "kind": "method",
       "title": "按标准、条款和条件查询依据",
-      "method_version": "0.9.0",
+      "method_version": "0.9.1",
       "read_only": true,
       "analysis": "standards_lookup",
       "input_schema": "cablesim.standards-query/1",
@@ -90,22 +90,22 @@
     },
     {
       "path": "src/cablesim_standards_basis/basis.json",
-      "sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+      "sha256": "a0a1652bd9f7f5274b9c5e77232dbf70d4720bd3f89f3984fc1d235e69e985f5",
       "size_bytes": 428684
     },
     {
       "path": "src/cablesim_standards_basis/excerpts.json",
-      "sha256": "d52833201c3543ded9465caee0c5bd9f2d701cd1981878785b9f8c601092073c",
+      "sha256": "5c2ef36f68ad04bd3036a13fd828d3952fd73ece7b020ed47703517f9fd87ed7",
       "size_bytes": 805041
     },
     {
       "path": "src/cablesim_standards_basis/integrity.json",
-      "sha256": "049b542aecf0edfb827703726927030ab95fff7c39ff4ead43ef0b5806b34fb1",
+      "sha256": "839baad4c73d5030c4c5e0beb8d017354a328ec2636c11f3f714979834d4eb4b",
       "size_bytes": 3869
     },
     {
       "path": "src/cablesim_standards_basis/library.py",
-      "sha256": "7541cc761d13b0b1f43396d4c71852ba78ca68ae871c1a479029e3916e22a1d6",
+      "sha256": "78ca40baf1c0cf678386d566ae96bf463248a8e56234861f2cca4918d144ac20",
       "size_bytes": 15649
     },
     {
@@ -120,8 +120,8 @@
     },
     {
       "path": "src/cablesim_standards_basis/rebuild.py",
-      "sha256": "41e07610bde62ad4a39fa6fd8e26725d75522735b79993299226f04111814e34",
-      "size_bytes": 9553
+      "sha256": "d254f69e29ac6ead199f77ce9cd43213652c70618bf84d822caa4d2c5214e5c6",
+      "size_bytes": 11218
     },
     {
       "path": "src/cablesim_standards_basis/records-accessories.json",
@@ -245,8 +245,8 @@
     },
     {
       "path": "src/cablesim_standards_basis/verification.json",
-      "sha256": "fa8b9f74c16a4fcf07aa560da19c26f09093a44eb183c21d29862f6cd611237e",
-      "size_bytes": 501838
+      "sha256": "2ac909bea67874028b4327abe166a209dcac391aaaf66c92e08aa160f06e4e1f",
+      "size_bytes": 502828
     }
   ]
 }

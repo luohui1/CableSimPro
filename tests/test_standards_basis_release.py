@@ -66,7 +66,7 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
     with TestClient(app) as client:
         methods = client.get('/api/methods'); assert methods.status_code==200
         pin = next(m['method'] for m in methods.json() if m['method']['plugin_id']=='cablesim.standards-basis')
-        assert pin['version']=='0.9.0'
+        assert pin['version']=='0.9.1'
         receipts=[]
         for standard,edition,locator,quantity,conditions,value,printed,pdf in cases:
             query={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
@@ -75,7 +75,7 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
                               json={'release_digest':pin['release_digest'],'input':query})
             assert reply.status_code==200,reply.text
             envelope=reply.json(); answer=envelope['artifacts']['x-cablesim.standards-basis']
-            assert envelope['plugin_version']=='0.9.0' and len(envelope['request_sha256'])==64
+            assert envelope['plugin_version']=='0.9.1' and len(envelope['request_sha256'])==64
             assert answer['status']=='resolved' and len(answer['records'])==1, (query,answer)
             record=answer['records'][0]
             assert (record['value'],record['printed_page'],record['pdf_page'])==(value,printed,pdf)
@@ -197,3 +197,12 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
         blocked['record_id']='mv-表18/r2/test_voltage'
         reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',json={'release_digest':pin['release_digest'],'input':blocked})
         assert reply.status_code==422 and reply.json()['detail']['code']=='EVIDENCE_BLOCKED'
+        # Correcting a stale summary must not publish any cells from this
+        # unresolved original table, including the other 559 candidate cells.
+        pending=dict(schema_version='cablesim.standards-query/1',operation='list',
+                     standard='IEC 60287-2-1',edition='2023',locator='Table 2')
+        reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',json={
+            'release_digest':pin['release_digest'],'input':pending})
+        assert reply.status_code==200,reply.text
+        answer=reply.json()['artifacts']['x-cablesim.standards-basis']
+        assert answer['status']=='not_covered' and answer['records']==[]
