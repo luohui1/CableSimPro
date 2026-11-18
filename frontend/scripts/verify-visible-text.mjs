@@ -13,6 +13,14 @@ import { performance as monotonicClock } from 'node:perf_hooks';
 assert.equal(process.env.E2E_ISOLATED, '1', '文字巡检只能在隔离副本运行');
 const base = process.env.FRONTEND_URL;
 const performanceMode = process.env.PERFORMANCE_AUDIT === '1';
+const auditViewports = [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
+const requestedViewport = process.env.REGULARITY_VIEWPORT || '';
+if (requestedViewport && (performanceMode || process.env.REGULARITY_AUDIT !== '1'))
+  throw Error('REGULARITY_VIEWPORT 只用于规整巡检，不改变独立性能审计');
+if (requestedViewport && !auditViewports.some(size => `${size.width}x${size.height}` === requestedViewport))
+  throw Error('REGULARITY_VIEWPORT 只能是 1366x768 或 1920x1080');
+const sizes = performanceMode ? [auditViewports[0]] : requestedViewport
+  ? auditViewports.filter(size => `${size.width}x${size.height}` === requestedViewport) : auditViewports;
 const requestedPhase = process.env.VISIBLE_TEXT_PASS;
 if (requestedPhase && !/^[a-z-]+$/.test(requestedPhase)) throw Error('文字巡检输出名只能使用小写字母和连字符');
 const phase = requestedPhase || (performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after');
@@ -27,7 +35,8 @@ const withVisibleText = process.env.REGULARITY_WITH_VISIBLE === '1';
 const report = { phase, generated: new Date().toISOString(), source: '发布库只读备份；独立随机端口；不运行求解或批准提案', pages: [], findings: [], secondary: [], allowed: [], uncovered: [], errors: [], blockedWrites: [], readOnlyPosts: [], runChecks: [], whitelist, complete: false };
 report.sourceDatabase = process.env.E2E_DATABASE_SOURCE || path.join(repositoryRoot, '.data/release/engineering.sqlite');
 report.frontendSnapshot = process.env.E2E_FRONTEND_DIST || '当前前端构建';
-const sizes = performanceMode ? [{ width: 1366, height: 768 }] : [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
+report.viewports = sizes.map(size => ({ ...size }));
+report.viewportSelection = requestedViewport || (performanceMode ? '1366x768' : 'both');
 const targets = [], queued = new Set(), issueKeys = new Set(), secondaryKeys = new Set(), shellHoverSizes = new Set(), sourceModules = new Map();
 const requestedPaths = new Set((process.env.VISIBLE_TEXT_PATHS || '').split('|').filter(Boolean));
 const modulesOnly = process.env.VISIBLE_TEXT_MODULES === '1';
@@ -325,11 +334,11 @@ try {
             await page.getByText('正在读取方法与结论', { exact: true }).waitFor({ state: 'hidden', timeout: 30000 });
           }
         }
-        if (size.width === 1366) await page.screenshot({ path: path.join(out, 'runs-light.png') });
+        if (size.width === sizes[0].width) await page.screenshot({ path: path.join(out, 'runs-light.png') });
       }
       const surfaceUrl = page.url().replace(base, '');
       if (!performanceMode) await scan(surface, size);
-      if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === 1366) {
+      if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === sizes[0].width) {
         const links = await page.locator(`a[href^="/studies/${surface.study}/"]`).evaluateAll(links => links.map(l => l.getAttribute('href')));
         links.push(page.url()); // The active analysis may be selected by a combobox, not an anchor.
         const analysis = page.getByRole('combobox', { name: '分析', exact: true });
@@ -428,7 +437,7 @@ try {
         assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
         if (route === materialRoute) {
           await scan({ route, label: '材料详情 · ' + material.name, owner: '前端公共' }, size);
-          if (size.width === 1366 && theme === 'light') await page.screenshot({ path: path.join(regularity.out, 'material-conclusion-light.png') });
+          if (size.width === sizes[0].width && theme === 'light') await page.screenshot({ path: path.join(regularity.out, 'material-conclusion-light.png') });
         }
         await assertLayout(page, `${route} ${size.width} ${theme}`);
         check.passed = true;

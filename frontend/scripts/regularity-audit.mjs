@@ -194,6 +194,8 @@ export async function createRegularityAudit({ page, context, root }) {
   }
   async function save(traversal) {
     report.complete = traversal.complete;
+    report.viewports = traversal.viewports;
+    report.viewportSelection = traversal.viewportSelection;
     report.failure = traversal.failure;
     report.uncovered = traversal.uncovered;
     report.errors = traversal.errors;
@@ -234,7 +236,8 @@ ${traversal.uncovered.map(u => '- ' + cell(u.label || u.page) + '：' + cell(u.r
   async function overview() {
     const gallery = await context.newPage();
     try {
-      const surfaces = report.pages.filter(p => p.width === 1366 && p.screenshot);
+      const overviewWidth = report.viewports?.[0]?.width ?? 1366;
+      const surfaces = report.pages.filter(p => p.width === overviewWidth && p.screenshot);
       const groups = new Map();
       for (const p of surfaces) { const key = p.owner || '前端公共'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(p); }
       const index = [];
@@ -242,13 +245,13 @@ ${traversal.uncovered.map(u => '- ' + cell(u.label || u.page) + '：' + cell(u.r
         const part = surfaces.slice(offset, offset + 24), tiles = [];
         for (const p of part) { const bytes = await fs.readFile(path.join(out, p.screenshot)); tiles.push(`<figure><img src="data:image/png;base64,${bytes.toString('base64')}"><figcaption>${p.label.replaceAll('&','&amp;').replaceAll('<','&lt;')}</figcaption></figure>`); }
         await gallery.setViewportSize({ width: 1440, height: 1080 });
-        await gallery.setContent(`<html lang="zh"><style>body{margin:24px;font:14px sans-serif;background:#f4f4f4;color:#0d0d0d}h1{font-size:20px}main{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}figure{margin:0;background:white}img{width:100%;display:block}figcaption{padding:8px;overflow-wrap:anywhere}</style><h1>${owner} · 1366 浅色 · ${offset + 1}–${offset + part.length}</h1><main>${tiles.join('')}</main></html>`);
+        await gallery.setContent(`<html lang="zh"><style>body{margin:24px;font:14px sans-serif;background:#f4f4f4;color:#0d0d0d}h1{font-size:20px}main{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}figure{margin:0;background:white}img{width:100%;display:block}figcaption{padding:8px;overflow-wrap:anywhere}</style><h1>${owner} · ${overviewWidth} 浅色 · ${offset + 1}–${offset + part.length}</h1><main>${tiles.join('')}</main></html>`);
         await gallery.locator('img').evaluateAll(images => Promise.all(images.map(img => img.decode())));
         const name = `overview-${createHash('sha256').update(owner).digest('hex').slice(0,6)}-${Math.floor(offset / 24) + 1}.png`;
         await gallery.screenshot({ path: path.join(out, name), fullPage: true });
         index.push(`- ${owner} ${offset + 1}–${offset + part.length}：[总览](${name})`);
       }
-      await fs.writeFile(path.join(out, 'overview.md'), '# 逐页截图总览\n\n每个页面 / 页签一张 1366 浅色缩略图，按线程分组；截图为实际页面首屏。滚动后发现的问题另记录实际视口位置，不能用首屏图当作该位置截图。\n\n' + index.join('\n') + '\n');
+      await fs.writeFile(path.join(out, 'overview.md'), '# 逐页截图总览\n\n每个页面 / 页签一张 ' + overviewWidth + ' 浅色缩略图，按线程分组；截图为实际页面首屏。滚动后发现的问题另记录实际视口位置，不能用首屏图当作该位置截图。\n\n' + index.join('\n') + '\n');
     } finally { await gallery.close(); }
   }
   return { capture, record, save, overview, report, out };

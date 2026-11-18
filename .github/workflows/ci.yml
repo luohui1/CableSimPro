@@ -34,8 +34,14 @@ jobs:
             evidence: workbench-performance-evidence
           - os: ubuntu-latest
             task: regularity
-            name: Workbench text and regularity audit (ubuntu-latest)
-            evidence: workbench-text-regularity
+            viewport: 1366x768
+            name: Workbench text and regularity audit (1366x768 / ubuntu-latest)
+            evidence: workbench-text-regularity-1366x768
+          - os: ubuntu-latest
+            task: regularity
+            viewport: 1920x1080
+            name: Workbench text and regularity audit (1920x1080 / ubuntu-latest)
+            evidence: workbench-text-regularity-1920x1080
     defaults:
       run:
         shell: bash
@@ -276,6 +282,7 @@ jobs:
         working-directory: frontend
         env:
           REGULARITY_WITH_VISIBLE: '1'
+          REGULARITY_VIEWPORT: ${{ matrix.viewport }}
           VISIBLE_TEXT_PASS: after
           REGULARITY_PASS: after
         run: npm run test:regularity 2>&1 | tee ../.data/workbench-walk/logs/visible-text-and-regularity.log
