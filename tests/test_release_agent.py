@@ -187,6 +187,39 @@ def test_the_production_lock_keeps_the_pi_packages_and_none_of_the_page_toolchai
         release_agent.lock_closure(lock, {"@earendil-works/pi-ai": "0.0.1"})
 
 
+def test_the_installed_dependency_tree_loses_command_shims_at_every_depth(tmp_path):
+    modules = tmp_path / "node_modules"
+    for name in (".bin", "a/node_modules/.bin", "a/node_modules/b/node_modules/.bin"):
+        shim = modules / name
+        shim.mkdir(parents=True)
+        (shim / "tool.cmd").write_text("@echo off", encoding="utf-8")
+    (modules / "a/index.js").write_text("module.exports = 1;", encoding="utf-8")
+    (modules / ".package-lock.json").write_text("{}", encoding="utf-8")
+    release_agent.prune_installed_tree(modules)
+    assert sorted(path.relative_to(modules).as_posix() for path in modules.rglob("*")) == [
+        "a", "a/index.js", "a/node_modules", "a/node_modules/b", "a/node_modules/b/node_modules"]
+
+
+def test_command_links_npm_makes_on_linux_are_dropped_and_any_other_link_is_refused(tmp_path):
+    modules = tmp_path / "node_modules"
+    package = modules / "a/node_modules/semver"
+    (package / "bin").mkdir(parents=True)
+    (package / "bin/semver.js").write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    shims = modules / "a/node_modules/.bin"
+    shims.mkdir()
+    try:
+        # The exact shape of the failure npm caused on Linux: a package's own .bin holding a link to its command.
+        (shims / "semver").symlink_to("../semver/bin/semver.js")
+        (modules / ".bin").symlink_to(shims, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("this host cannot create symbolic links")
+    release_agent.prune_installed_tree(modules)
+    assert not (modules / ".bin").exists() and not shims.exists() and (package / "bin/semver.js").is_file()
+    (package / "bin/alias.js").symlink_to("semver.js")
+    with pytest.raises(RuntimeError, match="符号链接.*alias.js"):
+        release_agent.prune_installed_tree(modules)
+
+
 # ---- configuration: one place for the model, a port for the sidecar -----------------------------------------------
 
 def test_the_shipped_configuration_enables_the_sidecar_on_its_own_loopback_port(tmp_path):

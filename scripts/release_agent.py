@@ -116,6 +116,29 @@ def production_lock(lock: dict, roots: dict[str, str], *, version: str, engines:
             "packages": {"": root, **packages}}
 
 
+def prune_installed_tree(modules: Path) -> None:
+    """Drop npm's own build products from the installed tree and refuse anything a release payload cannot hold.
+
+    Command shims (``.bin`` at every depth: nested packages have their own) and npm's private description of the tree
+    (``.package-lock.json``) are not shipped files; the sidecar never runs a package command. Any other symbolic link
+    is an error, never silently followed: the manifest records regular files only.
+    """
+    (modules / ".package-lock.json").unlink(missing_ok=True)
+    links: list[str] = []
+    for directory, names, files in os.walk(modules, followlinks=False):
+        for name in [name for name in names if name == ".bin"]:
+            shim = Path(directory) / name
+            if shim.is_symlink():
+                shim.unlink()
+            else:
+                shutil.rmtree(shim)
+            names.remove(name)
+        links.extend((Path(directory) / name).relative_to(modules).as_posix()
+                     for name in [*names, *files] if (Path(directory) / name).is_symlink())
+    if links:
+        raise RuntimeError("Agent 依赖树里有符号链接，发行包只收普通文件：" + ", ".join(sorted(links)[:5]))
+
+
 def _verify_imports(node: Path, agent: Path, specifiers: list[str]) -> None:
     """Load the entry module and every bare specifier with the shipped Node: unresolved imports fail the build."""
     script = (
@@ -180,12 +203,11 @@ def bundle_agent(root: Path, staged: Path, *, ui: Path, node: Path, npm: str | N
     if not program:
         raise RuntimeError("发行构建需要 npm 来安装 Agent 的生产依赖（仅构建机需要，安装端不需要）。")
     environment = {**os.environ, "npm_config_update_notifier": "false", "npm_config_fund": "false"}
-    subprocess.run([program, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", "--no-progress"],
+    # --no-bin-links: on Linux npm makes every package's command shims symbolic links, which a release payload cannot hold.
+    subprocess.run([program, "ci", "--omit=dev", "--ignore-scripts", "--no-bin-links", "--no-audit", "--no-fund", "--no-progress"],
                    cwd=agent, env=environment, check=True)
     modules = agent / "node_modules"
-    # Link shims and npm's private cache of the tree are build products, not shipped files.
-    shutil.rmtree(modules / ".bin", ignore_errors=True)
-    (modules / ".package-lock.json").unlink(missing_ok=True)
+    prune_installed_tree(modules)
     present = sorted(entry for entry in derived["packages"] if entry)
     missing = [entry for entry in present if not (agent / entry / "package.json").is_file()]
     if missing:
@@ -196,7 +218,8 @@ def bundle_agent(root: Path, staged: Path, *, ui: Path, node: Path, npm: str | N
                 "data_files": [name.removeprefix("studio/") for name in data],
                 "dependencies": dict(sorted(roots.items())), "locked_packages": len(present),
                 "studio_lock_sha256": digest(lock_file),
-                "install": "npm ci --omit=dev --ignore-scripts from the derived production lock; no lifecycle scripts, "
-                           "no native build; better-sqlite3 is resolved for import only and its addon is not built"}
+                "install": "npm ci --omit=dev --ignore-scripts --no-bin-links from the derived production lock; no lifecycle "
+                           "scripts, no native build, no command shims; better-sqlite3 is resolved for import only and "
+                           "its addon is not built"}
     (staged / METADATA).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     return metadata
