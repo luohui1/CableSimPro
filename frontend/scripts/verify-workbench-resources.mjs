@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { walkthrough } from './verify-workbench-support.mjs';
 
 // Operate the real isolated application. API reads only corroborate what was
@@ -863,20 +864,44 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     }
   }
 
-  await branch('核对厂家资料导入入口', async () => {
+  await branch('厂家结构表与 PDF 分流并实传 CSV', async () => {
     await openCableVersions();
-    await page.locator('.topbar-actions').getByRole('button', { name: '从厂家资料导入', exact: true }).click();
+    await page.locator('.topbar-actions').getByRole('button', { name: '导入厂家结构表', exact: true }).click();
+    await expect(page).toHaveURL(/\/resources\/cables\/structure-import(?:\?|$)/);
+    await expect(page.getByRole('tab', { name: '导入结构表', exact: true })).toBeVisible();
+    const uploadButton = page.getByRole('button', { name: '选择结构表文件', exact: true });
+    await expect(uploadButton).toBeEnabled();
+    const picker = page.getByLabel('结构表文件', { exact: true });
+    const formats = await picker.getAttribute('accept');
+    await check('厂家结构表可从资源库导入', /\.xlsx/.test(formats || '') && /\.xls/.test(formats || '') && /\.csv/.test(formats || ''),
+      { acceptedFormats: formats, route: page.url(), owner: '现有 T3 结构表向导' });
+    await capture('manufacturer-structure-entry');
+    // Real published-source fixture; this is the actual browser multipart request
+    // on a fresh isolated library, not a test-created API response or OCR output.
+    const bytes = await fs.readFile(new URL('../../tests/fixtures/jiangnan_yjv22.csv', import.meta.url));
+    const expectedDigest = createHash('sha256').update(bytes).digest('hex');
+    const [uploaded] = await Promise.all([
+      page.waitForResponse(response => response.url().endsWith('/api/type-library/imports/upload')
+        && response.request().method() === 'POST', { timeout: 60000 }),
+      picker.setInputFiles({ name: 'T1-已公开结构表.csv', mimeType: 'text/csv', buffer: bytes }),
+    ]);
+    const receipt = await uploaded.json();
+    await check('实际 CSV 字节与来源摘要经后端验收', uploaded.status() === 201 &&
+      receipt.sha256 === expectedDigest && receipt.sheets?.some(sheet => sheet.data_rows >= 1),
+      { status: uploaded.status(), uploadedDigest: receipt.sha256, originalDigest: expectedDigest,
+        sheets: receipt.sheets?.map(sheet => ({ name: sheet.name, rows: sheet.data_rows })) });
+    await expect(page.getByRole('heading', { name: '选择工作表', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: '工作表', exact: true })).toBeVisible();
+    await capture('manufacturer-structure-upload');
+    // Distinct PDF intake remains accessible; do not confuse it with CSV/XLS.
+    await page.locator('.topbar-actions').getByRole('link', { name: '电缆型号版本', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '电缆型号版本', exact: true, level: 1 })).toBeVisible();
+    await page.locator('.topbar-actions').getByRole('button', { name: '提取厂家 PDF', exact: true }).click();
     await expect(page).toHaveURL(/\/resources\/cables\/imports(?:\?|$)/);
-    await expect(page.getByRole('button', { name: '上传 PDF', exact: true })).toBeVisible();
-    const shot = await capture('manufacturer-import');
-    // Workbook import belongs to T3; record what the real UI accepts without
-    // uploading fabricated manufacturer documents or invoking an OCR service.
-    const formats = await page.getByLabel('上传 PDF 文件', { exact: true }).getAttribute('accept');
-    await check('厂家结构表可从资源库导入', /xlsx|xls|csv/.test(formats || ''), { acceptedFormats: formats, owner: 'T3 数据导入接口与 T1 前端接线' }, { fatal: false });
-    if (!/xlsx|xls|csv/.test(formats || '')) {
-      report.handoffs ||= [];
-      report.handoffs.push({ label: 'L11 厂家 XLS/CSV 结构表导入', status: '未通过', owner: 'T3 数据导入契约', screenshot: shot.screenshot, acceptedFormats: formats });
-    }
+    const pdfFormats = await page.getByLabel('上传 PDF 文件', { exact: true }).getAttribute('accept');
+    await check('PDF 与 Excel/CSV 使用不同的真实入口', /\.pdf/.test(pdfFormats || '') && !/xlsx|csv/.test(pdfFormats || ''),
+      { pdfFormats, workbookFormats: formats });
+    await capture('manufacturer-pdf-entry');
   });
 
   for (const [group, kind, parameters] of [

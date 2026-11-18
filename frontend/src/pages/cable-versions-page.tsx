@@ -91,7 +91,8 @@ export function CableVersionsPage() {
   const visibleTeaching = teaching.filter(row => (origin === 'all' || origin === 'demo') && `${row.name} ${row.version}`.toLocaleLowerCase().includes(term));
   const series = [...new Set(visible.map((row) => row.series))].sort();
   const current = all.find((row) => row.id === selected);
-  const openImport = () => void navigate({ to: "/resources/cables/imports", search: { theme } });
+  const openImport = () => void navigate({ to: "/resources/cables/structure-import", search: { theme } });
+  const openPdfImport = () => void navigate({ to: "/resources/cables/imports", search: { theme } });
   const origins = [...new Set([...all.flatMap((row) => [...kindsOf(row)]), ...(teaching.length ? ['demo'] : [])])].filter((kind) => SOURCE[kind]);
   const filtered = !!query || origin !== 'all';
   const clearFilters = () => { setQuery(''); setOrigin('all'); };
@@ -99,7 +100,7 @@ export function CableVersionsPage() {
     <CatalogShell
       title="电缆型号版本"
       status={<span className="muted">{all.length} 项 · 研究按版本引用</span>}
-      actions={<Button variant={starting ? 'outline' : 'primary'} size="compact" onClick={openImport}>从厂家资料导入</Button>}
+      actions={<><Button variant="outline" size="compact" onClick={openPdfImport}>提取厂家 PDF</Button><Button variant={starting ? 'outline' : 'primary'} size="compact" onClick={openImport}>导入厂家结构表</Button></>}
       property={teachingCard ? (
         <PropertyPanel
           collapsed={false}
@@ -154,7 +155,7 @@ export function CableVersionsPage() {
             {filtered && <Button size="compact" onClick={clearFilters}>清除型号筛选</Button>}
           </Toolbar>
           <div data-page="cable-versions" data-state={visible.length ? "success" : "empty"}>
-            {!visible.length ? <InlineEmpty title={filtered ? '没有匹配的型号版本' : '还没有厂家或设计型号版本，可从厂家资料导入。'} action={filtered ? <Button size="compact" onClick={clearFilters}>清除型号筛选</Button> : <Button size="compact" onClick={openImport}>从厂家资料导入</Button>} /> : (
+            {!visible.length ? <InlineEmpty title={filtered ? '没有匹配的型号版本' : '还没有厂家或设计型号版本，可导入 Excel / CSV 厂家结构表或提取 PDF 资料。'} action={filtered ? <Button size="compact" onClick={clearFilters}>清除型号筛选</Button> : <Button size="compact" onClick={openImport}>导入厂家结构表</Button>} /> : (
               <DataTable<Version>
                 label="电缆型号版本"
                 selectedId={selected}
