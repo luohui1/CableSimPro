@@ -65,7 +65,7 @@ export function DeliveriesPage() {
   const label = (row: Row) => `${row.owner} · ${row.kind === "specification" ? "规格书" : "计算书"} · 第 ${row.version} 版`;
   const go = (workspace: string, next: string) => { download.reset(); setPreviewId(''); void navigate({ to: "/deliveries", search: { theme, workspace, delivery: next } }); };
   function emptyList() {
-    if (!filter) return <EmptyState title="还没有交付" description="在研究里生成计算书，或在型号里生成规格书。保存的文档会出现在这里。"
+    if (!filter) return <EmptyState title="还没有交付" description="这里展示已有的交付档案。选择研究或型号，核对保存来源并生成所需文件。"
       action={<div className="report-toolbar"><Button variant="primary" onClick={() => void navigate({ to: "/studies", search: { theme } })}>选择研究</Button>
         <Button variant="outline" onClick={() => void navigate({ to: "/types", search: { theme } })}>选择型号</Button></div>} />;
     if (!filteredOwner) return <EmptyState title="筛选对象已不可用" description="当前目录中没有这个工程或型号。清除筛选后可重新选择。"
@@ -76,7 +76,7 @@ export function DeliveriesPage() {
         <Button variant="outline" onClick={() => go('', '')}>清除筛选</Button></div>} />;
     const model = ownerTypes.data?.some(item => text(item.id) === filter);
     return <EmptyState title={model ? "这个型号还没有交付" : "这个工程还没有交付"}
-      description={model ? `打开“${filteredOwner.name}”的规格书，核对并保存文档后会出现在这里。` : `打开“${filteredOwner.name}”中的研究，生成并保存计算书后会出现在这里。`}
+      description={model ? `打开“${filteredOwner.name}”的规格书，核对并保存文档后会出现在这里。` : `打开“${filteredOwner.name}”中的研究，查看保存运行并生成计算书。已有的交付档案会显示在这里。`}
       action={<Button variant="primary" onClick={() => void navigate(model
         ? { to: `/types/${filter}/specification/content`, search: { theme } }
         : { to: "/studies", search: { theme, workspace: filter } })}>{model ? '打开型号规格书' : '打开工程研究'}</Button>} />;

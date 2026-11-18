@@ -28,11 +28,12 @@ import { savedRunLabel } from './study-run-label';
 import { reportSectionImages } from './study-report-drawing';
 import { useFemEvidence } from './study-fem-conclusion';
 import { FormalExport } from './formal-export';
+import { StudyFormalReport } from './study-formal-report';
 import type { FormalSource } from '@/api/formal-deliveries';
 
 export function StudyReport(props: ComponentProps<typeof CurrentReport>) {
   const search = useSearch({ strict: false });
-  return <><div className="report-toolbar"><Link to="/deliveries" search={{ workspace: props.wid, delivery: props.did, theme: search.theme === "dark" ? "dark" : "light" }}>交付历史 · 计算书与规格书</Link></div><CurrentReport {...props} /></>;
+  return <><div className="report-toolbar"><Link to="/deliveries" search={{ workspace: props.wid, delivery: props.did, theme: search.theme === "dark" ? "dark" : "light" }}>交付历史 · 计算书与规格书</Link></div>{props.did ? <CurrentReport {...props} autoGenerate={false} /> : <StudyFormalReport {...props} />}</>;
 }
 function CurrentReport({
   wid,

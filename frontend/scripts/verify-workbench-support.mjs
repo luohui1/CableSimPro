@@ -10,6 +10,10 @@ import { assertLayout } from './layout-assertions.mjs';
 export const isReadOnlyStandardsLookup = (method, path) => method === 'POST'
   && path === '/api/plugin-queries/cablesim.standards-basis/lookup';
 
+/** The accepted formal-delivery contract renders files from frozen sources without persisting a delivery. */
+export const isReadOnlyFormalDelivery = (method, path) => method === 'POST'
+  && ['/api/formal-deliveries/preview', '/api/formal-deliveries/export'].includes(path);
+
 /** Shared evidence only. Every scenario changes engineering data through the UI. */
 export async function walkthrough(name, scenario) {
   assert.equal(process.env.E2E_ISOLATED, '1', '工作台走查只能在隔离种子库中执行');
@@ -55,9 +59,10 @@ export async function walkthrough(name, scenario) {
   page.on('request', request => {
     if (!request.url().includes('/api/')) return;
     const item = { method: request.method(), path: new URL(request.url()).pathname };
-    if (isReadOnlyStandardsLookup(item.method, item.path)) {
+    if (isReadOnlyStandardsLookup(item.method, item.path) || isReadOnlyFormalDelivery(item.method, item.path)) {
       // Preserve every such call in audit evidence, but do not classify a pure
-      // fixed-release lookup as a mutation of the workspace or saved outputs.
+      // fixed-release lookup or frozen file rendering as a persisted engineering mutation.
+      // Walkthroughs also compare the actual workspace, study, run and delivery records.
       (report.readOnlyQueries ||= []).push(item);
     } else if (!['GET', 'HEAD', 'OPTIONS'].includes(item.method)) {
       report.writes.push(item);

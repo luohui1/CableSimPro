@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { walkthrough } from './verify-workbench-support.mjs';
+import { repositoryRoot } from './browser.mjs';
 import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
 
 // Chromium's native PDF viewer has no DOM paint signal. Read its unmodified
@@ -44,6 +45,40 @@ print(json.dumps({'width':w,'height':h,'whiteFraction':white/max(total,1),'inkPi
     child.stdin.end(png);
   });
 }
+
+async function inspectFormalBook(bundleFile, pdfFile) {
+  const script = `import importlib.util,json,pathlib,sys
+source=pathlib.Path(sys.argv[1])
+spec=importlib.util.spec_from_file_location("workbench_formal_verifier",source)
+verifier=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(verifier)
+bundle=json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+class SavedReads:
+ def api(self,method,url):
+  verifier.require(method=="GET" and url in bundle["responses"],"正式文件来源未从本次隔离服务独立读取")
+  return bundle["responses"][url]
+ def artifact(self,path,value):
+  pass
+payloads=verifier.SourceReader(SavedReads()).payloads(bundle["preview"])
+checks=verifier.validate_model(bundle["preview"],payloads,expected_document=bundle["request"]["document"])
+pdf=verifier.validate_pdf(pathlib.Path(sys.argv[3]).read_bytes(),bundle["preview"],payloads)
+print(json.dumps({"model":checks,"pdf":pdf},ensure_ascii=False))`;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.env.E2E_PYTHON || process.env.PYTHON || 'python',
+      ['-c', script, path.join(repositoryRoot, 'scripts/verify_formal_delivery.py'), bundleFile, pdfFile],
+      { stdio: ['ignore', 'pipe', 'pipe'] });
+    const output = [], errors = [];
+    child.stdout.on('data', value => output.push(value));
+    child.stderr.on('data', value => errors.push(value));
+    child.on('error', reject);
+    child.on('close', code => {
+      if (code !== 0) return reject(Error('正式计算书与独立完整来源核验失败：' + Buffer.concat(errors).toString().slice(0, 6000)));
+      try { resolve(JSON.parse(Buffer.concat(output).toString())); }
+      catch (error) { reject(error); }
+    });
+  });
+}
+
 
 // Read the real download, including escaped quotes and multiline source cells.
 function csvRows(text) {
@@ -507,29 +542,173 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     await csvButton.scrollIntoViewIfNeeded();
   });
   await independent('08-calculation-book-download', async () => {
-    await page.goto(resultUrl);
-    await expect(page.getByRole('region', { name: '载流量结论', exact: true })).toBeVisible();
-    await expect(command()).toBeVisible();
-    await clickCommand('生成计算书');
-    await expect(page.getByRole('button', { name: '下载 PDF', exact: true })).toBeEnabled({ timeout: 90000 });
-    const pending = page.waitForEvent('download');
-    await page.getByRole('button', { name: '下载 PDF', exact: true }).click();
-    const file = await pending, target = path.join(out, 'calculation-book-' + tag + '.pdf');
-    await file.saveAs(target);
-    const pdf = await fs.readFile(target), pdfSha256 = createHash('sha256').update(pdf).digest('hex');
-    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
-    await page.waitForURL(next => !!next.searchParams.get('delivery'));
-    const deliveryId = new URL(page.url()).searchParams.get('delivery');
-    expect(deliveryId).toBeTruthy();
-    const delivery = await api(`/api/workspaces/${wid}/deliveries/${deliveryId}?view=summary`);
-    const source = delivery.sources?.find(item => item.run_id === second.id);
-    check('计算书引用本次保存运行及准确输入输出摘要', !!source
-      && source.input_digest === second.input_digest && source.output_digest === second.output_digest,
-      { run: second.id, delivery: deliveryId, source });
-    if (report.phase === 'after') {
+    if (report.phase === 'before') {
+      await page.goto(resultUrl);
+      await expect(page.getByRole('region', { name: '载流量结论', exact: true })).toBeVisible();
+      await expect(command()).toBeVisible();
+      await clickCommand('生成计算书');
+      await expect(page.getByRole('button', { name: '下载 PDF', exact: true })).toBeEnabled({ timeout: 90000 });
+      const pending = page.waitForEvent('download');
+      await page.getByRole('button', { name: '下载 PDF', exact: true }).click();
+      const file = await pending, target = path.join(out, 'calculation-book-' + tag + '.pdf');
+      await file.saveAs(target);
+      const pdf = await fs.readFile(target), pdfSha256 = createHash('sha256').update(pdf).digest('hex');
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+      await page.waitForURL(next => !!next.searchParams.get('delivery'));
+      const deliveryId = new URL(page.url()).searchParams.get('delivery');
+      expect(deliveryId).toBeTruthy();
+      const delivery = await api(`/api/workspaces/${wid}/deliveries/${deliveryId}?view=summary`);
+      const source = delivery.sources?.find(item => item.run_id === second.id);
+      check('计算书引用本次保存运行及准确输入输出摘要', !!source
+        && source.input_digest === second.input_digest && source.output_digest === second.output_digest,
+        { run: second.id, delivery: deliveryId, source });
+      return;
+    }
+    const before = {
+      workspace: await api('/api/workspaces/' + wid),
+      study: await api('/api/workspaces/' + wid + '/studies/' + sid),
+      run: await api('/api/workspaces/' + wid + '/studies/' + sid + '/runs/' + second.id + '?view=full'),
+      deliveries: await api('/api/workspaces/' + wid + '/deliveries'),
+    };
+    const requests = [], responses = [], pendingReads = [];
+    const formalPath = url => {
+      const parsed = new URL(url);
+      return parsed.origin === new URL(base).origin
+        && ['/api/formal-deliveries/preview', '/api/formal-deliveries/export'].includes(parsed.pathname)
+        ? parsed.pathname : '';
+    };
+    const onRequest = request => {
+      const endpoint = formalPath(request.url());
+      if (endpoint) requests.push({ method: request.method(), path: endpoint, body: request.postDataJSON() });
+    };
+    const onResponse = response => {
+      const endpoint = formalPath(response.url());
+      if (!endpoint) return;
+      pendingReads.push((async () => {
+        const entry = { path: endpoint, status: response.status(), headers: await response.allHeaders() };
+        if (endpoint.endsWith('/preview')) entry.model = await response.json();
+        responses.push(entry);
+      })().catch(error => responses.push({ path: endpoint, readError: error.message })));
+    };
+    page.on('request', onRequest);
+    page.on('response', onResponse);
+    const writesStart = report.writes.length;
+    const evidence = { ...size, run: second.id, requests, responses };
+    (report.formalBooks ||= []).push(evidence);
+    try {
+      await page.goto(resultUrl);
+      await expect(page.getByRole('region', { name: '载流量结论', exact: true })).toBeVisible();
+      await clickCommand('生成计算书');
+      const form = page.getByRole('form', { name: '正式计算书文件信息', exact: true });
+      await expect(form).toBeVisible();
+      await expect(field('单位名称')).toHaveValue('');
+      await expect(field('文件编号')).toHaveValue('');
+      await expect(field('版次')).toHaveValue('');
+      await expect(field('签发日期（可选）')).toHaveValue('');
+      const previewButton = form.getByRole('button', { name: '预览计算书', exact: true });
+      await expect(previewButton).toBeEnabled();
+      await previewButton.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByText('单位名称不能为空。', { exact: true })).toBeVisible();
+      await expect(field('单位名称')).toBeFocused();
+      expect(requests).toEqual([]);
+      await capture('08-formal-empty-metadata-keyboard-validation');
+
+      const metadata = {
+        organization: '工程走查单位（演示）', number: 'T1-RESEARCH-' + tag, revision: 'A',
+        issued_on: null, header: '载流量研究验证', footer: '完整来源随文件保存', logo_data_uri: null,
+      };
+      for (const [label, value] of [
+        ['单位名称', metadata.organization], ['文件编号', metadata.number], ['版次', metadata.revision],
+        ['页眉（可选）', metadata.header], ['页脚（可选）', metadata.footer],
+      ]) {
+        await field(label).fill(value);
+        await field(label).press('Tab');
+      }
+      await expect(form).toContainText('本文件包含保存运行的全部 ' + before.run.snapshot.cases.length + ' 个工况');
+      await capture('08-formal-real-metadata-ready');
+      await previewButton.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByText('正式 PDF 已核对', { exact: true })).toBeVisible({ timeout: 90000 });
+      const download = page.getByRole('button', { name: '下载 PDF', exact: true });
+      await expect(download).toBeEnabled();
       const frame = page.locator('iframe[title="计算书预览"]');
       await expect(frame).toBeVisible();
       await expect(frame).toHaveAttribute('src', /^blob:/);
+      await Promise.all(pendingReads);
+      const previews = responses.filter(entry => entry.path.endsWith('/preview'));
+      const exports = responses.filter(entry => entry.path.endsWith('/export'));
+      expect(responses.every(entry => entry.status === 200 && !entry.readError)).toBe(true);
+      expect(previews).toHaveLength(1);
+      expect(exports).toHaveLength(1);
+      const preview = previews[0].model;
+      const frozen = {
+        kind: 'calculation',
+        source: { workspace_id: wid, expected_revision: before.workspace.revision,
+          runs: [{ run_id: second.id, input_digest: before.run.input_digest, output_digest: before.run.output_digest }] },
+        document: metadata,
+      };
+      expect(requests).toEqual([
+        { method: 'POST', path: '/api/formal-deliveries/preview', body: frozen },
+        { method: 'POST', path: '/api/formal-deliveries/export', body: { ...frozen, format: 'pdf', expected_model_digest: preview.model_digest } },
+      ]);
+      expect(preview.metadata).toEqual(metadata);
+      expect(preview.source_identity).toMatchObject({ workspace_id: wid, revision: before.workspace.revision,
+        pins: frozen.source.runs });
+      expect(new URL(page.url()).searchParams.get('run')).toBe(second.id);
+      expect(new URL(page.url()).searchParams.get('delivery') || '').toBe('');
+      check('计算书引用本次保存运行及准确输入输出摘要', true,
+        { run: second.id, request: frozen, sourceIdentity: preview.source_identity });
+
+      const originalPreviewUrl = await frame.getAttribute('src');
+      const reportTabs = page.getByRole('tablist', { name: '计算书页签', exact: true });
+      await reportTabs.getByRole('tab', { name: '内容', exact: true }).click();
+      await page.waitForURL(next => next.pathname === '/studies/' + sid + '/report/content');
+      const content = page.getByRole('region', { name: '正式计算书内容', exact: true });
+      await expect(content.getByRole('heading', { name: '保存运行计算书', exact: true })).toBeVisible();
+      await expect(content.locator('li')).toHaveText(preview.sections.map(section => section.heading));
+      await expect(field('单位名称')).toHaveValue(metadata.organization);
+      await expect(field('文件编号')).toHaveValue(metadata.number);
+      await capture('08-formal-content-real-sections');
+      const sourceTab = reportTabs.getByRole('tab', { name: '来源', exact: true });
+      await sourceTab.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForURL(next => next.pathname === '/studies/' + sid + '/report/sources');
+      const sources = page.locator('dl.report-sources');
+      for (const identity of [second.id, before.run.input_digest, before.run.output_digest,
+        preview.source_digest, preview.model_digest, exports[0].headers['x-artifact-sha256']])
+        await expect(sources).toContainText(identity);
+      await expect(page.locator('.button-primary:visible')).toHaveCount(1);
+      await capture('08-formal-sources-complete-identities');
+      await reportTabs.getByRole('tab', { name: '预览', exact: true }).click();
+      await page.waitForURL(next => next.pathname === '/studies/' + sid + '/report/preview');
+      await expect(frame).toBeVisible();
+      await expect(frame).toHaveAttribute('src', originalPreviewUrl);
+      await expect(download).toBeEnabled();
+      check('内容与来源页签经鼠标和Enter往返保留文件信息完整摘要及同一PDF预览', true,
+        { run: second.id, modelDigest: preview.model_digest, sourceDigest: preview.source_digest,
+          sectionCount: preview.sections.length, previewUrlUnchanged: true });
+
+      const pending = page.waitForEvent('download');
+      await download.click();
+      const file = await pending, target = path.join(out, 'calculation-book-' + tag + '.pdf');
+      await file.saveAs(target);
+      const pdf = await fs.readFile(target), pdfSha256 = createHash('sha256').update(pdf).digest('hex');
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+      await Promise.all(pendingReads);
+      expect(requests.filter(entry => entry.path.endsWith('/export'))).toHaveLength(1);
+      expect(requests.filter(entry => entry.path.endsWith('/preview'))).toEqual([
+        { method: 'POST', path: '/api/formal-deliveries/preview', body: frozen },
+        { method: 'POST', path: '/api/formal-deliveries/preview', body: frozen },
+      ]);
+      expect(responses.filter(entry => entry.path.endsWith('/preview')).every(entry =>
+        entry.status === 200 && entry.model.model_digest === preview.model_digest
+        && entry.model.source_digest === preview.source_digest)).toBe(true);
+      expect(exports[0].headers['x-artifact-sha256']).toBe(pdfSha256);
+      expect(exports[0].headers['x-delivery-source-sha256']).toBe(preview.source_digest);
+      expect(exports[0].headers['x-delivery-model-sha256']).toBe(preview.model_digest);
+      expect(exports[0].headers['content-type'].split(';')[0]).toBe('application/pdf');
+      expect(exports[0].headers['cache-control']).toBe('no-store');
       const binding = await frame.evaluate(async node => {
         const bytes = await (await fetch(node.src)).arrayBuffer();
         const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -537,36 +716,84 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
       });
       expect(binding).toMatchObject({ bytes: pdf.length, sha256: pdfSha256, signature: '%PDF-' });
       const started = Date.now(), attempts = [];
-      let pixels, screenshot;
+      let screenshot, pixels;
       try {
+        await frame.scrollIntoViewIfNeeded();
         await expect.poll(async () => {
           screenshot = await frame.screenshot({ animations: 'disabled' });
           pixels = await pdfPaperPaint(screenshot);
           attempts.push({ elapsedMs: Date.now() - started, ...pixels });
           return pixels.painted;
-        }, { timeout: 30000, intervals: [100, 250, 500], message: '真实计算书预览必须绘出纸面与文字，黑色外壳不算完成' }).toBe(true);
+        }, { timeout: 30000, intervals: [100, 250, 500], message: '真实正式计算书预览必须绘出纸面与文字' }).toBe(true);
       } finally {
         if (screenshot) await fs.writeFile(path.join(out, 'calculation-book-preview-' + tag + '.png'), screenshot);
-        (report.pdfPreviews ||= []).push({ ...size, run: second.id, delivery: deliveryId, download: path.basename(target),
+        (report.pdfPreviews ||= []).push({ ...size, run: second.id, download: path.basename(target),
           preview: 'calculation-book-preview-' + tag + '.png', binding, attempts });
       }
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       expect(await frame.getAttribute('src')).toBe(binding.src);
-      expect(new URL(page.url()).searchParams.get('delivery')).toBe(deliveryId);
+      expect(new URL(page.url()).searchParams.get('run')).toBe(second.id);
+      expect(new URL(page.url()).searchParams.get('delivery') || '').toBe('');
       const finalScreenshot = await frame.screenshot({ animations: 'disabled' });
       const finalPixels = await pdfPaperPaint(finalScreenshot);
       await fs.writeFile(path.join(out, 'calculation-book-preview-' + tag + '.png'), finalScreenshot);
       Object.assign(report.pdfPreviews.at(-1), { finalPixels,
         screenshotSha256: createHash('sha256').update(finalScreenshot).digest('hex') });
+      await capture('08-formal-pdf-preview-same-downloaded-bytes');
       check('计算书预览与原始下载字节一致且已绘出实际纸面文字', finalPixels.painted,
-        { run: second.id, delivery: deliveryId, pdfSha256, preview: binding, pixels: finalPixels });
+        { run: second.id, pdfSha256, preview: binding, pixels: finalPixels });
+
+      const sourceReplies = {};
+      for (const source of Object.values(preview.sources)) {
+        const url = new URL(source.api_url, base);
+        expect(source.api_url.startsWith('/api/') && url.origin === new URL(base).origin && !url.hash).toBe(true);
+        sourceReplies[source.api_url] = await api(source.api_url);
+      }
+      const bundle = path.join(out, 'formal-calculation-sources-' + tag + '.json');
+      await fs.writeFile(bundle, JSON.stringify({ request: frozen, preview, responses: sourceReplies }, null, 2));
+      const inspected = await inspectFormalBook(bundle, target);
+      Object.assign(evidence, { download: path.basename(target), sourceBundle: path.basename(bundle),
+        pdfSha256, bytes: pdf.length, sourceIdentity: preview.source_identity, inspected, previewBinding: binding,
+        previewScreenshotSha256: createHash('sha256').update(finalScreenshot).digest('hex') });
+      check('正式计算书逐个数值、单位、四独立空签栏、完整附件与独立API来源相符', true, inspected);
+      const after = {
+        workspace: await api('/api/workspaces/' + wid),
+        study: await api('/api/workspaces/' + wid + '/studies/' + sid),
+        run: await api('/api/workspaces/' + wid + '/studies/' + sid + '/runs/' + second.id + '?view=full'),
+        deliveries: await api('/api/workspaces/' + wid + '/deliveries'),
+      };
+      expect(after).toEqual(before);
+      expect(report.writes.slice(writesStart)).toEqual([]);
+      check('正式预览和下载没有保存虚假交付ID或改变工程研究运行档案', true,
+        { workspace: wid, revision: after.workspace.revision, run: second.id, writes: report.writes.slice(writesStart) });
+
+      await field('页脚（可选）').fill('修改后的页脚须重新预览');
+      await expect(download).toBeDisabled();
+      await expect(page.locator('iframe[title="计算书预览"]')).toHaveCount(0);
+      await expect(field('单位名称')).toHaveValue(metadata.organization);
+      await expect(field('文件编号')).toHaveValue(metadata.number);
+      await expect(field('版次')).toHaveValue(metadata.revision);
+      await expect(previewButton).toBeEnabled();
+      await capture('08-formal-metadata-change-invalidates-old-file');
+      check('修改文件信息即时撤下旧预览并禁用旧下载且保留其余填写', true,
+        { source: frozen.source, requestCount: requests.length });
+    } finally {
+      page.off('request', onRequest);
+      page.off('response', onResponse);
+      await Promise.all(pendingReads);
     }
   });
   await independent('08b-official-calculation-pdf-and-excel', async () => {
-    // The formal T4 route is deliberately separate from archived HTML/PDF.
-    // It must export the already verified second run without launching a solver.
-    await expect(page).toHaveURL(/delivery=/);
-    const opener = page.getByRole('button', { name: '正式交付（PDF / Excel）', exact: true });
+    // Keep the independently exercised generic PDF/Excel exporter available.
+    // The primary calculation page now uses a real run, without a synthetic archive ID.
+    if (report.phase === 'after') {
+      const url = new URL(page.url());
+      expect(url.searchParams.get('run')).toBe(second.id);
+      expect(url.searchParams.get('delivery') || '').toBe('');
+    } else await expect(page).toHaveURL(/delivery=/);
+    const opener = page.getByRole('button', {
+      name: report.phase === 'after' ? '其他交付格式' : '正式交付（PDF / Excel）', exact: true,
+    });
     await expect(opener).toBeEnabled({ timeout: 60000 });
     const savedBefore = await api('/api/workspaces/' + wid);
     await opener.click();
@@ -1057,6 +1284,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
           }));
           return fields.filter(field => field.path && field.value !== undefined).length;
         }, { timeout: 60000, message: '等待保存敷设输入表真实数值控件稳定挂载' }).toBeGreaterThan(0);
+        expect(fields.length).toBeGreaterThan(0);
         let fixedCaseEvidence;
         if (fixed) {
           const wrapper = page.locator('.study-saved-candidate-input');
@@ -1427,10 +1655,15 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         await expect(wrapper).toHaveAttribute('data-case-id', caseId);
         await expect(wrapper).toHaveAttribute('data-input-digest', input.input_digest);
         await expect(wrapper).toContainText('保存候选 · ' + name);
-        const fields = await page.getByRole('table', { name: label, exact: true }).locator('.number-field').evaluateAll(nodes =>
-          nodes.map(node => { const field = node.querySelector('input'); return {
-            path: node.dataset.fieldPath, value: field?.value, full: field?.title, readOnly: field?.readOnly,
-          }; }));
+        const savedTable = page.getByRole('table', { name: label, exact: true });
+        let fields = [];
+        await expect.poll(async () => {
+          fields = await savedTable.locator('.number-field').evaluateAll(nodes =>
+            nodes.map(node => { const field = node.querySelector('input'); return {
+              path: node.dataset.fieldPath, value: field?.value, full: field?.title, readOnly: field?.readOnly,
+            }; }));
+          return fields.filter(field => field.path && field.value !== undefined).length;
+        }, { timeout: 60000, message: '所选保存候选必须渲染真实参数行后再核对快照与只读状态' }).toBeGreaterThan(0);
         expect(fields.length).toBeGreaterThan(0);
         for (const field of fields) {
           expect(field.readOnly).toBe(true);

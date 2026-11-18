@@ -13,12 +13,13 @@ import {
 type Props = {
   kind: FormalKind;
   alternativeKinds?: FormalKind[];
+  triggerLabel?: string;
   source: FormalSource | null;
   disabledReason?: string;
 };
 
 /** Read-only T4 official delivery, deliberately separate from the legacy PDF generator. */
-export function FormalExport({ kind, alternativeKinds = [], source, disabledReason }: Props) {
+export function FormalExport({ kind, alternativeKinds = [], triggerLabel = '正式交付（PDF / Excel）', source, disabledReason }: Props) {
   const [open, setOpen] = useState(false);
   const [selectedKind, setSelectedKind] = useState(kind);
   const offeredKinds = [kind, ...alternativeKinds];
@@ -108,14 +109,15 @@ export function FormalExport({ kind, alternativeKinds = [], source, disabledReas
 
   return <>
     <Button size="compact" variant="secondary" disabled={!source || !!disabledReason}
+      title={disabledReason || (!source ? '请先选择完整且可核对的保存来源' : undefined)}
       onClick={() => { setError(''); setOpen(true); }}>
-      正式交付（PDF / Excel）
+      {triggerLabel}
     </Button>
     <Dialog open={open} onOpenChange={value => { if (!value && pending.current) return; setOpen(value); }}
       title="正式交付文件" description="从已保存且可验证的来源生成正式文件，不重算、不自动签字。预览后固定摘要，导出前再次核验来源。"
       actions={<div className="report-toolbar">
         <Button variant="secondary" disabled={!!busy} onClick={() => setOpen(false)}>关闭</Button>
-        <Button variant="primary" loading={!!busy && !current} disabled={!!busy || !source || !!disabledReason ||
+        <Button variant={current ? "secondary" : "primary"} loading={!!busy && !current} disabled={!!busy || !source || !!disabledReason ||
           !organization.trim() || !number.trim() || !revision.trim()} onClick={() => void preview()}>
           核对来源并预览
         </Button>
