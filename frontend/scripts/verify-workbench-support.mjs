@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { expect as playwrightExpect } from '@playwright/test';
 import { openHeadlessBrowser, repositoryRoot } from './browser.mjs';
 import { assertLayout } from './layout-assertions.mjs';
@@ -47,15 +47,80 @@ export async function walkthrough(name, scenario) {
   const expect = playwrightExpect.configure({ timeout: 30000 });
   page.setDefaultTimeout(30000);
   page.on('pageerror', error => report.errors.push({ kind: 'pageerror', url: page.url(), message: error.message }));
+  const responseEntries = new WeakMap(), requestIds = new WeakMap();
+  let requestSequence = 0, responseSequence = 0;
+  const requestId = request => {
+    if (!requestIds.has(request)) requestIds.set(request, 'request-' + (++requestSequence));
+    return requestIds.get(request);
+  };
   page.on('console', message => {
-    if (message.type() === 'error') report.errors.push({ kind: 'console', url: page.url(), message: message.text() });
+    if (message.type() === 'error') report.errors.push({ kind: 'console', url: page.url(), message: message.text(),
+      location: message.location(), argumentCount: message.args().length });
   });
   page.on('response', response => {
-    if (response.status() >= 400) report.network.push({ status: response.status(), method: response.request().method(), path: new URL(response.url()).pathname });
+    if (response.status() < 400) return;
+    const entry = { status: response.status(), method: response.request().method(), path: new URL(response.url()).pathname,
+      url: response.url(), requestId: requestId(response.request()), responseId: 'response-' + (++responseSequence) };
+    report.network.push(entry); responseEntries.set(response, entry);
   });
   page.on('requestfailed', request => {
-    if (!request.failure()?.errorText?.includes('ERR_ABORTED')) report.network.push({ method: request.method(), path: new URL(request.url()).pathname, failure: request.failure()?.errorText });
+    if (!request.failure()?.errorText?.includes('ERR_ABORTED')) report.network.push({ method: request.method(),
+      path: new URL(request.url()).pathname, failure: request.failure()?.errorText, url: request.url(), requestId: requestId(request) });
   });
+  async function confirmExpectedGeometryFailure(response, proof) {
+    // An explicit negative UI scenario may confirm its own actual Response only
+    // after input attribution, download, navigation and no-persistence assertions.
+    // Nothing is removed from the network/console evidence or performance audit.
+    assert.equal(name, 'types'); assert.equal(phase, 'after');
+    const entry = responseEntries.get(response), request = response.request(), url = new URL(response.url());
+    assert.ok(entry && !entry.expected, '必须绑定本次页面实际且尚未确认的失败 Response');
+    assert.equal(response.status(), 422); assert.equal(request.method(), 'POST');
+    assert.equal(url.origin, new URL(base).origin);
+    assert.equal(url.pathname, '/api/workspaces/' + encodeURIComponent(proof.workspace) + '/geometry-preview');
+    assert.equal(url.search, ''); assert.equal(url.hash, '');
+    assert.equal(proof.kind, 'type-geometry-missing-screen-input');
+    assert.ok(typeof proof.reason === 'string' && proof.reason.length > 0);
+    for (const key of ['uniqueMissingInputVerified', 'downloadVerified', 'navigationVerified', 'completeEntitiesUnchanged', 'zeroPersistentWrites'])
+      assert.equal(proof[key], true, '缺项负向验收尚未完成：' + key);
+    const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+    async function verifiedFile(reference, actual, label) {
+      assert.ok(reference && typeof reference.file === 'string' && path.basename(reference.file) === reference.file, label + '必须位于本轮证据目录');
+      const saved = await fs.readFile(path.join(out, reference.file));
+      assert.ok(saved.equals(actual), label + '必须保留实际原始字节');
+      assert.equal(reference.bytes, actual.length); assert.equal(reference.sha256, digest(actual));
+    }
+    const body = await response.body(), requestBody = request.postDataBuffer();
+    assert.ok(requestBody, '真实预览请求缺少正文');
+    await verifiedFile(proof.response, body, '响应'); await verifiedFile(proof.request, requestBody, '请求');
+    const payload = JSON.parse(body.toString('utf8')), detail = payload.detail ?? payload;
+    const diagnostic = typeof detail === 'string' ? detail : detail?.message;
+    assert.ok(typeof diagnostic === 'string' && diagnostic.length > 0, '缺项原始诊断不存在');
+    assert.equal(proof.diagnostic, diagnostic);
+    assert.ok(Array.isArray(proof.missing) && proof.missing.length > 0
+      && proof.missing.every(field => ['tape_width', 'overlap'].includes(field)));
+    assert.ok(typeof proof.field === 'string' && /\/(?:tape_width|overlap)$/.test(proof.field));
+    await verifiedFile(proof.download, Buffer.from(diagnostic, 'utf8'), '实际下载诊断');
+    entry.expected = { kind: proof.kind, reason: proof.reason, proof };
+    return { requestId: entry.requestId, responseId: entry.responseId };
+  }
+  function matchExpectedResourceConsoleErrors() {
+    for (const url of new Set(report.network.filter(row => row.expected).map(row => row.url))) {
+      const responses = report.network.filter(row => row.url === url);
+      if (!responses.length || !responses.every(row => row.expected && row.status === 422 && !row.failure)) continue;
+      // Chromium's native resource error has no console arguments and points at
+      // the failed resource, unlike an application console.error call.
+      const consoles = report.errors.filter(row => row.kind === 'console' && row.location?.url === url
+        && row.location.lineNumber === 0 && row.location.columnNumber === 0 && row.argumentCount === 0
+        && /^Failed to load resource: the server responded with a status of 422 \([^()]*\)$/.test(row.message));
+      // Exact-URL/status cardinality must establish a closed set. Any unmatched
+      // response or ambiguous/missing console counterpart stays unexpected.
+      if (consoles.length !== responses.length) continue;
+      consoles.forEach(entry => { entry.expected = { kind: 'native-resource-console-for-verified-422',
+        responseIds: responses.map(row => row.responseId), requestIds: responses.map(row => row.requestId),
+        reason: '此精确资源 URL 的全部失败响应都已逐对象完成缺项负向验收。',
+        association: 'closed exact-URL/status set with equal native-console cardinality; console API exposes no request ID' }; });
+    }
+  }
   page.on('request', request => {
     if (!request.url().includes('/api/')) return;
     const item = { method: request.method(), path: new URL(request.url()).pathname };
@@ -127,7 +192,7 @@ export async function walkthrough(name, scenario) {
       await page.setViewportSize(size);
       const tag = `${size.width}-${randomUUID().slice(0, 8)}`;
       try {
-        await scenario({ page, context, expect, base, api, choose, capture, step, check, out, size, tag, report });
+        await scenario({ page, context, expect, base, api, choose, capture, step, check, out, size, tag, report, confirmExpectedGeometryFailure });
       } catch (error) {
         report.failures.push({ ...size, message: error.stack || error.message });
         await capture('flow-blocked').catch(() => {});
@@ -139,6 +204,7 @@ export async function walkthrough(name, scenario) {
       try { await page.goto('about:blank'); }
       finally { page.off('dialog', leaveJourney); }
     }
+    matchExpectedResourceConsoleErrors();
     report.complete = true;
     report.summary = {
       steps: report.steps.length, checks: report.checks.length,
@@ -147,6 +213,10 @@ export async function walkthrough(name, scenario) {
       pageErrors: report.errors.filter(row => row.kind === 'pageerror').length,
       consoleErrors: report.errors.filter(row => row.kind === 'console').length,
       networkFailures: report.network.length,
+      expectedConsoleErrors: report.errors.filter(row => row.kind === 'console' && row.expected).length,
+      unexpectedConsoleErrors: report.errors.filter(row => row.kind === 'console' && !row.expected).length,
+      expectedNetworkFailures: report.network.filter(row => row.expected).length,
+      unexpectedNetworkFailures: report.network.filter(row => !row.expected).length,
     };
     await save();
     console.log(JSON.stringify({ name, phase, out, ...report.summary }));
@@ -154,8 +224,8 @@ export async function walkthrough(name, scenario) {
       assert.equal(report.summary.blockers, 0, name + ': 仍有流程卡点');
       assert.equal(report.summary.layoutFailures, 0, name + ': 界面规则未通过');
       assert.equal(report.summary.pageErrors, 0, name + ': 页面抛出异常');
-      assert.equal(report.summary.consoleErrors, 0, name + ': 控制台报错');
-      assert.equal(report.summary.networkFailures, 0, name + ': 请求失败');
+      assert.equal(report.summary.unexpectedConsoleErrors, 0, name + ': 未经完整负向验收的控制台报错');
+      assert.equal(report.summary.unexpectedNetworkFailures, 0, name + ': 未经完整负向验收的请求失败');
     }
   } catch (error) {
     flowError = error;

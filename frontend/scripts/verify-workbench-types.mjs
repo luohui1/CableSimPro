@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { walkthrough } from './verify-workbench-support.mjs';
+import { verifyTypeGeometryInput } from './verify-type-geometry-input.mjs';
 
 const fixedTypeRoutes = {
   structure: { module: 'structure', tab: 'quantities', page: 'quantities', label: '结构推导', table: '外径与用料', action: '更新结构推导' },
@@ -32,7 +33,7 @@ function archivedTypeModule(run) {
 // Run with isolated-e2e.mjs and the engineering demo database. All writes below
 // are mouse/keyboard actions; GETs only verify the state returned by this host.
 // Deliberately incomplete engineering inputs remain visible in the evidence.
-await walkthrough('types', async ({ page, expect, base, api, choose, capture, step, check, out, size, tag, report }) => {
+await walkthrough('types', async ({ page, expect, base, api, choose, capture, step, check, out, size, tag, report, confirmExpectedGeometryFailure }) => {
   const name = origin => `T1 型号走查 · ${origin} · ${tag}`;
   const versionLabel = value => String(value || '').replace(/\+engineering$/, '（工程版）').replace(/\+[^\s]+$/, '（定制版）') || '未提供';
   const workspace = id => api(`/api/workspaces/${encodeURIComponent(id)}`);
@@ -1550,6 +1551,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await attempt('00b-' + target.label + '从真实运行目录与旧链接回到固定只读结果', () => verifyFixedTypeNavigation(source));
     }
   }
+  if (report.phase === 'after') await attempt('00c-真实屏蔽层缺项的诊断下载和输入定位', () =>
+    verifyTypeGeometryInput({ page, expect, base, api, capture, check, out, size, tag, report, confirmExpectedGeometryFailure }));
   const options = await api('/api/types/creation-options');
   await attempt('01-型号列表与批量操作入口', async () => {
     await page.goto(base + '/types?theme=light');
