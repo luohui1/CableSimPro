@@ -30,6 +30,13 @@ from urllib.request import ProxyHandler, Request, build_opener
 from uuid import uuid4
 import zipfile
 
+if __package__:
+    from .verify_formal_delivery import verify_formal_exports
+    from .release_runtime_verification import assert_no_system_interpreters, base_python, public_command, runtime_identity
+else:
+    from verify_formal_delivery import verify_formal_exports
+    from release_runtime_verification import assert_no_system_interpreters, base_python, public_command, runtime_identity
+
 
 PROBE_ADDRESSES = ("1.1.1.1", "8.8.8.8", "2606:4700:4700::1111")
 
@@ -212,7 +219,7 @@ os.execve(plugin_python, [plugin_python, '-I', '-c', """ + repr(probe) + """, pl
 
 
 @contextmanager
-def windows_firewall(temporary: Path, interpreter: Path, gate):
+def windows_firewall(temporary: Path, interpreter: Path, gate, *, additional_programs: tuple[Path, ...] = ()):
     """Block only this gate's Python executables, preserving runner connectivity.
 
     The acceptance configuration has no companion programs. pip, the host and
@@ -223,7 +230,7 @@ def windows_firewall(temporary: Path, interpreter: Path, gate):
     require(bool(powershell), "缺少用于启用和恢复防火墙规则的 PowerShell。")
     programs = sorted({str(Path(sys.executable).resolve()),
                        str(Path(getattr(sys, "_base_executable", sys.executable)).resolve()),
-                       str(interpreter.resolve())})
+                       str(interpreter.resolve()), *(str(path.resolve()) for path in additional_programs)})
     group = "CableSimPro-offline-" + uuid4().hex
     configuration = temporary / "firewall.json"
     configuration.write_text(json.dumps({"group": group, "programs": programs,
@@ -303,7 +310,7 @@ if ($Action -eq 'enable') {
                 and {os.path.normcase(str(Path(rule["program"]).resolve())) for rule in rules}
                 == {os.path.normcase(program) for program in programs},
                 "未启用全部应用 Python 的外网阻断规则。")
-        gate.artifact("windows-firewall-rules.json", {"scope": "gate Python, installed host and method Python; no companion programs",
+        gate.artifact("windows-firewall-rules.json", {"scope": "evidence driver, bundled installer, installed base, venv and method Python; no companion programs",
                                                     "policy_store": "ActiveStore", "programs": programs, "rules": rules})
         yield
     except BaseException as error:
@@ -320,17 +327,17 @@ if ($Action -eq 'enable') {
 
 
 def no_node_environment(directory: Path) -> dict[str, str]:
-    """Provide Python/system commands while making Node/npm unavailable."""
+    """Provide OS commands only: no system Python, py, pip, Node or npm."""
     commands = directory / "commands"
     commands.mkdir()
     paths = [str(commands)]
     if os.name == "nt":
         windows = Path(os.environ["SystemRoot"])
-        paths.extend([str(windows / "System32"), str(windows),
+        paths.extend([str(windows / "System32"),
                       str(windows / "System32/WindowsPowerShell/v1.0")])
     else:
         # Do not inherit /usr/bin wholesale: some runners install Node there.
-        for name in ("sh", "bash", "uname", "ldconfig"):
+        for name in ("sh", "bash", "uname", "ldconfig", "chmod"):
             executable = shutil.which(name)
             if executable:
                 (commands / name).symlink_to(executable)
@@ -341,6 +348,13 @@ def no_node_environment(directory: Path) -> dict[str, str]:
         environment.pop(key, None)
     require(shutil.which("node", path=environment["PATH"]) is None, "验收环境仍能找到 Node。")
     require(shutil.which("npm", path=environment["PATH"]) is None, "验收环境仍能找到 npm。")
+    for key in list(environment):
+        if key.upper().startswith("PYTHON") or key.upper() in {
+            "VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "__PYVENV_LAUNCHER__",
+        }:
+            environment.pop(key)
+    environment.update(PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1", PYTHONNOUSERSITE="1")
+    assert_no_system_interpreters(environment)
     return environment
 
 
@@ -397,7 +411,7 @@ class InstallationGate:
         self.result["artifacts"].append({"name": name, "sha256": sha256(data).hexdigest(), "bytes": len(data)})
         return path
 
-    def api(self, method: str, path: str, body=None, *, binary=False):
+    def api(self, method: str, path: str, body=None, *, binary=False, include_headers=False):
         with self.step(method + " " + path.split("?")[0]) as row:
             data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
             request = Request(self.base_url + path, data=data, method=method,
@@ -406,9 +420,11 @@ class InstallationGate:
                 with self.http.open(request, timeout=self.timeout) as response:
                     raw = response.read()
                     row["http_status"] = response.status
+                    headers = {key.lower(): value for key, value in response.headers.items()}
             except HTTPError as error:
                 raise RuntimeError(f"HTTP {error.code}: {error.read().decode('utf-8', errors='replace')[:6000]}") from error
-            return raw if binary else json.loads(raw)
+            content = raw if binary else json.loads(raw)
+            return (content, headers) if include_headers else content
 
     def pdf(self, name: str, raw: bytes, expected: tuple[str, ...]) -> None:
         import fitz
@@ -578,8 +594,8 @@ class InstallationGate:
             validate_rating_values(table)
             require(any(row["value_a"] is not None for row in table["rows"]), "载流量表没有任何已计算结果。")
         self.artifact("ampacity-table.json", table)
-        # Until the formal Excel API is added, retain an exact data comparison;
-        # this CSV is evidence and is not represented as a server Excel export.
+        # Retain this independent CSV data comparison alongside the formal API
+        # workbook; it remains evidence rather than a server Excel export.
         stream = io.StringIO(newline="")
         writer = csv.writer(stream)
         writer.writerow(["工况", "允许电流 / A", "埋深 / m", "土壤热阻率 / K·m/W", "环境温度 / °C", "状态", "运行记录"])
@@ -613,7 +629,7 @@ class InstallationGate:
                                                "specification_sha256": specification["digest"],
                                                "calculation_workspace": project["id"], "calculation_study": calculation_study["id"],
                                                "calculation_run": calculation["id"]}
-        self.result["formal_documents"] = "后续正式版式阶段待验收；当前验证发行包的既有 PDF 和载流量数据接口。"
+        verify_formal_exports(self, self.result["engineering_sources"])
 
 
 def stop_process(process: subprocess.Popen) -> None:
@@ -743,17 +759,25 @@ def main() -> int:
                         "default_data_dir": str(defaults["data_dir"]), "default_path_policy": default_policy,
                         "acceptance_data_dir": str(temporary / "data"), "acceptance_path_policy": actual_policy,
                         "registry_changed": False})
-            guard = windows_firewall(temporary, interpreter, gate) if args.require_offline == "windows-firewall" else nullcontext()
+            # Include both actual base executables: a Windows venv may delegate
+            # to its base interpreter, which must not bypass the firewall.
+            source_python = base_python(root)
+            installed_python = installed / source_python.relative_to(root)
+            guard = (windows_firewall(temporary, interpreter, gate,
+                                      additional_programs=(source_python, installed_python))
+                     if args.require_offline == "windows-firewall" else nullcontext())
             with guard:
                 if args.require_offline:
                     with gate.step("操作系统禁网及实际外网连接探测"):
                         gate.result["offline"] = {"enforcement": args.require_offline, "probes": offline_probe()}
-                command = [sys.executable, str(root / "scripts/install_release.py"), "--config", str(configuration), "--no-browser"]
+                command = public_command(root, configuration)
                 gate.artifact("installation-command.json", {"argv": command, "default_start": True,
-                                                            "node_available": False, "combined_log": "startup.log"})
+                                                            "node_available": False, "system_python_available": False,
+                                                            "cwd": str(root), "discovery": assert_no_system_interpreters(environment),
+                                                            "combined_log": "startup.log"})
                 with (output / "startup.log").open("wb") as log:
                     process = subprocess.Popen(command,
-                                               cwd=temporary, env=environment, stdout=log, stderr=subprocess.STDOUT,
+                                               cwd=root, env=environment, stdout=log, stderr=subprocess.STDOUT,
                                                start_new_session=os.name != "nt",
                                                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
                     try:
@@ -763,6 +787,7 @@ def main() -> int:
                             require(Path(receipt["app_dir"]).resolve() == installed.resolve() and interpreter.is_file(),
                                     "安装回执未指向预期的发行环境。")
                             gate.artifact("installation-receipt.json", receipt)
+                            gate.artifact("python-runtime-verification.json", runtime_identity(installed, environment))
                             if args.require_offline:
                                 gate.result["offline"]["installed_after_start_probes"] = installed_offline_probe(interpreter, environment)
                         gate.frontend_assets(manifest)
@@ -776,6 +801,29 @@ def main() -> int:
                         if args.require_offline:
                             gate.result["offline"]["after_export_probes"] = offline_probe()
                             gate.result["offline"]["installed_after_export_probes"] = installed_offline_probe(interpreter, environment)
+                    finally:
+                        stop_process(process)
+                        process = None
+                # Remove the entire original extraction, not just its launcher.
+                # The installed base and stdlib must survive independently.
+                saved_configuration = temporary / "restart.toml"
+                shutil.copy2(configuration, saved_configuration)
+                shutil.rmtree(root)
+                require(not root.exists(), "Original extraction was not removed")
+                restart_command = public_command(installed, saved_configuration)
+                with (output / "restart.log").open("wb") as log:
+                    process = subprocess.Popen(restart_command, cwd=installed, env=environment,
+                                               stdout=log, stderr=subprocess.STDOUT,
+                                               start_new_session=os.name != "nt",
+                                               creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+                    try:
+                        with gate.step("Restart public launcher after removing the original extraction"):
+                            gate.wait_ready(process)
+                            identity = runtime_identity(installed, environment)
+                            identity.update(original_extraction_removed=True, argv=restart_command)
+                            gate.artifact("python-runtime-relocation.json", identity)
+                            if args.require_offline:
+                                gate.result["offline"]["after_relocation_probes"] = installed_offline_probe(interpreter, environment)
                     finally:
                         stop_process(process)
                         process = None
