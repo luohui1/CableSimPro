@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* 西文用 Inter（随站点打包），中文回落到系统黑体 */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+
+  /* 品牌色取自 design/tokens.css：导体铜色与信号蓝 */
+  --color-brand: #c47a3d;
+  --color-brand-foreground: #e3a15e;
+
+  /* 首页动效（Launch UI 的入场、Magic UI 的滚动条/流光/渐变字） */
+  --animate-appear: appear 0.6s forwards ease-out;
+  --animate-appear-zoom: appear-zoom 0.6s forwards ease-out;
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+  --animate-shiny-text: shiny-text 8s infinite;
+  --animate-aurora: aurora 8s ease-in-out infinite alternate;
+
+  @keyframes appear {
+    0% {
+      opacity: 0;
+      transform: translateY(1rem);
+      filter: blur(0.5rem);
+    }
+    50% {
+      filter: blur(0);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0);
+    }
+  }
+  @keyframes appear-zoom {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100% - var(--gap)));
+    }
+  }
+  @keyframes marquee-vertical {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(calc(-100% - var(--gap)));
+    }
+  }
+  @keyframes shiny-text {
+    0%,
+    90%,
+    100% {
+      background-position: calc(-100% - var(--shiny-width)) 0;
+    }
+    30%,
+    60% {
+      background-position: calc(100% + var(--shiny-width)) 0;
+    }
+  }
+  @keyframes aurora {
+    0% {
+      background-position: 0% 50%;
+      transform: rotate(-5deg) scale(0.9);
+    }
+    25% {
+      background-position: 50% 100%;
+      transform: rotate(5deg) scale(1.1);
+    }
+    50% {
+      background-position: 100% 50%;
+      transform: rotate(-3deg) scale(0.95);
+    }
+    75% {
+      background-position: 50% 0%;
+      transform: rotate(3deg) scale(1.05);
+    }
+    100% {
+      background-position: 0% 50%;
+      transform: rotate(-5deg) scale(0.9);
+    }
+  }
+}
+
+:root {
+  --aurora-1: #aa5827;
+  --aurora-2: #d79559;
+  --aurora-3: #00a6e4;
+  --aurora-4: #0064bc;
+}
+
+.dark {
+  --color-brand: #e08a4c;
+  --color-brand-foreground: #f0af73;
+  --aurora-1: #e08a4c;
+  --aurora-2: #f0af73;
+  --aurora-3: #4cc8f4;
+  --aurora-4: #4fa3e8;
+}
+
+/* 系统要求减少动效时，入场直接显示，循环动画停下 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-appear,
+  .animate-appear-zoom {
+    animation: none;
+    opacity: 1;
+  }
+  .animate-marquee,
+  .animate-marquee-vertical,
+  .animate-shiny-text,
+  .animate-aurora {
+    animation: none;
+  }
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* 长公式横向滚动，不撑破版面 */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25rem;
+}
+
+/* 正文截图：细边框、圆角 */
+.prose img {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+}
+
+/* 中文回落字体的加粗更明显一些 */
+.prose :where(strong) {
+  font-weight: 600;
+  color: var(--color-fd-foreground);
+}
