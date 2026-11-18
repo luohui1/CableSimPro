@@ -91,6 +91,10 @@ export async function installReadinessObserver(page) {
       else queued = false;
     }
     const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(sample); } };
+    // A pending image/visibility property can change without a mutation. Allow
+    // the waiter to request a bounded fresh sample, keeping the original clock
+    // and the two painted-frame confirmation inside this observer.
+    window.__requestLoadAuditSample = schedule;
     // Readiness depends on status text as well as element insertion. React may
     // update an existing Text node without changing its parent's children.
     new MutationObserver(schedule).observe(document, { childList: true, characterData: true, subtree: true, attributes: true,
@@ -109,10 +113,21 @@ export async function waitForPageReady(page, { includeCanvas = true, timeout = 3
   await page.waitForLoadState('domcontentloaded');
   try {
     await page.waitForFunction(({ snapshot, includeCanvas }) => {
-      // The observer already samples after DOM mutations/scroll/resize. Polling a
-      // second full visibility/layout walk added artificial tasks to every page.
-      const state = window.__loadAudit?.latest ?? (0, eval)('(' + snapshot + ')')();
-      return includeCanvas ? state.ready : state.mainReady;
+      // Normal DOM/image events drive the observer. If a pending cached state
+      // stops changing, request at most one fresh sample per 250 ms; do not run
+      // a second full visibility/layout walk on every 50 ms poll or invent an
+      // earlier ready timestamp for content that was only just observed.
+      const audit = window.__loadAudit;
+      if (!audit) {
+        const state = (0, eval)('(' + snapshot + ')')();
+        return includeCanvas ? state.ready : state.mainReady;
+      }
+      const current = audit.url === location.href;
+      const state = current ? audit.latest : null;
+      const ready = !!state && (includeCanvas ? state.ready : state.mainReady);
+      if (!ready && (!current || audit.sampledAtMs === null || performance.now() - audit.sampledAtMs >= 250))
+        window.__requestLoadAuditSample?.();
+      return ready;
     }, { snapshot: readinessSnapshot.toString(), includeCanvas }, { timeout, polling: 50 });
     // Let the committed content paint. No fixed sleep and no networkidle (polling pages stay active).
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -120,6 +135,7 @@ export async function waitForPageReady(page, { includeCanvas = true, timeout = 3
     if (!(includeCanvas ? state.ready : state.mainReady)) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw Error('内容在绘制前再次进入读取状态');
+      await page.evaluate(() => window.__requestLoadAuditSample?.());
       return waitForPageReady(page, { includeCanvas, timeout: remaining });
     }
     return state;
