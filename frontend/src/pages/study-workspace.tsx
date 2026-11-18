@@ -141,7 +141,6 @@ export function StudyWorkspace(): ReactElement {
   const context = useStudy();
   const { study, workspace, runs, draft } = context;
   const theme = search.theme;
-  const [selected, setSelected] = useState<SelectionRow | undefined>();
   const [fullFieldDomain,setFullFieldDomain]=useState(false);
   useEffect(()=>setFullFieldDomain(false),[sid,search.run]);
   // 曲线研究默认放大数据区；直接打开三维时给模型完整高度，其余模型保留分栏。
@@ -168,7 +167,6 @@ export function StudyWorkspace(): ReactElement {
   >();
   useEffect(() => {
     setInputSelection(undefined);
-    setSelected(undefined);
   }, [module, search.run]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -211,14 +209,20 @@ export function StudyWorkspace(): ReactElement {
     (moduleBehavior.input.has(module) || module === 'report' ||
       (text(optionalRecord(run.snapshot).module) === configuredModule && (!!configuredModule || module === calculatedModule))) &&
     ["accepted", "queued", "running", "validating"].includes(text(run.status));
-  if (run && !pendingRun && module === "selection")
+  const selectionContext = module === "selection" || isSectionInputTable(module, tab)
+    && text(optionalRecord(optionalRecord(optionalRecord(run?.snapshot).definition).driver).kind) === 'selection';
+  let selectedRow: SelectionRow | undefined;
+  if (run && !pendingRun && selectionContext)
     try {
       view = selectionView(run);
+      selectedRow = search.case ? view.rows.find(row => row.id === search.case) : view.recommendation;
+      if (search.case && !selectedRow) throw Error('所选候选不存在于这次保存运行，请返回候选结果重新选择。');
+      if (selectedRow && ![optionalRecord(run.output).cases, optionalRecord(run.snapshot).cases].every(cases =>
+        Array.isArray(cases) && cases.filter(value => optionalRecord(value).case_id === selectedRow!.id).length === 1))
+        throw Error('所选候选缺少对应的保存工况或输入，不能显示其他候选。');
     } catch (problem) {
       selectionError = problem;
     }
-  const selectedRow =
-    selected && view?.rows.find((row) => row.id === selected.id);
   const trialPin=optionalRecord(moduleConfiguration(draft?.definition || study.definition,module)?.method || study.definition.method);
   const trialPlugin=(catalog.data || []).find(row=>optionalRecord(row.method).plugin_id===trialPin.plugin_id);
   const trialCapability=(Array.isArray(trialPlugin?.capabilities)?trialPlugin.capabilities:[]).map(optionalRecord).find(cap=>cap.id===trialPin.capability);
@@ -226,7 +230,8 @@ export function StudyWorkspace(): ReactElement {
     !(search.run && (run?.freshness==='historical' || isVersionStale(run))) && singleAnswer(study) && module!=='report'});
   const shownRun=preview.result?.view || run;
   // 运行若带温度场工件（有限元，或插件输出的 IEC 土壤温度场），画布默认显示真实温度场；选型显示所选或推荐候选的工况
-  const fieldCase = module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined;
+  const fieldCase = selectionContext && !selectionError ? selectedRow?.id : undefined;
+  const savedCandidateDrawing = selectionContext && !!fieldCase;
   const savedFieldCases = (Array.isArray(optionalRecord(run?.output).cases) ? optionalRecord(run?.output).cases as unknown[] : []).map(optionalRecord);
   const hasFemField = savedFieldCases.some(item => {
     const field = optionalRecord(optionalRecord(item.artifacts)['x-cablesim.temperature-field']);
@@ -238,10 +243,10 @@ export function StudyWorkspace(): ReactElement {
   // mesh. Reuse that exact artifact; only absent/unsupported views need /view.
   // temperatureView also checks its artifact receipt and source binding.
   const savedFieldView = useMemo(() => {
-    if (!shownRun || pendingRun || !shownRun.output) return undefined;
+    if (!shownRun || pendingRun || !shownRun.output || selectionContext && !fieldCase) return undefined;
     try { return temperatureView(shownRun, fieldCase); } catch { return undefined; }
-  }, [shownRun, pendingRun, fieldCase]);
-  const needsFieldProjection = !!run && !pendingRun && (hasFemField && !savedFieldView || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
+  }, [shownRun, pendingRun, fieldCase, selectionContext]);
+  const needsFieldProjection = !selectionError && (!selectionContext || !!fieldCase) && !!run && !pendingRun && (hasFemField && !savedFieldView || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
   const fieldProjection = useQuery({...savedFieldViewQuery(text(run?.workspace),text(run?.id)), enabled:needsFieldProjection});
   const fieldRun = needsFieldProjection ? fieldProjection.data : run;
   const fieldView = useMemo(() => {
@@ -260,8 +265,28 @@ export function StudyWorkspace(): ReactElement {
   const sectionTable = isSectionInputTable(module, tab);
   const snapshotInput = inputModule && !!search.run;
   const savedInputReady = !!run && !context.loadingRuns && !context.runError && !pendingRun && run.integrity === 'verified';
+  const candidateInput = snapshotInput && sectionTable && selectionContext;
+  const sectionCaseInput = useQuery({
+    queryKey: ['drawing-saved-input', run?.id, fieldCase],
+    enabled: candidateInput && savedInputReady && !!fieldCase && !selectionError,
+    retry: false,
+    queryFn: ({ signal }) => hydrateCaseInputs(caseRun(run!, fieldCase), signal),
+  });
+  const sectionInputRun: Record<string, unknown> | undefined = sectionCaseInput.data;
+  const sectionCase = (Array.isArray(optionalRecord(sectionInputRun?.snapshot).cases)
+    ? optionalRecord(sectionInputRun?.snapshot).cases as unknown[] : []).map(optionalRecord)
+    .find(item => item.case_id === fieldCase);
+  const sectionDocument = optionalRecord(sectionCase?.input);
+  const sectionInputError = sectionCaseInput.error || (candidateInput && sectionInputRun && (
+    sectionInputRun.integrity !== 'verified' || sectionInputRun.id !== run?.id
+    || sectionInputRun.workspace !== run?.workspace || sectionInputRun.study !== run?.study
+    || sectionInputRun.input_digest !== run?.input_digest
+    || sectionDocument.schema_version !== 'cablesim.domain/1'
+  ) ? Error('所选候选的保存输入身份、摘要或敷设数据无法核对。') : undefined);
   const inputDocument = (
-    snapshotInput ? (savedInputReady ? savedDomain(run!) : undefined) : context.domain
+    snapshotInput ? (savedInputReady ? candidateInput
+      ? !sectionInputError && sectionDocument.schema_version === 'cablesim.domain/1' ? sectionDocument : undefined
+      : savedDomain(run!) : undefined) : context.domain
   ) as DomainDocument | undefined;
   const inputProps = {
     tab,
@@ -290,14 +315,14 @@ export function StudyWorkspace(): ReactElement {
   // S4: the complete simulation contract belongs in the work area when
   // editing its method, rather than inside the narrow properties column.
   const workspaceMethod = search.inspector === 'method' && ['thermal-field','transient','sheath-losses','electrothermal'].includes(module);
-  const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded;
+  const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded && !selectionError;
   // A maximized result starts without a hidden lazy canvas. Once the engineer
   // opens it, keep the existing canvas mounted across maximize/restore so its
   // local drawing state and the provider's unsaved inputs remain intact.
   const mountCanvas=showCanvas && (!dockMax || canvasMounted);
   useEffect(()=>{if(showCanvas && !dockMax)setCanvasMounted(true);},[showCanvas,dockMax]);
   const independentInput = study.definition.input_source === 'study';
-  const canvasReadOnly = viewingOldInput;
+  const canvasReadOnly = viewingOldInput || savedCandidateDrawing;
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
   const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
   const requestedCanvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
@@ -306,14 +331,17 @@ export function StudyWorkspace(): ReactElement {
   const missingTemperatureField = !fieldView && !needsFieldProjection;
   const canvasView = requestedCanvasView === 'field' && missingTemperatureField ? 'section' : requestedCanvasView;
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
+  const needsDrawingInput = ['three', 'section'].includes(canvasView) || savedCandidateDrawing && canvasView === 'cable';
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
-    enabled:mountCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
+    enabled:!!run && !pendingRun && (savedCandidateDrawing || mountCanvas && needsDrawingInput)
+      && (!context.dirty || savedCandidateDrawing) && (!selectionContext || !!fieldCase),
     queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
-  const drawingRun = preview.result?.view || drawingInput.data || run;
+  const loadedDrawingRun = preview.result?.view || drawingInput.data || run;
+  const drawingRun = selectionContext ? fieldCase && loadedDrawingRun ? caseRun(loadedDrawingRun, fieldCase) : undefined : loadedDrawingRun;
   const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
-  const drawingDocument = optionalRecord(savedDrawingCase?.input).schema_version === 'cablesim.domain/1' ? savedDrawingCase!.input as DomainDocument : canvasDocument;
+  const drawingDocument = optionalRecord(savedDrawingCase?.input).schema_version === 'cablesim.domain/1' ? savedDrawingCase!.input as DomainDocument : savedCandidateDrawing ? undefined : canvasDocument;
   // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
-  const annotations = shownRun && !pendingRun ? conductorAnnotations(shownRun, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
+  const annotations = shownRun && !pendingRun && (!selectionContext || !!fieldCase) ? conductorAnnotations(shownRun, fieldCase) : undefined;
   const shownDefinition = viewingOldInput ? optionalRecord(optionalRecord(run?.snapshot).definition) as StudyDefinition : draft?.definition || study.definition;
   const methodPin = optionalRecord(moduleConfiguration(shownDefinition, module)?.method || shownDefinition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
@@ -332,7 +360,7 @@ export function StudyWorkspace(): ReactElement {
   const presentation = studyPresentation(study, overallRun.id ? overallRun : undefined, edits, context.runError, context.loadingRuns && !overallRun.id);
   const selectedPresentation = studyPresentation(study, run, edits);
   const recalculateTarget = { wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined };
-  const onRecalculated = (next: Record<string, unknown>) => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), delivery: '', generate: false } }); };
+  const onRecalculated = (next: Record<string, unknown>) => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), case: undefined, delivery: '', generate: false } }); };
   const recalculate = presentation.code === 'outdated' ? <StudyRecalculate value={presentation.staleValue} target={recalculateTarget} disabledReason={context.dirty ? '请先保存修改' : undefined} onComplete={onRecalculated} /> : undefined;
   const methodInfo = {
     name: text(pluginEntry?.name) || displayName(text(methodPin.plugin_id)),
@@ -365,6 +393,9 @@ export function StudyWorkspace(): ReactElement {
   const projectName = text(optionalRecord(workspace.domain || workspace.scenario).name);
   function currentSearch() {
     return { ...search, workspace: study.workspace };
+  }
+  function selectCandidate(row: SelectionRow) {
+    void navigate({ search: { ...currentSearch(), run: text(run?.id), case: row.id }, replace: true });
   }
   // The old generic run links landed type calculations in ampacity/batch.
   // Preserve explicit reports, evidence tabs, model and method deep links.
@@ -402,7 +433,7 @@ export function StudyWorkspace(): ReactElement {
   // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
   const answer = pendingRun || !run ? null
     : savedMethod.capability === 'iec-thermal-field' && module !== 'report' ? <FemConclusionBar run={run} />
-    : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={(row) => setSelected(row)} dirty={context.dirty} part="conclusion" />
+    : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={selectCandidate} dirty={context.dirty} part="conclusion" />
       : module === 'ampacity' ? <StudyResults run={shownRun} onSelect={inputProps.onSelect} part="conclusion" />
         : moduleBehavior.resultConclusion.has(module) ? <SavedRunConclusion run={run} />
         : null;
@@ -436,7 +467,7 @@ export function StudyWorkspace(): ReactElement {
   ];
   const commandBar = <CommandBar label="工程命令" actions={commandActions} status={!presentation.historical?presentation.label:undefined} leading={<>
         {analyses.length > 1 && <Select label="分析" value={analyses.some(item => item.value === currentAnalysis) ? currentAnalysis : calculatedModule} options={analyses}
-          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />}
+          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',case:undefined,delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />}
         <PreviewControls preview={preview} />
         {runnable && !snapshotInput && <StudyRunControl
                         key={sid + module}
@@ -458,7 +489,7 @@ export function StudyWorkspace(): ReactElement {
                             );
                           navigate({
                             params: { sid, module: destination, tab: nextTab },
-                            search: { ...currentSearch(), run: "", delivery: "", inspector: field.startsWith('/parameters') ? 'method' : 'input' },
+                            search: { ...currentSearch(), run: "", case: undefined, delivery: "", inspector: field.startsWith('/parameters') ? 'method' : 'input' },
                           }).then(() => focusPreflightField(field, workspace.domain));
                         }}
                         onResult={(id, outputModule) =>
@@ -468,7 +499,7 @@ export function StudyWorkspace(): ReactElement {
                               module: outputModule,
                               tab: moduleDefinitions[outputModule].tabs[0].id,
                             },
-                            search: { ...currentSearch(), run: id, delivery: "" },
+                            search: { ...currentSearch(), run: id, case: undefined, delivery: "" },
                           })
                         }
                       />}
@@ -542,7 +573,7 @@ export function StudyWorkspace(): ReactElement {
         >
           {commandBar}
           <div className="workbench-frame">
-          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
+          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={savedCandidateDrawing ? drawingDocument : canvasDocument} modelLabel={savedCandidateDrawing ? '保存候选模型（只读）' : viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} activeModelSearch={selectionContext && run && fieldCase ? { run: text(run.id), case: fieldCase } : undefined} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
           <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined} data-canvas={showCanvas && canvasMax ? 'max' : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
           {mountCanvas && (
@@ -561,7 +592,7 @@ export function StudyWorkspace(): ReactElement {
               </div>
               {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
               {canvasView === "field" && fieldView ? (
-                <div className="study-field-slot" data-run-id={text((needsFieldProjection ? fieldRun : shownRun)?.id)} data-case-id={text(fieldView.case.case_id)}><FieldView
+                <div className="study-field-slot" data-run-id={text((needsFieldProjection ? fieldRun : shownRun)?.id)} data-case-id={text(fieldView.case.case_id)} data-field-digest={text(optionalRecord(fieldView.case.artifact_digests)['x-cablesim.temperature-field'])}><FieldView
                   label={fieldView.kind === "iec" ? `土壤温度场（IEC 解析） · ${fieldLoadLabel(fieldView.case)}` : "温度场"}
                   key={fullFieldDomain ? 'full-domain' : 'cable-region'}
                   points={focusedField!.points}
@@ -588,9 +619,10 @@ export function StudyWorkspace(): ReactElement {
               ) : canvasView === 'field' && needsFieldProjection && fieldProjection.isPending ? <LoadingState title="正在读取保存场图" />
                 : canvasView === 'field' && fieldProjection.error ? <ErrorState title="场图读取失败" description={message(fieldProjection.error)} action={<Button onClick={() => void fieldProjection.refetch()}>重新读取</Button>} />
                 : canvasView === 'field' ? <InlineEmpty title="该保存运行没有温度场" />
-                : ['three','section'].includes(canvasView) && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
-                : ['three','section'].includes(canvasView) && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
-                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} readOnly={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
+                : needsDrawingInput && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
+                : needsDrawingInput && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} />
+                : savedCandidateDrawing && !drawingDocument ? <ErrorState title="保存候选模型不可用" description="所选工况没有可核对的模型输入，不能显示当前工程作为替代。" action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
+                <StudyDrawing document={savedCandidateDrawing ? drawingDocument! : canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} readOnly={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
                   preview={capabilityEntry?.preview === true && !methodInfo.hpc && !canvasReadOnly && !independentInput ? geometryPreview : undefined}
                   onPropose={canvasReadOnly || independentInput ? undefined : changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
                   if (!run || context.dirty || image.metadata.field?.provisional || image.metadata.field?.runId !== run.id) throw Error('请从所选保存运行的三维结果导出，试算图不能进入计算书。');
@@ -623,7 +655,9 @@ export function StudyWorkspace(): ReactElement {
               description={message(context.saveError)}
             />
           )}
-          {workspaceMethod ? <div className="study-method-workspace" aria-label="有限元方法参数">
+          {selectionError ? <ErrorState title="保存候选无法核对" description={message(selectionError)}
+            action={<Button onClick={() => void navigate({ params: { sid, module: 'selection', tab: 'results' }, search: { ...currentSearch(), case: undefined } })}>返回候选结果</Button>} />
+          : workspaceMethod ? <div className="study-method-workspace" aria-label="有限元方法参数">
             <h3 className="study-parameters-heading">本次计算参数</h3>
             <p className="muted">先核对网格、计算域、材料来源和热边界；数值求解选项在“高级参数”。</p>
             <StudyMethodForm module={module} historical={methodHistorical} savedRun={methodHistorical ? run : undefined}
@@ -647,6 +681,16 @@ export function StudyWorkspace(): ReactElement {
             <ErrorState description="指定运行不存在或不属于此研究。" />
           ) : pendingRun && tab !== "parameters" ? (
             <LoadingState title="运行尚未完成" />
+          ) : candidateInput ? (
+            !selectedRow ? <InlineEmpty title="该运行没有推荐候选，请返回结果选择要查看的型号。" />
+            : sectionInputError ? <ErrorState title="候选输入读取失败" description={message(sectionInputError)}
+              action={<Button onClick={() => void sectionCaseInput.refetch()}>重新读取</Button>} />
+            : !sectionCaseInput.data ? <LoadingState title="正在读取候选的保存输入" />
+            : <div className="study-saved-candidate-input" data-run-id={text(run?.id)} data-case-id={fieldCase}
+                data-input-digest={text(optionalRecord(sectionCase?.input_ref).sha256) || undefined}>
+                <p className="muted">保存候选 · {selectedRow.name}</p>
+                <SectionInputs {...inputProps} />
+              </div>
           ) : inputModule ? (
             run?.integrity !== "verified" ? (
               <ErrorState description="固定运行输入未通过完整性校验" />
@@ -720,9 +764,7 @@ export function StudyWorkspace(): ReactElement {
                 theme={theme}
                 run={run}
                 selectedId={selectedRow?.id}
-                onSelect={(row) => {
-                  setSelected(row);
-                            }}
+                onSelect={selectCandidate}
                 dirty={context.dirty}
                 part="details"
               />
@@ -736,9 +778,9 @@ export function StudyWorkspace(): ReactElement {
           ) : module === "sweep" ? (
             <StudySweep run={run} tab={tab} readOnly={!!search.run} onSelect={inputProps.onSelect} />
           ) : module === "batch" ? (
-            <StudyBatch tab={tab} readOnly={!!search.run} datasetId={search.dataset || ""} onDataset={id => navigate({ params: { sid, module: "batch", tab: "results" }, search: { ...currentSearch(), dataset: id, run: "" } })} onSelect={inputProps.onSelect} />
+            <StudyBatch tab={tab} readOnly={!!search.run} datasetId={search.dataset || ""} onDataset={id => navigate({ params: { sid, module: "batch", tab: "results" }, search: { ...currentSearch(), dataset: id, run: "", case: undefined } })} onSelect={inputProps.onSelect} />
           ) : module === "method-compare" ? (
-            (study.definition.modules?.["method-compare"]?.method.capability || (calculatedModule === "method-compare" ? study.definition.method.capability : "")) === "physics-comparison" ? <StudyPhysicsComparison run={run} tab={tab} readOnly={!!search.run} /> : <StudyCompare run={run} tab={tab} readOnly={!!search.run} selectedRuns={search.compare || ""} onComparison={compare => navigate({ params: { sid, module: "method-compare", tab: "inputs" }, search: { ...currentSearch(), compare, run: "" } })} />
+            (study.definition.modules?.["method-compare"]?.method.capability || (calculatedModule === "method-compare" ? study.definition.method.capability : "")) === "physics-comparison" ? <StudyPhysicsComparison run={run} tab={tab} readOnly={!!search.run} /> : <StudyCompare run={run} tab={tab} readOnly={!!search.run} selectedRuns={search.compare || ""} onComparison={compare => navigate({ params: { sid, module: "method-compare", tab: "inputs" }, search: { ...currentSearch(), compare, run: "", case: undefined } })} />
           ) : module === "simulation" ? (
             <StudySimulation run={run} tab={tab} readOnly={!!search.run} />
           ) : module === "report" ? (
@@ -752,7 +794,7 @@ export function StudyWorkspace(): ReactElement {
               calculationLabel={moduleDefinitions[calculatedModule].label}
               onReturnToCalculation={() => void navigate({
                 params: { sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) },
-                search: { ...currentSearch(), run: '', delivery: '', generate: false, preflight: false },
+                search: { ...currentSearch(), run: '', case: undefined, delivery: '', generate: false, preflight: false },
               })}
               cadImage={reportImage && reportImage.runId === run?.id ? reportImage.image : undefined}
               runs={runs}
@@ -825,8 +867,7 @@ export function StudyWorkspace(): ReactElement {
         error={context.runError}
         onRetry={context.refresh}
         onSelect={(id) => {
-          setSelected(undefined);
-          navigate({ search: { ...currentSearch(), run: id, delivery: "" } });
+          navigate({ search: { ...currentSearch(), run: id, case: undefined, delivery: "" } });
         }}
       />
     </>

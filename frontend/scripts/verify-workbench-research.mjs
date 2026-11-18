@@ -892,7 +892,9 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         expect(cells[4].trim()).toBe(verdict);
         rows.push({ caseId: assessment.case_id, name, current: assessment.value, margin: assessment.margin, status: assessment.status, cells });
       }
-      const links = await page.locator('[aria-label="本次计算工况"] a').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, href: node.href })));
+      const conditionLinks = page.locator('[aria-label="本次计算工况"] a');
+      await expect(conditionLinks.first()).toBeVisible();
+      const links = await conditionLinks.evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, href: node.href })));
       expect(links.length).toBeGreaterThan(0);
       for (const link of links) {
         const location = new URL(link.href);
@@ -938,6 +940,38 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         return Array.isArray(owner) ? owner.find(item => item.id === part || item.cable === part) : owner[part];
       }, document);
     }
+    const caseInputs = new Map();
+    async function readCandidateInput(caseId) {
+      if (!caseInputs.has(caseId)) {
+        const value = await api('/api/workspaces/' + selection.workspace + '/studies/' + selection.id
+          + '/runs/' + before.run.id + '/cases/' + encodeURIComponent(caseId) + '/input');
+        expect(value.integrity).toBe('verified');
+        expect(value.run_id).toBe(before.run.id);
+        expect(value.case_id).toBe(caseId);
+        expect(value.run_input_digest).toBe(before.run.input_digest);
+        expect(value.input_digest).toMatch(/^[a-f0-9]{64}$/);
+        const savedCase = before.run.snapshot.cases.find(item => item.case_id === caseId);
+        expect(savedCase, '所选工况必须存在于同次完整输入快照').toBeTruthy();
+        expect(value.input).toEqual(savedCase.input);
+        caseInputs.set(caseId, value);
+      }
+      return caseInputs.get(caseId);
+    }
+    async function observeCandidateField(caseId) {
+      const result = before.run.output.cases.find(item => item.case_id === caseId);
+      expect(result, '场图必须来自当前选择的真实保存工况').toBeTruthy();
+      const digest = result.artifact_digests['x-cablesim.temperature-field'];
+      expect(digest).toMatch(/^[a-f0-9]{64}$/);
+      const slot = canvas.locator('.study-field-slot');
+      await expect(slot).toBeVisible();
+      await expect(slot).toHaveAttribute('data-run-id', before.run.id);
+      await expect(slot).toHaveAttribute('data-case-id', caseId);
+      await expect(slot).toHaveAttribute('data-field-digest', digest);
+      await expect(slot.locator('canvas.field-canvas')).toHaveAttribute('data-audit-first-draw', /.+/, { timeout: 60000 });
+      const ready = await waitForPageReady(page, { timeout: 60000 });
+      expect(ready.errors).toEqual([]);
+      return { runId: before.run.id, caseId, fieldDigest: digest, text: await slot.innerText(), ready };
+    }
     const tableEvidence = [];
     for (const fixed of [false, true]) {
       for (const [tab, label] of [['coordinates', '敷设坐标与尺寸'], ['media', '介质参数']]) {
@@ -951,7 +985,17 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
           return { path: node.dataset.fieldPath, value: input?.value, full: input?.title, readOnly: input?.readOnly };
         }));
         expect(fields.length).toBeGreaterThan(0);
-        const document = fixed ? savedDocument : before.workspace.domain;
+        let fixedCaseEvidence;
+        if (fixed) {
+          const wrapper = page.locator('.study-saved-candidate-input');
+          const caseId = await wrapper.getAttribute('data-case-id');
+          expect(caseId, '固定敷设输入必须明确来自哪一个候选').toBeTruthy();
+          const input = await readCandidateInput(caseId);
+          await expect(wrapper).toHaveAttribute('data-run-id', before.run.id);
+          await expect(wrapper).toHaveAttribute('data-input-digest', input.input_digest);
+          fixedCaseEvidence = { caseId, inputDigest: input.input_digest, field: await observeCandidateField(caseId) };
+        }
+        const document = fixed ? caseInputs.get(fixedCaseEvidence.caseId).input : before.workspace.domain;
         if (tab === 'media') {
           const legacySoil = document.materials.filter(material => material.label === 'v0 soil' && material.category === 'soil');
           expect(legacySoil.length, '从本次保存输入核对实际旧土壤显示，不制造迁移材料').toBeGreaterThan(0);
@@ -982,7 +1026,7 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         await expect(returnToResult).toBeEnabled();
         await expect(page.locator('.button-primary:visible,.button-run:visible')).toHaveCount(1);
         await capture(`11-${fixed ? 'saved' : 'current'}-section-${tab}`);
-        tableEvidence.push({ tab, fixed, fields });
+        tableEvidence.push({ tab, fixed, fields, fixedCaseEvidence });
         if (tab === 'coordinates') { await returnToResult.focus(); await page.keyboard.press('Enter'); }
         else await returnToResult.click();
         await page.waitForURL(next => next.pathname === `/studies/${selection.id}/selection/results`
@@ -1270,8 +1314,209 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
     check('旧截面与三维入口保留固定运行并打开正确模型视图', true, source);
     check('选型正文和工况链接均来自同一真实保存运行，不把读取外壳当结果', candidateEvidence.length === 9,
       { ...source, pages: candidateEvidence });
+    const caseNavigation = [];
+    const hasField = item => before.run.output.cases.some(row => row.case_id === item.case_id
+      && row.artifacts?.['x-cablesim.temperature-field']);
+    const selectedCases = [
+      before.run.output.assessment.find(item => item.status === 'satisfied' && hasField(item)),
+      before.run.output.assessment.find(item => item.status === 'not_satisfied' && hasField(item)),
+    ];
+    expect(selectedCases.every(Boolean), '实际运行须同时有满足与不满足候选，不能造数据代验').toBe(true);
+    for (const [trial, assessment] of selectedCases.entries()) {
+      const caseId = assessment.case_id, keyboard = trial === 1;
+      const index = Number(/^case-(\d+)$/.exec(caseId)?.[1]);
+      const payload = before.run.snapshot.candidate_snapshots[index].payload;
+      const name = payload.name || payload.cable_type?.label;
+      const input = await readCandidateInput(caseId);
+      await page.goto(target('selection', 'results', true));
+      const table = page.getByRole('table', { name: '真实选型候选', exact: true });
+      const candidate = table.locator('[id="row-真实选型候选-' + caseId + '"]');
+      await expect(candidate).toBeVisible();
+      if (keyboard) { await candidate.focus(); await page.keyboard.press('Enter'); }
+      else await candidate.click();
+      await page.waitForURL(next => next.searchParams.get('case') === caseId && next.searchParams.get('run') === before.run.id);
+      await expect(candidate).toHaveAttribute('aria-selected', 'true');
+      await clickCommand('查看布置图');
+      const initialField = await observeCandidateField(caseId);
+      await capture('12-selected-' + caseId + '-field');
+      const pages = [];
+      for (const [tab, label] of [['coordinates', '敷设坐标与尺寸'], ['media', '介质参数']]) {
+        const link = page.locator('[aria-label="本次计算工况"] a[href*="/section/' + tab + '"]').first();
+        await expect(link).toBeVisible();
+        const href = new URL(await link.getAttribute('href'), base);
+        expect(href.searchParams.get('run')).toBe(before.run.id);
+        expect(href.searchParams.get('case')).toBe(caseId);
+        if (tab === 'coordinates') { await link.focus(); await page.keyboard.press('Enter'); }
+        else await link.click();
+        await page.waitForURL(next => next.pathname.endsWith('/section/' + tab)
+          && next.searchParams.get('case') === caseId && next.searchParams.get('run') === before.run.id);
+        const wrapper = page.locator('.study-saved-candidate-input');
+        await expect(wrapper).toHaveAttribute('data-run-id', before.run.id);
+        await expect(wrapper).toHaveAttribute('data-case-id', caseId);
+        await expect(wrapper).toHaveAttribute('data-input-digest', input.input_digest);
+        await expect(wrapper).toContainText('保存候选 · ' + name);
+        const fields = await page.getByRole('table', { name: label, exact: true }).locator('.number-field').evaluateAll(nodes =>
+          nodes.map(node => { const field = node.querySelector('input'); return {
+            path: node.dataset.fieldPath, value: field?.value, full: field?.title, readOnly: field?.readOnly,
+          }; }));
+        expect(fields.length).toBeGreaterThan(0);
+        for (const field of fields) {
+          expect(field.readOnly).toBe(true);
+          const raw = sourceValue(input.input, field.path);
+          expect(raw == null || typeof raw === 'number').toBe(true);
+          if (raw == null) { expect(field.value).toBe(''); expect(field.full).toBe('未提供'); }
+          else {
+            const expectedValue = /\/(inner_diameter|outer_diameter)$/.test(field.path) ? raw * 1000 : raw;
+            expect(Number(field.full.match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i)?.[0])).toBe(expectedValue);
+          }
+        }
+        const fieldBefore = await observeCandidateField(caseId);
+        await capture('12-selected-' + caseId + '-' + tab);
+        // A copied saved URL or a cold reload must retain the same candidate.
+        const location = page.url();
+        await page.reload();
+        await expect(wrapper).toHaveAttribute('data-case-id', caseId);
+        await expect(wrapper).toHaveAttribute('data-input-digest', input.input_digest);
+        expect(page.url()).toBe(location);
+        const fieldAfter = await observeCandidateField(caseId);
+        expect(fieldAfter.fieldDigest).toBe(initialField.fieldDigest);
+        await capture('12-reloaded-' + caseId + '-' + tab);
+        pages.push({ tab, href: href.href, url: location, name, fields, inputDigest: input.input_digest, fieldBefore, fieldAfter });
+        const back = command().getByRole('button', { name: '返回问询选型', exact: true });
+        if (tab === 'coordinates') { await back.focus(); await page.keyboard.press('Enter'); } else await back.click();
+        await page.waitForURL(next => next.pathname.endsWith('/selection/results')
+          && next.searchParams.get('case') === caseId && next.searchParams.get('run') === before.run.id);
+        await expect(candidate).toHaveAttribute('aria-selected', 'true');
+        await clickCommand('查看布置图');
+        expect((await observeCandidateField(caseId)).fieldDigest).toBe(initialField.fieldDigest);
+      }
+      const modelLink = page.locator('.project-explorer a.explorer-item[href*="view=section"]').first();
+      const modelHref = new URL(await modelLink.getAttribute('href'), base);
+      expect(modelHref.searchParams.get('run')).toBe(before.run.id);
+      expect(modelHref.searchParams.get('case')).toBe(caseId);
+      if (keyboard) { await modelLink.focus(); await page.keyboard.press('Enter'); } else await modelLink.click();
+      await page.waitForURL(next => next.searchParams.get('view') === 'section'
+        && next.searchParams.get('run') === before.run.id && next.searchParams.get('case') === caseId);
+      await expect(canvas.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+      await capture('12-selected-' + caseId + '-model-link');
+      await canvas.getByRole('button', { name: '土壤温度场', exact: true }).click();
+      expect((await observeCandidateField(caseId)).fieldDigest).toBe(initialField.fieldDigest);
+      const cableLink = page.locator('.project-explorer a.explorer-item[href*="view=cable"]').first();
+      await expect(cableLink).toBeVisible();
+      const cableHref = new URL(await cableLink.getAttribute('href'), base);
+      expect(cableHref.searchParams.get('run')).toBe(before.run.id);
+      expect(cableHref.searchParams.get('case')).toBe(caseId);
+      if (keyboard) { await cableLink.focus(); await page.keyboard.press('Enter'); } else await cableLink.click();
+      await page.waitForURL(next => next.searchParams.get('view') === 'cable'
+        && next.searchParams.get('run') === before.run.id && next.searchParams.get('case') === caseId);
+      const cableFrame = canvas.locator('.cable-section[aria-label="电缆等比例截面"]');
+      await expect(cableFrame.locator('[data-drawing-canvas="cable"]')).toBeVisible();
+      await expect(cableFrame).toHaveAttribute('data-cable-section-state', /^(success|historical)$/);
+      const savedCable = input.input.cable_types[0];
+      expect(savedCable, '电缆截面来自同一候选实际保存输入').toBeTruthy();
+      await expect(cableLink).toContainText(savedCable.label);
+      const expectedLayers = [...savedCable.cores.flatMap(core =>
+        [core.id + '/conductor', ...core.layers.map(layer => core.id + '/' + layer.role)]),
+        ...savedCable.common_layers.map(layer => 'common/' + layer.role)].sort();
+      const drawnLayers = cableFrame.locator('svg[data-drawing-canvas="cable"] path[data-layer-id]');
+      await expect(drawnLayers).toHaveCount(expectedLayers.length);
+      expect((await drawnLayers.evaluateAll(nodes => nodes.map(node => node.dataset.layerId))).sort()).toEqual(expectedLayers);
+      const core = savedCable.cores[0];
+      const conductorPath = cableFrame.locator('svg[data-drawing-canvas="cable"] path[data-layer-id="' + core.id + '/conductor"]');
+      if (keyboard) { await conductorPath.focus(); await page.keyboard.press('Enter'); } else await conductorPath.click();
+      await expect(conductorPath).toHaveAttribute('aria-pressed', 'true');
+      const details = cableFrame.getByLabel('所选层尺寸与材料', { exact: true });
+      const dimension = details.getByRole('button');
+      const conductorMaterial = input.input.materials.find(material => material.id === core.conductor.material);
+      expect(conductorMaterial).toBeTruthy();
+      await expect(details).toContainText(conductorMaterial.label);
+      await expect(dimension).toHaveText('直径 ' + (core.conductor.diameter * 1000).toFixed(1) + ' mm');
+      await expect(dimension).toBeDisabled();
+      const cableEvidence = { href: cableHref.href, cableId: savedCable.id, cableName: savedCable.label,
+        expectedLayers, drawnLayers: await drawnLayers.evaluateAll(nodes => nodes.map(node => ({
+          id: node.dataset.layerId, profile: node.dataset.profileKind, path: node.getAttribute('d'),
+        }))), conductorDiameterM: core.conductor.diameter, conductorMaterial: conductorMaterial.label,
+        conductorText: await details.innerText() };
+      await capture('12-selected-' + caseId + '-actual-cable-structure');
+      const insulation = core.layers.find(layer => layer.role === 'insulation');
+      expect(insulation, '实际选型电缆应提供可核对的绝缘层').toBeTruthy();
+      const insulationPath = cableFrame.locator('svg[data-drawing-canvas="cable"] path[data-layer-id="' + core.id + '/' + insulation.role + '"]');
+      await insulationPath.focus(); await page.keyboard.press('Enter');
+      await expect(insulationPath).toHaveAttribute('aria-pressed', 'true');
+      const insulationMaterial = input.input.materials.find(material => material.id === insulation.material);
+      expect(insulationMaterial).toBeTruthy();
+      await expect(details).toContainText(insulationMaterial.label);
+      await expect(dimension).toHaveText('厚度 ' + Number((insulation.thickness * 1000).toFixed(2)) + ' mm');
+      await expect(dimension).toBeDisabled();
+      cableEvidence.insulation = { thicknessM: insulation.thickness, material: insulationMaterial.label, text: await details.innerText() };
+      await conductorPath.dblclick();
+      await expect(page.locator('.drawing-editor-panel')).toHaveCount(0);
+      await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+      await capture('12-selected-' + caseId + '-saved-cable-remains-readonly');
+      let draftModel;
+      if (trial === 0) {
+        // Edit the real current input; the selected saved model must remain
+        // immutable while this separate draft survives a view round trip.
+        const draftInput = field('介质热阻率');
+        await expect(draftInput).toBeEditable();
+        const original = Number(await draftInput.inputValue());
+        expect(Number.isFinite(original)).toBe(true);
+        const edited = Number((original + 0.1).toFixed(3));
+        await fill('介质热阻率', String(edited));
+        await expect(command().getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
+        await canvas.getByRole('button', { name: '三维', exact: true }).click();
+        const cad = canvas.locator('.cad-viewport'), thermal = cad.locator('.cad-thermal-overlay');
+        await expect(cad).toHaveAttribute('data-cad-ready', 'true', { timeout: 60000 });
+        await expect(cad).toHaveAttribute('aria-busy', 'false');
+        await expect(cad).toHaveAttribute('data-cad-result-state', 'success');
+        await expect(thermal).toHaveAttribute('data-run-id', before.run.id);
+        await expect(thermal).toHaveAttribute('data-case-id', caseId);
+        await expect(cad.locator('.cad-canvas-host canvas')).toHaveAttribute('data-webgl-renderer', /.+/);
+        await expect.poll(async () => Number(await cad.locator('.cad-canvas-host canvas').getAttribute('data-webgl-colors'))).toBeGreaterThan(8);
+        if (await cad.locator('.cad-temperature-host').count())
+          await expect(cad.locator('.cad-temperature-host canvas')).toHaveAttribute('data-cad-field-ready', 'true', { timeout: 60000 });
+        await expect.poll(async () => Number(await draftInput.inputValue())).toBe(edited);
+        await expect(command().getByRole('button', { name: '保存修改', exact: true })).toBeEnabled();
+        await capture('12-selected-' + caseId + '-saved-three-with-current-draft');
+        draftModel = { original, edited, caseId, runId: before.run.id, status: await cad.locator('.cad-result-status').innerText() };
+        const returnCable = page.locator('.project-explorer a.explorer-item[href*="view=cable"]').first();
+        await returnCable.focus(); await page.keyboard.press('Enter');
+        await expect(cableFrame.locator('[data-drawing-canvas="cable"]')).toBeVisible();
+        await conductorPath.focus(); await page.keyboard.press('Enter');
+        await expect(dimension).toHaveText('直径 ' + (core.conductor.diameter * 1000).toFixed(1) + ' mm');
+        await expect(dimension).toBeDisabled();
+        await expect.poll(async () => Number(await draftInput.inputValue())).toBe(edited);
+        await capture('12-selected-' + caseId + '-cable-preserves-current-draft');
+        await clickCommand('撤销');
+        await expect.poll(async () => Number(await draftInput.inputValue())).toBe(original);
+        await expect(command().getByRole('button', { name: '已保存', exact: true })).toBeVisible();
+      }
+      caseNavigation.push({ ...source, caseId, name, keyboard, inputDigest: input.input_digest, initialField, pages,
+        modelHref: modelHref.href, cable: cableEvidence, draftModel });
+    }
+    expect(caseNavigation.some(item => item.cable.conductorDiameterM !== before.workspace.domain.cable_types[0]?.cores[0]?.conductor.diameter),
+      '实际候选至少有一个导体尺寸不同于当前工程，才能识别错误回退').toBe(true);
+    check('候选电缆的实际SVG层、导体和绝缘尺寸与材料来自同工况，保存模型不可编辑', true,
+      { ...source, cables: caseNavigation.map(item => ({ caseId: item.caseId, ...item.cable })) });
+    check('当前输入草稿在保存候选三维和电缆视图往返中保留，可撤销且不替换保存模型', true,
+      { ...source, draftModel: caseNavigation[0].draftModel });
+    const invalid = new URL(target('section', 'coordinates', true));
+    invalid.searchParams.set('case', 'not-a-saved-candidate');
+    await page.goto(invalid.href);
+    await expect(page.getByText('保存候选无法核对', { exact: true })).toBeVisible();
+    await expect(canvas.locator('.study-field-slot')).toHaveCount(0);
+    await expect(page.locator('.study-saved-candidate-input')).toHaveCount(0);
+    await capture('12-invalid-candidate-never-shows-another-field');
+    const recover = page.getByRole('button', { name: '返回候选结果', exact: true });
+    await recover.focus(); await page.keyboard.press('Enter');
+    await page.waitForURL(next => next.pathname.endsWith('/selection/results')
+      && !next.searchParams.get('case') && next.searchParams.get('run') === before.run.id);
+    await expect(page.getByRole('table', { name: '真实选型候选', exact: true })).toBeVisible();
+    check('真实候选经坐标、介质、冷重载、返回及模型链接始终保留同工况与保存摘要', caseNavigation.length === 2,
+      { ...source, candidates: caseNavigation });
+    check('不存在的保存候选明确报错，可用Enter返回且不会显示另一工况', true, { ...source, invalidUrl: invalid.href, recoveredUrl: page.url() });
     check('模型入口与坐标介质回归不写工程、研究、运行或启动计算', isDeepStrictEqual(await readSource(), before)
       && report.writes.length === writesStart, { ...source, writes: report.writes.slice(writesStart) });
-    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence, candidates: candidateEvidence, savedCad, savedSoilField });
+    (report.sectionNavigation ||= []).push({ ...size, ...source, tables: tableEvidence, candidates: candidateEvidence, caseNavigation, savedCad, savedSoilField });
   });
 });

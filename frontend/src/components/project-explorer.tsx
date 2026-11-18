@@ -61,8 +61,8 @@ function Section({ icon, title, count, children, expanded, onToggle }: { icon: s
  * 工程浏览器：侧栏右侧的第二层，只列本工程真实存在的对象。
  * 模型 = 工程模型里的敷设截面、电缆、负荷工况；研究 = 本工程的研究；交付 = 已封存的计算书。
  */
-export function ProjectExplorer({ workspaceId, projectName, document, modelLabel = '模型', activeStudy, activeRow, activeState, view, theme, onCreate }: {
-  workspaceId: string; projectName: string; document?: DomainDocument; modelLabel?: string; activeStudy: string; activeRow?: StudyRow; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
+export function ProjectExplorer({ workspaceId, projectName, document, modelLabel = '模型', activeStudy, activeRow, activeState, activeModelSearch, view, theme, onCreate }: {
+  workspaceId: string; projectName: string; document?: DomainDocument; modelLabel?: string; activeStudy: string; activeRow?: StudyRow; activeState?: StudyPresentation; activeModelSearch?: { run: string; case?: string }; view: string; theme: Theme; onCreate: () => void;
 }) {
   const [studiesExpanded,setStudiesExpanded] = useState(!activeRow);
   const [booksExpanded,setBooksExpanded] = useState(false);
@@ -76,6 +76,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, modelLabel
     to: "/studies/$sid/$module/$tab" as const, params: { sid: study.id, module, tab },
     search: { workspace: study.workspace, theme, run: "", delivery: "", ...extra },
   });
+  const modelSearch = current?.id === activeStudy ? activeModelSearch : undefined;
   const calc = current ? rootModule(current.definition) : "";
   const head = projectName.split(" · ")[0];
   return <nav className="project-explorer" aria-label="工程浏览器">
@@ -83,10 +84,10 @@ export function ProjectExplorer({ workspaceId, projectName, document, modelLabel
       <strong title={projectName}>{projectName}</strong>
     </header>
     {current && document && <Section icon="object/overview" title={modelLabel}>
-      {document.sections.map((section) => <Link key={section.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "section" })} aria-current={view === "section" ? "true" : undefined}>
+      {document.sections.map((section) => <Link key={section.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "section", ...(modelSearch ? { run: modelSearch.run, ...(modelSearch.case ? { case: modelSearch.case } : {}) } : {}) })} aria-current={view === "section" ? "true" : undefined}>
         <Icon name="object/section" /><span>{section.label || "敷设截面"}</span>
       </Link>)}
-      {document.cable_types.map((cable) => <Link key={cable.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "cable" })} aria-current={view === "cable" ? "true" : undefined}>
+      {document.cable_types.map((cable) => <Link key={cable.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "cable", ...(modelSearch ? { run: modelSearch.run, ...(modelSearch.case ? { case: modelSearch.case } : {}) } : {}) })} aria-current={view === "cable" ? "true" : undefined}>
         <Icon name="object/cable" /><span>{cable.label}</span>
       </Link>)}
       {document.load_cases.map((load) => <a key={load.id} className="explorer-item" href="#inspector-conditions"><Icon name="object/conditions" /><span>{entityLabel(document, load.id)}</span></a>)}

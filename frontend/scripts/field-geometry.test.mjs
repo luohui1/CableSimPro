@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildLocator, contourLevels, contourSegments, probe } from "../src/features/field/contours.ts";
 import { turbo } from "../src/features/field/colormap.ts";
+import { pickSavedCase } from "../src/lib/saved-case.ts";
 
 // 两个三角形拼成单位正方形，节点值 = x（线性场），用来核对插值与等值线位置。
 const points = [[0, 0], [1, 0], [1, 1], [0, 1]];
@@ -34,4 +35,27 @@ test("色带由蓝经绿到红（低温蓝、中段绿黄、高温红），超�
   assert.ok(rHigh > gHigh && rHigh > bHigh);
   assert.deepEqual(turbo(-1), turbo(0));
   assert.deepEqual(turbo(2), turbo(1));
+});
+
+test("保存工况显式选择优先于更早的参考工况，且不改写保存顺序", () => {
+  const reference = Object.freeze({ case_id: "reference", field: Object.freeze([301, 302]) });
+  const preferred = Object.freeze({ case_id: "selected", field: Object.freeze([311, 312]) });
+  const cases = Object.freeze([reference, preferred]);
+  assert.equal(pickSavedCase(cases, "selected", "reference"), preferred);
+  assert.deepEqual(cases.map(item => item.case_id), ["reference", "selected"]);
+  assert.equal(pickSavedCase(cases, undefined, "reference"), reference);
+  assert.equal(pickSavedCase(cases, undefined, "unknown-reference"), reference);
+});
+
+test("显式保存工况不存在或没有可用场时不显示相邻工况", () => {
+  const cases = Object.freeze([
+    Object.freeze({ case_id: "with-field", available: true }),
+    Object.freeze({ case_id: "without-field", available: false }),
+  ]);
+  const fields = cases.filter(item => item.available);
+  assert.equal(pickSavedCase(fields, "missing", "with-field"), undefined);
+  assert.equal(pickSavedCase(fields, "without-field", "with-field"), undefined);
+  assert.equal(pickSavedCase(cases, "without-field"), cases[1]);
+  assert.equal(pickSavedCase(fields, undefined, "with-field"), cases[0]);
+  assert.equal(pickSavedCase([], undefined, "with-field"), undefined);
 });
