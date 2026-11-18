@@ -203,6 +203,7 @@ const IMPORT_PARAMETER_NAMES: Record<string, string> = {
   conductor_class: '导体类别', core_lay_length: '成缆节距', screen_model: '铜带纵向电阻模型',
   screen_radial_factor: '铜带径向包络与单带厚度之比', filler_rho: '填充与包带热阻率',
   armour_gap_ratio: '钢带间隙与带宽之比', steel_relative_permeability: '钢带相对磁导率', diameter_rounding: '外径列示精度的半个单位',
+  corrugation_depth: '金属套波纹深度', corrugation_pitch: '金属套波纹节距',
 };
 export const IMPORT_MATERIAL_ROLES: Record<string, string> = {
   conductor: '导体', conductor_screen: '导体屏蔽', insulation: '绝缘', insulation_screen: '绝缘屏蔽',
