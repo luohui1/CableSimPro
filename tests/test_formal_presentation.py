@@ -122,6 +122,36 @@ def test_case_names_are_chinese_and_never_leak_layout_ids():
     assert engineering_text('338.6719999639408 K') == '原始说明见追溯记录'
 
 
+def test_legacy_soil_name_is_chinese_in_body_but_exact_in_source_and_trace():
+    model = reference_model()
+    original = '敷设介质 · v0 soil热阻率 · 采用值'
+    source = model['sources']['record']
+    source['payload']['material'] = original
+    from backend.kernel.formal_contracts import jsonsha
+    source['payload_digest'] = jsonsha(source['payload'])
+    reference = {'source_id': 'record', 'pointer': '/material'}
+    model['tables']['values']['columns'].append({'key': 'material', 'label': '材料', 'role': 'text'})
+    cell = {'value': original, 'raw_text': original, 'value_ref': reference,
+            'unit': None, 'unit_ref': None}
+    model['tables']['values']['rows'][0]['cells']['material'] = cell
+    saved_sources = canonical_bytes(model['sources'])
+
+    apply_presentation(model)
+    validate_model_refs(model)
+
+    assert cell['display_text'] == '敷设介质 · 旧版土壤材料热阻率 · 采用值'
+    assert cell['value'] == cell['raw_text'] == original
+    assert canonical_bytes(model['sources']) == saved_sources
+    row = next(row for row in model['tables']['presentation:prose']['rows']
+               if row['cells']['original']['value_ref'] == reference)
+    assert row['cells']['original']['raw_text'] == original
+    assert row['cells']['display']['raw_text'] == cell['display_text']
+    # A legacy material name can touch Chinese prose, but cannot be a substring
+    # replacement inside an unrelated ASCII identifier.
+    assert engineering_text('v0 soil') == '旧版土壤材料'
+    assert engineering_text('v0 soils / legacy-v0 soil') == 'v0 soils / legacy-v0 soil'
+
+
 def matrix_input():
     # Layout-only fixture. Each value is explicitly a serialization example;
     # the real-study suite verifies independently executed ampacity results.

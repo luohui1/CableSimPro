@@ -160,6 +160,11 @@ def cell_unit(cell):
 
 def engineering_text(text, names=None):
     result = str(text)
+    # The saved legacy material name may directly precede Chinese property
+    # text. ASCII boundaries preserve unrelated identifiers without treating
+    # that Chinese suffix as part of the name. Raw cells/sources stay intact.
+    result = re.sub(r'(?<![A-Za-z0-9_.-])v0 soil(?![A-Za-z0-9_.-])',
+                    '旧版土壤材料', result, flags=re.I)
     for key, label in sorted({**_LAYOUTS, **(names or {})}.items(), key=lambda item: len(item[0]), reverse=True):
         result = re.sub(r'(?<![\w.-])' + re.escape(key) + r'(?![\w.-])', lambda _: label, result, flags=re.I)
     result = _CASE.sub(lambda m: '工况' + str(int(m[1]) + 1), result)
