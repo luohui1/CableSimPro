@@ -5,7 +5,7 @@ import {
   ActionBarPrimitive, AttachmentPrimitive, AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, SuggestionPrimitive, ThreadPrimitive,
   groupPartByType, useAui, useAuiState, type AssistantState,
 } from '@assistant-ui/react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { reportFailure } from '@/components/notice';
 import { Button } from '@/components/ui/button';
@@ -14,31 +14,50 @@ import { ComposerAttach, ComposerBar, ComposerFrame, ComposerSend, ComposerStop,
 import { AssistantMessage, ThreadColumn, Typing, UserMessage, threadViewportClass } from '@/kit/chat/messages';
 import { Icon } from '@/kit/icon';
 import { DropZone } from '@/kit/workbench/form';
+import { useChat } from '@/state/queries';
 import { RatingFacts, RatingFigure, TypeFacts, TypeFigure } from './empty-tiles';
 import { MarkdownText } from './markdown';
 import { ALL_STARTERS, STARTERS } from './starters';
 import { StepGroup } from './steps';
 
 // A thread with nothing in it yet shows the welcome and the starting tasks; a thread that is still fetching its history shows neither.
-const isNewChatView = (state: AssistantState) => state.thread.messages.length === 0 && (!state.thread.isLoading || state.threads.isLoading);
-const isHistoryLoadingView = (state: AssistantState) => state.thread.messages.length === 0 && state.thread.isLoading && !state.threads.isLoading;
+const isNewChatView = (state: AssistantState) => state.thread.messages.length === 0 && !state.thread.isLoading;
+const isHistoryLoadingView = (state: AssistantState) => state.thread.messages.length === 0 && state.thread.isLoading;
 
-export function Thread({ notice }: { notice?: ReactNode }) {
+export function Thread({ notice, sessionId }: { notice?: ReactNode; sessionId?: string }) {
   const empty = useAuiState(isNewChatView);
+  const history = useChat(sessionId);
+  const viewport = useRef<HTMLDivElement>(null);
+  const waitingForHistory = Boolean(sessionId) && !history.data;
+  const historyError = history.isError && <ChatNotice tone="error">
+    <p className="m-0 font-medium">这段对话暂时无法读取</p>
+    <p className="my-2 whitespace-pre-wrap wrap-anywhere">{history.error.message}</p>
+    {history.data && <p className="my-2">当前保留上次读取的内容，请重试以确认最新状态。</p>}
+    <Button variant="outline" size="sm" disabled={history.isFetching} onClick={() => void history.refetch()}>
+      <Icon name="agent/retry" data-icon="inline-start" />{history.isFetching ? '正在重试…' : '重新读取对话'}
+    </Button>
+  </ChatNotice>;
   return <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-    {empty
+    {waitingForHistory
+      ? <div className="min-h-0 flex-1 overflow-y-auto py-8"><ThreadColumn className="gap-3">
+        {historyError || <p role="status" className="m-0 py-10 text-center text-sm text-ink-2">正在打开对话…</p>}
+        {notice}
+      </ThreadColumn></div>
+      : empty
       ? <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
         <AgentEmpty title="今天要处理哪款电缆？" lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。" className="2xl:max-w-4xl"
-          notice={notice} composer={<div className="flex flex-col gap-2"><Composer /><ImportDrop /></div>}
+          notice={historyError ? <div className="flex flex-col gap-3">{historyError}{notice}</div> : notice}
+          composer={<div className="flex flex-col gap-2"><Composer /><ImportDrop /></div>}
           groups={STARTERS.map(group => ({ label: group.label, icon: group.icon, ...TILES[group.label],
             tasks: <Starters first={ALL_STARTERS.indexOf(group.tasks[0])} count={group.tasks.length} /> }))} />
       </div>
       : <>
         {/* A new turn starts at the top of the page, and a conversation that is opened shows its latest turn from the person's words on,
             nothing cut off above (the design's screen). */}
-        <ThreadPrimitive.Viewport turnAnchor="top" scrollToBottomOnInitialize={false} scrollToBottomOnThreadSwitch={false} className={threadViewportClass}>
-          <OpenAtLatestTurn />
+        <ThreadPrimitive.Viewport ref={viewport} turnAnchor="top" scrollToBottomOnInitialize={false} scrollToBottomOnThreadSwitch={false} className={threadViewportClass}>
+          <OpenAtLatestTurn viewport={viewport} />
           <ThreadColumn className="pb-6">
+            {historyError}
             <AuiIf condition={isHistoryLoadingView}><p role="status" className="m-0 py-10 text-center text-sm text-ink-2">正在打开对话…</p></AuiIf>
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
           </ThreadColumn>
@@ -61,13 +80,17 @@ export function Thread({ notice }: { notice?: ReactNode }) {
 /** A conversation that is opened shows its latest turn from the person's words on: the ask, then what came of it, nothing cut off above.
  *  The history arrives after the page is mounted, so this waits for it; each message carries its own space above it, so the turn at the
  *  top of the page still has air above its first line. */
-function OpenAtLatestTurn() {
+function OpenAtLatestTurn({ viewport }: { viewport: RefObject<HTMLDivElement | null> }) {
   const loaded = useAuiState(state => state.thread.messages.length > 0 && !state.thread.isLoading);
+  const threadId = useAuiState(state => state.threads.mainThreadId);
   useEffect(() => {
-    if (!loaded) return;
-    const turns = document.querySelectorAll('[data-turn-start]');
-    turns[turns.length - 1]?.scrollIntoView({ block: 'start' });
-  }, [loaded]);
+    const node = viewport.current;
+    if (!loaded || !node) return;
+    const turns = node.querySelectorAll<HTMLElement>('[data-turn-start]');
+    const last = turns[turns.length - 1];
+    // Only this thread scrolls: other embedded conversations and the outer page keep their positions.
+    if (last) node.scrollTop = Math.max(0, node.scrollTop + last.getBoundingClientRect().top - node.getBoundingClientRect().top);
+  }, [loaded, threadId, viewport]);
   return null;
 }
 
