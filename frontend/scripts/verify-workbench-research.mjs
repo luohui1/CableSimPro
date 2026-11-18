@@ -684,6 +684,11 @@ await walkthrough('research', async ({ page, context, expect, base, api, choose,
       await sourceTab.focus();
       await page.keyboard.press('Enter');
       await page.waitForURL(next => next.pathname === '/studies/' + sid + '/report/sources');
+      for (const [label, value] of [
+        ['单位名称', metadata.organization], ['文件编号', metadata.number], ['版次', metadata.revision],
+        ['签发日期（可选）', metadata.issued_on ?? ''], ['页眉（可选）', metadata.header], ['页脚（可选）', metadata.footer],
+      ]) await expect(field(label)).toHaveValue(value);
+      await expect(download).toBeEnabled();
       const sources = page.locator('dl.report-sources');
       for (const identity of [second.id, before.run.input_digest, before.run.output_digest,
         preview.source_digest, preview.model_digest, exports[0].headers['x-artifact-sha256']])

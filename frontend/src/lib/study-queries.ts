@@ -142,7 +142,11 @@ export async function invalidateSavedStudyResults(client: QueryClient, wid: stri
 }
 
 export function studyRunsQuery(client: QueryClient, wid: string | undefined, sid: string, run: string, module = '', tab = '') {
-  const evidence = ['detail', 'validation', 'sources', 'inputs', 'parameters'].includes(tab) || module === 'method-compare';
+  // Report tabs share one selected-run projection. Switching only the document
+  // surface must not remount its editor or discard a verified PDF; the formal
+  // report independently reads and validates the full saved run.
+  const evidence = module !== 'report'
+    && (['detail', 'validation', 'sources', 'inputs', 'parameters'].includes(tab) || module === 'method-compare');
   return queryOptions({
     queryKey: ["runs", wid, sid, run || 'latest', run ? '' : module, evidence ? 'evidence' : 'detail'],
     queryFn: async () => {
