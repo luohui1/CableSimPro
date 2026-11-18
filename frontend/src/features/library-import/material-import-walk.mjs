@@ -27,11 +27,12 @@ async function declaredReference(root, filename, id, expectedSource, expectedRec
     ...record.limitations.map(text => '适用限制：' + text),
     `原件：${record.source_file}；SHA-256：${record.source_sha256}。`,
     `记录：${record.id}；记录 SHA-256：${expectedRecord}。`,
-    `来源方法：${manifest.id} ${manifest.version} 封签记录；导入方法：明示材料物性映射 1.0.0。`,
+    `来源方法：${manifest.name} ${manifest.version} 封签记录；导入方法：明示材料物性映射 1.0.0。`,
   ].join('\n');
   assert.ok(reference.length <= 2000);
   return { role, property, record, declaration: { value: record.value, unit: record.quantity.unit, reference },
-    data_file: file, data_sha256: hash(bytes), manifest_sha256: hash(manifestBytes), plugin_version: manifest.version, record_sha256: expectedRecord };
+    data_file: file, data_sha256: hash(bytes), manifest_sha256: hash(manifestBytes), plugin_id: manifest.id,
+    plugin_name: manifest.name, plugin_version: manifest.version, record_sha256: expectedRecord };
 }
 
 /** All writes originate in the existing wizard's visible controls. API calls
@@ -108,11 +109,14 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
   const rowFor = (role, property) => materialRows
     .filter({ has: roleControl(page).filter({ hasText: role }) })
     .filter({ has: propertyControl(page).filter({ hasText: property }) });
-  async function visibleOrder() {
+  async function visibleOrder(stage) {
     await expect(materialRows).toHaveCount(2);
-    return Promise.all((await materialRows.all()).map(async row => ({
-      role: (await roleControl(row).innerText()).trim(), property: (await propertyControl(row).innerText()).trim(),
+    const controls = await Promise.all((await materialRows.all()).map(async row => ({
+      role: { text_content: await roleControl(row).textContent(), inner_text: await roleControl(row).innerText() },
+      property: { text_content: await propertyControl(row).textContent(), inner_text: await propertyControl(row).innerText() },
     })));
+    audit.material_control_text = { ...audit.material_control_text, [stage]: controls };
+    return controls.map(row => ({ role: row.role.inner_text.trim(), property: row.property.inner_text.trim() }));
   }
   async function expectDeclaration(row, role, property, declaration) {
     await expect(row).toHaveCount(1);
@@ -187,7 +191,7 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     await page.getByRole('button', { name: '返回修改声明', exact: true }).click();
     await fill(1, '导体', '密度', density.declaration);
     await fill(2, '绝缘', '体积热容', wrongUnitDeclarations.insulation.volumetric_heat_capacity);
-    audit.declaration_order = { initial: await visibleOrder() };
+    audit.declaration_order = { initial: await visibleOrder('initial') };
 
     // An edited row still owns its saved key until that edit is saved or the
     // row is deleted. A second row must not acquire and then lose that value.
@@ -246,10 +250,12 @@ export async function walkMaterialImport({ page, base, viewport, out, root, samp
     assert.equal(audit.requests.filter(item => item.method === 'POST' && item.url.endsWith('/imports/commit')).length, 0);
     await shot('错误单位逐行拒绝且无入库');
     await page.getByRole('button', { name: '返回修改声明', exact: true }).click();
-    audit.declaration_order.returned = await visibleOrder();
+    audit.declaration_order.returned = await visibleOrder('returned');
     assert.deepEqual(audit.declaration_order.returned, audit.declaration_order.initial,
       '同一用途与物性保存后，返回预览不得改变已保存声明顺序');
-    const conductorRow = rowFor(/^导体$/, /^密度$/), capacityRow = rowFor(/^绝缘$/, /^体积热容$/);
+    // The decorative SVG contributes whitespace to Playwright's raw regex text.
+    // Keep exact semantic identity while allowing that surrounding whitespace.
+    const conductorRow = rowFor(/^\s*导体\s*$/, /^\s*密度\s*$/), capacityRow = rowFor(/^\s*绝缘\s*$/, /^\s*体积热容\s*$/);
     await expectDeclaration(conductorRow, '导体', '密度', density.declaration);
     await expectDeclaration(capacityRow, '绝缘', '体积热容', wrongUnitDeclarations.insulation.volumetric_heat_capacity);
     await capacityRow.getByLabel('物性单位', { exact: true }).fill(capacity.declaration.unit);
