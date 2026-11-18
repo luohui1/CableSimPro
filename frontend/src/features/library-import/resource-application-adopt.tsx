@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { message } from '@/api/client';
+import { studyContextQuery } from '@/lib/study-queries';
 import { DataTable } from '@/components/data-table';
 import { ErrorState } from '@/components/states';
 import { Button } from '@/components/ui/button';
@@ -107,10 +109,48 @@ export function ApplicationAdoption({ asset, evidence }: { asset: ApplicationAss
     <div className="library-import-actions"><Button variant="primary" disabled={!ready} loading={busy} onClick={() => void readPreview()}>预览目标采用变化</Button></div>
     {notice && <div className="library-import-stack" role="status">
       <p>{notice.studyId ? `已创建保存研究，工程输入仍为修订 ${notice.revision}；没有启动计算。` : `已采用到型号输入修订 ${notice.revision}，固定来源与逐字段变化已保存。`}</p>
-      <div><Button asChild><a href={notice.studyId ? `/studies/${encodeURIComponent(notice.studyId)}?workspace=${encodeURIComponent(notice.workspaceId)}` : `/types/${encodeURIComponent(notice.workspaceId)}/structure/section`}>{notice.studyId ? '打开新保存研究' : '打开目标型号并核对或撤销'}</a></Button></div>
+      {notice.studyId ? <OpenSavedStudy key={`${notice.workspaceId}:${notice.revision}:${notice.studyId}`} workspaceId={notice.workspaceId} studyId={notice.studyId} />
+        : <div><Button asChild><a href={`/types/${encodeURIComponent(notice.workspaceId)}/structure/section`}>打开目标型号并核对或撤销</a></Button></div>}
     </div>}
     {preview && <AdoptionConfirmation key={preview.response.preview_digest} kind={kind} value={preview} onClose={() => setPreview(null)} onDone={adopted} />}
   </section>;
+}
+
+function OpenSavedStudy({ workspaceId, studyId }: { workspaceId: string; studyId: string }) {
+  const client = useQueryClient(), navigate = useNavigate();
+  const [opening, setOpening] = useState(false), [error, setError] = useState('');
+  const mounted = useRef(false), pending = useRef(false), generation = useRef(0);
+  // This control is keyed by the adoption notice. A changed target or an
+  // unmounted page must not navigate when an earlier read eventually finishes.
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; generation.current++; };
+  }, []);
+  async function open() {
+    if (pending.current) return;
+    pending.current = true;
+    const request = ++generation.current;
+    const current = () => mounted.current && generation.current === request;
+    setOpening(true); setError('');
+    try {
+      // Finish the existing, complete context query before mounting its
+      // consumers. SPA navigation keeps the same verified query cache.
+      const context = await client.fetchQuery(studyContextQuery(client, workspaceId, studyId));
+      if (!current()) return;
+      if (!context.some(study => study.id === studyId && study.workspace === workspaceId))
+        throw new Error('保存研究与目标工程不一致，请重新读取。');
+      await navigate({ to: '/studies/$sid', params: { sid: studyId },
+        search: previous => ({ theme: previous.theme === 'dark' ? 'dark' : 'light', workspace: workspaceId, run: '', delivery: '' }) });
+    } catch (cause) {
+      if (current()) setError(`无法打开保存研究：${message(cause)} 请重试打开。`);
+    } finally {
+      if (current()) { pending.current = false; setOpening(false); }
+    }
+  }
+  return <div className="library-import-stack">
+    <div><Button disabled={opening} loading={opening} onClick={() => void open()}>打开新保存研究</Button></div>
+    {error && <p role="alert" className="library-import-error">{error}</p>}
+  </div>;
 }
 
 function AdoptionConfirmation({ kind, value, onClose, onDone }: {
