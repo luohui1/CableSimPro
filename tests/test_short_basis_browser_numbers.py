@@ -14,14 +14,18 @@ from tests.test_type_electrical import plugin, PUBLIC
 from cablesim_type_electrical.short_basis import queries, record
 
 
-def browser_json(value):
+def browser_json_text(value):
     node = shutil.which('node')
     if node is None:
         pytest.skip('This transport regression requires actual JavaScript; the browser CI also exercises it.')
     program = "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',s=>raw+=s);process.stdin.on('end',()=>process.stdout.write(JSON.stringify(JSON.parse(raw))));"
     result = subprocess.run([node, '-e', program], input=json.dumps(value, ensure_ascii=False),
                             text=True, capture_output=True, check=True, timeout=20)
-    return json.loads(result.stdout)
+    return result.stdout
+
+
+def browser_json(value):
+    return json.loads(browser_json_text(value))
 
 
 @pytest.fixture(scope='module')
@@ -95,7 +99,14 @@ def test_real_api_query_save_read_resave_preflight_and_run_after_javascript(tmp_
         method = {**method, 'capability': 'short-circuit'}
         root = '/api/workspaces/'+workspace['id']
         definition = {'title': '浏览器短路依据往返', 'input_source': 'domain', 'method': method, 'parameters': parameters}
-        saved = client.post(root+'/studies', json={**definition, 'expected_revision': workspace['revision']})
+        # Send the literal bytes produced by JavaScript JSON.stringify, as the
+        # real page does, instead of letting TestClient reserialize Python JSON.
+        actual_post = browser_json_text({**definition, 'expected_revision': workspace['revision']})
+        assert actual_post.count('"record_sha256"') >= 30
+        assert '"value":3450000.0' not in actual_post
+        assert '"value":3450000' in actual_post
+        saved = client.post(root+'/studies', content=actual_post.encode('utf-8'),
+                            headers={'content-type': 'application/json'})
         assert saved.status_code == 201, saved.text[:800]
         study = saved.json()
         route = root+'/studies/'+study['id']
@@ -103,8 +114,10 @@ def test_real_api_query_save_read_resave_preflight_and_run_after_javascript(tmp_
         assert loaded.status_code == 200, loaded.text
         loaded = browser_json(loaded.json())
         assert loaded['definition']['parameters']['basis_references'] == parameters['basis_references']
-        response = client.put(route, json={**loaded['definition'], 'expected_revision': workspace['revision'],
-                                          'expected_study_revision': loaded['revision']})
+        actual_resave = browser_json_text({**loaded['definition'], 'expected_revision': workspace['revision'],
+                                           'expected_study_revision': loaded['revision']})
+        response = client.put(route, content=actual_resave.encode('utf-8'),
+                              headers={'content-type': 'application/json'})
         assert response.status_code == 200, response.text
         study = response.json()
         preflight = client.get(route+'/preflight', params={
