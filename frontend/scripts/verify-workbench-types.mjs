@@ -13,6 +13,7 @@ const fixedTypeRoutes = {
 };
 let fixedTypeArchiveSources;
 let declaredTypeSeedIds, declaredTypeSeedId;
+let incompleteLibrarySource, publishedTeachingVersion;
 function archivedTypeModule(run) {
   const definition = run?.snapshot?.definition, method = definition?.method, driver = definition?.driver;
   if (run?.integrity !== 'verified' || !['succeeded', 'partial'].includes(run.status) || !method?.release_digest) return null;
@@ -178,15 +179,35 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   let teachingSource;
   async function teachingDesign() {
     if (teachingSource) return teachingSource;
-    const candidates = (await api('/api/design/type-workspaces')).filter(item => item.name === 'YJV22-8.7/15 3×300');
+    const owners = await api('/api/design/type-workspaces');
+    let publication;
+    if (publishedTeachingVersion) {
+      // The prior viewport really published this family. Read its current
+      // immutable release and branch that saved design, never the old seed.
+      const library = await api('/api/types/library');
+      publication = library.items.find(item => item.asset_id === publishedTeachingVersion.asset_id);
+      check('后续尺寸从真实最新教学发布版本建立方案', publication?.status === 'published'
+        && typeof publication.workspace_id === 'string' && /^[a-f0-9]{64}$/.test(publication.content_sha256),
+      { previous: publishedTeachingVersion, current: publication });
+    }
+    const candidates = publication ? owners.filter(item => item.id === publication.workspace_id)
+      : owners.filter(item => item.name === 'YJV22-8.7/15 3×300');
     for (const seed of candidates) {
       const original = await workspace(seed.id);
-      // A previous viewport's independent copy retains the engineering model
-      // name. Resolve the actual seed identity, never that more-recent copy.
-      if (original.type_plan_source) continue;
-      const studies = await api(`/api/workspaces/${seed.id}/studies`);
+      // An unrelated earlier copy must not replace the genuine seed. A chosen
+      // published design is allowed only after its fixed receipt is verified.
+      if (original.type_plan_source && !publication) continue;
+      if (publication) {
+        const spec = await api('/api/types/' + seed.id + '/specification?audience=customer&view=detail');
+        expect(spec.lifecycle.status).toBe('published');
+        expect(spec.lifecycle.asset_id).toBe(publication.id);
+        expect(spec.payload.workspace_id).toBe(seed.id);
+        expect(spec.payload.revision).toBe(original.revision);
+        expect(spec.payload.document).toEqual(original.domain);
+      }
+      const studies = await api('/api/workspaces/' + seed.id + '/studies');
       if (!studies.some(item => item.definition.driver.kind === 'batch' && /教学/.test(item.definition.parameters?.source || ''))) continue;
-      teachingSource = { seed, original, studies }; return teachingSource;
+      teachingSource = { seed, original, studies, publication }; return teachingSource;
     }
     return null;
   }
@@ -849,6 +870,12 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     check(`${origin} 起点保留真实来源且建立独立草稿`, result.type_creation?.kind === origin && result.type_lifecycle?.status === 'draft', {
       workspace: result.id, creation: result.type_creation, lifecycle: result.type_lifecycle,
     });
+    if (origin === 'library') {
+      const actual = result.type_creation?.source;
+      check('两尺寸库引用严格保留同一原始资料身份与摘要', Boolean(incompleteLibrarySource)
+        && ['id', 'version', 'content_sha256', 'source'].every(key => actual?.[key] === incompleteLibrarySource[key]),
+      { expected: incompleteLibrarySource, actual });
+    }
     await expectIdentity(result);
     return result;
   }
@@ -1050,21 +1077,62 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const iframe = specification ? page.locator('iframe[title="正式规格书预览"]') : null;
     const surface = specification ? page.frameLocator('iframe[title="正式规格书预览"]') : page;
     let before, specBefore, frameBefore;
+    const writesBeforeNotation = report.writes.length;
     try {
       before = await savedNotationInputs(id);
       await write('-saved-before.json', JSON.stringify(before, null, 2));
       await expect(surface.locator('body')).toBeVisible();
       await surface.locator('body').evaluate(async () => { await document.fonts.ready; });
+      specBefore = await api('/api/types/' + id + '/specification?audience=customer&view=detail');
+      await write('-specification-before.json', JSON.stringify(specBefore, null, 2));
+      expect(specBefore.payload.workspace_id).toBe(id);
+      expect(specBefore.payload.revision).toBe(before.workspace.revision);
+      const source = specBefore.payload.sources.find(item => item.channel === 'standards');
+      const result = specBefore.payload.results.standards, artifact = result?.artifact;
+      expect(source?.freshness).toBe('current');
+      expect(source?.method?.plugin_id).toBe('cablesim.standard-check');
+      expect(artifact?.schema).toBe('cablesim.standard-check/1');
+      // Bind the text to the actual full saved run, preserving the original GET
+      // bytes before parsing. No obsolete wording or plugin version is imposed.
+      const endpoint = '/api/workspaces/' + id + '/studies/' + source.study_id + '/runs/' + source.run_id + '?view=full';
+      const response = await page.request.get(base + endpoint, { timeout: 90000 });
+      let full;
+      try {
+        const raw = await response.body();
+        entry.standardRunOriginal = { endpoint, status: response.status(), bytes: raw.length, sha256: digest(raw),
+          file: await write('-standard-run-original.json', raw) };
+        expect(response.ok()).toBe(true);
+        full = JSON.parse(raw.toString('utf8'));
+      } finally { await response.dispose(); }
+      expect(full.id).toBe(source.run_id);
+      expect(full.workspace).toBe(id);
+      expect(full.study).toBe(source.study_id);
+      expect(full.integrity).toBe('verified');
+      expect(full.input_digest).toBe(source.input_digest);
+      expect(full.output_digest).toBe(source.output_digest);
+      expect(full.snapshot.definition.method).toEqual(source.method);
+      const savedCase = full.output.cases.find(item => item.case_id === result.case_id);
+      expect(savedCase?.status).toBe('succeeded');
+      expect(Object.values(savedCase.artifacts).find(item => item?.schema === artifact.schema)).toEqual(artifact);
+      const uncovered = artifact.rows.filter(row => row.verdict === 'uncovered');
+      expect(uncovered.length).toBe(artifact.counts.uncovered || 0);
+      expect(uncovered.every(row => typeof row.reason === 'string' && row.reason.trim())).toBe(true);
+      const normativeTokens = uncovered.length ? [...new Set(uncovered.map(row => row.reason))]
+        : [artifact.rows.find(row => typeof row.citation === 'string' && row.citation.trim())?.citation.replace(/（PDF.*$/, '')];
+      expect(normativeTokens.every(token => typeof token === 'string' && token.trim()),
+        '规范原文目标必须来自本次保存工件的实际原因或引用').toBe(true);
+      entry.standardSource = { ...source, case_id: result.case_id, method_version: artifact.method_version,
+        uncovered: uncovered.map(row => ({ id: row.id, title: row.title, verdict: row.verdict, reason: row.reason, clause: row.clause })),
+        normativeTokens };
+      await write('-standard-source.json', JSON.stringify(entry.standardSource, null, 2));
       if (specification) {
-        specBefore = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
         await write('-host-before.html', specBefore.html);
-        await write('-specification-before.json', JSON.stringify(specBefore, null, 2));
         frameBefore = await iframe.getAttribute('srcdoc');
         await write('-iframe-before.html', frameBefore || '');
         await write('-iframe-aria.txt', await surface.locator('body').ariaSnapshot());
         await write('-iframe-text.txt', await surface.locator('body').textContent() || '');
       } else await write('-body-aria.txt', await page.locator('body').ariaSnapshot());
-      for (const token of specification ? ['Case2/10', '附录 A/B'] : ['附录 A/B']) {
+      for (const token of specification ? ['Case2/10', ...normativeTokens] : normativeTokens) {
         const targets = surface.getByText(token, { exact: false });
         try { await expect(targets.first()).toBeAttached(); }
         catch (error) {
@@ -1073,7 +1141,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
           continue;
         }
         const count = await targets.count();
-        check(label + '保留原文 ' + token, count > 0, { token, count, evidence: prefix }, { fatal: false });
+        const expectedCount = uncovered.filter(row => row.reason === token).length || 1;
+        check(label + '保留原文 ' + token, count >= expectedCount,
+          { token, count, expectedCount, run: source.run_id, evidence: prefix }, { fatal: false });
         for (let index = 0; index < count; index++) {
           const target = targets.nth(index), item = { token, index }; entry.targets.push(item);
           try {
@@ -1106,7 +1176,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
               return stable;
             }, { timeout: 3000 }).toBe(true);
             geometry = await notationGeometry(target, token, iframe);
-            const shot = await capture(label + '-' + (token === 'Case2/10' ? '算例来源' : '附录诊断') + '-' + (index + 1));
+            const shot = await capture(label + '-' + (token === 'Case2/10' ? '算例来源' : '规范追溯') + '-' + (index + 1));
             item.screenshot = shot.screenshot;
             item.geometry = await write(`-target-${entry.targets.length}.json`, JSON.stringify(geometry, null, 2));
             item.originalText = await write(`-target-${entry.targets.length}.txt`, geometry.text || '');
@@ -1129,8 +1199,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       try {
         const after = await savedNotationInputs(id);
         await write('-saved-after.json', JSON.stringify(after, null, 2));
-        check(label + '滚动未改动保存输入引用及方法版本', Boolean(before) && JSON.stringify(after) === JSON.stringify(before),
-          { before: prefix + '-saved-before.json', after: prefix + '-saved-after.json' }, { fatal: false });
+        check(label + '滚动未改动保存输入引用及方法版本', Boolean(before) && JSON.stringify(after) === JSON.stringify(before)
+          && report.writes.length === writesBeforeNotation,
+          { before: prefix + '-saved-before.json', after: prefix + '-saved-after.json', writes: report.writes.slice(writesBeforeNotation) }, { fatal: false });
         if (specification && specBefore) {
           const specAfter = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
           const frameAfter = await iframe.getAttribute('srcdoc');
@@ -1554,6 +1625,24 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   if (report.phase === 'after') await attempt('00c-真实屏蔽层缺项的诊断下载和输入定位', () =>
     verifyTypeGeometryInput({ page, expect, base, api, capture, check, out, size, tag, report, confirmExpectedGeometryFailure }));
   const options = await api('/api/types/creation-options');
+  async function originalLibraryChoice(dialog) {
+    if (!incompleteLibrarySource) {
+      const source = options.library.find(item => ['catalogue', 'manufacturer'].includes(item.source)
+        && /YJV22/.test(item.name) && /300/.test(item.name));
+      check('缺项走查有真实厂家资料起点', Boolean(source), options.library.map(item => ({
+        id: item.id, name: item.name, version: item.version, source: item.source, content_sha256: item.content_sha256,
+      })));
+      incompleteLibrarySource = { ...source };
+      report.incompleteLibrarySource = incompleteLibrarySource;
+    }
+    const source = options.library.find(item => ['id', 'version', 'content_sha256', 'source']
+      .every(key => item[key] === incompleteLibrarySource[key]));
+    check('原始厂家资料固定版本在本尺寸仍可选择', Boolean(source), { expected: incompleteLibrarySource });
+    const label = source.name + ' · ' + versionLabel(source.version);
+    expect(options.library.filter(item => item.name + ' · ' + versionLabel(item.version) === label)).toHaveLength(1);
+    await choose('型号版本', label, dialog);
+    return source;
+  }
   await attempt('01-型号列表与批量操作入口', async () => {
     await page.goto(base + '/types?theme=light');
     await expect(page.locator('[data-type-page="list"]')).toHaveAttribute('data-type-state', 'success');
@@ -1570,9 +1659,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
 
   const library = await attempt('02-从真实型号库引用建立草稿', async () => {
     const dialog = await openNew('从型号库复制', name('库引用'));
-    const source = options.library.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || options.library[0];
+    const source = await originalLibraryChoice(dialog);
     if (!check('库引用起点可开始', Boolean(source), await dialog.innerText())) return null;
-    await choose('型号版本', source.name + ' · ' + versionLabel(source.version), dialog);
     await capture('库引用-固定型号版本与来源');
     const created = await create(dialog, 'library');
     const next = await primary('标准核对', '新建型号的已保存结构页');
@@ -1630,9 +1718,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     // Keep this editable fixture independent of the calculation model, whose
     // original missing provenance must remain available to the rating check.
     const dialog = await openNew('从型号库复制', name('名称与来源编辑'));
-    const source = options.library.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || options.library[0];
+    const source = await originalLibraryChoice(dialog);
     if (!check('名称与来源编辑有真实独立起点', Boolean(source), await dialog.innerText())) return;
-    await choose('型号版本', source.name + ' · ' + versionLabel(source.version), dialog);
     editFixture = await create(dialog, 'library');
     const before = await workspace(editFixture.id), title = name('名称已编辑');
     const opener = page.getByRole('button', { name: '修改型号名称', exact: true });
@@ -2109,14 +2196,29 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await readableResultColumns('标准核对');
     await capture('标准核对-真实结果');
     if (await issues.count()) {
-      await issues.first().click();
-      const locate = page.getByRole('button', { name: '定位结构层', exact: true });
-      const repair = issues.first().getByRole('button').first();
-      if (await locate.isVisible()) {
+      const issue = issues.first();
+      await issue.click();
+      await expect(issue).toHaveAttribute('aria-selected', 'true');
+      const rowId = await issue.getAttribute('id');
+      const specification = await api('/api/types/' + main.id + '/specification?audience=customer&view=detail');
+      const savedRow = specification.payload.results.standards.artifact.rows
+        .find(row => rowId === 'row-标准核对-' + row.id);
+      expect(savedRow, '所选检查行须对应本型号的真实保存标准结果').toBeTruthy();
+      const locate = issue.getByRole('button', { name: '定位结构层', exact: true });
+      const repair = issue.getByRole('button').first();
+      if (await locate.count()) {
+        await expect(locate).toHaveCount(1);
+        const target = savedRow.target;
+        expect(typeof target?.role).toBe('string');
+        const layer = (target.scope === 'core' ? target.core_id : 'common') + '/' + target.role;
         await locate.click();
-        await expect(page).toHaveURL(/\/structure\/table.*layer=/);
-        await expect(layers().getByRole('row', { selected: true })).toBeVisible();
-        check('标准核对不满足项可定位到结构层', true);
+        await page.waitForURL(next => next.pathname === '/types/' + main.id + '/structure/table'
+          && next.searchParams.get('layer') === layer);
+        const selected = layers().getByRole('row', { selected: true });
+        await expect(selected).toHaveAttribute('id', 'row-型号分层-' + layer);
+        check('标准核对不满足项可定位到其原始结构层', true, {
+          checkId: savedRow.id, title: savedRow.title, target: savedRow.target, layer, url: page.url(),
+        });
       } else if (await repair.isVisible()) {
         const from = page.url();
         await repair.click();
@@ -2374,7 +2476,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   const delivery = await attempt('13-打开来源完整的教学型号并建立独立交付方案', async () => {
     const teaching = await teachingDesign();
     if (!check('发布种子提供独立的三芯教学型号', Boolean(teaching), '按真实型号名、非方案副本及已保存教学条件定位原始种子')) return null;
-    const { seed, original, studies } = teaching;
+    const { seed, original, studies, publication } = teaching;
     const conditions = parameters => parameters && Object.fromEntries(Object.entries(parameters)
       .filter(([key]) => !['basis_references', 'cable_type_id', 'circuit_id'].includes(key)));
     const electrical = conditions(studies.find(item => item.definition.parameters?.temperature_k
@@ -2402,6 +2504,13 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const title = name('教学交付副本');
     await field('方案名称', title, dialog);
     const branch = await responseFor('POST', `/api/types/${seed.id}/plans`, () => dialog.getByRole('button', { name: '建立方案', exact: true }).click());
+    if (publication) {
+      expect(branch.base_reference).toMatchObject({
+        id: publication.asset_id, version: publication.version, content_sha256: publication.content_sha256,
+        source: 'published_type',
+      });
+      (report.teachingPublicationBases ||= []).push({ ...size, source: seed.id, publication, branch });
+    }
     await expect(page).toHaveURL(new RegExp('/types/' + branch.workspace_id + '/structure/section'));
     await expect(layers()).toBeVisible();
     // The plan name distinguishes this copy; preserve its engineering model
@@ -2524,7 +2633,16 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   });
   await attempt('17b-教学交付逐项限定范围并保留未闭合门禁', () => declareTeachingScope(delivery.id));
   await attempt('18-教学交付副本生成客户规格书并下载真实PDF', () => generateSpecification(delivery.id, '教学交付规格书', 'teaching'));
-  await attempt('19-教学交付副本逐项审核并执行版本流程', () => reviewSpecification(delivery.id, '教学交付规格书'));
+  await attempt('19-教学交付副本逐项审核并执行版本流程', async () => {
+    await reviewSpecification(delivery.id, '教学交付规格书');
+    const library = await api('/api/types/library');
+    const published = library.items.filter(item => item.workspace_id === delivery.id
+      && item.source_design?.id === delivery.id && item.status === 'published');
+    expect(published, '仅记录本次真实审核发布成功的版本').toHaveLength(1);
+    publishedTeachingVersion = Object.fromEntries(['id', 'asset_id', 'version', 'content_sha256', 'workspace_id']
+      .map(key => [key, published[0][key]]));
+    (report.teachingPublishedVersions ||= []).push({ ...size, ...publishedTeachingVersion });
+  });
   const sourceAfterDelivery = await workspace(delivery.source);
   check('交付计算和文档流程没有改动原教学型号', sourceAfterDelivery.revision === delivery.original.revision
     && JSON.stringify(sourceAfterDelivery.domain) === JSON.stringify(delivery.original.domain));
