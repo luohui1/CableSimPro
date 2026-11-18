@@ -28,10 +28,10 @@ def stamp() -> str:
 
 def confirm_reference_write(*releases: AssetRelease, actor: str | None,
                             human_confirmed: bool) -> None:
-    if any(release.reference_evidence for release in releases) and (
+    if any(release.reference_evidence or release.application is not None for release in releases) and (
             actor != 'human' or human_confirmed is not True):
         raise AssetError('HUMAN_REFERENCE_ASSET_REQUIRED',
-                         '含固定参考回执的资料写入须由人工明确确认；Agent 只能查看和预览。', 403)
+                         '含固定参考回执或输入应用的资料写入须由人工明确确认；Agent 只能查看和预览。', 403)
 
 
 class AssetRepository:
@@ -124,15 +124,18 @@ class AssetRepository:
         issues: list[dict] = []
         # Published dependencies themselves have passed this gate; traverse again
         # to catch deprecation of a transitive dependency after initial publication.
-        visited: set[tuple[str, str]] = set()
+        visited: dict[tuple[str, str], str] = {}
         def visit(ref, depth=0):
             key = (ref.asset_id, ref.version)
             if key in visited:
+                if visited[key] != ref.content_sha256:
+                    issues.append({'code':'ASSET_DEPENDENCY_DIGEST',
+                                   'message':f'依赖 {ref.asset_id}@{ref.version} 经不同路径声明了不同内容摘要。'})
                 return
             if depth > 64 or len(visited) >= 1024:
                 issues.append({'code':'ASSET_GRAPH_LIMIT', 'message':'依赖图超过预检上限。'})
                 return
-            visited.add(key)
+            visited[key] = ref.content_sha256
             row = db.execute('SELECT * FROM engineering_assets WHERE asset_id=? AND version=?', key).fetchone()
             if row is None:
                 issues.append({'code':'ASSET_DEPENDENCY_MISSING', 'message':f'缺少依赖 {ref.asset_id}@{ref.version}。'})
