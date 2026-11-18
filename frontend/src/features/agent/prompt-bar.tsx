@@ -1,83 +1,84 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Icon } from "@/components/icon";
-
-/* 输入栏（组件陈列“输入栏（@ 引用 · / 命令）”，@react-bits PromptBar 的结构与交互）：
-   灰底圆角输入；+ 或 @ 引用本工程的研究与型号，/ 调出常用任务；左下是模型，右下是发送 / 停止。 */
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { ComposerPrimitive, useAui, useAuiState } from '@assistant-ui/react';
+import { Command } from 'cmdk';
+import { Icon } from '@/components/icon';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 
 export type PromptReference = { key: string; name: string; description?: string; icon: string };
 export type PromptCommand = { key: string; name: string; description: string; text: string };
 type Row = { key: string; name: string; description?: string; icon?: string; insert: string };
-type Token = { kind: "at" | "slash"; query: string; start: number };
+type Mode = 'at' | 'slash';
 
-const parseToken = (draft: string): Token | null => {
+const parseToken = (draft: string) => {
   const match = /(^|\s)([@/])([^\s@/]*)$/.exec(draft);
-  return match ? { kind: match[2] === "@" ? "at" : "slash", query: match[3].toLowerCase(), start: match.index + match[1].length } : null;
+  return match ? { kind: (match[2] === '@' ? 'at' : 'slash') as Mode, query: match[3], start: match.index + match[1].length } : null;
 };
 
-export function PromptBar({ value, onChange, onSend, onStop, busy, canSend, placeholder, references = [], commands = [], model }: {
-  value: string; onChange: (value: string) => void; onSend: () => void; onStop?: () => void; busy?: boolean; canSend: boolean;
-  placeholder: string; references?: PromptReference[]; commands?: PromptCommand[]; model?: ReactNode;
+/** Radix manages popup focus and dismissal; cmdk owns search, selection and keyboard navigation. */
+export function PromptBar({ value, onChange, busy, canSend, placeholder, references = [], commands = [], model, disabledReason }: {
+  value: string; onChange: (value: string) => void; busy?: boolean; canSend: boolean;
+  placeholder: string; references?: PromptReference[]; commands?: PromptCommand[]; model?: ReactNode; disabledReason?: string;
 }) {
-  const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  const [plus, setPlus] = useState(false);
+  const aui = useAui();
+  const composerText = useAuiState(state => state.composer.text);
+  // The draft is cleared by the host's HTTP acceptance callback, not when a local send button is clicked.
+  useEffect(() => { if (composerText !== value) aui.composer.setText(value); }, [aui, composerText, value]);
+  const [manual, setManual] = useState<Mode | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const [active, setActive] = useState(0);
+  const [query, setQuery] = useState('');
+  const helpId = useId();
   const token = dismissed ? null : parseToken(value);
-  const open = plus ? "at" : token?.kind ?? null;
-  const query = plus ? "" : token?.query ?? "";
-  const rows: Row[] = open === "at"
-    ? references.filter((row) => row.name.toLowerCase().includes(query)).map((row) => ({ ...row, insert: `@${row.name} ` }))
-    : open === "slash" ? commands.filter((row) => row.name.toLowerCase().includes(query)).map((row) => ({ ...row, insert: row.text })) : [];
-  const cursor = Math.min(active, Math.max(0, rows.length - 1));
-  const armed = busy || (canSend && !!value.trim());
-
-  useEffect(() => {
-    if (!plus) return;
-    const close = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setPlus(false); };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [plus]);
-
-  const pick = (row: Row) => {
-    const head = token && !plus ? value.slice(0, token.start) : value.replace(/\s*$/, value.trim() ? " " : "");
+  const mode = manual ?? token?.kind ?? null;
+  const rows: Row[] = mode === 'at'
+    ? references.map(row => ({ ...row, insert: `@${row.name} ` }))
+    : commands.map(row => ({ ...row, insert: row.text }));
+  const canSubmit = canSend && !!value.trim() && !busy;
+  const close = () => { setManual(null); setDismissed(true); };
+  const choose = (row: Row) => {
+    const head = token && !manual ? value.slice(0, token.start) : value.replace(/\s*$/, value.trim() ? ' ' : '');
     onChange(head + row.insert);
-    setPlus(false); setActive(0);
-    input.current?.focus();
+    close();
+    requestAnimationFrame(() => input.current?.focus());
   };
-  const send = () => { if (canSend && value.trim() && !busy) onSend(); };
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (open && rows.length) {
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setActive((cursor + (event.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length); return; }
-      if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); pick(rows[cursor]); return; }
-    }
-    if (open && event.key === "Escape") { event.preventDefault(); setPlus(false); setDismissed(true); return; }
-    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); }
-  };
+  const open = (next: Mode) => { setManual(next); setQuery(''); };
+  const hint = busy ? '正在处理上一条任务。可以先写下一条；停止接收后请更新任务状态。'
+    : !canSend ? disabledReason || '先连接模型并选择工作对象，才能发送任务。'
+      : 'Enter 发送，Shift + Enter 换行。';
 
-  return <div className="prompt-bar" ref={root}>
-    {open && <div className="prompt-bar-menu" role="listbox" aria-label={open === "at" ? "引用" : "常用任务"}>
-      {rows.length ? rows.map((row, index) => <button key={row.key} type="button" role="option" aria-selected={index === cursor} className="prompt-bar-row"
-        onMouseDown={(event) => event.preventDefault()} onPointerEnter={() => setActive(index)} onClick={() => pick(row)}>
-        {row.icon && <Icon name={row.icon} />}<b>{row.name}</b>{row.description && <span>{row.description}</span>}
-      </button>) : <p className="prompt-bar-empty">{open === "at" ? "本工程里没有匹配的研究或型号" : "没有匹配的任务"}</p>}
-    </div>}
-    <div className="prompt-bar-box" onClick={() => input.current?.focus()}>
-      <textarea ref={input} value={value} rows={1} aria-label="给 Agent 的任务" placeholder={placeholder} disabled={busy}
-        onChange={(event) => { onChange(event.target.value); setDismissed(false); setPlus(false); setActive(0); }} onKeyDown={onKeyDown} />
-      <div className="prompt-bar-tools">
-        {references.length > 0 && <button type="button" className="prompt-bar-icon" aria-label="引用研究或型号" aria-expanded={plus} data-on={plus || undefined}
-          onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); setActive(0); setPlus((state) => !state); input.current?.focus(); }}>
-          <Icon name="action/add" />
-        </button>}
-        {model && <span className="prompt-bar-model">{model}</span>}
-        <span className="prompt-bar-hint">{[references.length && "@ 引用", commands.length && "/ 任务"].filter(Boolean).join(" · ")}</span>
-        <button type="button" className="prompt-bar-send" aria-label={busy ? "停止接收" : "发送"} data-armed={armed || undefined} disabled={!armed || (busy && !onStop)}
-          onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); if (busy) onStop?.(); else send(); }}>
-          <Icon name={busy ? "run/stop" : "action/arrow-up"} />
-        </button>
-      </div>
-    </div>
-  </div>;
+  return <ComposerPrimitive.Root className="prompt-bar">
+    <Popover open={!!mode} onOpenChange={next => { if (!next) close(); }}>
+      <PopoverAnchor asChild><div className="prompt-bar-box">
+        <ComposerPrimitive.Input ref={input} value={value} minRows={1} maxRows={6} cancelOnEscape={false} addAttachmentOnPaste={false} aria-label="给 Agent 的任务" aria-describedby={helpId} placeholder={placeholder}
+          onChange={event => { onChange(event.target.value); setDismissed(false); setManual(null); setQuery(parseToken(event.target.value)?.query || ''); }} />
+        <div className="prompt-bar-tools">
+          {references.length > 0 && <Button type="button" variant="ghost" size="compact" className="prompt-bar-icon" aria-label="引用研究或型号" aria-haspopup="dialog" aria-expanded={mode === 'at'} onClick={() => open('at')}><Icon name="action/add" /><span>引用</span></Button>}
+          {commands.length > 0 && <Button type="button" variant="ghost" size="compact" className="prompt-bar-icon" aria-label="选择常用任务" aria-haspopup="dialog" aria-expanded={mode === 'slash'} onClick={() => open('slash')}><Icon name="agent/message" /><span>常用任务</span></Button>}
+          <div className="prompt-bar-submit">
+            {busy && <ComposerPrimitive.Cancel render={<Button type="button" variant="outline" size="compact" aria-label="停止接收" />}><Icon name="run/stop" />停止接收</ComposerPrimitive.Cancel>}
+            <ComposerPrimitive.Send render={<Button type="button" variant="primary" size="compact" className="prompt-bar-send" aria-label="发送" data-armed={canSubmit || undefined} disabled={!canSubmit}
+              title={!canSend ? disabledReason || '先连接模型并选择工作对象' : busy ? '上一条任务结束后可以发送' : !value.trim() ? '先填写任务内容' : '发送任务'} />}>
+              <Icon name="action/arrow-up" /><span>发送</span>
+            </ComposerPrimitive.Send>
+          </div>
+        </div>
+        {model && <div className="prompt-bar-model">{model}</div>}
+      </div></PopoverAnchor>
+      <PopoverContent className="prompt-command-menu" side="top" align="start" onCloseAutoFocus={event => { event.preventDefault(); input.current?.focus(); }}>
+        <Command label={mode === 'at' ? '引用研究或型号' : '常用任务'} loop>
+          <Command.Input value={query} onValueChange={setQuery} placeholder={mode === 'at' ? '搜索研究或型号' : '搜索常用任务'} aria-label={mode === 'at' ? '搜索引用对象' : '搜索常用任务'} className="prompt-command-search" />
+          <Command.List className="prompt-command-list">
+            <Command.Empty className="prompt-bar-empty">{mode === 'at' ? '没有匹配的研究或型号' : '没有匹配的任务'}</Command.Empty>
+            <Command.Group heading={mode === 'at' ? '引用工作对象' : '选择任务后可继续补充要求'}>
+              {rows.map(row => <Command.Item key={row.key} value={row.key} keywords={[row.name, row.description || '']} onSelect={() => choose(row)} className="prompt-bar-row">
+                <Icon name={row.icon || 'agent/message'} /><span><b>{row.name}</b>{row.description && <span>{row.description}</span>}</span>
+              </Command.Item>)}
+            </Command.Group>
+          </Command.List>
+        </Command>
+      </PopoverContent>
+    </Popover>
+    <p className="prompt-bar-help" id={helpId}>{hint}</p>
+  </ComposerPrimitive.Root>;
 }

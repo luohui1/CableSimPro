@@ -10,6 +10,8 @@ import { Icon } from "@/components/icon";
 import { Button, IconButton } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AgentConversationMessages, AgentConversationProvider } from "@/features/agent/conversation-runtime";
+import { AgentThread } from "@/features/agent/thread-viewport";
 import { SectionThumbnail } from "@/features/drawing";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
@@ -54,7 +56,7 @@ export function AgentPage() {
   const { theme } = usePageTheme();
   const search = useSearch({ from: "/agent" });
   const navigate = useNavigate();
-  const { ready, canSend, label: model } = useAgentStatus();
+  const { ready, canSend, label: model, hint: modelHint, loading: modelLoading, error: modelError, retry: retryModel } = useAgentStatus();
   const tools = useQuery({ queryKey: ["agent-tools"], queryFn: ({ signal }) => agentTools(signal), retry: false, staleTime: 60_000 });
   const kinds = useMemo(() => new Map((tools.data || []).map((tool) => [tool.name, tool.kind])), [tools.data]);
   const sessions = useQuery({ queryKey: ["agent-sessions"], queryFn: ({ signal }) => agentSessions(undefined, signal), retry: false });
@@ -62,27 +64,35 @@ export function AgentPage() {
   const types = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal) });
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
   const typeIds = new Set((types.data || []).map((row) => text(row.id)));
-  const options = (projects.data || []).filter((row) => !typeIds.has(text(row.id))).map((row) => ({ id: text(row.id), name: text(row.name) || "未命名工程" }));
+  const options = [
+    ...(projects.data || []).filter(row => !typeIds.has(text(row.id))).map(row => ({ id: text(row.id), name: text(row.name) || '未命名工程', kind: '工程' })),
+    ...(types.data || []).map(row => ({ id: text(row.id), name: text(row.name) || '未命名型号', kind: '型号' })),
+  ];
   const summary = sessions.data?.find((row) => row.id === search.task);
-  const workspaceId = summary?.workspace_id || options.find((row) => row.id === search.workspace)?.id || options[0]?.id;
+  const requestedWorkspaceId = summary?.workspace_id || options.find((row) => row.id === search.workspace)?.id || (!search.task ? options[0]?.id : undefined);
+  const createdNavigation = useRef<string | undefined>(undefined);
+  const agent = useAgentSession({ sessionId: search.task, workspaceId: requestedWorkspaceId, studyId: summary?.study_id ?? undefined,
+    onCreated: (id) => { createdNavigation.current = id; void navigate({ to: "/agent", search: { theme, task: id, workspace: requestedWorkspaceId }, replace: true }); } });
+  const workspaceId = agent.sessionContext?.workspaceId || requestedWorkspaceId;
+  const studyId = agent.sessionContext?.studyId || summary?.study_id;
   const project = options.find((row) => row.id === workspaceId);
-  const scopeName = project?.name || text(types.data?.find(row => text(row.id) === workspaceId)?.name) || '工程';
+  const scopeName = project?.name || '工作对象';
   const recipes = useQuery({ queryKey: ["agent-recipes", search.task || "", workspaceId || ""], queryFn: ({ signal }) => agentRecipes({ session: search.task, workspace: workspaceId }, signal), retry: false, staleTime: 300_000 });
   const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: RECIPE_HINT[row.id] || "", text: RECIPE_TEXT[row.id] || `${row.name}：` }));
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: !!workspaceId });
   const domain = workspace.data?.domain as DomainDocument | undefined;
   const label = (entity: string) => entityLabel(domain, entity);
-  const agent = useAgentSession({ sessionId: search.task, workspaceId, studyId: summary?.study_id ?? undefined,
-    onCreated: (id) => void navigate({ to: "/agent", search: { theme, task: id, workspace: workspaceId }, replace: true }) });
   const [draft, setDraft] = useState("");
+  useEffect(() => {
+    if (search.task && search.task === createdNavigation.current) { createdNavigation.current = undefined; return; }
+    setDraft('');
+  }, [search.task, search.workspace]);
   const [side, setSide] = useState(readSide);
   // 右栏页签：没手动选过时跟着内容走（有待审改动先看改动），换任务时重置
   const [sideTab, setSideTab] = useState<string>();
   useEffect(() => setSideTab(undefined), [agent.id]);
   const thread = useRef<HTMLDivElement>(null);
 
-  // 新内容出现时滚到底部
-  useEffect(() => { thread.current?.scrollTo({ top: thread.current.scrollHeight }); }, [agent.turns.length, agent.live]);
 
   const projectStudies = (studies.data || []).filter((row) => row.workspace === workspaceId);
   const studyTitle = (sid: string) => studies.data?.find((row) => row.id === sid)?.title;
@@ -93,7 +103,7 @@ export function AgentPage() {
     void navigate({ to: "/studies/$sid/$module/$tab", params: { sid, module, tab: studyEntryTab(module) }, search: { workspace: row.workspace, theme, run, delivery: "" } });
   };
   const openWorkbench = () => {
-    if (summary?.study_id) { openStudy(summary.study_id); return; }
+    if (studyId) { openStudy(studyId); return; }
     if (workspaceId && typeIds.has(workspaceId)) { void navigate({ to: '/types/$wid/$module/$tab', params: { wid: workspaceId, module: 'structure', tab: 'table' }, search: { theme } }); return; }
     if (workspaceId) void navigate({ to: '/studies', search: { workspace: workspaceId, theme } });
   };
@@ -104,34 +114,36 @@ export function AgentPage() {
   // 以“/”任务开头、且不需要额外参数的配方，交给宿主按固定步骤执行，再请模型作答一次
   const send = (value: string) => {
     const recipe = (recipes.data || []).find((row) => RECIPE_TEXT[row.id] && value.trim().startsWith(RECIPE_TEXT[row.id]) && !(row.parameters.required as unknown[] | undefined)?.length);
-    void agent.send(value, recipe ? { id: recipe.id, parameters: {} } : undefined);
-    setDraft("");
+    return agent.send(value, recipe ? { id: recipe.id, parameters: {} } : undefined, () => setDraft(current => current.trim() === value.trim() ? "" : current));
   };
   // 首页“让 Agent 整理”：带 ask=inbox 打开时，新建任务并按宿主配方整理待办；只发一次，随后从地址里去掉
   const asked = useRef(false);
   useEffect(() => {
-    if (search.ask !== "inbox" || asked.current || !canSend || !project || !recipes.data || agent.sending) return;
+    if (search.ask !== "inbox" || asked.current || !canSend || !project || !recipes.data || agent.sending || !agent.canContinue) return;
     asked.current = true;
     send(RECIPE_TEXT.inbox_triage);
     void navigate({ to: "/agent", search: { theme, workspace: workspaceId }, replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search.ask, canSend, project, recipes.data]);
+  }, [search.ask, canSend, project, recipes.data, agent.canContinue]);
   const toggleSide = () => setSide((open) => { storeSide(!open); return !open; });
 
-  const turns = agent.live ? [...agent.turns, agent.live] : agent.turns;
+  const turns = useMemo(() => agent.live ? [...agent.turns, agent.live] : agent.turns, [agent.turns, agent.live]);
   const proposals = [...new Set(turns.flatMap((turn) => turn.proposals))].map((id) => agent.proposals.get(id)).filter((item) => !!item);
   const pending = proposals.filter((item) => item.status === "pending").length;
   const previews = turns.flatMap((turn) => turn.previews);
   const runs = turns.flatMap((turn) => turn.runs).filter((run, index, all) => all.findIndex((item) => item.id === run.id) === index);
   const title = summary?.title || turns[0]?.question || "新任务";
-  const state = agent.live?.running ? { tone: "running", text: "执行中" } : summary ? taskState({ ...summary, pending_proposals: pending }) : null;
+  const state = agent.sending ? { tone: "running", text: "执行中" }
+    : agent.serverRunning ? { tone: "running", text: "服务端处理中" }
+      : agent.awaitingRecord ? { tone: "waiting", text: "核对任务记录" }
+        : summary ? taskState({ ...summary, pending_proposals: pending }) : null;
   const section = domain?.sections?.[0];
 
   const scope = agent.id
     ? <span className="agent-scope-chip"><Icon name="object/folder" />{scopeName}</span>
     : <DropdownMenu>
-      <DropdownMenuTrigger asChild><button type="button" className="agent-scope-chip is-picker" aria-label="选择工程"><Icon name="object/folder" />{project?.name || "选择工程"}<Icon name="action/chevron-down" /></button></DropdownMenuTrigger>
-      <DropdownMenuContent align="start">{options.map((row) => <DropdownMenuItem key={row.id} onSelect={() => void navigate({ to: "/agent", search: { theme, workspace: row.id }, replace: true })}>{row.name}</DropdownMenuItem>)}</DropdownMenuContent>
+      <DropdownMenuTrigger asChild><button type="button" className="agent-scope-chip is-picker" aria-label="选择工程或型号"><Icon name="object/folder" />{project?.name || "选择工程或型号"}<Icon name="action/chevron-down" /></button></DropdownMenuTrigger>
+      <DropdownMenuContent align="start">{options.map((row) => <DropdownMenuItem key={row.id} onSelect={() => void navigate({ to: "/agent", search: { theme, workspace: row.id }, replace: true })}>{row.name}（{row.kind}）</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>;
 
   const sidebar = <aside className="property-panel agent-side" aria-label="侧栏">
@@ -151,7 +163,7 @@ export function AgentPage() {
             receipt={event ? { created: event.created, status: String(event.data.status), actor: typeof event.data.actor === 'string' ? event.data.actor : undefined } : undefined}
             busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />;
         })
-          : <div className="agent-review-empty"><Icon name="agent/proposal" /><p>暂无待审核方案</p></div>}
+          : <div className="agent-review-empty"><Icon name="agent/proposal" /><p>暂无待审核方案</p><p>提出方案后，这里会列出字段改动与检查结果。你核对并批准后才会保存。</p></div>}
       </TabsContent>
       <TabsContent value="runs">
         {previews.map((item) => <PreviewCard key={item.id} preview={item} label={label} proposalTitle={item.proposalId ? agent.proposals.get(item.proposalId)?.title : undefined}
@@ -169,38 +181,49 @@ export function AgentPage() {
   </aside>;
 
   return (
+    <AgentConversationProvider key={agent.id || 'new'} turns={turns} loading={agent.loading} sending={agent.sending}
+      canSend={canSend && !!workspaceId && agent.canContinue} onSend={send} onStop={agent.stop}>
     <AppShell title={title} status={state ? <span className={`agent-state is-${state.tone}`}>{state.text}</span> : null}
       actions={<>
-        {summary?.study_id && <Button size="compact" variant="ghost" onClick={() => openStudy(summary.study_id!)}><Icon name="nav/workbench" />在工作台打开</Button>}
+        {workspaceId && <Button size="compact" variant="ghost" onClick={openWorkbench}><Icon name="nav/workbench" />在工作台打开</Button>}
         {!side && <IconButton variant="ghost" icon="nav/sidebar" label={pending ? `展开右栏（${pending} 项改动待审核）` : "展开右栏"} onClick={toggleSide} />}
       </>}
       property={side ? sidebar : undefined} theme={theme} onTheme={() => {}} onUnavailable={() => {}}>
       <div className="agent-page" data-page="agent">
-        <div className="agent-thread" ref={thread} aria-busy={agent.loading || undefined}>
+        <div className="agent-context-bar">
+          <div><Icon name={project?.kind === '型号' ? 'object/cable' : 'object/folder'} /><span>{project ? `工作对象：${project.name}` : projects.isPending || types.isPending ? '正在读取可用工程与型号' : '请选择工程或型号'}</span></div>
+          {pending > 0 && <Button size="compact" variant="outline" onClick={() => { setSide(true); storeSide(true); setSideTab('changes'); }}>审核 {pending} 个方案<Icon name="action/arrow-right" /></Button>}
+        </div>
+        <AgentThread session={agent.id} viewportRef={thread} busy={agent.loading}>
           {agent.loading ? <p className="agent-thread-note">正在读取任务记录</p>
-            : agent.error ? <div className="agent-notice" role="alert"><Icon name="status/warning" />任务记录读取失败：{agent.error.message}<Button size="compact" onClick={() => void agent.reload()}>重新读取任务</Button></div>
+            : agent.error && !turns.length ? <div className="agent-notice" role="alert"><Icon name="status/warning" />任务记录读取失败：{agent.error.message}<Button size="compact" onClick={() => void agent.reload()}>重新读取任务</Button></div>
               : !turns.length ? <div className="agent-start">
                 <h2>要 Agent 做什么？</h2>
-                <p>{project ? `基于「${project.name}」工作。` : "先选择一个工程。"}</p>
+                <p>{project ? `基于「${project.name}」读取已保存输入和结果。可以汇总结论、检查缺项或提出修改方案。` : "先选择一个工程或型号，再描述需要完成的工作。"}</p>
                 {/* 没连模型时先说明原因和去处，建议不再整体变淡得像坏了 */}
-                {!canSend ? <InlineEmpty title="还没有连接 AI 模型。在设置里填写服务地址、模型名和密钥后即可使用。" action={<Button size="compact" onClick={() => void navigate({ to: "/settings", search: { theme, section: "ai" } })}>去设置</Button>} />
-                  : <div className="agent-start-grid">{SUGGESTIONS.map((item) => <button key={item} type="button" disabled={!project} onClick={() => send(item)}><Icon name="agent/message" />{item}</button>)}</div>}
+                {!canSend && <InlineEmpty title={modelHint} action={modelError ? <Button size="compact" onClick={() => void retryModel()}>重新连接</Button> : !modelLoading ? <Button size="compact" onClick={() => void navigate({ to: "/settings", search: { theme, section: "ai" } })}>去设置</Button> : undefined} />}
+                {!projects.isPending && !types.isPending && !options.length && <InlineEmpty title="还没有可用的工程或型号。先在工作台建立工作对象。" action={<Button size="compact" onClick={() => void navigate({ to: '/studies', search: { theme } })}>打开工程列表</Button>} />}
+                {project && <div className="agent-start-grid">{(project.kind === '型号' ? [RECIPE_TEXT.type_review, '说明这个型号的结构组成和现有计算依据', '列出生成规格书前仍需要补齐的内容'] : SUGGESTIONS).map((item) => <Button key={item} type="button" variant="outline" onClick={() => { setDraft(item); thread.current?.closest('.agent-page')?.querySelector<HTMLTextAreaElement>('textarea')?.focus(); }}><Icon name="agent/message" />{item}</Button>)}</div>}
               </div>
-                : turns.map((turn, index) => <TurnView key={turn.id} turn={turn} kinds={kinds} proposals={agent.proposals} label={label} review="aside" onOpenStudy={openStudy}
-                  onRefresh={index === turns.length - 1 && !agent.sending ? () => void agent.reload() : undefined}
-                  onOpenWorkspace={index === turns.length - 1 ? openWorkbench : undefined}
+                : <AgentConversationMessages renderTurn={turn => <TurnView showQuestion={false} key={turn.id} turn={turn} kinds={kinds} proposals={agent.proposals} label={label} review="aside" onOpenStudy={openStudy}
+                  onRefresh={turn.id === turns.at(-1)?.id && !agent.sending ? () => void agent.reload() : undefined}
+                  onOpenWorkspace={turn.id === turns.at(-1)?.id ? openWorkbench : undefined}
                   onReview={() => { setSide(true); storeSide(true); setSideTab('changes'); }}
-                  onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined} />)}
-        </div>
+                  onRetry={turn.id === turns.at(-1)?.id && canSend && agent.canContinue && !agent.sending ? () => send(turn.question) : undefined} />} />}
+        </AgentThread>
         <div className="agent-prompt">
+          {agent.error && turns.length > 0 && <div className="agent-notice" role="alert"><span>记录尚未更新：{agent.error.message}</span><Button size="compact" onClick={() => void agent.reload()}>重新读取任务</Button></div>}
+          {agent.awaitingRecord && !agent.sending && <div className="agent-next-step" role="status"><p>{agent.blockedReason}</p><Button size="compact" variant="outline" onClick={() => void agent.reload()}>更新任务状态</Button></div>}
           <details className="agent-policy"><summary>改动由你审核批准 · 了解更多</summary><p>Agent 通过平台工具读取输入、提出方案。核对字段差异后按住批准才会保存；拒绝不改工程。保存方案不等于运行、发布或提交超算，工程结论须有真实运行依据。</p></details>
-          <PromptBar value={draft} onChange={setDraft} onSend={() => send(draft)} onStop={agent.stop} busy={agent.sending} canSend={canSend && !!project}
+          <PromptBar value={draft} onChange={setDraft} busy={agent.sending} canSend={canSend && !!workspaceId && agent.canContinue}
+            disabledReason={agent.blockedReason || (!canSend ? modelHint : agent.loading ? "正在读取任务记录，请稍候。" : agent.error ? "请先重新读取任务记录，确认已有操作后再继续。" : !workspaceId ? "先选择工程或型号。" : undefined)}
             placeholder={canSend ? "描述任务，或输入 @ 引用研究、/ 调出常用任务" : "Agent 模型未连接，暂时不能发送"}
             references={references} commands={commands}
             model={<><span className={`status-dot ${ready ? "is-ok" : "is-off"}`} /><span className="agent-panel-model">{model}</span></>} />
-          <div className="agent-prompt-scope">{scope}</div>
+          <div className="agent-prompt-scope">{scope}{turns.length > 0 && !canSend && <Button size="compact" variant="ghost" onClick={() => modelError ? void retryModel() : void navigate({ to: '/settings', search: { theme, section: 'ai' } })}>{modelError ? '重新连接' : '模型设置'}</Button>}</div>
         </div>
       </div>
     </AppShell>
+    </AgentConversationProvider>
   );
 }
