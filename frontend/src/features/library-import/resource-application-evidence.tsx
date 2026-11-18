@@ -1,6 +1,7 @@
 import { DataTable } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { optionalRecord, text } from '@/api/client';
+import { engineeringQuantity, type EngineeringPresentation } from '@/lib/format';
 import { displayLibraryText, sourceText } from './api';
 import { referenceUnit, referenceValue } from './reference-evidence';
 import { applicationDownload, type ApplicationEvidence, type ApplicationField, type ApplicationChange } from './resource-application-api';
@@ -40,20 +41,38 @@ const fieldValues: Record<string, Record<string, string>> = {
   operation: { both: '额定载流量与保存负荷温度', temperature: '保存负荷温度' },
   rating_mode: { individual: '逐回路额定', simultaneous: '同时增载', both: '逐回路额定与同时增载' },
 };
+const withUnit = (shown: EngineeringPresentation) => shown.unit === '—' ? shown.text : `${shown.text} ${shown.unit}`;
+/** Saved SI values shown in the units engineers read (mm, mm², Ω/km); the download keeps the exact saved value. */
+function numberText(value: number, unit: string, key: string) {
+  if (unit === '1' && Number.isInteger(value)) return String(value);
+  if (unit === 'm²' && /area/.test(key)) return withUnit(engineeringQuantity(key, value * 1e6, 'mm²'));
+  if (unit === 'm' && /(?:diameter|thickness|radius|width|depth|pitch|gap|lay_length)/.test(key)) return withUnit(engineeringQuantity(key, value * 1000, 'mm'));
+  return withUnit(engineeringQuantity(key, value, referenceUnit(unit)));
+}
 export function applicationValue(value: ApplicationField['value'], unit: string | null = '', path = '') {
   if (typeof value === 'string' && /^(material|cable_type|core|circuit|cable)\/[A-Za-z0-9_-]+$/.test(value))
     return '固定对象引用（完整身份见原始记录）';
-  const label = typeof value === 'string' ? fieldValues[path.split('/').at(-1) ?? '']?.[value] ?? componentValues[value] ?? referenceValue(value) : referenceValue(value);
+  const key = path.split('/').at(-1) ?? '';
+  if (typeof value === 'number' && unit) return numberText(value, unit, key);
+  const label = typeof value === 'string' ? fieldValues[key]?.[value] ?? componentValues[value] ?? referenceValue(value) : referenceValue(value);
   return `${applicationText(label)}${value !== null && unit ? ` ${referenceUnit(unit)}` : ''}`;
 }
+/** One text when every row repeats it, so the table does not print the same source on each line. */
+function sharedText(texts: string[]) {
+  return texts.length > 1 && texts.every(item => item === texts[0]) ? texts[0] : '';
+}
 export function ApplicationFields({ fields, label = '部件与模板逐项来源' }: { fields: ApplicationField[]; label?: string }) {
-  return <DataTable label={label} showGroups={false} groups={[{ id: 'fields', label, rows: fields.map((field, index) => ({ ...field, id: String(index) })) }]}
-    rowLabel={row => `${row.label}，${applicationValue(row.value, row.unit, row.path)}`} columns={[
-      { id: 'label', label: '保存参数', wrap: true, render: row => row.label },
-      { id: 'value', label: '保存值与单位', wrap: true, render: row => applicationValue(row.value, row.unit, row.path) },
-      { id: 'source', label: '原始出处', wrap: true, render: row => <span className="reference-evidence">{fieldSource(row.source)}</span> },
-      { id: 'inspect', label: '完整来源', render: row => <Button size="compact" onClick={() => applicationDownload('fixed-field-source.json', row)}>下载此项原始记录</Button> },
-    ]} />;
+  const shared = sharedText(fields.map(field => fieldSource(field.source)));
+  return <>
+    {shared && <p className="reference-evidence">全部 {fields.length} 项的原始出处：{shared}</p>}
+    <DataTable label={label} showGroups={false} groups={[{ id: 'fields', label, rows: fields.map((field, index) => ({ ...field, id: String(index) })) }]}
+      rowLabel={row => `${row.label}，${applicationValue(row.value, row.unit, row.path)}`} columns={[
+        { id: 'label', label: '保存参数', wrap: true, render: row => row.label },
+        { id: 'value', label: '保存值与单位', wrap: true, render: row => applicationValue(row.value, row.unit, row.path) },
+        ...(shared ? [] : [{ id: 'source', label: '原始出处', wrap: true, render: (row: ApplicationField) => <span className="reference-evidence">{fieldSource(row.source)}</span> }]),
+        { id: 'inspect', label: '完整来源', render: row => <Button size="compact" onClick={() => applicationDownload('fixed-field-source.json', row)}>下载此项原始记录</Button> },
+      ]} />
+  </>;
 }
 export function ApplicationFrozenEvidence({ evidence }: { evidence: ApplicationEvidence }) {
   return <div className="library-import-stack reference-evidence">
@@ -80,13 +99,18 @@ export function ApplicationFrozenEvidence({ evidence }: { evidence: ApplicationE
     </details>
   </div>;
 }
+const sourceAction = (row: ApplicationChange) => `${row.source_action === 'unchanged' ? '保留目标原出处；下列为来源参考记录：' : '将保存下列固定来源：'}${fieldSource(row.source)}`;
 export function ApplicationChanges({ changes }: { changes: ApplicationChange[] }) {
-  return <DataTable label="部件采用逐字段变化" showGroups={false} groups={[{ id: 'changes', label: '变化', rows: changes.map((item, index) => ({ ...item, id: String(index) })) }]}
-    rowLabel={row => row.label} columns={[
-      { id: 'name', label: '参数', wrap: true, render: row => row.label },
-      { id: 'before', label: '当前值', wrap: true, render: row => applicationValue(row.before, row.unit, row.path) },
-      { id: 'after', label: '采用后', wrap: true, render: row => row.after === null ? '清空为未给出；不保留旧值' : `${applicationValue(row.after, row.unit, row.path)}${typeof row.after === 'string' && /^(material|cable_type|core|circuit|cable)\//.test(row.after) && row.before !== row.after ? ' · 引用已变化' : ''}` },
-      { id: 'source', label: '来源处理', wrap: true, render: row => <span className="reference-evidence">{row.source_action === 'unchanged' ? '保留目标原出处；下列为来源参考记录：' : '将保存下列固定来源：'}{fieldSource(row.source)}</span> },
-      { id: 'download', label: '核对原文', render: row => <Button size="compact" onClick={() => applicationDownload('component-change.json', row)}>下载前后值与出处</Button> },
-    ]} />;
+  const shared = sharedText(changes.map(sourceAction));
+  return <>
+    {shared && <p className="reference-evidence">全部 {changes.length} 项的来源处理：{shared}</p>}
+    <DataTable label="部件采用逐字段变化" showGroups={false} groups={[{ id: 'changes', label: '变化', rows: changes.map((item, index) => ({ ...item, id: String(index) })) }]}
+      rowLabel={row => row.label} columns={[
+        { id: 'name', label: '参数', wrap: true, render: row => row.label },
+        { id: 'before', label: '当前值', wrap: true, render: row => applicationValue(row.before, row.unit, row.path) },
+        { id: 'after', label: '采用后', wrap: true, render: row => row.after === null ? '清空为未给出；不保留旧值' : `${applicationValue(row.after, row.unit, row.path)}${typeof row.after === 'string' && /^(material|cable_type|core|circuit|cable)\//.test(row.after) && row.before !== row.after ? ' · 引用已变化' : ''}` },
+        ...(shared ? [] : [{ id: 'source', label: '来源处理', wrap: true, render: (row: ApplicationChange) => <span className="reference-evidence">{sourceAction(row)}</span> }]),
+        { id: 'download', label: '核对原文', render: row => <Button size="compact" onClick={() => applicationDownload('component-change.json', row)}>下载前后值与出处</Button> },
+      ]} />
+  </>;
 }

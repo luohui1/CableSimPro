@@ -386,6 +386,10 @@ def test_frozen_evidence_never_rereads_current_source_and_source_missing_refuses
     assert after == before and after['source']['snapshot']['domain'] == source['domain']
     refusal = client.post(PREFIX + '/components/capture-preview', json=capture_request(client, workspace=changed))
     assert refusal.status_code == 422 and refusal.json()['detail']['code'] == 'RESOURCE_COMPONENT_SOURCE_MISSING'
+    # The person reads the field name; the escaped document path stays machine-readable beside it.
+    detail = refusal.json()['detail']
+    assert detail['fields'] and all(path.startswith('/cable_types/') or path.startswith('/materials/') for path in detail['fields'])
+    assert '/' not in detail['message'] and '“' in detail['message']
     assert captured['source']['revision'] == source['revision']
 
 

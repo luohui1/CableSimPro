@@ -31,8 +31,8 @@ LIMITATIONS = ['只采用明确选中的输入；缺项保持缺失，不补默�
               '捕获来源、资料核对与目标工程批准是不同操作；采用后仍须独立预检和人工检查结果。']
 
 
-def fail(code, message, status=422):
-    raise HTTPException(status, {'code': code, 'message': message})
+def fail(code, message, status=422, **details):
+    raise HTTPException(status, {'code': code, 'message': message, **details})
 
 
 def require_human(actor):

@@ -168,7 +168,9 @@ def source_component(document, selection):
         for key, value in values.items():
             source, source_path = source_for(document.get('provenance', {}), stable + pointer(key), index_path + pointer(key))
             if value is not None and key not in ('id', 'label', 'material') and source is None:
-                fail('RESOURCE_COMPONENT_SOURCE_MISSING', '所选部件或材料缺少明确原始出处：' + stable + pointer(key))
+                fail('RESOURCE_COMPONENT_SOURCE_MISSING',
+                     f'所选{group}的“{LABELS[key]}”没有明确原始出处，不能捕获为参考部件；请在原输入中补充该字段的真实来源后重新预览。',
+                     fields=[stable + pointer(key)])
             if value is not None and source and source['kind'] == 'measurement':
                 fail('RESOURCE_COMPONENT_OBSERVATION', '实测来源不能作为新目标的制造或检验事实搬用。')
             unit = UNITS.get(key)
