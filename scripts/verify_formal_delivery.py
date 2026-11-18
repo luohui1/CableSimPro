@@ -143,15 +143,16 @@ def validate_contract_unit(cell: dict, payloads: dict, sources: dict) -> None:
 
 class SourceReader:
     """Fetch each declared source independently and retain its whole API reply."""
-    def __init__(self, gate):
+    def __init__(self, gate, *, artifact_prefix="formal/sources"):
         self.gate = gate
+        self.artifact_prefix = artifact_prefix
         self.responses = {}
 
     def get(self, url: str):
         if url not in self.responses:
             response = self.gate.api("GET", url)
             self.responses[url] = response
-            self.gate.artifact("formal/sources/" + sha256(url.encode()).hexdigest() + ".json",
+            self.gate.artifact(self.artifact_prefix + "/" + sha256(url.encode()).hexdigest() + ".json",
                                {"api_url": url, "response": response})
         return self.responses[url]
 
@@ -665,8 +666,8 @@ def sample_document() -> dict:
             "logo_data_uri": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")}
 
 
-def verify_formal_exports(gate, engineering_sources: dict) -> None:
-    """Export all four document types through the installed release's real API."""
+def verify_formal_exports(gate, engineering_sources: dict) -> dict[str, dict]:
+    """Export four real document types and retain their exact batch selections."""
     reader = SourceReader(gate)
     wid, sid, rid = (engineering_sources[key] for key in ("workspace", "study", "run"))
     calc_wid, calc_sid, calc_rid = (engineering_sources[key] for key in
@@ -700,6 +701,7 @@ def verify_formal_exports(gate, engineering_sources: dict) -> None:
     result = {"status": "running", "source_mode": "independent full API records", "documents": [],
               "human_visual_review": "逐页图片已生成后仍须人工逐页打开；自动检查不代替目视验收。"}
     gate.result["formal_documents"] = result
+    requests = {}
     for kind, source in selections.items():
         request = {"kind": kind, "source": source, "document": {**metadata, "number": "T4-CI-" + kind.upper() + "-001"}}
         prefix = "formal/" + kind
@@ -746,7 +748,11 @@ def verify_formal_exports(gate, engineering_sources: dict) -> None:
                 row["formats"][format] = {"file": file_name, "sha256": sha256(raw).hexdigest(), **details}
                 gate.artifact(prefix + "-" + format + "-validation.json", details)
         gate.artifact(prefix + "-validation.json", row)
+        # The batch gate must reuse these successfully exported identities,
+        # rather than refetching potentially newer revisions or run selections.
+        requests[kind] = deepcopy(request)
     require(len(result["documents"]) == 4 and all(set(row["formats"]) == {"pdf", "xlsx"} for row in result["documents"]),
             "正式文件没有完成全部四类 PDF 与 Excel 导出。")
     result["status"] = "passed"
     gate.artifact("formal/validation.json", result)
+    return requests

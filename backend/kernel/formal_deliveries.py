@@ -1,11 +1,13 @@
 """Additive, read-only formal PDF/Excel exports with optimistic source pinning."""
 from hashlib import sha256
+import re
 from urllib.parse import quote
 
 from fastapi import APIRouter
 from fastapi.responses import Response
 
 from .formal_contracts import ExportRequest, PreviewRequest, fail, filename, public_model
+from .formal_batches import BatchExportRequest, BatchPreviewRequest, FormalBatches
 from .formal_sources import build_model
 
 
@@ -62,17 +64,42 @@ def file_response(model: dict, content: bytes, format: str) -> Response:
     })
 
 
+def batch_response(manifest: dict, content: bytes) -> Response:
+    scope = manifest['scope']
+    label = scope['series_name'] if scope['kind'] == 'series' else scope['workspace_id']
+    label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', label).strip(' .') or 'CableSimPro'
+    name = label + '-正式交付.zip'
+    return Response(content, media_type='application/zip', headers={
+        'Content-Disposition': f"attachment; filename=\"CableSimPro-formal-batch.zip\"; filename*=UTF-8''{quote(name, safe='')}",
+        'X-Artifact-SHA256': sha256(content).hexdigest(),
+        'X-Delivery-Batch-SHA256': manifest['batch_digest'],
+        'Cache-Control': 'no-store',
+    })
+
+
 def make_router(research, types):
     service = FormalDeliveries(research, types)
+    batches = FormalBatches(service)
     router = APIRouter(prefix='/api/formal-deliveries', tags=['formal-deliveries'])
 
     @router.post('/preview')
-    def preview(request: PreviewRequest):
+    def preview(request: PreviewRequest, response: Response):
+        response.headers['Cache-Control'] = 'no-store'
         return service.preview(request)
 
     @router.post('/export')
     def export(request: ExportRequest):
         model, content = service.export(request)
         return file_response(model, content, request.format)
+
+    @router.post('/batch/preview')
+    def batch_preview(request: BatchPreviewRequest, response: Response):
+        response.headers['Cache-Control'] = 'no-store'
+        return batches.preview(request)
+
+    @router.post('/batch/export')
+    def batch_export(request: BatchExportRequest):
+        manifest, content = batches.export(request)
+        return batch_response(manifest, content)
 
     return router
