@@ -286,6 +286,202 @@ def test_dielectric_reference_requires_actual_formulation_and_temperature(client
     assert denied.status_code == 422
 
 
+LOSS_CONDITIONS = {'current_system': 'AC', 'temperature_basis': 'maximum_permissible',
+                   'insulation': 'XLPE', 'filler': 'unfilled', 'u0_v': 8700, 'u_v': 15000}
+
+
+@pytest.fixture(scope='module')
+def loss_reference(client):
+    return published(client, [{'parameter': 'loss_tangent', 'selection': selected(
+        client, 'iec60287-1-1-table3', 'iec60287-1-1-table3/r15/tan_delta', LOSS_CONDITIONS)}])
+
+
+def declared_dielectric_design(client):
+    """An explicit test design, not an amendment to a manufacturer/release seed.
+
+    The inherited 8.7/15 kV geometry is unchanged. A human declares this design's
+    unfilled XLPE and maximum-permissible-temperature basis before selecting any
+    material reference. The loss tangent is deliberately an absent design input;
+    its eventual number comes only from the real sealed Table 3 provider.
+    """
+    saved = workspace(client)
+    doc = deepcopy(saved['domain'])
+    material = next(m for m in doc['materials'] if m['id'] == 'material/xlpe')
+    material['standard_kind'] = 'XLPE'
+    material['loss_tangent'] = None
+    doc['provenance'][pointer('materials', material['id'])] = {
+        'kind': 'user', 'reviewed': True,
+        'reference': json.dumps({'asset_id': 'material/xlpe-mv',
+            'declaration': '人工声明本试验设计使用未填充XLPE；不宣称厂家实测或工程批准。'}, ensure_ascii=False)}
+    normal = doc['cable_types'][0]['rating']['max_conductor_temperature']['normal']
+    doc['provenance'][pointer('materials', material['id'], 'applicability')] = {
+        'kind': 'user', 'reviewed': True,
+        'reference': json.dumps({'schema': 'cablesim.material-applicability/1', 'material_id': material['id'],
+            'temperature_basis': 'maximum_permissible', 'temperature_k': normal,
+            'declaration': '人工明确以本设计已保存最高允许温度评价安全参数，不是现场或实测温度。'}, ensure_ascii=False)}
+    doc['provenance'][pointer('materials', material['id'], 'loss_tangent')] = {
+        'kind': 'user', 'reviewed': False, 'reference': '本试验设计尚未填写介质损耗角正切；禁止默认补值。'}
+    api(client, 'PUT', '/api/workspaces/'+saved['id']+'/domain', {
+        'expected_revision': saved['revision'], 'document': doc})
+    return api(client, 'GET', '/api/workspaces/'+saved['id'])
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
+def test_real_loss_tangent_reference_adopts_only_selected_value_and_exchanges(client, loss_reference, tmp_path, format):
+    from backend.kernel.resource_exchange import encoded, parse_file
+
+    asset = loss_reference
+    evidence = asset['release']['reference_evidence'][0]
+    assert evidence['quantity'] == {'value': .004, 'unit': '1', 'dimension': 'dimensionless'}
+    assert evidence['selection']['conditions'] == LOSS_CONDITIONS
+    record = evidence['receipt']['record']
+    assert record['id'] == 'iec60287-1-1-table3/r15/tan_delta'
+    assert record['conditions'] == {**LOSS_CONDITIONS, 'u0_v': {'lte': 18000}, 'u_v': {'lte': 30000}}
+    assert (record['edition'], record['clause'], record['printed_page'], record['pdf_page']) == ('2023', '5.2', 37, 85)
+    assert record['source_sha256'] == 'b300bb2bea52ce64e24c8137193559d7ee4cc04013ec4122357a2625e868a327'
+    assert evidence['receipt']['method']['method_version'] == '0.9.1'
+    assert evidence['receipt']['trust']['grade'] == 'reference'
+    assert evidence['receipt']['approval'] == 'not_granted'
+    saved = bind(client, declared_dielectric_design(client), asset, 'material/xlpe')
+    body = preview_body(saved, asset, 'loss_tangent', 'material/xlpe')
+    preview = api(client, 'POST', '/api/library/resources/materials/preview', body)
+    assert preview['adoptable'] and preview['comparison']['status'] == 'design_missing'
+    assert {c['condition'] for c in preview['comparison']['condition_checks']} == set(LOSS_CONDITIONS)
+    assert all(c['status'] == 'matched' for c in preview['comparison']['condition_checks'])
+    assert preview['evidence'] == evidence
+    confirmation = adopt_body(body, preview)
+    for actor in (None, 'agent'):
+        denied = client.post('/api/library/resources/materials/adopt', json=confirmation,
+                             headers={} if actor is None else {'X-CableSim-Actor': actor})
+        assert denied.status_code == 403
+    for value in (False, 1, 'true'):
+        denied = client.post('/api/library/resources/materials/adopt', json={**confirmation, 'human_confirmed': value},
+                             headers={'X-CableSim-Actor': 'human'})
+        assert denied.status_code == 422
+    bypass = client.post('/api/types/'+saved['id']+'/material-comparison/adopt', json={
+        key: value for key, value in confirmation.items() if key not in {
+            'workspace_id', 'preview_digest', 'human_confirmed', 'acknowledge_reference_limits'}})
+    assert bypass.status_code == 422 and bypass.json()['detail']['code'] == 'MATERIAL_REFERENCE_PREVIEW_REQUIRED'
+    stale = client.post('/api/library/resources/materials/adopt', json={**confirmation, 'preview_digest': '0'*64},
+                        headers={'X-CableSim-Actor': 'human'})
+    assert stale.status_code == 409
+    assert api(client, 'GET', '/api/workspaces/'+saved['id']) == saved
+    adopted = api(client, 'POST', '/api/library/resources/materials/adopt', confirmation,
+                  headers={'X-CableSim-Actor': 'human'})
+    assert adopted['revision'] == saved['revision']+1
+    path = pointer('materials', 'material/xlpe', 'loss_tangent')
+    source = adopted['domain']['provenance'][path]
+    assert source['kind'] == 'asset' and source['reviewed'] is False
+    receipt = json.loads(source['reference'])
+    assert receipt['previous_value'] is None
+    assert receipt['previous_source'] == saved['domain']['provenance'][path]
+    assert receipt['reference_value']['resource_reference'] == evidence
+    expected = deepcopy(saved['domain'])
+    next(m for m in expected['materials'] if m['id'] == 'material/xlpe')['loss_tangent'] = .004
+    expected['provenance'][path] = source
+    assert adopted['domain'] == expected
+    assert adopted['runs'] == saved['runs']
+    assert api(client, 'POST', '/api/library/resources/materials/adopt', confirmation,
+               headers={'X-CableSim-Actor': 'human'}) == adopted
+    conflict = client.post('/api/library/resources/materials/adopt', json={**confirmation, 'request_id': str(uuid4())},
+                           headers={'X-CableSim-Actor': 'human'})
+    assert conflict.status_code == 409
+    same = api(client, 'POST', '/api/library/resources/materials/preview',
+               preview_body(adopted, asset, 'loss_tangent', 'material/xlpe'))
+    assert not same['adoptable'] and same['comparison']['status'] == 'same'
+
+    exported = client.post('/api/library/exchange/export', json={
+        'asset_ids': [asset['id']], 'workspace_ids': [adopted['id']], 'format': format})
+    assert exported.status_code == 200, exported.text
+    filename = 'loss-reference.'+format
+    bundle = parse_file(filename, exported.content)
+    assert encoded(bundle['assets'][0]['release']) == encoded(asset['release'])
+    with TestClient(create_app(tmp_path/'received.sqlite')) as target:
+        files = {'file': (filename, exported.content)}
+        check = target.post('/api/library/exchange/preview', files=files)
+        assert check.status_code == 200, check.text
+        imported = target.post('/api/library/exchange/import', files=files, data={
+            'reviewed_sha256': check.json()['sha256'], 'confirmed': 'true', 'request_id': str(uuid4())},
+            headers={'X-CableSim-Actor': 'human'})
+        assert imported.status_code == 201, imported.text
+        received = imported.json()
+        assert received['approval_inherited'] is False
+        copy = api(target, 'GET', '/api/foundation/assets/'+received['assets'][0]['id'])
+        assert copy['status'] == 'draft' and copy['reviewed_sha256'] is None
+        assert encoded(copy['release']) == encoded(asset['release'])
+        document = api(target, 'GET', '/api/workspaces/'+received['projects'][0]['id'])
+        assert document['domain'] == adopted['domain'] and document['runs'] == []
+        assert api(target, 'GET', '/api/workspaces/'+document['id']+'/studies') == []
+    undone = api(client, 'POST', '/api/workspaces/'+saved['id']+'/history/undo', {'expected_revision': adopted['revision']})
+    assert undone['domain'] == saved['domain'] and undone['type_resource_bindings'] == saved['type_resource_bindings']
+    history = api(client, 'GET', '/api/workspaces/'+saved['id']+'/revisions/'+str(adopted['revision']))
+    assert history['state']['domain'] == adopted['domain']
+
+
+@pytest.mark.parametrize('changed,condition', [
+    ('missing_temperature', 'temperature_basis'), ('unreviewed_temperature', 'temperature_basis'),
+    ('changed_temperature', 'temperature_basis'), ('missing_filler', 'filler'), ('filled', 'filler'),
+    ('pvc', 'insulation'), ('u0', 'u0_v'), ('u', 'u_v'), ('dc', 'current_system'),
+])
+def test_loss_tangent_never_invents_missing_or_conflicting_target_conditions(client, loss_reference, changed, condition):
+    saved = declared_dielectric_design(client)
+    doc = deepcopy(saved['domain']); material = next(m for m in doc['materials'] if m['id'] == 'material/xlpe')
+    path = pointer('materials', material['id'], 'applicability')
+    if changed == 'missing_temperature':
+        doc['provenance'].pop(path)
+    elif changed == 'unreviewed_temperature':
+        doc['provenance'][path]['reviewed'] = False
+    elif changed == 'changed_temperature':
+        doc['cable_types'][0]['rating']['max_conductor_temperature']['normal'] += 1
+    elif changed == 'missing_filler':
+        doc['provenance'][pointer('materials', material['id'])]['reviewed'] = False
+    elif changed == 'filled':
+        doc['provenance'][pointer('materials', material['id'])]['reference'] = json.dumps({'asset_id': 'material/xlpe-filled-hv'})
+    elif changed == 'pvc':
+        material['standard_kind'] = 'PVC'
+    elif changed in ('u0', 'u'):
+        doc['cable_types'][0]['rating'][changed] += 1
+    elif changed == 'dc':
+        for circuit in doc['circuits']:
+            circuit['system'].update(kind='dc', frequency=0)
+    api(client, 'PUT', '/api/workspaces/'+saved['id']+'/domain', {'expected_revision': saved['revision'], 'document': doc})
+    saved = bind(client, api(client, 'GET', '/api/workspaces/'+saved['id']), loss_reference, 'material/xlpe')
+    body = preview_body(saved, loss_reference, 'loss_tangent', 'material/xlpe')
+    preview = api(client, 'POST', '/api/library/resources/materials/preview', body)
+    assert not preview['adoptable'] and preview['comparison']['status'] == 'condition_mismatch'
+    assert any(c['condition'] == condition and c['status'] == 'unconfirmed' for c in preview['comparison']['condition_checks'])
+    denied = client.post('/api/library/resources/materials/adopt', json=adopt_body(body, preview),
+                         headers={'X-CableSim-Actor': 'human'})
+    assert denied.status_code == 422
+    assert api(client, 'GET', '/api/workspaces/'+saved['id']) == saved
+
+
+def test_loss_tangent_selection_retains_all_table_conditions_and_rejects_wrong_dimensionless_quantity(client):
+    choice = selected(client, 'iec60287-1-1-table3', 'iec60287-1-1-table3/r15/tan_delta', LOSS_CONDITIONS)
+    body = {'asset_id': 'material.reference.'+uuid4().hex, 'version': '1.0.0', 'name': '真实Table3损耗角正切',
+            'selections': [{'parameter': 'loss_tangent', 'selection': choice}]}
+    for condition in LOSS_CONDITIONS:
+        missing = deepcopy(body); missing['selections'][0]['selection']['conditions'].pop(condition)
+        assert client.post('/api/library/resources/materials/draft-preview', json=missing).status_code == 422
+    for condition, value in [('u0_v', 18001), ('u_v', 30001), ('insulation', 'PVC'),
+                             ('filler', 'filled'), ('current_system', 'DC'), ('temperature_basis', 'ambient')]:
+        wrong = deepcopy(body); wrong['selections'][0]['selection']['conditions'][condition] = value
+        assert client.post('/api/library/resources/materials/draft-preview', json=wrong).status_code == 422
+    wrong = deepcopy(body); wrong['selections'][0]['parameter'] = 'relative_permittivity'
+    denied = client.post('/api/library/resources/materials/draft-preview', json=wrong)
+    assert denied.status_code == 422 and denied.json()['detail']['code'] == 'RESOURCE_QUANTITY_MISMATCH'
+    # PVC's distinct real row remains selectable with its own full conditions;
+    # it never becomes an XLPE reference just because both quantities use unit 1.
+    pvc = selected(client, 'iec60287-1-1-table3', 'iec60287-1-1-table3/r13/tan_delta',
+                   {'current_system': 'AC', 'temperature_basis': 'maximum_permissible', 'insulation': 'PVC'})
+    preview = api(client, 'POST', '/api/library/resources/materials/draft-preview', {
+        **body, 'selections': [{'parameter': 'loss_tangent', 'selection': pvc}]})
+    evidence = preview['release']['reference_evidence'][0]
+    assert evidence['quantity'] == {'value': .1, 'unit': '1', 'dimension': 'dimensionless'}
+    assert evidence['receipt']['record']['conditions'] == pvc['conditions']
+    assert evidence['receipt']['trust']['grade'] == 'reference' and evidence['receipt']['approval'] == 'not_granted'
+
+
 def test_draft_requeries_identity_rejects_forged_values_and_preserves_old_asset_hash(client):
     selection = selected(client, SOURCES[0][1], SOURCES[0][2])
     body = {'asset_id': 'material.reference.'+uuid4().hex, 'version': '1.0.0', 'name': '来源身份核验',
