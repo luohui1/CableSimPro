@@ -9,9 +9,9 @@
     },
     {
       "plugin_id": "cablesim.comsol-bridge",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "manifest": "plugins/cablesim.comsol-bridge/plugin.json",
-      "release_digest": "4712e950da0cd69c0cadfe1ac2f075032686e6085b58a1c48528d4e7e8b6dc19"
+      "release_digest": "54edaad0f0a71e1158b5b05d4fe7af780797b6de2afcdc76951bb0b0877e3226"
     },
     {
       "plugin_id": "cablesim.datasheet-extract",
@@ -27,15 +27,15 @@
     },
     {
       "plugin_id": "cablesim.hybrid-rating",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "manifest": "plugins/cablesim.hybrid-rating/plugin.json",
-      "release_digest": "4f6458554a342516d3d318141c12d76ad1a0e577166e654cd9dce6bd5d5a62b5"
+      "release_digest": "1a982050593275c00c417ea05e9264cb57d0779466d97dc12be938f7a51f60a3"
     },
     {
       "plugin_id": "cablesim.iec60287",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "manifest": "plugins/cablesim.iec60287/plugin.json",
-      "release_digest": "ed6b99fa998f905a07ffa61eba2fba65ea39935266a222c080d9ebeca4d4e669"
+      "release_digest": "52f5046f26de1a9df0c29bceabb0acc4fd03d56387bfefce44d38a89c2effa30"
     },
     {
       "plugin_id": "cablesim.native-reference",
@@ -45,9 +45,9 @@
     },
     {
       "plugin_id": "cablesim.simulation",
-      "version": "1.7.1",
+      "version": "1.7.2",
       "manifest": "plugins/cablesim.simulation/plugin.json",
-      "release_digest": "0cc81b63ae4367f1d58404ea328dcef2e5887c1e86bb8f4180a86ba7d14a3dd3"
+      "release_digest": "3d1e8565f1ab99e236c2f678aec0cdedfe95e60d08bea81eb368b2c9bd1552dc"
     },
     {
       "plugin_id": "cablesim.standard-check",
