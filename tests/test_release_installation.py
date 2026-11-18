@@ -1,5 +1,6 @@
 """Real host routing, SQLite upgrade safety and immutable offline package validation."""
 from contextlib import closing
+import errno
 from hashlib import sha256
 import json
 import os
@@ -9,6 +10,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+from threading import Thread
 import time
 from uuid import uuid4
 import zipfile
@@ -100,6 +102,79 @@ def test_pending_release_rejects_engineering_access_until_activation_and_reopens
     with TestClient(run_release.create_release_app()) as client:
         assert [row["id"] for row in client.get("/api/workspaces").json()] == [identifier]
         assert client.post("/api/workspaces", json={}).status_code == 201
+
+
+def loopback_address(host):
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family) as probe:
+        try:
+            probe.bind((host, 0))
+        except OSError as error:
+            if family == socket.AF_INET6 and error.errno in {
+                errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL, errno.EPROTONOSUPPORT, 10047, 10049,
+            }:
+                pytest.skip("IPv6 loopback is unavailable on this host")
+            raise
+        return family, probe.getsockname()[1]
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
+def test_release_server_restarts_immediately_after_requests(tmp_path, monkeypatch, host):
+    """Real Uvicorn + release app; the server closes first to leave TIME_WAIT."""
+    import uvicorn
+
+    family, port = loopback_address(host)
+    root = tmp_path / "program"
+    package(root)
+    monkeypatch.setattr(run_release, "ROOT", root)
+    directory = tmp_path / "data"
+    directory.mkdir()
+    monkeypatch.setenv("CABLESIM_DB", str(directory / "engineering.sqlite"))
+    monkeypatch.setenv("CABLESIM_DATASETS_DIR", str(directory / "datasets"))
+    monkeypatch.setenv("CABLESIM_REPRODUCTION_LIBRARY", str(directory / "library"))
+    for _ in range(2):
+        # This is the production preflight, immediately after the previous stop.
+        # A plain bind fails on POSIX while the served connections are TIME_WAIT.
+        run_release.check_server_port(host, port)
+        server = uvicorn.Server(uvicorn.Config(run_release.create_release_app(),
+            host=host, port=port, log_level="error", access_log=False))
+        thread = Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 15
+            while not server.started and thread.is_alive() and time.monotonic() < deadline:
+                time.sleep(.01)
+            assert server.started and thread.is_alive(), "release HTTP server did not start"
+            for _ in range(8):
+                with socket.socket(family) as connection:
+                    connection.settimeout(5)
+                    connection.connect((host, port))
+                    connection.sendall(b"GET /api/health HTTP/1.1\r\nHost: localhost\r\n"
+                                       b"Connection: close\r\n\r\n")
+                    chunks = []
+                    # Read the server's FIN before closing the client: otherwise
+                    # TIME_WAIT can be on the client and the regression is missed.
+                    while chunk := connection.recv(65536):
+                        chunks.append(chunk)
+                headers, separator, body = b"".join(chunks).partition(b"\r\n\r\n")
+                assert separator and headers.startswith(b"HTTP/1.1 200 ")
+                assert json.loads(body)["status"] == "ok"
+        finally:
+            server.should_exit = True
+            thread.join(timeout=15)
+            assert not thread.is_alive(), "release server did not stop gracefully"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
+def test_release_port_probe_rejects_live_listener(host):
+    family, port = loopback_address(host)
+    with socket.socket(family) as listener:
+        # Uvicorn enables reuse too; Windows preflight must still be exclusive.
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((host, port))
+        listener.listen()
+        with pytest.raises(OSError):
+            run_release.check_server_port(host, port)
 
 
 def test_upgrade_backup_contains_wal_and_failure_restores_real_database(tmp_path, monkeypatch):
