@@ -198,6 +198,10 @@ jobs:
             frontend/src/api/generated/schema.ts
             frontend/src/api/generated/endpoints.ts
             .data/frontend-integration/openapi.json
+      - name: Check generated API types match the built source
+        if: ${{ !cancelled() && steps.workbench-openapi.outcome == 'success' && matrix.task == 'walks' }}
+        working-directory: frontend
+        run: git diff --exit-code -- src/api/generated/schema.ts src/api/generated/endpoints.ts
       - name: Walk ampacity research at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' && matrix.task == 'walks' }}
         working-directory: frontend
