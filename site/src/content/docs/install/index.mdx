@@ -9,6 +9,10 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 CableSimPro 以离线安装包发行：Windows 10 / 11 x64 和 Linux x86_64 各一个 ZIP。包里带有固定版本的 Python 运行时、全部依赖和预构建的界面，**安装端不需要预装 Python、Node、编译器或 Git，也不需要管理员权限，安装过程不联网**。
 
+<Aside type="note" title="安装包暂不含 Agent 对话">
+当前的离线安装包不打包、也不启动 Agent 对话服务，安装后没有 Agent 对话界面，型号、计算、仿真和交付等功能不受影响。目前只有[从源码运行](#从源码运行开发与评估)的一键演示会启动 Agent 对话。
+</Aside>
+
 ## 系统要求
 
 | 项目 | 要求 |
@@ -79,6 +83,8 @@ python scripts/run_demo.py
 ```
 
 它会构建界面，在 `.data/release/` 下用与安装包相同的发布种子生成示例库，然后在 `http://127.0.0.1:8100/` 启动；之后启动保留已有数据。常用参数：`--skip-install`（依赖已就绪）、`--no-browser`、`--port 8101`。按 Ctrl+C 停止。
+
+一键演示同时构建并启动 Agent 对话服务（需要 Node.js 22.12+），退出时一并停止。Agent 需要先[接入模型](model/)；模型密钥只从环境变量或系统凭据读取，不写入配置文件或工程库。
 
 ## 进一步阅读
 

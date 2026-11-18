@@ -50,12 +50,12 @@ sidebar:
 
 ## [[processes]] 伴随进程
 
-可以追加随应用一起启动和停止的进程，例如以后的 Agent 边车服务：
+可以追加随应用一起启动和停止的进程。安装包自带的 `release.toml` 中，这一节只是注释掉的示例：当前安装包不包含 Agent 对话服务，也不会启动它。格式如下：
 
 ```toml
 [[processes]]
-name = "agent-sidecar"
-command = ["{python}", "{app_dir}/path/to/sidecar.py"]
+name = "companion"
+command = ["{python}", "{app_dir}/path/to/service.py"]
 cwd = "."
 required = true
 env = { HOST = "127.0.0.1" }
