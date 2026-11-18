@@ -23,7 +23,34 @@ def encode(value):
     return raw
 
 
+def validate_status_index(excerpts, verification):
+    """Keep release summaries consistent with the reviewed cell evidence.
+
+    This checks authoring metadata, not the independence of source readings.
+    Original-page verification remains a separate prerequisite for each cell.
+    """
+    if excerpts['version'] != verification['version']:
+        raise ValueError('编制与核验版本不一致。')
+    tables = {table['id']: table for table in excerpts['tables']}
+    if len(tables) != len(excerpts['tables']) or set(tables) != set(verification['tables']):
+        raise ValueError('编制与核验表索引不一致。')
+    blocked = {key for key, evidence in verification['tables'].items()
+               if any(cell['status'] == 'blocked' for row in evidence['cells'] for cell in row)}
+    unresolved = [item['table_id'] for item in verification.get('unresolved', [])]
+    if len(unresolved) != len(set(unresolved)) or set(unresolved) != blocked:
+        raise ValueError('未解决摘要与实际 blocked 表不一致。')
+    for pending in verification.get('not_released', []):
+        for key, table in tables.items():
+            if ((table['standard'], table['edition'], ''.join(table['locator'].split())) !=
+                    (pending['standard'], pending['edition'], ''.join(pending['locator'].split()))):
+                continue
+            cells = [cell for row in verification['tables'][key]['cells'] for cell in row]
+            if cells and all(cell['status'] == 'verified' for cell in cells):
+                raise ValueError('未发布摘要与已完整核验的表冲突：' + key)
+
+
 def build(excerpts, verification):
+    validate_status_index(excerpts, verification)
     records, tables = [], []
     for table in excerpts['tables']:
         ids = []

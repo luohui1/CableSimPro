@@ -1,0 +1,128 @@
+import { DataTable } from '@/components/data-table';
+import { Button } from '@/components/ui/button';
+import { optionalRecord, text } from '@/api/client';
+import { displayLibraryText, sourceText } from './api';
+import { referenceUnit, referenceValue } from './reference-evidence';
+import { applicationDownload, type ApplicationEvidence, type ApplicationField, type ApplicationChange } from './resource-application-api';
+
+function applicationText(value: string): string {
+  return displayLibraryText(value.split(/(https?:\/\/[^\s<>]+)/g).map((part, index) => index % 2 ? part : part
+    .replace(/\b(TB\s*880\s+)Case(?=\d+(?:\/\d+)*\b)/g, '$1算例')
+    .replace(/\bDOI(?=10\.\d{4,9}\/)/g, 'DOI ')).join(''));
+}
+function fieldSource(value: unknown): string {
+  const source = optionalRecord(value), reference = text(source.reference);
+  if (reference.trim().startsWith('{') || reference.trim().startsWith('[')) {
+    try {
+      const saved = optionalRecord(JSON.parse(reference));
+      return applicationText(text(saved.reference) || text(saved.title) || text(saved.name) || '结构化固定来源，完整原文可逐项下载');
+    } catch { return applicationText(reference); }
+  }
+  return applicationText(sourceText(value));
+}
+const componentValues: Record<string, string> = {
+  design: '设计输入', measurement: '实测输入', manufacturer_limit: '厂家电阻上限（非实测）',
+  semiconductor: '半导电材料', metal: '金属', polymer: '聚合物', filler: '填充材料',
+  backfill: '回填材料', duct: '管材', fluid: '流体', aluminium_alloy: '铝合金',
+  steel_galvanized: '镀锌钢', steel_stainless_nonmagnetic: '非磁性不锈钢', lead: '铅', other: '其他已声明材料',
+  segmental: '分割导体', hollow: '空心导体', sectoral: '扇形导体', wires: '金属丝', tape: '绕包带',
+  smooth: '光滑结构', corrugated: '皱纹结构', left: '左向绞合', right: '右向绞合',
+  helical_overlap: '螺旋搭盖绕包', two_tape_gap: '双带间隙绕包', longitudinal: '纵包',
+  dc: '直流', power_frequency_ac: '工频交流', separator: '隔离层', binder: '扎带',
+};
+const fieldValues: Record<string, Record<string, string>> = {
+  role: {
+    conductor_screen: '导体屏蔽', insulation: '绝缘', insulation_screen: '绝缘屏蔽',
+    metallic_screen: '金属屏蔽', metallic_sheath: '金属套', bedding: '内衬层',
+    separator: '隔离层', filler: '填充层', binder: '扎带', armour: '铠装', oversheath: '外护套',
+  },
+  form: { unspecified: '未明确构造' },
+  operation: { both: '额定载流量与保存负荷温度', temperature: '保存负荷温度' },
+  rating_mode: { individual: '逐回路额定', simultaneous: '同时增载', both: '逐回路额定与同时增载' },
+};
+const SUPERSCRIPT: Record<string, string> = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+/** Every saved digit (12 significant figures drop only floating-point noise), with powers of ten instead of e-notation. */
+function exactNumber(value: number) {
+  const rounded = Number(value.toPrecision(12));
+  if (rounded === 0) return '0';
+  const exponent = Math.floor(Math.log10(Math.abs(rounded)));
+  if (exponent >= -4 && exponent < 9) return String(rounded);
+  const [mantissa, power] = rounded.toExponential().split('e');
+  return `${mantissa.replace('-', '−')} × 10${[...power.replace('+', '')].map(char => SUPERSCRIPT[char] ?? char).join('')}`;
+}
+/** Structure parts read in mm, mm² and Ω/km; every other saved value keeps its SI unit. Downloads keep the saved value. */
+function numberText(value: number, unit: string, key: string, path: string) {
+  if (/^\/(cable_types|materials)\//.test(path)) {
+    if (unit === 'm²' && /area/.test(key)) return `${exactNumber(value * 1e6)} mm²`;
+    if (unit === 'm' && /(?:diameter|thickness|width|depth|pitch|gap|lay_length)/.test(key)) return `${exactNumber(value * 1000)} mm`;
+    if (unit === 'Ω/m') return `${exactNumber(value * 1000)} Ω/km`;
+  }
+  if (unit === '1') return exactNumber(value);
+  if (unit === '°') return `${exactNumber(value)}°`;
+  return `${exactNumber(value)} ${referenceUnit(unit)}`;
+}
+export function applicationValue(value: ApplicationField['value'], unit: string | null = '', path = '') {
+  if (typeof value === 'string' && /^(material|cable_type|core|circuit|cable)\/[A-Za-z0-9_-]+$/.test(value))
+    return '固定对象引用（完整身份见原始记录）';
+  const key = path.split('/').at(-1) ?? '';
+  if (typeof value === 'number' && Number.isFinite(value) && unit) return numberText(value, unit, key, path);
+  const label = typeof value === 'string' ? fieldValues[key]?.[value] ?? componentValues[value] ?? referenceValue(value) : referenceValue(value);
+  return `${applicationText(label)}${value !== null && unit && unit !== '1' ? ` ${referenceUnit(unit)}` : ''}`;
+}
+/** One text when every row repeats it, so the table does not print the same source on each line. */
+function sharedText(texts: string[]) {
+  return texts.length > 1 && texts.every(item => item === texts[0]) ? texts[0] : '';
+}
+export function ApplicationFields({ fields, label = '部件与模板逐项来源' }: { fields: ApplicationField[]; label?: string }) {
+  const shared = sharedText(fields.map(field => fieldSource(field.source)));
+  return <>
+    {shared && <p className="reference-evidence">全部 {fields.length} 项的原始出处：{shared}</p>}
+    <DataTable label={label} showGroups={false} groups={[{ id: 'fields', label, rows: fields.map((field, index) => ({ ...field, id: String(index) })) }]}
+      rowLabel={row => `${row.label}，${applicationValue(row.value, row.unit, row.path)}`} columns={[
+        { id: 'label', label: '保存参数', wrap: true, render: row => row.label },
+        { id: 'value', label: '保存值与单位', wrap: true, render: row => applicationValue(row.value, row.unit, row.path) },
+        ...(shared ? [] : [{ id: 'source', label: '原始出处', wrap: true, render: (row: ApplicationField) => <span className="reference-evidence">{fieldSource(row.source)}</span> }]),
+        { id: 'inspect', label: '完整来源', render: row => <Button size="compact" onClick={() => applicationDownload('fixed-field-source.json', row)}>下载此项原始记录</Button> },
+      ]} />
+  </>;
+}
+export function ApplicationFrozenEvidence({ evidence }: { evidence: ApplicationEvidence }) {
+  return <div className="library-import-stack reference-evidence">
+    <dl className="reference-facts">
+      <div><dt>固定输入来源</dt><dd>{evidence.source.name} · 输入修订 {evidence.source.revision}</dd></div>
+      <div><dt>方法版本</dt><dd>{evidence.method.name} · {evidence.method.method_version ?? evidence.method.version}{evidence.method.method_version && evidence.method.method_version !== evidence.method.version ? `（发行 ${evidence.method.version}）` : ''}</dd></div>
+      <div><dt>可信分档</dt><dd>{evidence.trust.label} · 不授予工程批准</dd></div>
+      {evidence.source.study_revision !== undefined && <div><dt>保存研究版本</dt><dd>研究修订 {evidence.source.study_revision} · 已固定原记录所选运行</dd></div>}
+    </dl>
+    {evidence.trust.reason && <p>{displayLibraryText(evidence.trust.reason)}</p>}
+    <ApplicationFields fields={evidence.fields} />
+    {evidence.missing.length > 0 && <section aria-label="固定输入缺项"><h3>已保留的缺项</h3><ul className="reference-limitations">{evidence.missing.map((item, index) => <li key={index}>{displayLibraryText(item)}</li>)}</ul></section>}
+    <section aria-label="部件与模板适用限制"><h3>适用限制</h3><ul className="reference-limitations">{evidence.limitations.map((item, index) => <li key={index}>{displayLibraryText(item)}</li>)}</ul></section>
+    <details className="library-import-details"><summary>固定来源与完整性核对</summary>
+      <dl className="reference-facts">
+        <div><dt>源输入 SHA-256</dt><dd className="library-import-digest">{evidence.source.document_sha256}</dd></div>
+        {evidence.resource && <div><dt>资料内容 SHA-256</dt><dd className="library-import-digest">{evidence.resource.content_sha256}</dd></div>}
+        {evidence.source.input_digest && <div><dt>保存运行输入 SHA-256</dt><dd className="library-import-digest">{evidence.source.input_digest}</dd></div>}
+        {evidence.source.output_digest && <div><dt>保存运行输出 SHA-256</dt><dd className="library-import-digest">{evidence.source.output_digest}</dd></div>}
+        {evidence.method.release_digest && <div><dt>固定方法发行摘要</dt><dd className="library-import-digest">{evidence.method.release_digest}</dd></div>}
+      </dl>
+      <p className="muted">完整冻结输入、来源路径、方法身份与摘要均保存在下载中。此处的读取不会查询当前源输入来替换已保存的历史。</p>
+      <Button onClick={() => applicationDownload('resource-application-evidence.json', evidence)}>下载完整冻结输入与证据</Button>
+    </details>
+  </div>;
+}
+const sourceAction = (row: ApplicationChange) => `${row.source_action === 'unchanged' ? '保留目标原出处；下列为来源参考记录：' : '将保存下列固定来源：'}${fieldSource(row.source)}`;
+export function ApplicationChanges({ changes }: { changes: ApplicationChange[] }) {
+  const shared = sharedText(changes.map(sourceAction));
+  return <>
+    {shared && <p className="reference-evidence">全部 {changes.length} 项的来源处理：{shared}</p>}
+    <DataTable label="部件采用逐字段变化" showGroups={false} groups={[{ id: 'changes', label: '变化', rows: changes.map((item, index) => ({ ...item, id: String(index) })) }]}
+      rowLabel={row => row.label} columns={[
+        { id: 'name', label: '参数', wrap: true, render: row => row.label },
+        { id: 'before', label: '当前值', wrap: true, render: row => applicationValue(row.before, row.unit, row.path) },
+        { id: 'after', label: '采用后', wrap: true, render: row => row.after === null ? '清空为未给出；不保留旧值' : `${applicationValue(row.after, row.unit, row.path)}${typeof row.after === 'string' && /^(material|cable_type|core|circuit|cable)\//.test(row.after) && row.before !== row.after ? ' · 引用已变化' : ''}` },
+        ...(shared ? [] : [{ id: 'source', label: '来源处理', wrap: true, render: (row: ApplicationChange) => <span className="reference-evidence">{sourceAction(row)}</span> }]),
+        { id: 'download', label: '核对原文', render: row => <Button size="compact" onClick={() => applicationDownload('component-change.json', row)}>下载前后值与出处</Button> },
+      ]} />
+  </>;
+}

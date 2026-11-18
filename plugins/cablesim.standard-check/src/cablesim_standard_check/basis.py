@@ -4,7 +4,12 @@ import json
 import math
 from pathlib import Path
 
+from .json_numbers import SCHEMA as CONTENT_SCHEMA, json_numbers
+
 RECORDS=json.loads((Path(__file__).parent/'basis-records.json').read_text('utf-8'))
+# Records whose JSON content changes when a browser rewrites integral floats keep
+# a second, consumer-pinned digest of that same content; all others hash alike.
+CONTENT=RECORDS['content_records']['sha256'] if RECORDS['content_records']['schema']==CONTENT_SCHEMA else {}
 
 
 class BasisIntegrityError(ValueError):
@@ -15,9 +20,11 @@ def digest(value):
     return sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 def same_query(ref, query):
-    # Canonical identity distinguishes the JSON values True/1 and False/0.
+    # A browser sends 8700.0 back as 8700. Canonical identity still distinguishes
+    # True/1, False/0 and every changed value, and the issuer's digest of this
+    # method's own query must match exactly.
     expected = digest(query)
-    return (isinstance(ref.get('query'), dict) and digest(ref['query']) == expected
+    return (isinstance(ref.get('query'), dict) and digest(json_numbers(ref['query'])) == digest(json_numbers(query))
             and ref.get('query_sha256') == expected)
 
 
@@ -25,7 +32,10 @@ def sealed_record(record):
     """Verify signed content and its reconstructible display fields."""
     bare = {key:value for key,value in record.items() if key not in ('record_sha256', 'citation')}
     expected = RECORDS['records'].get(record.get('id'))
-    if (expected is None or digest(bare) != expected or record.get('record_sha256') != expected
+    # The issuer's record SHA stays mandatory; its content is compared in the
+    # integral-number form a browser transport leaves (lossless, no tolerance).
+    content = CONTENT.get(record.get('id'), expected)
+    if (expected is None or digest(json_numbers(bare)) != content or record.get('record_sha256') != expected
             or record.get('verification', {}).get('status') != 'verified'):
         raise BasisIntegrityError('basis_references：封签依据记录摘要或核验状态不一致。')
     # Reconstruct the data reader's display only after the underlying source
@@ -211,7 +221,7 @@ def apply(checker,parameters):
                 reason = (row.get('reason') or reason) if row['id'] not in plan else '此电压、材料、截面与制造条件组合没有已固定依据；不插值、换版或套用 110 kV。'
             row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason=reason);continue
         record=validate(ref,plan[row['id']])
-        row.update(basis_reference=ref,citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'])
+        row.update(basis_reference={**ref,'query':plan[row['id']]},citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'])
         if execute(checker,row,record): continue
         if row['id'].endswith(':screen-tape-minimum'):
             nominal=next((r for r in checker.rows if r['id'].endswith(':screen-tape-nominal')
@@ -219,7 +229,7 @@ def apply(checker,parameters):
             limit,actual=nominal.get('limit'),nominal.get('actual')
             row['formula_inputs']={'t_n_mm':max(limit,actual) if limit is not None and actual is not None else None}
         limit,comparison,reason=criterion(ref,row['unit'],row.get('formula_inputs') or {})
-        row.update(basis_reference=ref,citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'],limit=limit,comparison=comparison or row['comparison'])
+        row.update(basis_reference={**ref,'query':plan[row['id']]},citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'],limit=limit,comparison=comparison or row['comparison'])
         actual=row['actual'];row['margin']=None if actual is None or limit is None else actual-limit if comparison=='>=' else limit-actual
         row['verdict']='uncovered' if limit is None else 'missing' if actual is None else 'passed' if row['margin']>=-1e-12 else 'failed'
         row['reason']=(reason or row['reason'] or '缺字段：'+row['title']+'；补录相应输入或实测值后重新核对。') if row['verdict'] in ('missing','uncovered') else None

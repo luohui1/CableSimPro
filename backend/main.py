@@ -156,6 +156,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(resource_exchange_router(exchange))
     from .kernel.resource_data import make_router as resource_data_router
     app.include_router(resource_data_router(research.executor, assets, research, types))
+    from .kernel.resource_applications import make_router as resource_applications_router
+    app.include_router(resource_applications_router(research, assets, types))
     app.include_router(scenario_router(workspace_store,research))
     app.include_router(requirements_router(research))
     app.include_router(rating_table_router(research))

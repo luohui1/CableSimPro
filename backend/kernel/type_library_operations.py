@@ -62,7 +62,7 @@ def _run(service, spec, definition, request):
     result = {'status': run['status'], 'workspace_id': wid, 'study_id': study['id'], 'run_id': run['id'],
               'method_name': plugin.manifest.name, 'method_version': method['version'], 'confidence': 'reference',
               'input_digest': run['input_digest'], 'output_digest': run['output_digest'],
-              'message': '已保存真实运行；计算成功、标准符合与人工批准分别判断。'}
+              'message': '运行记录已保存；计算状态、标准核对结论与人工批准状态分别判断。'}
     if definition['driver']['kind'] == 'batch':
         result['rows'] = rating_rows(run)
     else:
