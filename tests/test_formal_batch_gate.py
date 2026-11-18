@@ -11,8 +11,11 @@ from openpyxl import load_workbook
 import pytest
 
 from backend.main import create_app
-from scripts.verify_formal_batch import unpack_batch, validate_batch_files, validate_batch_preview
-from scripts.verify_formal_delivery import SourceReader, canonical, digest, full_run_payload, validate_model
+from scripts.verify_formal_batch import unpack_batch, validate_batch_files, validate_batch_preview, verify_formal_batches
+from scripts.verify_formal_delivery import (SourceReader, canonical, digest, full_run_payload,
+                                           validate_model, verify_formal_exports)
+from scripts.verify_installation import InstallationGate
+from test_formal_sources import saved as full_sources
 from test_research import study, request as execution_request
 
 
@@ -95,6 +98,49 @@ def test_actual_zip_keeps_duplicate_document_numbers_distinct_and_exact(actual_b
     assert checks[0]["pages"] >= 2
     assert all(item["numeric_xml_exact"] and item["numeric_reopen_exact"] and item["original_text_exact"]
                for item in checks[1:])
+
+
+def test_single_export_gate_passes_exact_successful_selections_to_real_batches(full_sources, tmp_path, monkeypatch):
+    """Exercise the installed gate's handoff against real saved five-channel API data."""
+    client = full_sources["client"]
+    rating, calculation = full_sources["rating_table"], full_sources["calculation"]
+    engineering_sources = {
+        "workspace": full_sources["workspace"]["id"], "study": rating["study"], "run": rating["id"],
+        "calculation_workspace": full_sources["calculation_workspace"]["id"],
+        "calculation_study": calculation["study"], "calculation_run": calculation["id"],
+    }
+    posted = []
+
+    class ApiGate(InstallationGate):
+        def api(self, method, path, body=None, *, binary=False, include_headers=False):
+            if method == "POST":
+                posted.append((path, deepcopy(body)))
+            response = client.request(method, path, json=body)
+            assert response.status_code == 200, response.text[:1000]
+            content = response.content if binary else response.json()
+            return (content, dict(response.headers)) if include_headers else content
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("single-to-batch verification must consume saved results, never recalculate")
+
+    monkeypatch.setattr(client.app.state.research.executor, "run", forbidden)
+    gate = ApiGate(tmp_path, timeout=30)
+    requests = verify_formal_exports(gate, engineering_sources)
+    assert set(requests) == {"specification", "calculation", "rating_table", "research_report"}
+    assert gate.result["formal_documents"]["status"] == "passed"
+    single_exports = [body for path, body in posted if path == "/api/formal-deliveries/export"]
+    assert len(single_exports) == 8
+    for exported in single_exports:
+        assert requests[exported["kind"]] == {key: exported[key] for key in ("kind", "source", "document")}
+    before = deepcopy(requests)
+    verify_formal_batches(gate, requests)
+    assert requests == before
+    assert gate.result["formal_batches"]["status"] == "passed"
+    batch_exports = [body for path, body in posted if path == "/api/formal-deliveries/batch/export"]
+    assert {body["scope"]["kind"] for body in batch_exports} == {"project", "series"}
+    for batch in batch_exports:
+        for item in batch["items"]:
+            assert {key: item[key] for key in ("kind", "source", "document")} == requests[item["kind"]]
 
 
 @pytest.mark.parametrize("mutation", ["manifest-sha", "manifest-source", "missing", "duplicate", "traversal"])

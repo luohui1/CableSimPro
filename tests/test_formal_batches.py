@@ -26,6 +26,7 @@ from backend.kernel.formal_batches import BatchPreviewRequest
 from backend.kernel.formal_contracts import PreviewRequest, canonical_bytes, jsonsha, resolve_pointer
 from backend.kernel.formal_deliveries import FormalDeliveries
 from backend.kernel.workspace import Edit
+from scripts.verify_formal_delivery import rendered_text, validate_xlsx
 from test_research import study, request as execution_request
 
 
@@ -106,7 +107,16 @@ def _full_model(content, format):
             for row in workbook['追溯数值'].iter_rows(min_row=2, values_only=True):
                 table_id, row_id, column_key, sheet, cell, text = row[:6]
                 quantity = next(item for item in model['tables'][table_id]['rows'] if item['id'] == row_id)['cells'][column_key]
-                assert text == quantity['raw_text'] == workbook[sheet][cell].value
+                assert text == quantity['raw_text']
+                assert workbook[sheet][cell].value == rendered_text(quantity)
+            # Engineering display may be rounded or use converted units. The
+            # raw archive, numeric cells and exact OOXML lexemes still retain
+            # every original value and its source/units independently.
+            payloads = {key: source['payload'] for key, source in model['sources'].items()}
+            preview = {**model, 'sources': {key: {field: value for field, value in source.items()
+                                                if field != 'payload'}
+                                         for key, source in model['sources'].items()}}
+            assert validate_xlsx(content, preview, payloads)['numeric_xml_exact']
             return model
         finally:
             workbook.close()
