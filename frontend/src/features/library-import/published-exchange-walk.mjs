@@ -25,6 +25,63 @@ async function fileEvidence(filename) { const bytes = await fs.readFile(filename
 function pythonJSON(script, args = []) {
   return JSON.parse(execFileSync(python, ['-c', script, ...args], { cwd: root, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, timeout: 120000 }));
 }
+const errorCode = error => error?.code || error?.name || 'UNKNOWN';
+async function progressResources() {
+  const memory = process.memoryUsage();
+  const result = { node: { rss_bytes: memory.rss, heap_used_bytes: memory.heapUsed, external_bytes: memory.external } };
+  if (process.platform !== 'linux') return result;
+  const inspect = async operation => { try { return await operation(); } catch (error) { return { error_code: errorCode(error) }; } };
+  const readText = filename => fs.readFile(filename, { encoding: 'utf8', signal: AbortSignal.timeout(1000) });
+  result.host_memory = await inspect(async () => {
+    const values = Object.fromEntries((await readText('/proc/meminfo')).split('\n').map(line => /^(MemAvailable|SwapFree):\s+(\d+) kB$/.exec(line)).filter(Boolean).map(match => [match[1] + '_bytes', Number(match[2]) * 1024]));
+    return values;
+  });
+  result.cgroup = await inspect(async () => {
+    const relative = (await readText('/proc/self/cgroup')).split('\n').find(line => line.startsWith('0::'))?.slice(3);
+    if (!relative?.startsWith('/')) return { error_code: 'CGROUP_V2_UNAVAILABLE' };
+    const directory = path.resolve('/sys/fs/cgroup', '.' + relative);
+    if (directory !== '/sys/fs/cgroup' && !directory.startsWith('/sys/fs/cgroup/')) return { error_code: 'CGROUP_PATH_OUTSIDE_MOUNT' };
+    return Object.fromEntries(await Promise.all(['memory.current', 'memory.max', 'memory.events'].map(async name => [name, await inspect(async () => {
+      const text = (await readText(path.join(directory, name))).trim();
+      return name === 'memory.events' ? Object.fromEntries(text.split('\n').map(line => { const [key, value] = line.split(' '); return [key, Number(value)]; })) : text;
+    })])));
+  });
+  return result;
+}
+function progressJournal(directory, scope) {
+  const started = performance.now(), filename = path.join(directory, 'progress.jsonl'), failures = [];
+  let sequence = 0, lastOperation = null, queued = Promise.resolve(), beating = null, beats = 0, counters = () => ({});
+  const checkpoint = (event, details = {}) => {
+    if (event !== 'heartbeat') lastOperation = { event, case: details.case ?? null, method: details.method ?? null, label: details.label ?? null };
+    const entry = { at: new Date().toISOString(), sequence: ++sequence, scope, pid: process.pid, ppid: process.ppid,
+      elapsed_ms: Math.round(performance.now() - started), event, last_operation: lastOperation, ...details };
+    const line = JSON.stringify(entry) + '\n';
+    process.stdout.write('[published-progress] ' + line);
+    queued = queued.then(() => fs.appendFile(filename, line)).catch(error => {
+      failures.push(error); process.stderr.write('[published-progress-write-error] ' + JSON.stringify({ scope, error_code: errorCode(error) }) + '\n');
+    });
+  };
+  const heartbeat = () => {
+    if (beating) return;
+    if (beats >= 180) { clearInterval(timer); return; }
+    beats++;
+    beating = progressResources().then(resources => checkpoint('heartbeat', { heartbeat: beats, ...counters(), resources }))
+      .catch(error => { failures.push(error); checkpoint('heartbeat.failed', { error_code: errorCode(error) }); })
+      .finally(() => { beating = null; });
+  };
+  // At most 180 small samples per process; observation cannot keep a phase alive.
+  const timer = setInterval(heartbeat, 10000); timer.unref();
+  checkpoint('journal.start'); heartbeat();
+  return {
+    checkpoint,
+    counters(read) { counters = read; },
+    async close() {
+      clearInterval(timer); if (beating) await beating;
+      checkpoint('journal.stop', { heartbeat_count: beats }); await queued;
+      if (failures.length) throw new AggregateError(failures, '发布交换进度记录失败');
+    },
+  };
+}
 async function frontendInventory(directory) {
   const files = [];
   async function visit(relative) {
@@ -47,9 +104,11 @@ async function frontendInventory(directory) {
 // Network.getResponseBody copy (microsoft/playwright#42862). No request is replayed
 // or fulfilled. The paused original is continued without overrides, after the
 // body command has completely settled; timing of this observation is recorded.
-async function observeExportResponses(page, base, directory, caseId, identity, report) {
+async function observeExportResponses(page, base, directory, caseId, identity, report, progress) {
   const endpoint = new URL('/api/library/exchange/export', base).href;
+  progress.checkpoint('cdp.session.before', { case: caseId });
   const session = await page.context().newCDPSession(page), tasks = new Set(), actualRequests = new WeakMap();
+  progress.checkpoint('cdp.session.after', { case: caseId });
   const ledger = { case: caseId, endpoint, stage: 'Response', resource_type: 'Fetch', actions: [], unexpected: [], errors: [] };
   report.export_observations.push(ledger);
   let active = null, terminated = false, saving = Promise.resolve();
@@ -71,7 +130,15 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
     try { const value = await operation(); assert.equal(terminated, false, '导出观测超时，整个上下文已判失败'); return value; }
     finally { clearTimeout(timer); }
   }
-  const command = (method, params, timeout) => bounded(method, () => session.send(method, params), timeout);
+  const command = async (method, params, timeout) => {
+    progress.checkpoint('cdp.command.before', { case: caseId, method, action_id: active?.record.id ?? null });
+    try {
+      const result = await bounded(method, () => session.send(method, params), timeout);
+      progress.checkpoint('cdp.command.after', { case: caseId, method, action_id: active?.record.id ?? null }); return result;
+    } catch (error) {
+      progress.checkpoint('cdp.command.failed', { case: caseId, method, error_code: errorCode(error) }); throw error;
+    }
+  };
   function recordRequest(request) {
     if (request.url() !== endpoint) return;
     const record = { request_id: identity(request).id, at: new Date().toISOString(), method: request.method(), url: request.url(),
@@ -92,6 +159,8 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
   }
   function paused(event) {
     const action = active;
+    progress.checkpoint('export.response.paused', { case: caseId, action_id: action?.record.id ?? null,
+      fetch_request_id: event.requestId, network_id: event.networkId ?? null, status: event.responseStatusCode });
     const record = { fetch_request_id: event.requestId, network_id: event.networkId ?? null, at: new Date().toISOString(),
       method: event.request.method, url: event.request.url, post_data: event.request.postData, resource_type: event.resourceType,
       status: event.responseStatusCode, headers: event.responseHeaders ?? [], error_reason: event.responseErrorReason ?? null,
@@ -111,6 +180,7 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
         const bytes = Buffer.from(body.body, body.base64Encoded ? 'base64' : 'utf8');
         const filename = path.join(directory, `export-fetch-${action.record.id}-${action.record.pauses.indexOf(record) + 1}.bin`);
         await fs.writeFile(filename, bytes, { flag: 'wx' }); record.raw_response = await fileEvidence(filename);
+        progress.checkpoint('export.response.saved', { case: caseId, action_id: action.record.id, ...record.raw_response });
         assert.ok(bytes.length > 0, '原始导出响应正文不得为空');
         await persist();
       } catch (error) { record.failure = String(error); failure('读取原始导出响应', error, { fetch_request_id: event.requestId }); }
@@ -284,54 +354,64 @@ function compareDownloads(original, exported) {
   ].join('\n'), [original, exported]);
 }
 
-async function run(command, args, environment, logfile) {
+async function run(command, args, environment, logfile, progress, label) {
   const stream = createWriteStream(logfile, { flags: 'wx' });
   const started = new Date().toISOString();
+  progress.checkpoint('child.spawn.before', { label, executable: path.basename(command) });
   const child = spawn(command, args, { cwd: root, env: { ...process.env, ...environment }, stdio: ['ignore', 'pipe', 'pipe'] });
+  progress.checkpoint('child.spawn.after', { label, child_pid: child.pid });
   for (const output of [child.stdout, child.stderr]) output.on('data', bytes => { stream.write(bytes); process.stdout.write(bytes); });
   const [exit_code, signal] = await once(child, 'close');
   await new Promise(resolve => stream.end(resolve));
-  return { command, args, pid: child.pid, started, completed: new Date().toISOString(), exit_code, signal, log: await fileEvidence(logfile) };
+  const log = await fileEvidence(logfile);
+  progress.checkpoint('child.closed', { label, child_pid: child.pid, exit_code, signal, log });
+  return { command, args, pid: child.pid, started, completed: new Date().toISOString(), exit_code, signal, log };
 }
 async function orchestrate() {
   await fs.mkdir(path.dirname(out), { recursive: true });
   await fs.mkdir(out, { recursive: false }); // A rerun may not reuse earlier evidence.
+  const progress = progressJournal(out, 'orchestrator');
   const report = { production_frontend: null, producer: null, manifest: null, phases: [], completed_cases: [], failures: [] };
   const save = () => write(path.join(out, 'report.json'), report);
   const buildDirectory = path.join(root, '.data/release/frontend'), servedDirectory = path.join(root, 'frontend/dist');
   let linked = false, buildInventory = null;
   try {
     assert.equal(process.env.E2E_DEV, '0', '独立发布交换只使用本轮真实 shipped production build');
+    progress.checkpoint('production.inventory.before');
     const build = await fs.realpath(buildDirectory), inventory = await frontendInventory(build); buildInventory = inventory;
     const frontendFile = path.join(out, 'production-frontend.json');
     await write(frontendFile, { mode: 'production', source_commit: process.env.GITHUB_SHA ?? null,
       build_directory: build, served_directory: servedDirectory, ...inventory });
     report.production_frontend = { ...await fileEvidence(frontendFile), mode: 'production', inventory_sha256: inventory.inventory_sha256 };
+    progress.checkpoint('production.inventory.after', { manifest: report.production_frontend, asset_count: inventory.file_count, asset_bytes: inventory.bytes });
     if (!(await fs.lstat(servedDirectory).catch(error => { if (error.code !== 'ENOENT') throw error; return null; }))) {
       await fs.symlink(path.relative(path.dirname(servedDirectory), build), servedDirectory, 'dir'); linked = true;
     }
     assert.equal(await fs.realpath(servedDirectory), build, 'runner 默认 dist 必须指向本轮 shipped build，不能消费残留构建');
     assert.deepEqual(await frontendInventory(servedDirectory), inventory); await save();
+    report.producer = { status: 'running', started: new Date().toISOString() }; await save();
     report.producer = await run(python, ['-m', 'pytest', '-n', '0', 'tests/test_published_project_exchange.py', '--junitxml=' + path.join(out, 'producer.xml')],
-      { CABLESIM_PUBLISHED_EXCHANGE_EVIDENCE: path.join(out, 'source') }, path.join(out, 'producer.log'));
+      { CABLESIM_PUBLISHED_EXCHANGE_EVIDENCE: path.join(out, 'source') }, path.join(out, 'producer.log'), progress, 'producer');
     await save(); assert.equal(report.producer.exit_code, 0, '真实源数据生产与后端门禁必须成功，不能复用旧库');
     const manifestFile = path.join(out, 'source/manifest.json'), manifest = await read(manifestFile);
     assert.equal(manifest.schema, 'cablesim.published-exchange-browser-source/1'); assert.equal(manifest.source_host_closed, true);
     const source = await fileEvidence(manifest.database);
     assert.equal(source.sha256, manifest.snapshot.sha256); assert.equal(source.bytes, manifest.snapshot.size_bytes);
     report.manifest = { ...await fileEvidence(manifestFile), source_database: source };
+    progress.checkpoint('source.manifest.verified', { manifest: report.manifest }); await save();
     async function phase(name, phaseName, database, task) {
       const directory = path.join(out, name); await fs.mkdir(directory, { recursive: true });
       const taskFile = path.join(directory, 'task.json'); if (task) await write(taskFile, task);
+      const lifecycle = { name, phase: phaseName, started: new Date().toISOString(), closed: [], status: 'running' };
+      report.phases.push(lifecycle); await save(); progress.checkpoint('phase.before', { name, phase: phaseName });
+      try {
       const receipt = await run(process.execPath, [path.join(root, 'frontend/scripts/isolated-e2e.mjs'), 'library-exchange-walk.mjs'], {
         E2E_DATABASE_SOURCE: database, PUBLISHED_EXCHANGE_PHASE: phaseName, PUBLISHED_EXCHANGE_PHASE_OUT: directory,
         PUBLISHED_EXCHANGE_MANIFEST: manifestFile, PUBLISHED_EXCHANGE_FRONTEND_MANIFEST: frontendFile,
         ...(task ? { PUBLISHED_EXCHANGE_TASK: taskFile } : {}),
-      }, path.join(directory, 'process.log'));
+      }, path.join(directory, 'process.log'), progress, name);
       const result = await read(path.join(directory, 'report.json')).catch(() => null);
-      const lifecycle = { name, phase: phaseName, ...receipt, service: result?.service, closed: [], status: 'checking' };
-      report.phases.push(lifecycle); await save();
-      try {
+      Object.assign(lifecycle, receipt, { service: result?.service, status: 'checking' }); await save();
         if (result?.service) {
           const log = await fs.readFile(receipt.log.file, 'utf8');
           const identity = /隔离服务：后端 PID (\d+) \/ (\d+)；预览 PID (\d+) \/ (\d+)/.exec(log);
@@ -350,10 +430,11 @@ async function orchestrate() {
           assert.ok(log.includes('本任务服务与子进程退出、端口关闭已核对。'));
         }
         assert.equal(receipt.exit_code, 0, `${name}未通过；原始日志与浏览器证据已保留`); assert.ok(result);
-        lifecycle.status = 'passed'; await save();
+        lifecycle.status = 'passed'; await save(); progress.checkpoint('phase.after', { name, phase: phaseName });
         return { result, lifecycle };
       } catch (error) {
         lifecycle.status = 'failed'; lifecycle.failure = { message: String(error), stack: error.stack };
+        progress.checkpoint('phase.failed', { name, phase: phaseName, error_code: errorCode(error) });
         await save(); throw error;
       }
     }
@@ -376,7 +457,7 @@ async function orchestrate() {
       await save();
     }
     assert.equal(report.completed_cases.length, 4);
-  } catch (error) { report.failures.push({ message: String(error), stack: error.stack }); throw error; }
+  } catch (error) { report.failures.push({ message: String(error), stack: error.stack }); progress.checkpoint('orchestrator.failed', { error_code: errorCode(error) }); throw error; }
   finally {
     try {
       if (report.production_frontend) {
@@ -386,7 +467,7 @@ async function orchestrate() {
       }
       if (linked) { assert.equal(await fs.realpath(servedDirectory), await fs.realpath(buildDirectory)); await fs.unlink(servedDirectory); report.production_frontend.temporary_link_removed = true; }
     } catch (error) { report.failures.push({ phase: '生产构建字节与临时链接收尾', message: String(error), stack: error.stack }); throw error; }
-    finally { await save(); }
+    finally { try { await save(); } finally { await progress.close(); } }
   }
 }
 
@@ -401,27 +482,40 @@ export async function runPublishedExchangePhase() {
   const report = { phase, service: { backend_url: backend, frontend_url: base, database: process.env.CABLESIM_DB }, production_frontend: null,
     requests: [], http: [], console: [], errors: [], failures: [], layout_failures: [], screenshots: [], downloads: [], closed_before_start: [], export_observations: [], served_entries: [], served_assets: [] };
   const save = () => write(path.join(directory, 'report.json'), report);
+  const progress = progressJournal(directory, phase);
   let browser;
   try {
     assert.equal(process.env.E2E_DEV, '0');
+    progress.checkpoint('phase.inventory.before');
     const frontendFile = process.env.PUBLISHED_EXCHANGE_FRONTEND_MANIFEST, frontend = await read(frontendFile);
     assert.equal(frontend.mode, 'production'); assert.equal(await fs.realpath(frontend.served_directory), frontend.build_directory);
     const inventory = await frontendInventory(frontend.served_directory);
     assert.deepEqual(inventory.files, frontend.files); assert.equal(inventory.inventory_sha256, frontend.inventory_sha256);
     const productionFiles = new Map(frontend.files.map(file => [file.path, file]));
     report.production_frontend = { ...await fileEvidence(frontendFile), mode: frontend.mode, inventory_sha256: inventory.inventory_sha256 };
+    progress.checkpoint('phase.inventory.after', { manifest: report.production_frontend, asset_count: inventory.file_count, asset_bytes: inventory.bytes });
     for (const service of task?.stopped_services ?? []) for (const url of [service.backend_url, service.frontend_url]) {
       assert.ok(![base, backend].some(current => new URL(current).port === new URL(url).port), '来源、原目标与重启目标必须使用不同端口');
       report.closed_before_start.push(await closed(url));
     }
     await save();
     const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
+    progress.checkpoint('browser.launch.before', { executable: executablePath });
     browser = await chromium.launch({ executablePath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    progress.checkpoint('browser.launch.after');
     for (const item of phase === 'source' ? cases : [task]) {
       const caseDir = path.join(directory, item.id); await fs.mkdir(caseDir);
+      progress.checkpoint('context.create.before', { case: item.id, viewport: item.viewport });
       const context = await browser.newContext({ viewport: item.viewport, acceptDownloads: true, locale: 'zh-CN' });
-      const page = await context.newPage(), observer = await observeExchangeUploads(page);
+      progress.checkpoint('context.create.after', { case: item.id });
+      progress.checkpoint('page.create.before', { case: item.id });
+      const page = await context.newPage();
+      progress.checkpoint('page.create.after', { case: item.id });
+      progress.checkpoint('upload.observer.before', { case: item.id });
+      const observer = await observeExchangeUploads(page);
+      progress.checkpoint('upload.observer.after', { case: item.id });
       const requests = new WeakMap(), pending = new Set(), bodies = new Set(), readCounts = new Map(); let sequence = 0, shot = 0;
+      progress.counters(() => ({ case: item.id, request_count: sequence, pending_requests: pending.size, pending_bodies: bodies.size }));
       const identity = request => {
         if (!requests.has(request)) {
           const record = { case: item.id, id: ++sequence, method: request.method(), url: request.url(), started: new Date().toISOString(), request_headers: safeRequestHeaders(request) };
@@ -457,8 +551,9 @@ export async function runPublishedExchangePhase() {
         })().catch(error => { record.body_error = String(error); report.errors.push({ case: item.id, kind: 'response-body', request_id: record.id, message: String(error) }); });
         bodies.add(work); void work.finally(() => bodies.delete(work));
       });
-      const exports = await observeExportResponses(page, base, caseDir, item.id, identity, report);
+      const exports = await observeExportResponses(page, base, caseDir, item.id, identity, report, progress);
       async function capture(label, inspect = true) {
+        progress.checkpoint('screenshot.before', { case: item.id, label });
         await page.evaluate(() => document.fonts.ready);
         const filename = path.join(caseDir, `${String(++shot).padStart(2, '0')}-${label}.png`);
         await page.screenshot({ path: filename }); await fs.writeFile(filename.replace('.png', '.txt'), await page.locator('body').innerText());
@@ -466,47 +561,61 @@ export async function runPublishedExchangePhase() {
         if (inspect) try { await assertLayout(page, `${phase} ${item.id} ${label}`); }
         catch (error) { report.layout_failures.push({ screenshot: filename, message: String(error) }); }
         await save();
+        progress.checkpoint('screenshot.after', { case: item.id, label, file: filename });
       }
       async function get(endpoint, label) {
+        progress.checkpoint('readback.before', { case: item.id, endpoint, label });
         const response = await page.request.get(base + endpoint, { timeout: 180000 });
         try {
           const count = (readCounts.get(label) || 0) + 1; readCounts.set(label, count);
           const filename = path.join(caseDir, label + (count === 1 ? '' : '-' + count) + '-raw.json');
           const raw = await saveRawResponse(response, filename); report.http.push({ case: item.id, method: 'GET', endpoint, status: response.status(), ...raw });
+          progress.checkpoint('readback.after', { case: item.id, endpoint, label, status: response.status(), ...raw });
           assert.equal(response.status(), 200, await response.text()); return { value: await response.json(), file: filename };
         } finally { await response.dispose(); }
       }
       async function select(label, value) {
+        progress.checkpoint('select.before', { case: item.id, label });
         const field = page.getByRole('combobox', { name: label, exact: true }); await field.click();
         await page.getByRole('option', { name: value, exact: true }).click(); await expect(field).toHaveText(value);
+        progress.checkpoint('select.after', { case: item.id, label });
       }
       async function enter(operation) {
+        progress.checkpoint('navigation.before', { case: item.id, operation });
         const response = await page.goto(base + '/resources/cables/structure-import');
+        progress.checkpoint('navigation.after', { case: item.id, status: response?.status() ?? null });
         assert.ok(response); assert.equal(response.status(), 200);
         const served = await saveRawResponse(response, path.join(caseDir, 'served-production-index.html'));
         report.served_entries.push({ case: item.id, url: response.url(), request_id: identity(response.request()).id, ...served });
         const expected = frontend.files.find(file => file.path === 'index.html');
         assert.equal(served.sha256, expected.sha256); assert.equal(served.size, expected.bytes);
         assert.ok(!report.requests.some(request => ['/@vite/client', '/@react-refresh'].includes(new URL(request.url).pathname)), '生产预览不能载入开发运行时');
+        progress.checkpoint('exchange.tab.before', { case: item.id });
         await page.getByRole('tab', { name: '数据交换', exact: true }).click();
+        progress.checkpoint('exchange.tab.after', { case: item.id });
         await select('交换内容', '材料、环境与工程'); await select('交换操作', operation);
       }
       async function download(projectId, projectName, name) {
         await enter('导出本机数据'); await select('导出内容类别', '工程输入');
+        progress.checkpoint('project.selection.before', { case: item.id, project_id: projectId });
         await page.getByRole('textbox', { name: '按名称查找交换内容', exact: true }).fill(projectName);
         const row = page.locator(`[id="row-可导出的工程输入-${projectId}"]`); await expect(row).toContainText(projectName); await row.getByRole('checkbox').check();
         await expect(page.getByRole('table', { name: '已选择的交换内容', exact: true }).getByRole('row')).toHaveCount(2);
+        progress.checkpoint('project.selection.after', { case: item.id, project_id: projectId });
         await select('交换文件格式', item.format === 'json' ? 'JSON 交换文件' : 'Excel 交换文件');
         await capture(name + '只勾选明确工程');
         const selection = { asset_ids: [], workspace_ids: [projectId], format: item.format };
         const exportAction = await exports.begin(name, selection);
+        progress.checkpoint('export.click.before', { case: item.id, action_id: exportAction.record.id });
         const [exported, response] = await Promise.all([page.waitForEvent('download', { timeout: 180000 }),
           page.waitForResponse(value => new URL(value.url()).pathname === '/api/library/exchange/export' && value.request().method() === 'POST', { timeout: 180000 }),
           Promise.resolve().then(() => { exports.click(exportAction); return page.getByRole('button', { name: '导出已选资料与工程', exact: true }).click(); })]);
+        progress.checkpoint('export.download.received', { case: item.id, action_id: exportAction.record.id, status: response.status() });
         assert.equal(response.status(), 200, await response.text());
         assert.deepEqual(response.request().postDataJSON(), selection);
         const filename = path.join(caseDir, name + '.' + item.format); await exported.saveAs(filename); assert.equal(await exported.failure(), null);
         const saved = await fileEvidence(filename); assert.equal(saved.sha256, response.headers()['x-content-sha256']);
+        progress.checkpoint('export.download.saved', { case: item.id, action_id: exportAction.record.id, ...saved });
         const observation = await exports.finish(exportAction, response, saved);
         const bundle = bundleEvidence(filename, manifestFile, phase === 'source' ? path.join(caseDir, 'source-project-raw.json') : undefined);
         assert.equal(bundle.bundle_sha256, response.headers()['x-bundle-sha256']);
@@ -570,8 +679,10 @@ export async function runPublishedExchangePhase() {
             assert.deepEqual((await get('/api/types/library', 'empty-published-types')).value.items, []);
             await enter('导入交换文件'); await capture('全新目标选择文件');
             const previewAction = await observer.begin('/api/library/exchange/preview', 'published-preview');
+            progress.checkpoint('import.preview.before', { case: item.id });
             const [response] = await Promise.all([page.waitForResponse(value => new URL(value.url()).pathname === '/api/library/exchange/preview' && value.request().method() === 'POST', { timeout: 180000 }),
               Promise.resolve().then(() => page.getByLabel('资料与工程交换文件', { exact: true }).setInputFiles(item.download.file))]);
+            progress.checkpoint('import.preview.after', { case: item.id, status: response.status() });
             assert.equal(response.status(), 200, await response.text());
             const preview = await response.json(), observation = await observer.finish(previewAction, response);
             const upload = await multipartEvidence(response, item.download.file, observation); assert.deepEqual(upload.form, {});
@@ -588,7 +699,9 @@ export async function runPublishedExchangePhase() {
             const confirm = page.getByRole('button', { name: '确认导入资料与工程', exact: true }); await expect(confirm).toBeDisabled();
             await page.getByRole('checkbox', { name: '确认资料与工程交换范围', exact: true }).check(); await capture('人工确认来源但不继承审批');
             const importAction = await observer.begin('/api/library/exchange/import', 'published-import');
+            progress.checkpoint('import.confirm.before', { case: item.id });
             const [imported] = await Promise.all([page.waitForResponse(value => new URL(value.url()).pathname === '/api/library/exchange/import' && value.request().method() === 'POST', { timeout: 180000 }), Promise.resolve().then(() => confirm.click())]);
+            progress.checkpoint('import.confirm.after', { case: item.id, status: imported.status() });
             assert.equal(imported.status(), 201, await imported.text());
             const receipt = await imported.json(), importedUpload = await multipartEvidence(imported, item.download.file, await observer.finish(importAction, imported));
             assert.equal(importedUpload.request_headers['x-cablesim-actor'], 'human');
@@ -608,6 +721,7 @@ export async function runPublishedExchangePhase() {
             assert.ok(index.value.items.some(project => project.id === target.value.id && project.kind === 'project'));
             await expect(page.getByRole('link', { name: `打开工程：${item.project_name}`, exact: true })).toHaveAttribute('href', `/studies?workspace=${target.value.id}`);
             const checkpoint = path.join(directory, 'target.sqlite');
+            progress.checkpoint('target.snapshot.before', { case: item.id });
             const snapshot = pythonJSON([
               'import json,sys', 'from contextlib import closing', 'from backend.kernel.database_ops import snapshot,readonly',
               'receipt=snapshot(sys.argv[1],sys.argv[2])',
@@ -617,6 +731,7 @@ export async function runPublishedExchangePhase() {
             ].join('\n'), [process.env.CABLESIM_DB, checkpoint]);
             report.checkpoint = { ...await fileEvidence(checkpoint), ...snapshot };
             assert.equal(report.checkpoint.sha256, snapshot.snapshot.sha256);
+            progress.checkpoint('target.snapshot.after', { case: item.id, file: report.checkpoint.file, bytes: report.checkpoint.bytes, sha256: report.checkpoint.sha256 });
           } else {
             report.target = task.target; const target = await readTarget(task.target);
             const exported = await download(task.target.project_id, target.value.domain.name, 'restarted-target-ui');
@@ -626,8 +741,10 @@ export async function runPublishedExchangePhase() {
         }
       } catch (error) {
         report.failures.push({ case: item.id, message: String(error), stack: error.stack });
+        progress.checkpoint('case.failed', { case: item.id, error_code: errorCode(error) });
         await capture('失败现场', false).catch(cause => report.failures.push({ case: item.id, phase: '失败截图', message: String(cause) }));
       } finally {
+        progress.checkpoint('case.cleanup.before', { case: item.id });
         try { await observer.assertComplete(); }
         catch (error) { report.failures.push({ case: item.id, phase: '完整上传观测', message: String(error) }); }
         try { await write(path.join(caseDir, 'upload-observations.json'), await observer.snapshot()); }
@@ -641,11 +758,18 @@ export async function runPublishedExchangePhase() {
         catch (error) { report.failures.push({ case: item.id, phase: '请求与响应正文收尾', message: String(error) }); }
         try { await exports.close(); }
         catch (error) { report.failures.push({ case: item.id, phase: '原始导出响应观测收尾', message: String(error), stack: error.stack }); }
+        progress.checkpoint('context.close.before', { case: item.id });
         await context.close(); await save();
+        progress.checkpoint('context.close.after', { case: item.id }); progress.counters(() => ({}));
       }
     }
-  } catch (error) { report.failures.push({ message: String(error), stack: error.stack }); }
-  finally { if (browser) await browser.close(); await save(); }
+  } catch (error) { report.failures.push({ message: String(error), stack: error.stack }); progress.checkpoint('phase.failed', { error_code: errorCode(error) }); }
+  finally {
+    try {
+      if (browser) { progress.checkpoint('browser.close.before'); await browser.close(); progress.checkpoint('browser.close.after'); }
+      await save();
+    } finally { await progress.close(); }
+  }
   assert.deepEqual(report.errors, [], '新发布工程正向流程存在控制台、网络、取消或正文错误，全部原样保留');
   assert.deepEqual(report.failures, [], '新发布工程真实UI流程未通过');
   assert.deepEqual(report.layout_failures, [], '新发布工程截图布局未通过');
