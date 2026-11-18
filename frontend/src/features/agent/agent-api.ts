@@ -25,9 +25,11 @@ export const agentStatus = (signal?: AbortSignal) => fetch("/api/agent/status", 
 export type AgentSettings = {
   source: "settings" | "environment" | "none"; base_url: string; model: string; has_key: boolean; key_hint: string | null;
   key_source: "system" | "memory" | "environment" | null; key_storage: "system" | "memory"; configured: boolean;
-  instructions: string; model_timeout_s: number | null; environment: { base_url: boolean; model: boolean; api_key: boolean };
+  instructions: string; model_timeout_s: number | null; context_window: number | null; max_output_tokens: number | null;
+  environment: { base_url: boolean; model: boolean; api_key: boolean };
 };
-export type AgentSettingsUpdate = { base_url: string; model: string; api_key?: string; instructions: string; model_timeout_s: number | null };
+export type AgentSettingsUpdate = { base_url: string; model: string; api_key?: string; instructions: string; model_timeout_s: number | null;
+  context_window?: number | null; max_output_tokens?: number | null };
 export type AgentProbe = { ok: boolean; latency_ms?: number; model?: string; code?: string; message?: string };
 const sendJson = (method: string, body?: unknown) => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 export type MemorySettings = { enabled: boolean; recall_limit: number; available: boolean; code?: string | null; worker_error?: string | null; engineering_evidence: false };

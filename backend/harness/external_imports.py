@@ -401,10 +401,15 @@ class StructureImports:
         if proposal['action'] == 'propose_structure_import':
             return Commit(preview_id=args['preview_id'], preview_digest=args['preview_digest'],
                 request_id=pid, human_confirmed=True, skip_errors=args['skip_errors']).model_dump(mode='json')
-        return Batch(request_id=pid, operation='check', spec_ids=args['spec_ids'],
+        request = Batch(request_id=pid, operation='check', spec_ids=args['spec_ids'],
             expected_versions={row['id']: row['version'] for row in args['specs']},
             expected_revisions={row['id']: row['workspace_revision'] for row in args['specs']},
             human_confirmed=True, scope_acknowledged=True).model_dump(mode='json')
+        # T3 omits an empty optional environment lane from the durable request
+        # identity. Standard checks never adopt environments; recovery must use
+        # the same canonical body as TypeLibrary.run_batch after an upgrade.
+        request.pop('environment_references', None)
+        return request
 
     def receipt(self, proposal, result):
         name, args = proposal['action'], proposal['arguments']

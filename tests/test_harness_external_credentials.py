@@ -88,8 +88,46 @@ def test_saved_model_configuration_wins_over_studio_fallback(client, monkeypatch
     settings = client.app.state.harness.settings
     settings.update(ModelSettingsUpdate(base_url='https://saved.invalid/v1', model='human-chosen', api_key=key))
     info = client.get('/internal/agent/model', headers=AUTH)
-    assert info.json() == {'configured': True, 'source': 'settings', 'model': 'human-chosen', 'provider': 'saved.invalid'}
+    assert info.json() == {'configured': True, 'source': 'settings', 'model': 'human-chosen', 'provider': 'saved.invalid',
+                           'context_window': 64000, 'max_output_tokens': 16384}
     assert key not in info.text
+
+
+def test_model_token_settings_survive_reopen_and_reach_sidecar_without_secrets(client):
+    body = {'base_url': 'https://saved.invalid/v1', 'model': 'human-chosen',
+            'context_window': 96000, 'max_output_tokens': 12000, 'api_key': 'sentinel-' + uuid4().hex}
+    saved = client.put('/api/agent/settings', json=body)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['context_window'] == 96000 and saved.json()['max_output_tokens'] == 12000
+    settings = client.app.state.harness.settings
+    reopened = type(settings)(settings.store)
+    assert reopened.token_limits() == {'context_window': 96000, 'max_output_tokens': 12000}
+    info = client.get('/internal/agent/model', headers=AUTH)
+    assert info.json()['context_window'] == 96000 and info.json()['max_output_tokens'] == 12000
+    assert body['api_key'] not in saved.text + info.text
+    for context, expected_output in ((32768, 16384), (16384, 8192), (None, 16384)):
+        saved = client.put('/api/agent/settings', json={**body, 'context_window': context, 'max_output_tokens': None})
+        assert saved.status_code == 200, saved.text
+        assert saved.json()['context_window'] == context and saved.json()['max_output_tokens'] is None
+        info = client.get('/internal/agent/model', headers=AUTH).json()
+        assert info['context_window'] == (context or 64000) and info['max_output_tokens'] == expected_output
+    reset = client.delete('/api/agent/settings')
+    assert reset.status_code == 200 and reset.json()['context_window'] is None
+    assert settings.token_limits() == {'context_window': 64000, 'max_output_tokens': 16384}
+
+
+@pytest.mark.parametrize('limits', [
+    {'context_window': 16383}, {'context_window': 2000001}, {'context_window': True},
+    {'context_window': '64000'}, {'context_window': 64000.5}, {'max_output_tokens': 255},
+    {'max_output_tokens': 131073}, {'max_output_tokens': False}, {'max_output_tokens': 16384.5},
+    {'context_window': 32768, 'max_output_tokens': 30000}, {'max_output_tokens': 64000},
+])
+def test_invalid_model_token_limits_do_not_change_saved_settings(client, limits):
+    original = client.get('/api/agent/settings').json()
+    response = client.put('/api/agent/settings', json={
+        'base_url': 'https://saved.invalid/v1', 'model': 'bad-limits', **limits})
+    assert response.status_code == 422, response.text
+    assert client.get('/api/agent/settings').json() == original
 
 
 @pytest.mark.parametrize(('role', 'system'), [('system', '业务写入必须人工接受。'),

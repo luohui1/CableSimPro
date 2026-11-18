@@ -64,6 +64,8 @@ class ModelSettingsUpdate(StrictModel):
     api_key: str | None = Field(default=None,max_length=500)
     instructions: str = Field(default='',max_length=4000)
     model_timeout_s: int | None = None
+    context_window: int | None = Field(default=None, strict=True, ge=16384, le=2000000)
+    max_output_tokens: int | None = Field(default=None, strict=True, ge=256, le=131072)
 
 
 class ModelSettingsTest(StrictModel):

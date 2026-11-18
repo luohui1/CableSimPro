@@ -403,7 +403,7 @@ def make_router(harness, link):
         current = harness.settings.resolve()
         configured = bool(current['base_url'] and current['model'] and current['api_key'])
         return {'configured': configured, 'source': current['source'], 'model': current['model'] if configured else None,
-                'provider': urlsplit(current['base_url']).hostname if configured else None}
+                'provider': urlsplit(current['base_url']).hostname if configured else None, **harness.settings.token_limits()}
 
     @router.post('/internal/llm/v1/chat/completions', dependencies=[Depends(authorized)])
     async def completions(request: Request):
