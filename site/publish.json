@@ -7,20 +7,16 @@
 
     { "source": "docs/METHOD.md", "slug": "methods/notes/rating-basis", "label": "载流量口径与热网络参考", "order": 1 },
     { "source": "docs/plugins/IEC60287_SINGLE_CORE.md", "slug": "methods/notes/iec-60287", "label": "IEC 60287 逐项依据与算例", "order": 2 },
-    { "source": "plugins/cablesim.gb50217-correction/README.md", "slug": "methods/notes/gb-50217", "title": "GB 50217 校正插件说明", "label": "GB 50217 校正插件说明", "order": 3 },
     { "source": "docs/plugins/TYPE_ELECTRICAL.md", "slug": "methods/notes/type-electrical", "label": "型号电气参数与短路容量", "order": 3 },
     { "source": "docs/plugins/TYPE_RATING_TABLE.md", "slug": "methods/notes/type-rating-table", "label": "型号载流量表", "order": 4 },
     { "source": "docs/plugins/STANDARD_CHECK.md", "slug": "methods/notes/standard-check", "label": "产品标准尺寸核对", "order": 5 },
-    { "source": "docs/plugins/HYBRID_RATING.md", "slug": "methods/notes/hybrid-rating", "label": "混合载流量与物理对比", "order": 6 },
     { "source": "docs/plugins/BURIED_REFERENCE.md", "slug": "methods/notes/buried-reference", "title": "三根电缆均匀土壤热参考（英文）", "label": "均匀土壤热参考（英文）", "order": 7 },
     { "source": "docs/plugins/LINE_SOURCE_CROSSCHECK.md", "slug": "methods/notes/line-source-crosscheck", "title": "半空间线热源交叉校核（英文）", "label": "线热源交叉校核（英文）", "order": 8 },
     { "source": "docs/plugins/ELECTROTHERMAL_REFERENCE.md", "slug": "methods/notes/electrothermal-reference", "title": "电热耦合参考（英文）", "label": "电热耦合参考（英文）", "order": 9 },
 
     { "source": "docs/architecture/formal-deliveries.md", "slug": "develop/host/formal-deliveries", "label": "正式交付文件契约", "order": 1 },
-    { "source": "docs/architecture/customer-selection.md", "slug": "develop/host/customer-selection", "label": "选型与工程补全契约", "order": 2 },
     { "source": "docs/architecture/ASSET_WORKSPACE.md", "slug": "develop/host/asset-workspace", "label": "资源与工程资产", "order": 3 },
-    { "source": "docs/architecture/installation-scene.md", "slug": "develop/host/installation-scene", "label": "敷设场景", "order": 4 },
-    { "source": "docs/architecture/cad-viewport.md", "slug": "develop/host/cad-viewport", "label": "三维模型视口", "order": 5 }
+    { "source": "docs/architecture/installation-scene.md", "slug": "develop/host/installation-scene", "label": "敷设场景", "order": 4 }
   ],
   "unpublished": [
     { "source": "docs/design/", "reason": "内部设计与界面规划" },
@@ -39,6 +35,10 @@
     { "source": "docs/architecture/electromagnetic-losses.md", "reason": "含开发过程记录" },
     { "source": "docs/architecture/electrical-topology.md", "reason": "含开发过程记录" },
     { "source": "docs/architecture/temperature-field.md", "reason": "含开发过程记录" },
-    { "source": "docs/plugins/examples/", "reason": "示例清单以代码形式展示在站内“插件示例”页" }
+    { "source": "docs/plugins/examples/", "reason": "示例清单以代码形式展示在站内“插件示例”页" },
+    { "source": "docs/architecture/customer-selection.md", "reason": "开发验收记录（本机耗时、证据目录、原件存档位置）为主，不是读者的操作说明" },
+    { "source": "docs/plugins/HYBRID_RATING.md", "reason": "研究中的训练流程与工作目录记录，方法未进入正式计算" },
+    { "source": "docs/architecture/cad-viewport.md", "reason": "三维视口开发与超算环境锁定细节，读者无需操作" },
+    { "source": "plugins/cablesim.gb50217-correction/README.md", "reason": "插件自带说明的版本号（1.0.0）与清单（1.0.6）不一致；方法页按清单展示" }
   ]
 }

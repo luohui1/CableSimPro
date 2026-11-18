@@ -1,8 +1,8 @@
 {
-  "$comment": "公开页面的内部信息检查规则，供 scripts/check-internal.mjs 使用。hostnames 为不得公开的内部主机名；allowedPaths 为面向用户的示例路径（正则，匹配整段路径）；allowedEmails 为可以出现的邮箱域名；processTerms 为内部过程记录的标志词（正则）。放宽任何一项都要写明原因。",
+  "$comment": "公开页面的内部信息检查规则，供 scripts/check-internal.mjs 使用。hostnames 为不得公开的内部主机名（按子串、不分大小写匹配）；allowedPaths 为面向用户的示例路径（正则，匹配整段路径），只放文档里实际使用的安装、配置和数据目录示例；allowedEmails 为可以出现的邮箱域名；processTerms 为内部过程记录的标志词（正则，不分大小写）。仓库相对的 .data/ 是 AGENTS.md 记载的产品数据目录，不算内部信息。放宽任何一项都要写明原因。",
   "hostnames": ["dghpc", "dg83"],
   "allowedPaths": [
-    "^[A-Za-z]:[\\\\/]+CableSimPro[\\w.-]*(?:[\\\\/].*)?$",
+    "^[A-Za-z]:[\\\\/]CableSimPro(?:-data|-config)?(?:[\\\\/][^\\\\/]*)*$",
     "^D:[\\\\/]config[\\\\/]release\\.toml$"
   ],
   "allowedEmails": ["example.com", "example.org"],
@@ -12,10 +12,12 @@
     "Claude",
     "Gemini",
     "Copilot",
+    "Zotero",
     "会话交接",
     "交接记录",
     "修改稿",
     "未推送",
+    "(?:本|上一|这一)轮(?!廓)",
     "(?:研究|三维|仿真|几何|前端|正式前端|生产|数据|本)线程"
   ]
 }

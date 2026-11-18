@@ -47,4 +47,4 @@ python scripts/plugin_sdk.py verify  # 校验全部插件清单与封签
 
 ## 宿主契约
 
-侧栏“宿主契约”收录已经实现的宿主接口约定，例如[正式交付文件契约](host/formal-deliveries/)和[选型与工程补全契约](host/customer-selection/)。
+侧栏“宿主契约”收录已经实现的宿主接口约定，例如[正式交付文件契约](host/formal-deliveries/)。
