@@ -8,11 +8,13 @@
 //       site/ 中执行过 npm ci 与 npx playwright install chromium。
 //
 // 参数：--only factory|research  只走一条主线
-//       --url http://127.0.0.1:端口  使用已在运行、可以随意改动的实例（不要指向正式数据）
+//       --url http://127.0.0.1:端口 --allow-writes  使用已在运行的实例；脚本会在其中新建系列、研究和运行，
+//                                               只能指向可以随意改动的演示库，所以必须同时写明 --allow-writes
+// 研究院主线结束后，把页面上实际显示的结果数值写入 src/quickstart-values.json，文档正文引用这份数据。
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,8 +57,12 @@ async function startProduct() {
   const frontend = path.join(repo, '.data/release/frontend');
   if (!existsSync(path.join(frontend, 'index.html')))
     throw Error('缺少前端发布构建。请先在仓库根目录运行 python scripts/run_demo.py --no-browser，看到 “Homepage ready” 后按 Ctrl+C，再重新运行本命令。');
+  // 超算连接设置保存在仓库的 .data/hpc/ 下，不随工程库隔离；存在时不截图，避免把个人连接信息带进画面
+  if (existsSync(path.join(repo, '.data/hpc/config.json')))
+    throw Error('仓库 .data/hpc/config.json 中有超算连接设置。请在没有这份设置的检出中运行截图。');
   const scratch = path.join(repo, '.tmp/docs-screenshots', randomUUID());
-  await mkdir(scratch, { recursive: true });
+  const home = path.join(scratch, 'home');
+  await mkdir(home, { recursive: true });
   const env = {
     ...process.env,
     CABLESIM_DB: path.join(scratch, 'engineering.sqlite'),
@@ -69,10 +75,14 @@ async function startProduct() {
     USERNAME: 'engineer',
     USER: 'engineer',
     LOGNAME: 'engineer',
+    // 用户目录指到临时目录：读不到本机的 SSH 主机别名、凭据和其他个人配置
+    HOME: home,
+    USERPROFILE: home,
   };
   // 截图不调用任何外部模型或识别服务
   for (const key of Object.keys(env))
-    if (/^(MISTRAL|OPENAI|ANTHROPIC|DEEPSEEK|CABLE_STUDIO_MODEL|CABLESIM_MODEL)/.test(key)) delete env[key];
+    if (/^(MISTRAL|OPENAI|ANTHROPIC|DEEPSEEK|DASHSCOPE|ZHIPU|MOONSHOT|CABLE_STUDIO_MODEL|CABLESIM_MODEL|CABLESIM_LLM|CABLESIM_DATASHEET|CABLESIM_AGENT|CABLESIM_HPC|FUSION_)/.test(key))
+      delete env[key];
   console.log(`临时工程库：${scratch}\n用发布种子生成示例数据（约 5–10 分钟）……`);
   const seed = [
     'import importlib.util, sys',
@@ -82,7 +92,13 @@ async function startProduct() {
     'spec.loader.exec_module(module)',
     'module.seed_release(Path(sys.argv[1]))',
   ].join('\n');
-  await run(python, ['-c', seed, env.CABLESIM_DB], { env });
+  const discard = () => rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+  try {
+    await run(python, ['-c', seed, env.CABLESIM_DB], { env });
+  } catch (error) {
+    await discard();
+    throw error;
+  }
   const port = await freePort();
   let log = '';
   const server = spawn(
@@ -93,23 +109,26 @@ async function startProduct() {
   server.stdout.on('data', (chunk) => (log += chunk));
   server.stderr.on('data', (chunk) => (log += chunk));
   const url = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; ; attempt++) {
-    if (server.exitCode !== null) throw Error('产品服务启动失败：\n' + log.slice(-3000));
-    try {
-      if ((await fetch(url + '/api/health')).ok) break;
-    } catch {}
-    if (attempt > 480) throw Error('产品服务 120 秒内没有就绪：\n' + log.slice(-3000));
-    await wait(250);
-  }
-  return {
-    url,
-    scratch,
-    async stop() {
-      server.kill();
-      await new Promise((resolve) => (server.exitCode !== null ? resolve() : server.once('exit', resolve)));
-      await rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
-    },
+  const stop = async () => {
+    server.kill();
+    await new Promise((resolve) => (server.exitCode !== null ? resolve() : server.once('exit', resolve)));
+    await discard();
   };
+  // 没等到就绪也要停掉服务、删掉临时库，不留下占着端口的进程
+  try {
+    for (let attempt = 0; ; attempt++) {
+      if (server.exitCode !== null) throw Error('产品服务启动失败：\n' + log.slice(-3000));
+      try {
+        if ((await fetch(url + '/api/health')).ok) break;
+      } catch {}
+      if (attempt > 480) throw Error('产品服务 120 秒内没有就绪：\n' + log.slice(-3000));
+      await wait(250);
+    }
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+  return { url, scratch, stop };
 }
 
 // ---------------------------------------------------------------- 截图工具
@@ -306,6 +325,9 @@ async function research(page, capture, base, scratch) {
     await page.getByRole('button', { name: '预检并运行', exact: true }).click();
     const preflight = page.getByRole('dialog', { name: '运行前预检', exact: true });
     await preflight.waitFor();
+    // 预检结果读完后“确认并运行”才可用；等它可用再截图，画面里不留加载中的状态
+    const ready = await preflight.getByRole('button', { name: '确认并运行', exact: true }).elementHandle();
+    await page.waitForFunction((button) => !button.disabled, ready, { timeout: 120000 });
     return preflight;
   };
   const confirm = async (preflight, previous) => {
@@ -319,6 +341,13 @@ async function research(page, capture, base, scratch) {
     return page.getByText(/^允许电流 [\d.]+ A/).first().innerText();
   };
 
+  // 文档正文引用的数值取自页面上实际显示的结论，不手写
+  const reading = (text) => {
+    const match = text.match(/允许电流 ([\d.]+) A.*?运行 ([\d.]+) A 时最热导体 ([\d.]+) °C.*?距 ([\d.]+) °C 温限 ([\d.]+) K/s);
+    if (!match) throw Error(`结论文字的格式变了，读不出数值：${text}`);
+    const [, ampacity, load, hottest, limit, margin] = match;
+    return { ampacity_a: ampacity, load_a: load, hottest_conductor_c: hottest, limit_c: limit, margin_k: margin };
+  };
   let preflight = await runOnce();
   await capture('preflight');
   const first = await confirm(preflight);
@@ -330,8 +359,9 @@ async function research(page, capture, base, scratch) {
   await page.getByRole('button', { name: '保存修改', exact: true }).click();
   await page.getByRole('button', { name: '已保存', exact: true }).waitFor();
   preflight = await runOnce();
-  await confirm(preflight, first.match(/允许电流 [\d.]+ A/)[0]);
+  const second = await confirm(preflight, first.match(/允许电流 [\d.]+ A/)[0]);
   await capture('result-changed');
+  const values = { base: reading(first), changed: reading(second) };
 
   await page.getByRole('button', { name: '运行记录', exact: true }).click();
   const boxes = page.getByRole('checkbox', { name: /^对比 第 \d+ 次运行/ });
@@ -359,6 +389,7 @@ async function research(page, capture, base, scratch) {
   const file = path.join(scratch, 'calculation.pdf');
   await (await pdf).saveAs(file);
   await capture('report-pdf', await pdfPage(file));
+  return values;
 }
 
 // ---------------------------------------------------------------- 主流程
@@ -366,6 +397,8 @@ const flows = { factory, research };
 const selected = only ? [only] : Object.keys(flows);
 if (selected.some((name) => !flows[name])) throw Error(`--only 只能是 ${Object.keys(flows).join(' 或 ')}`);
 
+if (option('--url') && !process.argv.includes('--allow-writes'))
+  throw Error('--url 会在目标实例里新建系列、研究和运行。确认它是可以随意改动的演示库后，加上 --allow-writes 再运行。');
 const product = option('--url')
   ? { url: option('--url').replace(/\/$/, ''), scratch: path.join(repo, '.tmp/docs-screenshots', randomUUID()), stop: async () => {} }
   : await startProduct();
@@ -380,8 +413,9 @@ try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 1, locale: 'zh-CN', acceptDownloads: true });
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
+    let values;
     try {
-      await flows[name](page, recorder(page, name, staging), product.url, product.scratch);
+      values = await flows[name](page, recorder(page, name, staging), product.url, product.scratch);
     } catch (error) {
       failed = true;
       const scene = path.join(repo, '.tmp/docs-screenshots', `failure-${name}.png`);
@@ -396,6 +430,13 @@ try {
     await rm(target, { recursive: true, force: true });
     await mkdir(shotsRoot, { recursive: true });
     await rename(staging, target);
+    if (values) {
+      const file = path.join(site, 'src/quickstart-values.json');
+      const data = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {};
+      data[name] = values;
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify(data, null, 2) + '\n');
+    }
     console.log(`主线 ${name} 完成：${(await readdir(target)).length} 张截图`);
   }
 } finally {

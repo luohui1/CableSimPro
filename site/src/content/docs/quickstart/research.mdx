@@ -4,6 +4,10 @@ description: 新建工程，做 110 kV 电缆直埋载流量研究，改土壤�
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
+import values from '../../../quickstart-values.json';
+
+export const base = values.research.base;
+export const changed = values.research.changed;
 
 本篇按真实操作走完研究院最常用的一条线：**新建工程 → 直埋载流量研究 → 改条件对比 → 计算书**，约 10 分钟。截图来自随安装包提供的示例库，数值都是软件实际算出来的。
 
@@ -44,7 +48,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 如果某一项超出方法范围或缺少必需参数，预检会逐条写明原因，**确认并运行** 按钮不可用。软件不会自己估一个值替你算下去。
 </Aside>
 
-确认无误后点 **确认并运行**，几秒后结果出现在研究页顶部。本例在 90.0 °C 温限下的允许电流为 944.8 A；按 350 A 运行时最热导体 33.5 °C，距温限还有 56.5 K。
+确认无误后点 **确认并运行**，几秒后结果出现在研究页顶部。本例在 {base.limit_c} °C 温限下的允许电流为 {base.ampacity_a} A；按 {base.load_a} A 运行时最热导体 {base.hottest_conductor_c} °C，距温限还有 {base.margin_k} K。
 
 ![第一次运行结果：允许电流、最热导体温度和温限余量](../../../assets/screenshots/research/result-base.webp)
 
@@ -57,7 +61,7 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 
 </Steps>
 
-土壤热阻率变大后散热变差，本例允许电流降到 801.1 A。第一次的结果仍然保存着，研究里标为历史结果，不会被覆盖。
+土壤热阻率变大后散热变差，本例允许电流降到 {changed.ampacity_a} A。第一次的结果仍然保存着，研究里标为历史结果，不会被覆盖。
 
 ![土壤热阻率改为 1.5 K·m/W 后的结果](../../../assets/screenshots/research/result-changed.webp)
 
