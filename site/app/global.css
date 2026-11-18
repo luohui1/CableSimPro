@@ -131,3 +131,20 @@ html > body[data-scroll-locked] {
     left bottom;
   background-repeat: no-repeat;
 }
+
+/* 首页：依据标准的滚动条（两份内容首尾相接，悬停暂停） */
+@keyframes ticker {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.ticker {
+  animation: ticker 44s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker {
+    animation: none;
+  }
+}

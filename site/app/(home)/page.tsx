@@ -7,6 +7,7 @@ import { Hero } from '@/components/landing/hero';
 import { CountUp, PixelWordmark, Reveal } from '@/components/landing/motion-bits';
 import { RulerBar } from '@/components/landing/ruler-bar';
 import { ScreenshotTabs } from '@/components/landing/screenshot-tabs';
+import { AiSection, CoreLines, DeployAndDocs, PluginWall, StandardsTicker, ThermalSection } from '@/components/landing/sections';
 import { SourceChain } from '@/components/landing/source-chain';
 import importMapping from '@/src/assets/screenshots/factory/import-mapping.webp';
 import specPdf from '@/src/assets/screenshots/factory/spec-pdf.webp';
@@ -36,13 +37,24 @@ const shots = [
 ];
 
 // 数字在构建时从插件清单（plugins/*/plugin.json）统计，不手写
-const pluginList = catalog.plugins as unknown as { capabilities: { validation: { cases: unknown[] } }[] }[];
+const pluginList = catalog.plugins as unknown as {
+  id: string;
+  name: string;
+  version: string;
+  capabilities: { validation: { cases: unknown[] } }[];
+}[];
 let capabilityCount = 0;
 let caseCount = 0;
 for (const plugin of pluginList) {
   capabilityCount += plugin.capabilities.length;
   for (const capability of plugin.capabilities) caseCount += capability.validation.cases.length;
 }
+const tiles = pluginList.map((plugin) => ({
+  id: plugin.id,
+  name: plugin.name,
+  version: plugin.version,
+  capabilities: plugin.capabilities.length,
+}));
 const stats = [
   { value: pluginList.length, label: '第一方插件' },
   { value: capabilityCount, label: '计算与核对能力' },
@@ -54,6 +66,7 @@ export default function HomePage() {
     <main className="w-full overflow-x-clip">
       <Hero />
       <RulerBar sections={sections} />
+      <StandardsTicker />
 
       {/* 是什么 */}
       <section className="mx-auto max-w-[1400px] px-6 py-20 md:py-24">
@@ -77,6 +90,9 @@ export default function HomePage() {
         </Reveal>
       </section>
 
+      <CoreLines />
+      <AiSection />
+
       {/* 插件与核对：反色色带 */}
       <section className="border-y border-fd-foreground/60 bg-fd-foreground text-fd-background">
         <div className="mx-auto grid max-w-[1400px] gap-10 px-6 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] lg:items-end">
@@ -96,10 +112,19 @@ export default function HomePage() {
             ))}
           </Reveal>
         </div>
+        <div className="mx-auto max-w-[1400px] px-6 pb-16">
+          <Reveal>
+            <PluginWall plugins={tiles} />
+          </Reveal>
+        </div>
       </section>
 
+      <ThermalSection />
+      <DeployAndDocs />
+
       {/* 收尾 */}
-      <section className="mx-auto max-w-[1400px] px-6 pb-6 pt-20 text-center md:pt-24">
+      <section className="border-t border-fd-foreground/60">
+        <div className="mx-auto max-w-[1400px] px-6 pb-6 pt-20 text-center md:pt-24">
         <Reveal>
           <h2 className="font-display text-[34px] leading-snug text-balance sm:text-[46px]">
             <span className="whitespace-nowrap">挑一条工作线，</span>
@@ -115,6 +140,7 @@ export default function HomePage() {
             </Link>
           </div>
         </Reveal>
+        </div>
       </section>
       <div className="mt-10 overflow-hidden pb-4">
         <PixelWordmark text="CableSimPro" />
