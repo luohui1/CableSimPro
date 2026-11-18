@@ -184,7 +184,7 @@ jobs:
         id: workbench-openapi
         working-directory: frontend
         env:
-          E2E_PYTHON: ${{ github.workspace }}/.venv/bin/python
+          PYTHON: ${{ github.workspace }}/.venv/bin/python
         run: node scripts/isolated-e2e.mjs generate-api.mjs
       - name: Preserve formally generated API types for review
         if: ${{ !cancelled() && steps.workbench-openapi.outcome == 'success' && matrix.task == 'walks' }}
