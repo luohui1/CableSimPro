@@ -642,8 +642,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
           ['materials.insulation_loss_tangent', '绝缘介质损耗因数', '手册仅给出含 tanδ 的介质损耗公式，没有公布 tanδ 数值；旧版独立参考情景使用 IEC 参考值 0.004。'],
         ];
         for (const row of compared.rows) for (const [field, label, reason] of lossReasons) assert.deepEqual(row.metrics.ampacity.missing_fields.find(item => item.field === field), { field, label, reason });
-        const firstManufacturer = page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('row').nth(1);
-        const visibleReasons = lossReasons.map(([, label, reason]) => firstManufacturer.getByText(`${label}：${reason}`, { exact: true }));
+        // Every Bahra row shares one refusal: it is written once above the table, item reasons on demand, and the table drops its reason column.
+        const shared = page.getByRole('region', { name: '载流量共同说明', exact: true });
+        await expect(shared).toContainText(`适用于全部 ${sample.count} 个规格`);
+        await expect(page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('columnheader', { name: '原因、方法与可信分档' })).toHaveCount(0);
+        await shared.locator('summary').first().click();
+        const visibleReasons = lossReasons.map(([, label, reason]) => shared.getByText(`${label}：${reason}`, { exact: true }));
         await visibleReasons[0].evaluate(element => element.scrollIntoView({ block: 'center' }));
         for (const reason of visibleReasons) await expect(reason).toBeInViewport({ ratio: 1 });
         await capture('Bahra电容量指南与介质损耗缺项范围');
@@ -756,7 +760,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       const calculatedRow = page.getByRole('table', { name: '研究情景载流量逐规格对照', exact: true }).getByRole('row').nth(firstCalculated + 1);
       await expect(calculatedRow).toContainText(calculated.rows[firstCalculated].metrics.ampacity.value.toLocaleString('zh-CN', { maximumFractionDigits: 3, useGrouping: false }));
       await expect(calculatedRow).toContainText('研究参考值，非厂家核验');
-      await expect(calculatedRow).toContainText('厂家核验仍为拒绝计算');
+      await expect(page.getByLabel('研究参考情景说明', { exact: true })).toContainText('厂家缺项与拒算原因不变');
       await calculatedRow.evaluate(element => element.scrollIntoView({ block: 'center' }));
       await capture(`${sample.id}-研究参考数值差异与厂家拒绝并列`);
       await page.getByRole('button', { name: '厂家数据与缺项', exact: true }).click();

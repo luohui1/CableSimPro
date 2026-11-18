@@ -19,7 +19,7 @@ import { ReferenceResources } from './reference-resources';
 import { ResourceApplications } from './resource-applications';
 import { LibraryDialog } from './dialog';
 import { displayUnit } from '@/lib/display-names';
-import { displayLibraryText, issueText, libraryPost, libraryRequest, methodText, normalizeSeriesDeclaration, tableHeaderText, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type Upload, type Vocabulary } from './api';
+import { displayLibraryText, issueText, libraryPost, libraryRequest, methodText, normalizeSeriesDeclaration, tableHeaderText, type CommitReceipt, type Mapping, type Preview, type PreviewRow, type SeriesDeclaration, type SeriesSummary, type Upload, type Vocabulary } from './api';
 import './library-import.css';
 
 const STEPS = ['选择文件', '选择工作表', '列映射', '系列声明', '预览入库'];
@@ -77,6 +77,14 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
   const missingBasis = Object.keys(series.common).filter(key => !series.common_basis[key]?.trim());
   const missingModelBasis = Object.keys(series.modelling).filter(key => !series.modelling[key].reference?.trim());
   const importable = preview?.rows.filter(row => row.status !== 'error').length || 0;
+  // Series names are unique; checking them while the declaration is written avoids
+  // reviewing a full preview only to be refused at the final confirmation.
+  const existingSeries = useQuery({ queryKey: ['type-library', 'series'], enabled: step >= 3, queryFn: ({ signal }) => libraryRequest<{ items: SeriesSummary[] }>('/series', { signal }) });
+  const seriesName = series.name.trim();
+  const nameTaken = !!seriesName && !!existingSeries.data?.items.some(item => item.name.trim() === seriesName);
+  // From the declaration on, the failing action sits at the bottom of a long page, so its error is shown beside it.
+  const errorNearActions = !receipt && step >= 3;
+  const actionError = error && errorNearActions ? <p role="alert" className="field-error library-import-error">{error}</p> : null;
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -214,7 +222,9 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       <h2 ref={heading} tabIndex={-1}>填写系列声明与来源</h2>
       <DeclarationForm value={series} onChange={updateSeries} vocabulary={{ ...vocabulary, fields }} mapped={new Set(Object.keys(mapping))} />
       {(missingBasis.length > 0 || missingModelBasis.length > 0) && <p className="field-error" role="status">请补充依据：{[...missingBasis, ...missingModelBasis].map(key => fields.find(field => field.key === key)?.label || vocabulary.modelling.find(field => field.key === key)?.label || '参数').join('、')}。</p>}
-      <div className="library-import-actions"><Button type="button" onClick={() => changeStep(2)}>上一步</Button><Button type="submit" variant="primary" loading={!!busy} disabled={!series.name.trim() || !series.designation.trim() || !series.u0_v || !series.u_v || missingBasis.length > 0 || missingModelBasis.length > 0}>逐行校验并预览</Button></div>
+      {nameTaken && <p className="field-error" role="status">系列名称“{seriesName}”已被现有系列使用，请在上方修改系列名称后再预览。</p>}
+      {actionError}
+      <div className="library-import-actions"><Button type="button" onClick={() => changeStep(2)}>上一步</Button><Button type="submit" variant="primary" loading={!!busy} disabled={!seriesName || nameTaken || !series.designation.trim() || !series.u0_v || !series.u_v || missingBasis.length > 0 || missingModelBasis.length > 0}>逐行校验并预览</Button></div>
     </form>;
   } else if (preview) {
     body = <div className="library-import-stack">
@@ -247,9 +257,15 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       {preview.error_count > 0 && <label className="library-import-confirm"><Checkbox checked={skipErrors} onCheckedChange={value => setSkipErrors(value === true)} aria-label="明确跳过错误行" /><span>明确跳过 {preview.error_count} 个错误行，仅保存其余 {importable} 个规格；错误行需回原表更正。</span></label>}
       <label className="library-import-confirm"><Checkbox checked={confirmed} onCheckedChange={value => setConfirmed(value === true)} aria-label="确认来源与系列声明" /><span>我已核对原始资料、列映射、系列声明与执行标准来源，确认将本次预览保存为未发布草稿。</span></label>
       {!importable && <p className="field-error">没有可入库的规格，请返回修正列映射或原始结构表。</p>}
+      {actionError}
       <div className="library-import-actions"><Button disabled={!!busy} onClick={() => changeStep(3)}>返回修改声明</Button><Button variant="primary" loading={!!busy} disabled={!importable || !confirmed || !preview.execution_standards || (preview.error_count > 0 && !skipErrors)} onClick={() => void run('正在保存型号草稿', async () => {
-        const result = await libraryPost<CommitReceipt>('/imports/commit', { preview_id: preview.preview_id, preview_digest: preview.preview_digest, request_id: requestId.current, human_confirmed: true, skip_errors: skipErrors });
-        setReceipt(result); await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
+        try {
+          const result = await libraryPost<CommitReceipt>('/imports/commit', { preview_id: preview.preview_id, preview_digest: preview.preview_digest, request_id: requestId.current, human_confirmed: true, skip_errors: skipErrors });
+          setReceipt(result);
+        } finally {
+          // A refusal may come from a series saved meanwhile; refresh the names the declaration step checks.
+          await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
+        }
       })}>确认入库 {importable} 个规格</Button></div>
     </div>;
   }
@@ -261,7 +277,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     </div>
     {upload && !receipt && <p className="library-import-file">{upload.file}{sheetName && ` · ${sheetName}`}</p>}
     {vocabularyQuery.isPending ? <LoadingState title="正在读取导入字段" /> : vocabularyQuery.isError ? <ErrorState description={message(vocabularyQuery.error)} action={<Button onClick={() => void vocabularyQuery.refetch()}>重新读取字段</Button>} /> : null}
-    {error && <p role="alert" className="field-error library-import-error">{error}</p>}
+    {error && !errorNearActions && <p role="alert" className="field-error library-import-error">{error}</p>}
     {busy && <p role="status" className="muted">{busy}…</p>}
     {body}
     <LibraryDialog open={!!previewRow} onOpenChange={open => { if (!open) setPreviewRow(null); }} title={previewRow ? `原表第 ${previewRow.row_number} 行 · ${previewRow.name || '数值预览'}` : '数值预览'} description="确认入库前逐项核对数值、原表位置、方法版本与可信分档。" initialFocus="form">
