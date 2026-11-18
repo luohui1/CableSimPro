@@ -562,6 +562,70 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         { run: second.id, delivery: deliveryId, pdfSha256, preview: binding, pixels: finalPixels });
     }
   });
+  await independent('08b-official-calculation-pdf-and-excel', async () => {
+    // The formal T4 route is deliberately separate from archived HTML/PDF.
+    // It must export the already verified second run without launching a solver.
+    await expect(page).toHaveURL(/delivery=/);
+    const opener = page.getByRole('button', { name: '正式交付（PDF / Excel）', exact: true });
+    await expect(opener).toBeEnabled({ timeout: 60000 });
+    const savedBefore = await api('/api/workspaces/' + wid);
+    await opener.click();
+    const dialog = page.getByRole('dialog', { name: '正式交付文件', exact: true });
+    await expect(dialog).toBeVisible();
+    const documentFields = [
+      ['正式文件单位名称', 'T1 隔离工程验收单位'],
+      ['正式文件编号', 'T1-CALC-' + tag],
+      ['正式文件版次', 'A'],
+    ];
+    for (const [label, value] of documentFields) await dialog.getByRole('textbox', { name: label, exact: true }).fill(value);
+    const endpoint = '/api/formal-deliveries';
+    const [response] = await Promise.all([
+      page.waitForResponse(reply => new URL(reply.url()).pathname === endpoint + '/preview'
+        && reply.request().method() === 'POST', { timeout: 180000 }),
+      dialog.getByRole('button', { name: '核对来源并预览', exact: true }).click(),
+    ]);
+    const model = await response.json();
+    const request = response.request().postDataJSON();
+    const validSources = Object.values(model.sources || {}).every(value => !Object.hasOwn(value || {}, 'payload'));
+    check('正式计算书从实际二次运行生成完整模型预览', response.ok() && model.kind === 'calculation'
+      && request.kind === 'calculation' && request.source.workspace_id === wid
+      && request.source.expected_revision === savedBefore.revision
+      && request.source.runs.length === 1
+      && request.source.runs[0].run_id === second.id
+      && request.source.runs[0].input_digest === second.input_digest
+      && request.source.runs[0].output_digest === second.output_digest
+      && /^[a-f0-9]{64}$/.test(model.model_digest)
+      && /^[a-f0-9]{64}$/.test(model.source_digest) && validSources,
+      { kind: model.kind, run: request.source.runs, expectedRevision: request.source.expected_revision,
+        sourceDigest: model.source_digest, modelDigest: model.model_digest });
+    await dialog.getByRole('checkbox', { name: '已核对正式交付来源和签栏', exact: true }).check();
+    for (const format of ['pdf', 'xlsx']) {
+      const [reply, download] = await Promise.all([
+        page.waitForResponse(item => new URL(item.url()).pathname === endpoint + '/export'
+          && item.request().method() === 'POST', { timeout: 180000 }),
+        page.waitForEvent('download', { timeout: 180000 }),
+        dialog.getByRole('button', { name: format === 'pdf' ? '下载正式 PDF' : '下载 Excel', exact: true }).click(),
+      ]);
+      const file = path.join(out, 'formal-calculation-' + tag + '.' + format);
+      await download.saveAs(file);
+      const bytes = await fs.readFile(file), headers = reply.headers(), payload = reply.request().postDataJSON();
+      const byteDigest = createHash('sha256').update(bytes).digest('hex');
+      check('正式计算书' + format.toUpperCase() + '文件与预览和实发字节完全同源', reply.ok()
+        && payload.expected_model_digest === model.model_digest && payload.format === format
+        && headers['x-delivery-model-sha256'] === model.model_digest
+        && headers['x-delivery-source-sha256'] === model.source_digest
+        && headers['x-artifact-sha256'] === byteDigest
+        && (format === 'pdf' ? bytes.subarray(0, 5).toString() === '%PDF-' : bytes.subarray(0, 2).toString() === 'PK'),
+        { file: path.basename(file), bytes: bytes.length, sha256: byteDigest,
+          sourceDigest: headers['x-delivery-source-sha256'], modelDigest: headers['x-delivery-model-sha256'] });
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    const savedAfter = await api('/api/workspaces/' + wid);
+    check('正式文件预览和双格式导出不改写研究输入', savedAfter.revision === savedBefore.revision
+      && JSON.stringify(savedAfter.domain) === JSON.stringify(savedBefore.domain),
+      { beforeRevision: savedBefore.revision, afterRevision: savedAfter.revision });
+  });
   await independent('09-create-type-from-research', async () => {
     const sidebar = page.locator('.workbench-sidebar');
     const visibleObjects = () => sidebar.locator('a.tree-object').evaluateAll(links => links.map(link => {

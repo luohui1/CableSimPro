@@ -875,7 +875,17 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await ack.check();
     await dialog.getByRole('button', { name: '确认并运行', exact: true }).click();
     await expect(dialog).toBeHidden({ timeout: 180000 });
-    await expect(page.locator(`[data-type-page="${resultPage}"]`)).toHaveAttribute('data-type-state', 'success', { timeout: 180000 });
+    const result = page.locator(`[data-type-page="${resultPage}"]`);
+    await expect.poll(async () => {
+      const state = await result.getAttribute('data-type-state');
+      if (state === 'success') return 'success';
+      return await page.locator('.type-run-control [role="alert"]').count() ? 'failed' : 'pending';
+    }, { timeout: 180000, message: label + '必须取得保存结果或显示真实失败诊断' }).not.toBe('pending');
+    const state = await result.getAttribute('data-type-state');
+    if (state !== 'success') {
+      const errors = await page.locator('.type-run-control [role="alert"]').allInnerTexts();
+      throw new Error(label + '真实运行失败：' + (errors.join('；') || '未取得有效当前结果'));
+    }
     check(label + '取得当前保存结果', true);
     return true;
   }
@@ -1660,9 +1670,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     const input = editor.getByRole('textbox', { name: '型号结构来源', exact: true });
     await expect(input).toBeVisible();
     const previousText = await input.inputValue();
-    // If the same citation is already present, a trailing line break exercises
-    // the editor without inventing a different engineering source.
-    const enteredReference = previousText === reference ? reference + '\n' : reference;
+    // The host intentionally trims trailing whitespace. Exercise a meaningful
+    // inner-line formatting edit instead: the parsed citation stays identical,
+    // while the saved source text must survive undo, commit, and reload exactly.
+    const enteredReference = previousText === reference ? reference.replace(/,\s+"/, ',\n"') : reference;
+    expect(enteredReference).not.toBe(previousText);
     await input.fill(enteredReference);
     await input.press('Tab');
     await expect.poll(dirty).toBe(true);

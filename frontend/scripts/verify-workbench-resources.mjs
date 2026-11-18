@@ -477,9 +477,33 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     const trace = { width: size.width, workspace: referenceWorkspace.id, plan, sources: [] };
     report.standardReferences.push(trace);
     check('执行版本来自当前输入的真实依据查询', response.ok() && plan.workspace_revision === before.revision
-      && Array.isArray(plan.undeclared_standards) && plan.undeclared_standards.length > 0,
-    { status: response.status(), revision: before.revision, plan });
+      && Array.isArray(plan.undeclared_standards) && Array.isArray(plan.missing_fields),
+    { status: response.status(), revision: before.revision,
+      declaredCount: plan.undeclared_standards.length, missingFields: plan.missing_fields, sourceCount: Object.keys(plan.parameters?.basis_references || {}).length });
     const declarations = plan.undeclared_standards;
+    if (!declarations.length) {
+      // Do not manufacture a new edition or sign a new revision when the host
+      // reports all standards already declared. Surface the actual remaining
+      // modelling gaps in the UI instead of an unhelpful disabled confirm.
+      const gaps = plan.missing_fields.map(item => item.reason).filter(Boolean);
+      const status = dialog.getByRole('status', { name: '执行标准版本与缺项', exact: true });
+      await expect(status).toBeVisible();
+      for (const reason of gaps) await expect(status).toContainText(reason);
+      check('无待声明版本时不得重复写入执行标准且必须定位真实缺项',
+        plan.unbound_standard_count > 0 && gaps.length > 0
+          && await dialog.getByRole('button', { name: '返回要求清单', exact: true }).isEnabled(),
+        { gaps, unboundCount: plan.unbound_standard_count, versionCount: 0 });
+      await capture('standard-existing-editions-with-real-missing-inputs');
+      await dialog.getByRole('button', { name: '返回要求清单', exact: true }).click();
+      const after = await api(`/api/workspaces/${referenceWorkspace.id}`);
+      check('只读查询和关闭缺项提示不创建新标准版本',
+        after.revision === before.revision && JSON.stringify(after.domain) === JSON.stringify(before.domain),
+        { before: before.revision, after: after.revision });
+      check('执行标准所需型号条件仍未闭合，不能宣称完整核对', false,
+        { gaps, unboundCount: plan.unbound_standard_count, owner: 'T3 方法与材料依据' },
+        { fatal: false });
+      return null;
+    }
     for (const declaration of declarations) {
       check('待声明版本有真实标准名和来源摘要', typeof declaration.standard === 'string' && !!declaration.standard
         && /^[a-f0-9]{64}$/.test(declaration.source_digest), declaration);
