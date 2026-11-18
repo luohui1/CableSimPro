@@ -40,11 +40,154 @@ function workspaceLabel(items, id) {
   return `${current.name} · 输入修订 ${current.revision}${same.length > 1 ? ` · 同名条目 ${same.findIndex(item => item.id === id) + 1}${current.updated_at ? ` · ${current.updated_at}` : ''}` : ''}`;
 }
 
+/** Observe the real page without replacing fetch or changing query state. A
+ * response event proves headers only; finished/body observations are separate. */
+async function observeStudyOpening({ page, base, viewport, out, write, workspaceId, studyId }) {
+  const started = performance.now(), origin = new URL(base).origin;
+  let sequence = 0, phase = 'registering', closed = false;
+  const ledger = { schema_version: 'cablesim.study-open-observation/1', workspace_id: workspaceId, study_id: studyId,
+    viewport, scope: 'All same-origin page API requests during this operation; direct API readbacks remain in the applications HTTP index.',
+    started_at: new Date().toISOString(), boundaries: [], requests: [], navigations: [], errors: [] };
+  const byRequest = new Map(), pending = new Set();
+  const stamp = () => ({ sequence: ++sequence, at: new Date().toISOString(), elapsed_ms: performance.now() - started, phase });
+  async function bounded(promise, timeoutMs) {
+    let timer;
+    try {
+      return await Promise.race([promise.then(value => ({ status: 'complete', value }), error => ({ status: 'error', error: String(error) })),
+        new Promise(resolve => { timer = setTimeout(() => resolve({ status: 'timeout', timeout_ms: timeoutMs }), timeoutMs); })]);
+    } finally { clearTimeout(timer); }
+  }
+  function requestRecord(request, observedEvent) {
+    if (closed) return null;
+    const url = new URL(request.url());
+    if (url.origin !== origin || !url.pathname.startsWith('/api/')) return null;
+    if (!byRequest.has(request)) {
+      const headers = request.headers(), body = request.postDataBuffer();
+      const item = { id: ledger.requests.length + 1, url: request.url(), method: request.method(),
+        resource_type: request.resourceType(), navigation_request: request.isNavigationRequest(),
+        first_observed_event: observedEvent, first_observed: stamp(),
+        request_headers: Object.fromEntries(['content-type', 'x-cablesim-actor'].filter(key => headers[key] !== undefined).map(key => [key, headers[key]])),
+        post_data: body === null ? { available: false } : { available: true, bytes: body.length, sha256: createHash('sha256').update(body).digest('hex') },
+        request_started: null, request_finished: null, request_failed: null, response: null, timing: request.timing() };
+      byRequest.set(request, item); ledger.requests.push(item);
+    }
+    return byRequest.get(request);
+  }
+  const onRequest = request => { const item = requestRecord(request, 'request'); if (item) item.request_started = stamp(); };
+  const onFinished = request => { const item = requestRecord(request, 'requestfinished'); if (item) { item.request_finished = stamp(); item.timing = request.timing(); } };
+  const onFailed = request => {
+    const item = requestRecord(request, 'requestfailed');
+    if (item) { item.request_failed = { ...stamp(), failure: request.failure() }; item.timing = request.timing(); }
+  };
+  const onResponse = response => {
+    const request = response.request(), item = requestRecord(request, 'response');
+    if (!item) return;
+    const headers = response.headers();
+    item.response = { headers_observed: stamp(), status: response.status(), status_text: response.statusText(),
+      headers: Object.fromEntries(['content-type', 'content-length', 'etag'].filter(key => headers[key] !== undefined).map(key => [key, headers[key]])),
+      finished: null, body: null };
+    const task = (async () => {
+      let stage = 'response.finished';
+      try {
+        const result = await response.finished();
+        if (closed) return;
+        item.response.finished = { ...stamp(), result: result === null ? 'null' : 'error', error: result === null ? null : String(result) };
+        item.timing = request.timing();
+        if (result !== null) return;
+        stage = 'response.body';
+        const bytes = await response.body();
+        if (closed) return;
+        const filename = `${viewport.width}-applications-study-open-response-${String(item.id).padStart(3, '0')}.json`;
+        item.response.body = { ...stamp(), status: 'writing', file: filename, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+        stage = 'write_response_body';
+        await fs.writeFile(path.join(out, filename), bytes);
+        if (!closed) item.response.body = { ...item.response.body, saved: stamp(), status: 'saved' };
+      } catch (error) {
+        if (closed) return;
+        const failure = { ...stamp(), result: 'rejected', error: String(error) };
+        if (stage === 'response.finished') item.response.finished = failure;
+        else item.response.body_error = { ...failure, stage };
+      }
+    })();
+    pending.add(task); void task.finally(() => pending.delete(task));
+  };
+  const onNavigation = frame => { if (!closed && frame === page.mainFrame()) ledger.navigations.push({ ...stamp(), url: frame.url() }); };
+  const onConsole = entry => { if (!closed && entry.type() === 'error') ledger.errors.push({ ...stamp(), kind: 'console', message: entry.text(), location: entry.location() }); };
+  const onPageError = error => { if (!closed) ledger.errors.push({ ...stamp(), kind: 'page', message: String(error) }); };
+  const listeners = { request: onRequest, requestfinished: onFinished, requestfailed: onFailed, response: onResponse,
+    framenavigated: onNavigation, console: onConsole, pageerror: onPageError };
+  for (const [event, listener] of Object.entries(listeners)) page.on(event, listener);
+  const originalDocument = await bounded(page.evaluateHandle(() => document), 1000);
+  async function checkpoint(name, timeoutMs = 2000) {
+    phase = name;
+    const boundary = { name, ...stamp(), page_url: page.url() };
+    boundary.browser = await bounded(page.evaluate(async ({ workspaceId, studyId, inspectQueries }) => {
+      const snapshot = { url: location.href, ready_state: document.readyState, time_origin: performance.timeOrigin,
+        performance_now: performance.now(), navigation: performance.getEntriesByType('navigation').map(item => item.toJSON()),
+        queries: { status: 'not_inspected', reason: 'Source module inspection is restricted to the existing dev server.' } };
+      if (inspectQueries) {
+        try {
+          const { queryClient } = await import('/src/lib/query-client.ts');
+          snapshot.queries = { status: 'read_only', items: queryClient.getQueryCache().getAll()
+            .filter(query => query.queryKey.includes(workspaceId) || query.queryKey.includes(studyId))
+            .map(query => ({ key: query.queryKey, status: query.state.status, fetch_status: query.state.fetchStatus,
+              has_data: query.state.data !== undefined, data_updated_at: query.state.dataUpdatedAt, error_updated_at: query.state.errorUpdatedAt,
+              error: query.state.error === null ? null : String(query.state.error), fetch_failure_count: query.state.fetchFailureCount,
+              observers: query.getObserversCount(), promise_status: query.promise?.status ?? null })) };
+        } catch (error) { snapshot.queries = { status: 'error', error: String(error) }; }
+      }
+      return snapshot;
+    }, { workspaceId, studyId, inspectQueries: process.env.E2E_DEV === '1' }), timeoutMs);
+    ledger.boundaries.push(boundary);
+    return boundary;
+  }
+  await checkpoint('before_click');
+  await write('study-open-ledger', ledger);
+  return {
+    mark(name) { phase = name; ledger.boundaries.push({ name, ...stamp(), page_url: page.url() }); },
+    checkpoint,
+    async finish({ error, automaticRunRequests }) {
+      const deadline = performance.now() + 2000;
+      const remaining = () => Math.max(0, deadline - performance.now());
+      try {
+        ledger.outcome = error ? 'failed' : 'passed'; ledger.failure = error ? String(error) : null;
+        ledger.final_observation_budget_ms = 2000;
+        await checkpoint(error ? 'operation_failed' : 'operation_completed', remaining());
+        // This short drain only completes observation already in flight. It
+        // does not extend any UI readiness timeout or retry an application call.
+        ledger.observer_drain = await bounded(Promise.allSettled([...pending]), remaining());
+        ledger.document_identity = originalDocument.status === 'complete'
+          ? await bounded(page.evaluate(original => original === document, originalDocument.value), remaining())
+          : { status: originalDocument.status, error: originalDocument.error ?? null };
+        for (const [request, item] of byRequest) {
+          item.timing = request.timing();
+          const terminal = item.request_finished ?? item.request_failed;
+          item.observed_duration_ms = item.request_started && terminal ? terminal.elapsed_ms - item.request_started.elapsed_ms : null;
+          item.headers_to_response_finished_ms = item.response?.finished
+            ? item.response.finished.elapsed_ms - item.response.headers_observed.elapsed_ms : null;
+        }
+        ledger.pending_at_cutoff = ledger.requests.filter(item => !item.request_finished && !item.request_failed
+          || item.response && !item.request_failed && !item.response.finished
+          || item.response?.finished?.result === 'null' && !item.response.body && !item.response.body_error
+          || item.response?.body?.status === 'writing').map(item => item.id);
+        ledger.pending_observation_tasks_at_cutoff = pending.size;
+        ledger.automatic_run_requests = [...automaticRunRequests]; ledger.closed = stamp();
+      } finally {
+        closed = true;
+        for (const [event, listener] of Object.entries(listeners)) page.off(event, listener);
+        if (originalDocument.status === 'complete') await bounded(originalDocument.value.dispose(), remaining());
+        await write('study-open-ledger', ledger);
+      }
+      return ledger;
+    },
+  };
+}
+
 /** Setup uses only existing APIs and is separately recorded. Every new resource
  * capture, review, publication, preview and adoption goes through visible UI. */
 export async function walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
-  const audit = { scope: '真实保存输入的部件与研究模板；参考分档，不授予工程批准', setup: [], http: [], read_only_checks: [], components: [], study: null };
+  const audit = { scope: '真实保存输入的部件与研究模板；参考分档，不授予工程批准', setup: [], http: [], read_only_checks: [], components: [], study: null, study_opening: null };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-applications-${name}.json`), JSON.stringify(value, null, 2));
   async function decoded(response, endpoint, method) {
     const body = await response.body();
@@ -342,6 +485,7 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
     await expect(confirm).toBeDisabled(); await capture('研究模板目标定义与来源预览');
     await dialog.getByRole('checkbox').nth(0).check(); await expect(confirm).toBeDisabled(); await dialog.getByRole('checkbox').nth(1).check();
     const runWrites = [];
+    let opening, studyError;
     const onRequest = request => { if (request.method() === 'POST' && /\/studies\/[^/]+\/runs$/.test(new URL(request.url()).pathname)) runWrites.push(request.url()); };
     page.on('request', onRequest);
     try {
@@ -354,9 +498,12 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       const savedRuns = await readApi(`/api/workspaces/${target.id}/studies/${saved.id}/runs?view=summary&after=0&limit=20`);
       assert.deepEqual(savedRuns.items, []); assert.equal(savedRuns.next_cursor, null);
       await capture('研究模板仅保存研究而未运行');
-      const link = page.getByRole('link', { name: '打开新保存研究', exact: true });
-      await expect(link).toHaveAttribute('href', `/studies/${saved.id}?workspace=${target.id}`);
-      await link.click();
+      const openStudy = page.getByRole('button', { name: '打开新保存研究', exact: true });
+      await expect(openStudy).toBeEnabled();
+      opening = await observeStudyOpening({ page, base, viewport, out, write, workspaceId: target.id, studyId: saved.id });
+      opening.mark('click_started');
+      await openStudy.click();
+      opening.mark('click_resolved');
       // StudyProvider first reads the saved study and workspace. StudyEntry
       // then selects the actual root module; an entry URL alone is not ready.
       await expect(page).toHaveURL(new RegExp(`/studies/${saved.id}/ampacity/results(?:\\?|$)`));
@@ -364,6 +511,7 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       await expect(page.getByRole('heading', { level: 1, name: saved.definition.title, exact: true })).toBeVisible();
       const results = page.getByRole('region', { name: '计算结果', exact: true });
       await expect(results.getByRole('heading', { name: '尚无载流量运行', exact: true })).toBeVisible();
+      await opening.checkpoint('study_page_ready');
       await capture('新保存研究在原研究入口回读');
       const openedTarget = await readApi(`/api/workspaces/${target.id}`);
       const openedStudy = await readApi(`/api/workspaces/${target.id}/studies/${saved.id}`);
@@ -376,7 +524,13 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       assert.deepEqual(runWrites, [], '采用后完整加载原研究页面并回读，仍未自动提交计算');
       audit.study = { source: project, source_study: study, source_run: sourceRun, target_before: target, capture: frozen, preview, adopted, target_after: targetAfter, saved, saved_runs: savedRuns,
         opened_url: page.url(), opened_target: openedTarget, opened_study: openedStudy, opened_runs: openedRuns, automatic_run_requests: runWrites };
-    } finally { page.off('request', onRequest); }
+    } catch (error) { studyError = error; throw error; }
+    finally {
+      try {
+        if (opening) audit.study_opening = await opening.finish({ error: studyError, automaticRunRequests: runWrites });
+        if (!studyError) assert.deepEqual(runWrites, [], '研究打开证据收尾完成前仍不得自动提交计算');
+      } finally { page.off('request', onRequest); }
+    }
     report.checks.push(`${viewport.width}：真实保存输入的导体、芯绝缘层、公共外护层和成功IEC研究，经可见页面捕获→人工草稿→核对→发布→冻结证据回读→明确目标预览→人工采用。三种部件核对每个捕获值、目标其它字段/出处不变及原Types真实撤销；芯层复用完全相同材料且保留原出处，其余新建独立材料。研究逐项确认固定对象，仅保存新研究且零运行请求，源输入和固定证据不变。准备目标仅走已记录的旧Types/工程交换接口，不代替新资源UI动作。`);
   } finally { await write('summary', audit); }
 }
