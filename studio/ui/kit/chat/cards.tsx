@@ -235,9 +235,9 @@ function ChangeList({ changes, wrap = false }: { changes: Change[]; wrap?: boole
   return <dl data-proposal-changes className={cn('m-0 grid items-baseline gap-x-3 gap-y-2', edits ? 'grid-cols-change' : 'grid-cols-label')}>
     {changes.map((change, index) => <div key={change.id ?? `${index}/${change.label}`} className="contents">
       <dt className={cn('min-w-0 text-sm text-ink-2', wrap ? 'break-words whitespace-normal' : 'truncate')}>{change.label}</dt>
-      {edits && <dd className={cn('m-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3', wrap && 'min-w-0 break-words whitespace-normal')}>{change.before ?? '—'}</dd>}
+      {edits && <dd className={cn('m-0 min-w-0 text-sm text-ink-2 tabular-nums line-through decoration-ink-3 wrap-anywhere', wrap && 'whitespace-normal')}>{change.before ?? '—'}</dd>}
       {edits && <dd className="m-0 flex items-center self-center text-ink-3" aria-hidden="true"><Icon name="action/arrow-right" /></dd>}
-      <dd className={cn('m-0 min-w-0 text-sm font-medium text-ink tabular-nums', wrap && 'break-words whitespace-normal')}>{change.after}</dd>
+      <dd className={cn('m-0 min-w-0 text-sm font-medium text-ink tabular-nums wrap-anywhere', wrap && 'whitespace-normal')}>{change.after}</dd>
     </div>)}
   </dl>;
 }
