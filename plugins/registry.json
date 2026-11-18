@@ -21,9 +21,9 @@
     },
     {
       "plugin_id": "cablesim.gb50217-correction",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "manifest": "plugins/cablesim.gb50217-correction/plugin.json",
-      "release_digest": "0d15c0740489df0fab5a65bf66a18542c2fd9e8825327d02d694caceb02bdf78"
+      "release_digest": "a25ffd1914d271f7b9f776fc8be84aee8c8e8c22f3fa1f5e3f3ba6640ee96915"
     },
     {
       "plugin_id": "cablesim.hybrid-rating",

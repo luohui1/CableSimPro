@@ -356,7 +356,7 @@ def test_d06_saved_v2_study_and_restart_read_original_evidence(tmp_path, monkeyp
         workspace = client.get(prefix).json()
         method = dict(next(item['method'] for item in client.get('/api/methods').json()
                       if item['method']['plugin_id'] == 'cablesim.gb50217-correction'), capability='steady-rating')
-        assert method['version'] == '1.0.8'
+        assert method['version'] == '1.0.9'
         saved = client.post(prefix + '/studies', json=dict(expected_revision=workspace['revision'],
             title='D.0.6 合成机制核验，不是厂家额定值', method=method, task='rating', input_source='domain',
             parameters=p, input_sources=sources, driver={'kind': 'single'}))
@@ -374,7 +374,7 @@ def test_d06_saved_v2_study_and_restart_read_original_evidence(tmp_path, monkeyp
         assert run['status'] == 'succeeded' and run['integrity'] == 'verified', run
         assert run['snapshot']['definition']['parameters'] == p
         assert run['snapshot']['definition']['input_sources'] == sources
-        assert run['output']['plugin_version'] == '1.0.8'
+        assert run['output']['plugin_version'] == '1.0.9'
         assert run['output']['method_version'] == run['output']['environment']['method'] == '1.1.0'
         case = run['output']['cases'][0]
         trace = case['artifacts'][ARTIFACT]

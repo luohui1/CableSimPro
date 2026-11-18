@@ -14,6 +14,7 @@ import { walkResources } from './resource-walk.mjs';
 import { walkResourceApplications } from './resource-application-walk.mjs';
 import { walkTaiIImport } from './tai-i-import-walk.mjs';
 import { walkGbTray } from './gb-tray-walk.mjs';
+import { walkGbOutdoor } from './gb-outdoor-walk.mjs';
 import { exportResourceExchange, safeRequestHeaders, saveRawResponse } from './resource-exchange-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
@@ -1044,7 +1045,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     const resourceAudit = JSON.parse(await fs.readFile(path.join(out, `${viewport.width}-resources-summary.json`), 'utf8'));
     exchangeTasks.push(await exportResourceExchange({ page, base, viewport, out, root, expect, capture, readApi, resourceAudit, report }));
     await walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report });
-    // Collect each extension's original failure independently; either failure
+    // Collect each extension's original failure independently; any failure
     // still fails the complete walk instead of hiding the other flow's evidence.
     const extensionFailures = [];
     try {
@@ -1058,6 +1059,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     } catch (error) {
       extensionFailures.push(error);
       report.failures.push({ viewport: viewport.width, phase: 'D06合成机制条件与运行', message: String(error), stack: error.stack });
+    }
+    try {
+      await walkGbOutdoor({ page, base, viewport, out, root, expect, capture, afterAction, report });
+    } catch (error) {
+      extensionFailures.push(error);
+      report.failures.push({ viewport: viewport.width, phase: 'D07同温户外无遮阳合成机制', message: String(error), stack: error.stack });
     }
     if (extensionFailures.length) throw new AggregateError(extensionFailures, '新增真实流程存在失败，原始证据分别保留');
   } catch (error) {

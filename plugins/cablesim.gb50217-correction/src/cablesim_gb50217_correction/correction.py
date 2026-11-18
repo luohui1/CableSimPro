@@ -74,7 +74,7 @@ def _pointer(*parts):
     return '/' + '/'.join(str(value).replace('~', '~0').replace('/', '~1') for value in parts)
 
 
-def _layout_source(document, stable, indexed, value, unit=None):
+def _layout_source(document, stable, indexed, value, unit=None, *, context='桥架校正'):
     """Keep the exact source that covers an actually consumed saved field."""
     provenance = document.get('provenance', {})
     candidates = [stable, indexed]
@@ -90,10 +90,10 @@ def _layout_source(document, stable, indexed, value, unit=None):
                     return dict(path=stable, indexed_path=indexed, value=value, unit=unit,
                                 source_path=candidate, source=source)
                 # An explicitly empty field source cannot borrow a broader one.
-                raise CorrectionError('桥架校正所用保存字段的明确出处为空；不能借用更宽的来源。',
+                raise CorrectionError(context + '所用保存字段的明确出处为空；不能借用更宽的来源。',
                                       '/input' + indexed, 'CORRECTION_SOURCE_REQUIRED')
         candidates = [path.rsplit('/', 1)[0] for path in candidates]
-    raise CorrectionError('桥架校正所用保存字段缺少明确出处；请在原输入补齐来源。',
+    raise CorrectionError(context + '所用保存字段缺少明确出处；请在原输入补齐来源。',
                           '/input' + indexed, 'CORRECTION_SOURCE_REQUIRED')
 
 

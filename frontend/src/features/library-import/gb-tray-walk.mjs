@@ -8,7 +8,7 @@ import { safeRequestHeaders, saveRawResponse } from './resource-exchange-walk.mj
 const hash = value => createHash('sha256').update(value).digest('hex');
 const trayFields = ['tray_kind', 'tray_layout_source', 'tray_layout_confirmed'];
 const artifactType = 'x-cablesim.gb50217-correction';
-const releaseDigest = '0d15c0740489df0fab5a65bf66a18542c2fd9e8825327d02d694caceb02bdf78';
+const releaseDigest = 'a25ffd1914d271f7b9f776fc8be84aee8c8e8c22f3fa1f5e3f3ba6640ee96915';
 
 // Fixed synthetic values captured from tray_example(kind, 1) at the exact
 // test-source SHA checked below. Both kinds use this same seven-cable Domain;
@@ -817,7 +817,7 @@ def digest(value):
 
 source=Path('tests/test_gb50217_correction.py')
 source_sha256=hashlib.sha256(source.read_bytes()).hexdigest()
-assert source_sha256=='222c5fc5c8feea2609454eb6c65fcdcafe054e73c986dc93a036c45b30be5b3c', 'Frozen synthetic input source changed; compare every value before recapturing'
+assert source_sha256=='1cd11c20934c4c84852d946bcad6d12a92d4da0916e6017d538149215295f97a', 'Frozen synthetic input source changed; compare every value before recapturing'
 assert sys.argv[1] in ('ladder','tray')
 fixed=json.load(sys.stdin)
 document=DomainDocument.model_validate(fixed['domain']).model_dump(mode='json')
@@ -919,8 +919,8 @@ export async function walkGbTray({ page, base, viewport, out, root, expect, capt
     await fs.writeFile(path.join(out, prefix + '-synthetic-input.json'), bytes);
     const fixture = JSON.parse(bytes.toString('utf8'));
     evidence.fixture = { file: prefix + '-synthetic-input.json', size: bytes.length, sha256: hash(bytes), source: fixture.source };
-    assert.equal(fixture.source.sha256, '222c5fc5c8feea2609454eb6c65fcdcafe054e73c986dc93a036c45b30be5b3c');
-    assert.equal(fixture.method.version, '1.0.8'); assert.equal(fixture.method.release_digest, releaseDigest);
+    assert.equal(fixture.source.sha256, '1cd11c20934c4c84852d946bcad6d12a92d4da0916e6017d538149215295f97a');
+    assert.equal(fixture.method.version, '1.0.9'); assert.equal(fixture.method.release_digest, releaseDigest);
     const baselineBytes = Buffer.from(fixture.baseline_original);
     await fs.writeFile(path.join(out, prefix + '-synthetic-baseline.json'), baselineBytes);
     assert.equal(hash(baselineBytes), fixture.parameters_without_tray.baseline_sha256);
@@ -942,9 +942,10 @@ export async function walkGbTray({ page, base, viewport, out, root, expect, capt
     assert.deepEqual(section.enclosures[0].contains, section.placements.map(position => position.cable));
     assert.ok(Object.values(domain.provenance).every(source => source.kind === 'demo' && source.reviewed === false));
     const methods = await api('methods', 'GET', '/api/methods');
-    const candidates = methods.filter(item => item.method.plugin_id === fixture.method.plugin_id);
+    const candidates = methods.flatMap(card => card.capabilities.filter(cap => card.method.plugin_id === fixture.method.plugin_id && cap.id === 'steady-rating')
+      .map(cap => ({ ...card.method, capability: cap.id })));
     assert.equal(candidates.length, 1);
-    const method = { ...candidates[0].method, capability: 'steady-rating' };
+    const method = candidates[0];
     assert.deepEqual(method, fixture.method);
     const contracts = await api('contract', 'GET', '/api/input-contracts?' + new URLSearchParams(method));
     assert.equal(contracts.length, 1); assert.deepEqual(contracts[0].method, method);
@@ -1071,7 +1072,7 @@ export async function walkGbTray({ page, base, viewport, out, root, expect, capt
     assert.deepEqual(run.output, receipt.output); assert.deepEqual(run.snapshot, receipt.snapshot);
     assert.deepEqual(run.snapshot.definition.parameters, complete); assert.deepEqual(run.snapshot.definition.input_sources, study.definition.input_sources);
     assert.deepEqual(run.snapshot.cases[0].input, workspace.domain);
-    assert.deepEqual([run.output.plugin_version, run.output.method_version, run.output.environment.method], ['1.0.8', '1.1.0', '1.1.0']);
+    assert.deepEqual([run.output.plugin_version, run.output.method_version, run.output.environment.method], ['1.0.9', '1.1.0', '1.1.0']);
     const result = run.output.cases[0], trace = result.artifacts[artifactType];
     assert.ok(trace); assert.equal(result.status, 'succeeded');
     assert.equal(trace.domain_input_sha256, fixture.domain_sha256); assert.deepEqual(trace.baseline, complete);
