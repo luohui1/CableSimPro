@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './formal-export.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -11,13 +12,23 @@ import {
 
 type Props = {
   kind: FormalKind;
+  alternativeKinds?: FormalKind[];
   source: FormalSource | null;
   disabledReason?: string;
 };
 
 /** Read-only T4 official delivery, deliberately separate from the legacy PDF generator. */
-export function FormalExport({ kind, source, disabledReason }: Props) {
+export function FormalExport({ kind, alternativeKinds = [], source, disabledReason }: Props) {
   const [open, setOpen] = useState(false);
+  const [selectedKind, setSelectedKind] = useState(kind);
+  const offeredKinds = [kind, ...alternativeKinds];
+  useEffect(() => {
+    if (!offeredKinds.includes(selectedKind)) {
+      setSelectedKind(kind);
+      setVerified(null);
+      setAck(false);
+    }
+  }, [kind, selectedKind, alternativeKinds.join('|')]);
   const [organization, setOrganization] = useState('');
   const [number, setNumber] = useState('');
   const [revision, setRevision] = useState('');
@@ -29,7 +40,7 @@ export function FormalExport({ kind, source, disabledReason }: Props) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const pending = useRef(false);
-  const sourceIdentity = JSON.stringify({ kind, source });
+  const sourceIdentity = JSON.stringify({ kind: selectedKind, source });
   const current = verified && JSON.stringify({ kind: verified.request.kind, source: verified.request.source }) === sourceIdentity
     && verified.request.document.organization === organization.trim()
     && verified.request.document.number === number.trim()
@@ -52,7 +63,7 @@ export function FormalExport({ kind, source, disabledReason }: Props) {
       header: header.trim(), footer: footer.trim(),
       ...(issuedOn ? { issued_on: issuedOn } : {}),
     };
-    return { kind, source: structuredClone(source), document };
+    return { kind: selectedKind, source: structuredClone(source), document };
   }
   async function preview() {
     if (pending.current || disabledReason) return;
@@ -110,6 +121,9 @@ export function FormalExport({ kind, source, disabledReason }: Props) {
         </Button>
       </div>}>
       <div className="formal-export-fields">
+        {alternativeKinds.length > 0 && <Select label="正式交付类型" value={selectedKind} disabled={!!busy}
+          onChange={value => { setSelectedKind(value as FormalKind); setVerified(null); setAck(false); setError(''); }}
+          options={offeredKinds.map(item => ({value: item, label: ({specification:'规格书',calculation:'计算书',rating_table:'载流量表',research_report:'研究报告'} as Record<FormalKind,string>)[item]}))} />}
         <label className="formal-export-label">单位名称
           <Input aria-label="正式文件单位名称" value={organization} maxLength={120} disabled={!!busy}
             onChange={event => change(setOrganization, event.target.value)} placeholder="请输入实际交付单位" />

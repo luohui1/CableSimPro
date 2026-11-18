@@ -6,6 +6,10 @@ import { expect as playwrightExpect } from '@playwright/test';
 import { openHeadlessBrowser, repositoryRoot } from './browser.mjs';
 import { assertLayout } from './layout-assertions.mjs';
 
+/** POST is not automatically a write: this one pinned standards lookup is expressly read-only in the host broker. */
+export const isReadOnlyStandardsLookup = (method, path) => method === 'POST'
+  && path === '/api/plugin-queries/cablesim.standards-basis/lookup';
+
 /** Shared evidence only. Every scenario changes engineering data through the UI. */
 export async function walkthrough(name, scenario) {
   assert.equal(process.env.E2E_ISOLATED, '1', '工作台走查只能在隔离种子库中执行');
@@ -49,8 +53,14 @@ export async function walkthrough(name, scenario) {
     if (!request.failure()?.errorText?.includes('ERR_ABORTED')) report.network.push({ method: request.method(), path: new URL(request.url()).pathname, failure: request.failure()?.errorText });
   });
   page.on('request', request => {
-    if (request.url().includes('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) {
-      report.writes.push({ method: request.method(), path: new URL(request.url()).pathname });
+    if (!request.url().includes('/api/')) return;
+    const item = { method: request.method(), path: new URL(request.url()).pathname };
+    if (isReadOnlyStandardsLookup(item.method, item.path)) {
+      // Preserve every such call in audit evidence, but do not classify a pure
+      // fixed-release lookup as a mutation of the workspace or saved outputs.
+      (report.readOnlyQueries ||= []).push(item);
+    } else if (!['GET', 'HEAD', 'OPTIONS'].includes(item.method)) {
+      report.writes.push(item);
     }
   });
   let currentSize, sequence = 0;

@@ -318,11 +318,10 @@ function CurrentReport({
         <StatusMark kind={create.isPending ? 'running' : create.error && !cancelled ? 'error' : did ? 'current' : 'saved'} label={create.isPending ? '正在生成' : cancelled ? '已取消' : create.error ? '生成失败' : did ? '已生成 · 所选运行' : '所选运行'} />
         {create.isPending && <><span role="status">{progressLabels[text(generation?.stage)] || '正在准备'}</span><Button variant="ghost" size="compact" disabled={generation?.stage==='save' || generation?.state==='cancelled'} onClick={()=>void cancelGeneration().catch(error=>setPreviewError(error as Error))}>取消生成</Button></>}
         <div className="spacer" />
-        <FormalExport kind="calculation" source={formalSource}
+        <FormalExport kind="calculation" alternativeKinds={formalRating ? ['rating_table', 'research_report'] : ['research_report']}
+          source={formalSource}
           disabledReason={dirty ? '请先保存当前研究。' : create.isPending ? '当前计算书正在生成。' :
             formalWorkspace.error ? message(formalWorkspace.error) : ''} />
-        {formalRating && <FormalExport kind="rating_table" source={formalSource}
-          disabledReason={dirty ? '请先保存当前研究。' : formalWorkspace.error ? message(formalWorkspace.error) : ''} />}
         {!create.isPending && did ? (
           <>
           <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />

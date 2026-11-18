@@ -980,6 +980,9 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
           && next.searchParams.get('workspace') === selection.workspace && (next.searchParams.get('run') || '') === (fixed ? before.run.id : ''));
         const table = page.getByRole('table', { name: label, exact: true });
         await expect(table).toBeVisible();
+        // A visible async table can still be rendering its empty/loading row.
+        // Wait for one real bound input before checking all saved values.
+        await expect(table.locator('.number-field').first()).toBeVisible();
         const fields = await table.locator('.number-field').evaluateAll(nodes => nodes.map(node => {
           const input = node.querySelector('input');
           return { path: node.dataset.fieldPath, value: input?.value, full: input?.title, readOnly: input?.readOnly };

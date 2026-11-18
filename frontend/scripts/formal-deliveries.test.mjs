@@ -28,6 +28,8 @@ const response = (body, status = 200, headers = {}) =>
 
 test('正式交付必须固定当前型号摘要或完整保存运行，不能临时补数', () => {
   assert.doesNotThrow(() => assertFormalSource(request()));
+  assert.doesNotThrow(() => assertFormalSource({...request(), kind: 'research_report'}));
+  assert.doesNotThrow(() => assertFormalSource({...request(), kind: 'rating_table'}));
   assert.throws(() => assertFormalSource({...request(), source: {...request().source, expected_revision: -1}}));
   assert.throws(() => assertFormalSource({...request(), source: {...request().source, runs: [{run_id:'r', input_digest:'bad', output_digest:two}]}}));
   assert.throws(() => assertFormalSource({...request(), kind: 'specification'}));
