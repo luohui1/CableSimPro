@@ -195,6 +195,53 @@ async function browserJson(page: Page, path: string, search: Record<string, stri
   return response.json();
 }
 
+/** Observe every page that the sidebar's indexAll actually reads; register before navigation so fast later pages are kept. */
+async function browserIndexAll(page: Page, kind: string) {
+  type Batch = { items: Record<string, any>[]; total: number };
+  const batches = new Map<number, Batch>();
+  let failure: unknown;
+  let result: (Batch & { pages: { offset: number; count: number }[] }) | undefined;
+  const observe = (response: BrowserResponse) => {
+    const url = new URL(response.url());
+    if (response.request().method() !== 'GET' || url.pathname !== '/api/index/objects'
+      || url.searchParams.get('kind') !== kind || url.searchParams.get('q') || url.searchParams.get('limit') !== '100') return;
+    void (async () => {
+      assert.equal(await response.finished(), null, '浏览器索引分页读取必须完成');
+      assert.equal(response.status(), 200, '浏览器索引分页读取必须成功');
+      const offset = Number(url.searchParams.get('offset'));
+      const batch = await response.json() as Batch;
+      assert.ok(Number.isInteger(offset) && offset >= 0 && Number.isInteger(batch.total) && batch.total >= 0);
+      assert.ok(Array.isArray(batch.items) && batch.items.length <= 100);
+      assert.ok(batch.items.every(item => item.kind === kind && typeof item.id === 'string' && item.id.length > 0));
+      if (batches.has(offset)) assert.deepEqual(batch, batches.get(offset), '同一索引页重读必须保持一致');
+      batches.set(offset, batch);
+    })().catch(error => { failure = error; });
+  };
+  page.on('response', observe);
+  try {
+    await until(() => {
+      if (failure) throw failure;
+      const first = batches.get(0);
+      if (!first) return false;
+      const items: Batch['items'] = [], pages: { offset: number; count: number }[] = [];
+      do {
+        const offset = items.length, batch = batches.get(offset);
+        if (!batch) return false;
+        assert.equal(batch.total, first.total, '索引各页总数必须一致');
+        assert.ok(batch.items.length > 0 || first.total === 0, '索引分页不能在完整读取前返回空页');
+        pages.push({ offset, count: batch.items.length });
+        items.push(...batch.items);
+        assert.ok(items.length <= first.total, '索引分页不能超过声明总数');
+      } while (items.length < first.total);
+      assert.equal(new Set(items.map(item => item.id)).size, items.length, '索引分页不能重复条目');
+      result = { items, total: first.total, pages };
+      return true;
+    }, '侧栏实际读取的全部索引分页已完成');
+    assert.ok(result);
+    return result;
+  } finally { page.off('response', observe); }
+}
+
 async function conversationListReady(page: Page, frame: Frame, sessions: { id: string; title: string }[]): Promise<void> {
   assert.ok(Array.isArray(sessions), '会话目录必须是已完成读取的真实列表');
   const list = frame.getByRole('navigation', { name: '对话', exact: true });
@@ -227,7 +274,8 @@ async function navigationReady(page: Page, spaces: Record<string, any>[], types:
     return JSON.stringify(actual) === JSON.stringify(expected) && !await nav.getByText('读取中', { exact: true }).isVisible()
       && (todo ? await badge.textContent() === String(todo) : await badge.count() === 0);
   }, '旧主导航的工程、型号、研究数和待办数已按真实响应渲染');
-  record(`${page.viewportSize()!.width}/sidecar-down-navigation-ready`, true, { objects: expected, todo });
+  record(`${page.viewportSize()!.width}/sidecar-down-navigation-ready`, true,
+    { objects: expected, todo, studyIndex: { total: studies.total, pages: studies.pages } });
 }
 
 /** Records browser traffic, including the SSE data that a response.body() cannot read until the connection is closed. */
@@ -1116,7 +1164,7 @@ try {
     try {
       const [spaces, types, studies, inbox] = await Promise.all([
         browserJson(page, '/api/workspaces'), browserJson(page, '/api/design/type-workspaces'),
-        browserJson(page, '/api/index/objects', { kind: 'study', offset: '0' }), browserJson(page, '/api/index/inbox'),
+        browserIndexAll(page, 'study'), browserJson(page, '/api/index/inbox'),
         page.goto(frontendUrl + '/agent', { waitUntil: 'domcontentloaded' }),
       ]);
       await page.getByRole('heading', { name: 'Agent 对话服务未连接' }).waitFor();
