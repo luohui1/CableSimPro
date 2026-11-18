@@ -141,36 +141,65 @@ def test_four_real_decisions_preserve_source_rows_and_run_standard_checks(client
         'propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check'))
 
 
-@pytest.mark.parametrize('style', ['changes', 'sparse-series'])
+@pytest.mark.parametrize('style', ['changes', 'full-copy'])
 def test_recognised_original_declaration_is_the_reviewed_series(client, style):
-    """A real model often states only the name and defaults; the original's declaration still applies."""
+    """The original's declaration is the series; at import only its name can differ."""
     current = scope(client)
     current, upload = uploaded(client, current)
     declared = deepcopy(upload['declarations'][1])
-    request = {key: declared[key] for key in ('sheet', 'first_data_row', 'mapping')}
+    original = declared['series']
+    # A padded sheet name still selects the same declared sheet.
+    request = {'sheet': declared['sheet'] + ' ', 'first_data_row': declared['first_data_row'], 'mapping': declared['mapping']}
     arguments = {'upload_id': upload['upload_id'], 'sha256': upload['sha256'], 'request': request}
     if style == 'changes':
         arguments['series_changes'] = {'name': 'Agent 验收系列'}
     else:
-        original = declared['series']
-        request['series'] = {'name': 'Agent 验收系列', 'manufacturer': original['manufacturer'] + '（改写）',
-            'designation': original['designation'], 'cores': original['cores'], 'u0_v': original['u0_v'], 'u_v': original['u_v'],
-            'common': {}, 'common_basis': {}, 'modelling': {}, 'standards': [], 'resistance_basis': 'stated'}
+        request['series'] = {**deepcopy(original), 'name': 'Agent 验收系列'}
     schemas = {row['name']: row['parameters'] for row in client.get('/api/agent/external/tools', headers=AUTH).json()}
     Draft202012Validator(schemas['propose_structure_preview']).validate(arguments)
     proposal = propose(client, current, 'propose_structure_preview', arguments)
-    deviations = {row['label'] for row in proposal['changes'] if row['label'].endswith('（与原件声明不同）')}
-    expected = {'系列声明 · 系列名称（与原件声明不同）'} | ({'系列声明 · 厂家（与原件声明不同）'} if style == 'sparse-series' else set())
-    assert deviations == expected
+    deviations = [row for row in proposal['changes'] if row['label'].endswith('（与原件声明不同）')]
+    assert [(row['label'], row['before'], row['after']) for row in deviations] == [
+        ('系列声明 · 系列名称（与原件声明不同）', original['name'], 'Agent 验收系列')]
     assert any(row['label'] == '系列声明底稿' for row in proposal['changes'])
     reviewed = next(row['after'] for row in proposal['changes'] if row['label'] == '系列声明及来源')
-    original = declared['series']
     assert original['common'] and reviewed['common'] == pytest.approx(original['common'])
-    assert original['modelling'] and set(reviewed['modelling']) == set(original['modelling'])
+    assert reviewed['common_basis'] == original['common_basis'] and set(reviewed['modelling']) == set(original['modelling'])
     assert reviewed['resistance_basis'] == original['resistance_basis'] == 'standard_limit' and reviewed['name'] == 'Agent 验收系列'
     receipt = decide(client, proposal)['receipt']
     # The same rows are complete as when the full declaration is proposed (11 valid, none incomplete).
     assert receipt['valid_count'] == receipt['row_count'] == 11 and receipt['incomplete_count'] == 0, receipt
+    # What is saved is exactly the declaration the person reviewed.
+    current = resume(client, current)
+    for field in ('name', 'common', 'common_basis', 'resistance_basis'):
+        saved = call(client, 'structure_import_read', {'kind': 'preview', 'id': receipt['preview_id'], 'view': '/series/' + field},
+                     current['session'], current['turn']).json()
+        assert saved['status'] == 'ok' and saved['data']['page']['value'] == reviewed[field], (field, saved)
+
+
+@pytest.mark.parametrize('style', ['sparse-series', 'common-change'])
+def test_a_recognised_declaration_is_not_rewritten_at_import(client, style):
+    """Defaults, paraphrases or new engineering values never replace the original silently."""
+    current = scope(client)
+    current, upload = uploaded(client, current)
+    declared = deepcopy(upload['declarations'][1])
+    original = declared['series']
+    request = {key: declared[key] for key in ('sheet', 'first_data_row', 'mapping')}
+    arguments = {'upload_id': upload['upload_id'], 'sha256': upload['sha256'], 'request': request}
+    if style == 'sparse-series':
+        # What the real model sent: the name, a paraphrased manufacturer and defaults.
+        request['series'] = {'name': 'Agent 验收系列', 'manufacturer': original['manufacturer'] + '（改写）',
+            'designation': original['designation'], 'cores': original['cores'], 'u0_v': original['u0_v'], 'u_v': original['u_v'],
+            'common': {}, 'common_basis': {}, 'modelling': {}, 'standards': [], 'resistance_basis': 'stated'}
+        code = 'IMPORT_DECLARATION_FIXED'
+    else:
+        # A changed thickness would keep the original's standard clause as its stated basis.
+        arguments['series_changes'] = {'name': 'Agent 验收系列', 'common': {'screen_tape_thickness': 0.00015}}
+        code = 'TOOL_ARGUMENTS_INVALID'
+    before = counts(client)
+    refused = call(client, 'propose_structure_preview', arguments, current['session'], current['turn']).json()
+    assert refused['status'] == 'error' and refused['diagnostics'][0]['code'] == code, refused
+    assert counts(client) == before
 
 
 def test_series_is_required_without_a_recognised_declaration(client):
@@ -184,10 +213,47 @@ def test_series_is_required_without_a_recognised_declaration(client):
     upload = decide(client, proposal)['receipt']
     current = resume(client, current)
     assert not match_sample(upload['sha256'])
-    response = call(client, 'propose_structure_preview', {'upload_id': upload['upload_id'], 'sha256': upload['sha256'],
-        'request': {'sheet': '表3 YJV22', 'first_data_row': 5, 'mapping': {'area': 0}}, 'series_changes': {'name': '无声明'}},
-        current['session'], current['turn']).json()
-    assert response['status'] == 'error' and 'IMPORT_SERIES_REQUIRED' in json.dumps(response, ensure_ascii=False), response
+    base = {'upload_id': upload['upload_id'], 'sha256': upload['sha256'],
+            'request': {'sheet': '表3 YJV22', 'first_data_row': 5, 'mapping': {'area': 0}}}
+    for extra, code in (({}, 'IMPORT_SERIES_REQUIRED'), ({'series_changes': {'name': '无声明'}}, 'IMPORT_SERIES_CHANGES_UNSUPPORTED')):
+        response = call(client, 'propose_structure_preview', {**base, **extra}, current['session'], current['turn']).json()
+        assert response['status'] == 'error' and response['diagnostics'][0]['code'] == code, response
+
+
+def test_object_find_names_a_few_exact_matches_within_the_result_budget(monkeypatch):
+    """Many same-named cards (one per run or delivery) never crowd out the page."""
+    from backend.harness import object_index
+    from backend.harness.context_builder import RESULT_BYTES, encoded
+    cards = {('study', 'study/' + str(i)): {'kind': 'study', 'id': 'study/' + str(i), 'name': '输入快照 · 修订 1',
+             'updated': '2026-11-18T00:%02d:00' % i} for i in range(120)}
+    cards[('type', 'type/a')] = {'kind': 'type', 'id': 'type/a', 'name': 'YJV22-8.7/15 3×300', 'updated': '2026-01-01'}
+    cards[('type', 'type/b')] = {'kind': 'type', 'id': 'type/b', 'name': 'YJV22-8.7/15 3×300 · 草稿', 'updated': '2026-11-18'}
+
+    class Snapshot:
+        def __init__(self): self.cards = cards
+
+    class Index:
+        snapshots = 0
+        def snapshot(self, copy=True):
+            Index.snapshots += 1
+            return Snapshot()
+        def objects(self, kind=None, q='', limit=50, offset=0):
+            term = q.casefold().strip()
+            items = sorted((card for card in cards.values() if (kind is None or card['kind'] == kind) and term in card['name'].casefold()),
+                           key=lambda card: card['updated'], reverse=True)
+            return {'items': items[offset:offset + limit], 'total': len(items), 'source_errors': []}
+
+    monkeypatch.setattr(object_index, 'get_index', lambda research: Index())
+    many = object_index.read(None, 'object_find', {'q': '输入快照 · 修订 1', 'limit': 10})
+    assert many.status == 'ok' and len(many.data['items']) == 10 and len(encoded(many.model_dump(mode='json'))) <= RESULT_BYTES
+    assert len(many.data['exact_matches']) == object_index.EXACT_LIMIT and many.data['exact_total'] == 120
+    later = object_index.read(None, 'object_find', {'q': '输入快照 · 修订 1', 'limit': 10, 'offset': 10})
+    assert 'exact_matches' not in later.data
+    named = object_index.read(None, 'object_find', {'q': 'YJV22-8.7/15 3×300'})
+    # The older exact type is named even though the newer similarly named draft comes first.
+    assert [card['id'] for card in named.data['items']] == ['type/b', 'type/a']
+    assert named.data['exact_matches'] == [{'kind': 'type', 'id': 'type/a', 'name': 'YJV22-8.7/15 3×300'}]
+    assert 'YJV22-8.7/15 3×300（type）' in named.summary
 
 
 def test_attachment_token_filename_limit_metadata_and_conversation_scope(client):

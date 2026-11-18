@@ -99,41 +99,47 @@ SERIES_LABELS = {'name': '系列名称', 'manufacturer': '厂家', 'designation'
                  'standards': '执行标准', 'common': '系列公共值', 'common_basis': '公共值依据',
                  'modelling': '建模参数', 'source': '来源', 'reference': '参考声明', 'resistance_basis': '电阻依据',
                  'material_properties': '材料物性'}
-SERIES_MAPS = ('common', 'common_basis', 'modelling', 'source', 'reference', 'material_properties')
+# Only the series name may differ from a recognised original at import time. Each
+# engineering value is tied to its stated basis; changing one is a type revision
+# with its own source after import, never an edit of the original's declaration.
+RENAMABLE = ('name',)
 
 
 def declared_series(saved, request, changes):
     """The original's own declaration, as the import wizard prefills it, is the draft.
 
     Only the uploaded file's recognised declaration is used, never a guess from its
-    name. A stated field equal to the declaration default says nothing and keeps the
-    original; every other difference from the original is listed for the reviewer.
+    name. Apart from the series name, a stated field must equal the original; any other
+    difference is refused with the reason rather than applied or silently dropped.
     """
     from backend.kernel.type_import_models import SeriesDeclaration
     fields = SeriesDeclaration.model_fields
-    candidate = next((item for item in saved.get('declarations') or [] if item.get('sheet') == request.get('sheet')), None)
-    stated = request.get('series')
-    for key in list((stated or {})) + list(changes or {}):
-        if key not in fields:
-            fail('IMPORT_SERIES_FIELD', '系列声明没有字段 ' + key + '。', path='/request/series/' + key)
+    sheet = str(request.get('sheet') or '').strip()
+    candidate = next((item for item in saved.get('declarations') or [] if str(item.get('sheet') or '').strip() == sheet), None)
+    stated, changes = request.get('series'), changes or {}
+    for prefix, values in (('/request/series/', stated or {}), ('/series_changes/', changes)):
+        for key in values:
+            if key not in fields:
+                fail('IMPORT_SERIES_FIELD', '系列声明没有字段 ' + key + '。', path=prefix + key)
     if candidate is None:
+        if changes:
+            fail('IMPORT_SERIES_CHANGES_UNSUPPORTED', '此原件没有可识别的系列声明，series_changes 无从修改；请按原件逐项完整填写 request.series。',
+                 path='/series_changes')
         if stated is None:
             fail('IMPORT_SERIES_REQUIRED', '此原件没有可识别的系列声明；请按原件逐项填写系列名称、厂家、型号、芯数、电压及来源。',
                  path='/request/series')
-        return {**deepcopy(stated), **deepcopy(changes or {})}, None, []
+        return deepcopy(stated), None, []
     original = deepcopy(candidate['series'])
-    series = deepcopy(original)
-    for statement, values in (('series', stated or {}), ('changes', changes or {})):
-        for key, value in values.items():
-            info = fields[key]
-            default = info.default_factory() if info.default_factory else info.default
-            if statement == 'series' and value == default and key in original:
-                continue
-            series[key] = ({**series[key], **value} if key in SERIES_MAPS and isinstance(value, dict)
-                           and isinstance(series.get(key), dict) else deepcopy(value))
-    deviations = [{'path': '/request/series/' + key, 'label': '系列声明 · ' + SERIES_LABELS.get(key, key) + '（与原件声明不同）',
+    for key, value in (stated or {}).items():
+        info = fields[key]
+        if key not in RENAMABLE and value != original.get(key, info.default_factory() if info.default_factory else info.default):
+            fail('IMPORT_DECLARATION_FIXED', '原件已有“' + candidate['sheet'] + '”的系列声明，' + SERIES_LABELS.get(key, key)
+                 + '须与原件一致。请省略 request.series，只在 series_changes 写系列名称；工程值及其依据导入后按型号修订流程逐项提出并给出来源。',
+                 path='/request/series/' + key)
+    series = {**original, **{key: value for key, value in (stated or {}).items() if key in RENAMABLE}, **deepcopy(changes)}
+    deviations = [{'path': '/request/series/' + key, 'label': '系列声明 · ' + SERIES_LABELS[key] + '（与原件声明不同）',
                    'before': original.get(key), 'after': series[key], 'unit': None}
-                  for key in series if series[key] != original.get(key)]
+                  for key in RENAMABLE if series.get(key) != original.get(key)]
     return series, candidate, deviations
 
 
@@ -147,10 +153,11 @@ def tools():
         request['required'].remove('upload_id')
         if 'SeriesDeclaration' in definitions:
             # A recognised original declaration supplies the series; the model
-            # then states only the fields the user asked to change.
+            # may only rename it. No defaults here, so nothing is filled in.
             request['required'].remove('series')
-            definitions['SeriesChanges'] = {**deepcopy(definitions['SeriesDeclaration']), 'title': 'SeriesChanges', 'required': []}
-            changes = {'$ref': '#/$defs/SeriesChanges'}
+            name = {key: value for key, value in definitions['SeriesDeclaration']['properties']['name'].items() if key != 'default'}
+            changes = {'type': 'object', 'properties': {'name': name}, 'required': ['name'], 'additionalProperties': False,
+                       'description': '仅系列名称；工程值与依据以原件声明为准。'}
     except ImportError:
         request, definitions = object_schema(), {}
     preview = object_schema({'upload_id': IDENTIFIER, 'sha256': DIGEST, 'request': request, 'series_changes': changes},
@@ -172,8 +179,8 @@ def tools():
          object_schema({'attachment_id': IDENTIFIER, 'expected_sha256': DIGEST}, ['attachment_id', 'expected_sha256'])),
         ('propose_structure_preview', '提出保存结构表预览', 'propose',
          '明确选择已接受原件的工作表、起始行与列映射。原件附带该表的系列声明（上传记录 declarations）时以原件声明为准：'
-         '省略 request.series，只在 series_changes 写用户明确要求修改的字段（如系列名称），不改写厂家、型号、电压或来源；'
-         '与原件不同之处在待审卡逐项列出。没有原件声明的文件须完整填写 request.series。保留原行、单位和来源；接受后调用原预览服务，尚不创建型号。', preview),
+         '省略 request.series，只在 series_changes.name 写用户要的系列名称；厂家、型号、电压、公共值、电阻依据与来源不能在导入时修改，'
+         '导入后按型号修订流程逐项提出。没有原件声明的文件须完整填写 request.series。保留原行、单位和来源；接受后调用原预览服务，尚不创建型号。', preview),
         ('propose_structure_import', '提出结构表草稿入库', 'propose',
          '按准确保存预览及摘要创建系列和型号草稿。必须明确 skip_errors；每行事实、缺项及错误均待人审，不审核、不发布。',
          object_schema({'preview_id': IDENTIFIER, 'preview_digest': DIGEST, 'skip_errors': {'type': 'boolean'}},
