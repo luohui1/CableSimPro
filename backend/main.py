@@ -161,6 +161,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(scenario_router(workspace_store,research))
     app.include_router(requirements_router(research))
     app.include_router(rating_table_router(research))
+    from .kernel.formal_deliveries import make_router as formal_deliveries_router
+    app.include_router(formal_deliveries_router(research, types))
     app.include_router(agent_router(harness))
     from .index import make_router as index_router
     app.include_router(index_router(research))

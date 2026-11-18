@@ -7,9 +7,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import venv
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.release_python_runtime import clean_python_environment, create_environment, installed_base_python
 from scripts.release_support import (InstallLock, MANIFEST, ROOT, atomic_json, config, digest,
                                     environment, installation, manifest, native_runtime_policy, python_path,
                                     run_installed, safe_relative, utf8_output, windows_long_paths_enabled, windows_path_policy)
@@ -48,6 +48,7 @@ def install(source: Path, settings: dict) -> Path:
         shim = app / "scripts/release_python.sh"
         if sys.platform == "linux" and shim.is_file():
             shim.chmod(0o755)
+        base_python = installed_base_python(app)
         python = python_path(app)
         if receipt.is_file() and python.is_file():
             saved = json.loads(receipt.read_text("utf-8"))
@@ -56,8 +57,8 @@ def install(source: Path, settings: dict) -> Path:
                 return app
         print("从随包 wheelhouse 离线安装 Python 依赖（包含 CAD 几何依赖）。", flush=True)
         if not python.is_file():
-            venv.EnvBuilder(with_pip=True).create(app / ".venv")
-        env = environment(settings, app)
+            create_environment(app, environment(settings, app))
+        env = clean_python_environment(environment(settings, app))
         subprocess.run([str(python), "-m", "pip", "install", "--no-index", "--no-cache-dir",
                         "--disable-pip-version-check", "--require-hashes", "--find-links", str(app / "wheelhouse"),
                         "-r", str(app / "requirements.lock")], cwd=app, env=env, check=True)
@@ -66,6 +67,7 @@ def install(source: Path, settings: dict) -> Path:
                        cwd=app, env=env, check=True)
         atomic_json(receipt, {"build_id": bundle["build_id"], "app_dir": str(app),
                               "requirements_sha256": digest(app / "requirements.lock"), "offline": True,
+                              "base_python": str(base_python), "python_runtime": bundle.get("python_runtime"),
                               "windows_path_policy": path_policy, "native_runtime_policy": native_policy})
         return app
 
@@ -86,7 +88,7 @@ def main() -> int:
     command = [str(python_path(app)), str(app / "scripts/run_release.py"), "--config", str(settings["path"])]
     if args.no_browser:
         command.append("--no-browser")
-    return run_installed(command, app=app, env=environment(settings, app))
+    return run_installed(command, app=app, env=clean_python_environment(environment(settings, app)))
 
 
 if __name__ == "__main__":

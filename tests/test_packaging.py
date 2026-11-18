@@ -30,6 +30,7 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
         "scripts/release_support.py", "scripts/install_release.py", "scripts/run_release.py",
         "scripts/workspace_db.py", "scripts/release_python.sh", "scripts/release.toml",
         "scripts/start_release.sh", "scripts/start_release.cmd",
+        "scripts/release_python_runtime.py", "scripts/python_runtime.lock.json",
         "frontend/scripts/seed-engineering-demo.py", "frontend/scripts/engineering_resources.py",
         "design/tokens.css", "docs/architecture/release-installation.md",
         "docs/architecture/database-operations.md",
@@ -48,7 +49,8 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
     assert set(tracked) <= names
     assert {"scripts/install_release.py", "scripts/run_release.py", "scripts/release_python.sh",
             "frontend/scripts/seed-engineering-demo.py", "design/tokens.css",
-            "release.toml", "start.sh", "start.cmd"} <= names
+            "release.toml", "start.sh", "start.cmd",
+            "scripts/release_python_runtime.py", "scripts/python_runtime.lock.json"} <= names
     assert not any(".sqlite" in name or ".env" in name or "node_modules" in name
                    or "__pycache__" in name or "private_customer_report" in name for name in names)
 
@@ -71,3 +73,32 @@ def test_release_entrypoint_help_needs_only_standard_library(script, option):
                               text=True, capture_output=True, check=False)
     assert response.returncode == 0, response.stderr
     assert option in response.stdout
+
+
+def test_release_manifest_preserves_posix_case_distinct_payloads(tmp_path):
+    from scripts.build_release import payload_files
+    put(tmp_path, "runtime/python/share/terminfo/a/ansi", "lower")
+    put(tmp_path, "runtime/python/share/terminfo/A/apple", "upper")
+    put(tmp_path, "runtime/python/LICENSE", "license")
+    put(tmp_path, "release.toml", "user-editable")
+    files = payload_files(tmp_path, platform_name="linux")
+    assert len(files) == 3
+    assert files["runtime/python/share/terminfo/a/ansi"]["size_bytes"] == 5
+    assert files["runtime/python/share/terminfo/A/apple"]["size_bytes"] == 5
+    assert "release.toml" not in files
+
+
+def test_release_manifest_rejects_windows_parent_alias(tmp_path):
+    from scripts.build_release import payload_files
+    put(tmp_path, "runtime/python/Lib/a.py")
+    put(tmp_path, "runtime/python/lib/b.py")
+    with pytest.raises(RuntimeError, match="Windows release path aliases"):
+        payload_files(tmp_path, platform_name="win32")
+
+
+def test_release_manifest_shared_parents_are_not_duplicates(tmp_path):
+    from scripts.build_release import payload_files
+    for name in ("LICENSE", "LICENSE.APACHE", "LICENSE.BSD", "METADATA"):
+        put(tmp_path, "runtime/python/Lib/site-packages/packaging.dist-info/" + name)
+    assert len(payload_files(tmp_path, platform_name="win32")) == 4
+    assert len(payload_files(tmp_path, platform_name="linux")) == 4

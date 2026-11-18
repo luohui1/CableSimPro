@@ -84,3 +84,73 @@ def test_windows_does_not_collect_or_create_linux_files(tmp_path, monkeypatch):
     monkeypatch.setattr(release_native.sys, "platform", "win32")
     assert release_native.bundle_native_runtime(tmp_path) is None
     assert not list(tmp_path.iterdir())
+
+
+def _fake_native_inputs(tmp_path, monkeypatch):
+    # Exercise ownership on all platforms without requiring a dpkg database.
+    library = tmp_path / "fake-libGL.so.1"
+    library.write_bytes(b"native-contents")
+    notice = tmp_path / "native-copyright"
+    notice.write_text("redistribution notice", encoding="utf-8")
+    monkeypatch.setattr(release_native.sys, "platform", "linux")
+    monkeypatch.setattr(release_native.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(release_native.platform, "freedesktop_os_release",
+                        lambda: {"ID": "ubuntu", "VERSION_ID": "24.04"})
+    monkeypatch.setattr(release_native.os, "confstr", lambda _: "glibc 2.38", raising=False)
+    monkeypatch.setattr(release_native, "dependency_closure",
+                        lambda: ({"libGL.so.1": {"source": library,
+                                  "needed": [], "glibc_versions": ["2.38"]}}, {}))
+    monkeypatch.setattr(release_native, "package_record", lambda name, path: {
+        "package": "libgl1", "package_version": "1", "architecture": "amd64",
+        "source_package": "libgl1", "source_version": "1", "package_md5": "f" * 32})
+    monkeypatch.setattr(release_native, "license_sources",
+                        lambda _: {"runtime/licenses/libgl1/copyright": notice})
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_native_step_coexists_with_bundled_python_and_never_deletes_it(tmp_path, monkeypatch, fail):
+    _fake_native_inputs(tmp_path, monkeypatch)
+    python = tmp_path / "runtime/python/bin/python3"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"bundled CPython sentinel")
+    metadata = tmp_path / "runtime/python-runtime.json"
+    metadata.write_text('{"python":"3.12"}', encoding="utf-8")
+    if fail:
+        original = release_native.shutil.copyfile
+
+        def fail_during_license_copy(source, destination, *args, **kwargs):
+            if "licenses" in Path(destination).parts:
+                raise OSError("injected native-license failure")
+            return original(source, destination, *args, **kwargs)
+
+        monkeypatch.setattr(release_native.shutil, "copyfile", fail_during_license_copy)
+        with pytest.raises(OSError, match="injected native-license failure"):
+            release_native.bundle_native_runtime(tmp_path)
+        for owned in release_native.NATIVE_OUTPUTS:
+            assert not (tmp_path / owned).exists()
+    else:
+        report = release_native.bundle_native_runtime(tmp_path)
+        assert report["libraries"][0]["soname"] == "libGL.so.1"
+        assert (tmp_path / release_native.METADATA).is_file()
+        assert (tmp_path / "runtime/linux-libs/libGL.so.1").read_bytes() == b"native-contents"
+    assert python.read_bytes() == b"bundled CPython sentinel"
+    assert metadata.read_text(encoding="utf-8") == '{"python":"3.12"}'
+
+
+@pytest.mark.parametrize("occupied", release_native.NATIVE_OUTPUTS)
+def test_native_step_refuses_existing_own_output_without_mutating_python(tmp_path, monkeypatch, occupied):
+    _fake_native_inputs(tmp_path, monkeypatch)
+    python = tmp_path / "runtime/python/bin/python3"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"python remains")
+    own_path = tmp_path / occupied
+    own_path.parent.mkdir(parents=True, exist_ok=True)
+    if occupied in ("runtime/linux-libs", "runtime/licenses"):
+        own_path.mkdir()
+        (own_path / "keep").write_text("original")
+    else:
+        own_path.write_text("original")
+    with pytest.raises(RuntimeError, match="原生运行库文件已存在"):
+        release_native.bundle_native_runtime(tmp_path)
+    assert own_path.exists()
+    assert python.read_bytes() == b"python remains"
