@@ -7,6 +7,7 @@ import {
   ApiError,
 } from "./client";
 import type { components } from "./generated/schema";
+import { inputContractCacheOptions } from "@/lib/input-contract-cache";
 export type InputContract = components["schemas"]["InputContract"];
 type ContractSelector = Pick<components["schemas"]["Method"], "plugin_id" | "capability"> &
   Partial<Pick<components["schemas"]["Method"], "version" | "release_digest">>;
@@ -28,8 +29,7 @@ export function capabilityInputContracts(selector: ContractSelector, signal?: Ab
 /** Shared cache keys keep method versions separate; prefix invalidation remains compatible. */
 export function inputContractQuery(method: components["schemas"]["Method"]) {
   return {
-    queryKey: ["input-contracts", method.plugin_id, method.capability, method.version, method.release_digest],
-    staleTime: 30000,
+    ...inputContractCacheOptions(method),
     queryFn: async ({ signal }: { signal: AbortSignal }) =>
       exactContract(await capabilityInputContracts(method, signal), method),
   };
