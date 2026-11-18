@@ -217,10 +217,11 @@ export const IMPORT_MATERIAL_PROPERTIES: Record<string, string> = {
 export function issueText(value: string | ImportIssue): string { return displayLibraryText(typeof value === 'string' ? value : value.message); }
 export function tableHeaderText(value: string): string { return value.replace(/\buF(?=\/)/g, 'μF'); }
 export function displayLibraryText(value: string): string {
-  const named = value.replace(/\bmaterial_properties\./g, '材料物性 · ').replace(/\b([a-z][a-z_]+)\.([a-z][a-z_0-9]+)\b/g, (original, role: string, property: string) =>
+  const named = value.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻')
+    .replace(/\bmaterial_properties\./g, '材料物性 · ').replace(/\b([a-z][a-z_]+)\.([a-z][a-z_0-9]+)\b/g, (original, role: string, property: string) =>
     IMPORT_MATERIAL_ROLES[role] && IMPORT_MATERIAL_PROPERTIES[property] ? `${IMPORT_MATERIAL_ROLES[role]}${IMPORT_MATERIAL_PROPERTIES[property]}` : original)
     .replace(/\b[a-z][a-z_0-9]+\b/g, key => IMPORT_PARAMETER_NAMES[key] || IMPORT_MATERIAL_ROLES[key] || IMPORT_MATERIAL_PROPERTIES[key] || key);
-  return displayText(named.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻'));
+  return displayText(named);
 }
 export function confidenceText(value?: unknown): string {
   const key = typeof value === 'string' ? value : text(optionalRecord(value).tier);
