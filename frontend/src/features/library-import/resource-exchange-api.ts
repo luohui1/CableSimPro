@@ -2,10 +2,16 @@ import { ApiError, optionalRecord, text } from '@/api/client';
 
 /** Projections of the existing library exchange routes, not another data store. */
 export interface ExchangeWorkspace { id: string; name: string; revision: number; updated_at: string }
+export interface PublishedModelProofSummary {
+  family: string; version: string; asset_sha256: string; specification_sha256: string;
+  proof_bytes: number; dependency_count: number; source_run_count: number;
+  run_evidence: 'external_declared_run'; approval_inherited: false;
+  source_approval: { reviewer: string; approved_at: string; authority: string };
+}
 export interface ResourceExchangePreview {
   sha256: string;
   assets: { origin_id: string; name: string; kind: string; action: 'reuse' | 'create_draft'; existing_id: string | null }[];
-  projects: { origin_id: string; name: string; action: 'create_independent_input_copy' }[];
+  projects: { origin_id: string; name: string; action: 'create_independent_input_copy'; published_model?: PublishedModelProofSummary }[];
   requires_human_confirmation: boolean; approval_inherited: boolean; limitations: string[];
 }
 export interface ResourceExchangeReceipt {

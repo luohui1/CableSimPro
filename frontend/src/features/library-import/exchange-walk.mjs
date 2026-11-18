@@ -7,6 +7,9 @@ import { chromium, expect as baseExpect } from '@playwright/test';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 import { classifyExchangeRefusals, importResourceExchange, multipartEvidence, observeExchangeUploads, saveRawResponse } from './resource-exchange-walk.mjs';
 
+if (process.env.PUBLISHED_EXCHANGE_PHASE) {
+  await (await import('./published-exchange-walk.mjs')).runPublishedExchangePhase();
+} else {
 if (process.env.E2E_ISOLATED !== '1' || !process.env.E2E_EXCHANGE_TASKS || !process.env.LIBRARY_IMPORT_EVIDENCE) throw new Error('交换走查须由结构表隔离验收启动。');
 const base = process.env.FRONTEND_URL;
 if (!base || !['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('仅允许本机隔离数据库。');
@@ -163,3 +166,4 @@ assert.deepEqual(report.errors, [], '交换导入控制台或网络错误');
 assert.deepEqual(report.failures, [], '全新库真实交换流程未通过');
 assert.deepEqual(report.layout_failures, [], '交换页面截图布局或可见名称未通过');
 console.log(JSON.stringify({ checks: report.checks, screenshots: report.screenshots.length }, null, 2));
+}

@@ -171,6 +171,16 @@ jobs:
           E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
           LIBRARY_IMPORT_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk
         run: npm run test:library-import 2>&1 | tee ../.tmp/library-import-walk/browser.log
+      - name: Walk published projects after source stop and target restart
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          PYTHON: python
+          CABLESIM_PLUGIN_PYTHON: ${{ github.workspace }}/.venv/bin/python
+          E2E_DEV: '1'
+          PUBLISHED_EXCHANGE_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk/published
+        run: node frontend/src/features/library-import/published-exchange-walk.mjs
       - name: Retain every public catalogue value and deviation
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         shell: bash
