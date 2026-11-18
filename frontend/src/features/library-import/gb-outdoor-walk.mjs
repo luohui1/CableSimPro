@@ -1346,7 +1346,7 @@ export async function walkGbOutdoor({ page, base, viewport, out, root, expect, c
   const prefix = `${viewport.width}-gb-outdoor`, layoutStart = report.layout_failures.length;
   const evidence = { viewport, purpose: 'D.0.7 合成机制核验；两条 400 A 输入不是厂家额定值、温度曲线或真实线路验收',
     factory_or_line_verification: false, status: 'running', api_calls: [], ui_requests: [], ui_responses: [],
-    console_errors: [], screenshots: [], expected_http_errors: [], cases: [],
+    console_errors: [], screenshots: [], viewport_observations: [], expected_http_errors: [], cases: [],
     observation_boundary: '只记录本模块开始至返回期间实际收到的事件；不把模块返回视为全页零待定请求' };
   const write = () => fs.writeFile(path.join(out, prefix + '-summary.json'), JSON.stringify(evidence, null, 2));
   const requestRecords = new WeakMap();
@@ -1361,7 +1361,31 @@ export async function walkGbOutdoor({ page, base, viewport, out, root, expect, c
   const onFinished = request => { const record = requestRecords.get(request); if (record) { record.status = 'finished'; record.finished_at = new Date().toISOString(); } };
   const onFailed = request => { const record = requestRecords.get(request); if (record) { record.status = 'failed'; record.failed_at = new Date().toISOString(); record.failure = request.failure(); } };
   const onConsole = entry => { if (entry.type() === 'error') evidence.console_errors.push({ at: new Date().toISOString(), operation, text: entry.text(), location: entry.location() }); };
-  async function shot(label) { await capture(label); evidence.screenshots.push(report.screenshots.at(-1)); await write(); }
+  async function observeViewport(label) {
+    const observation = await page.evaluate(() => {
+      const describe = node => {
+        const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+        return { tag: node.tagName, id: node.id, class: node.className, role: node.getAttribute('role'),
+          label: node.getAttribute('aria-label'), expanded: node.getAttribute('aria-expanded'),
+          scrollLeft: node.scrollLeft, scrollTop: node.scrollTop, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
+          overflowX: style.overflowX, overflowY: style.overflowY,
+          rect: { x: box.x, y: box.y, left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height } };
+      };
+      const selectors = ['.app-shell', '.work-panel', '.topbar', '.topbar h1', '.topbar .status-wrap', '.topbar .status-detail',
+        '.work-body', '.main-content', '.workbench-frame', '.study-workbench', '.workbench-canvas', '.workbench-dock', '.study-inspector',
+        '.workbench-sidebar', '.sidebar-scroll', '.tree-caption', '.tree-row[aria-current="page"]', '[role="tree"]', '[role="treeitem"][aria-selected="true"]'];
+      return { at: new Date().toISOString(), url: location.href, window: { scrollX, scrollY, innerWidth, innerHeight },
+        document: describe(document.documentElement), body: describe(document.body),
+        elements: selectors.map(selector => ({ selector, nodes: [...document.querySelectorAll(selector)].map(describe) })) };
+    });
+    evidence.viewport_observations.push({ label, ...observation });
+  }
+  async function shot(label) {
+    await observeViewport('before-screenshot: ' + label);
+    await capture(label);
+    evidence.viewport_observations.at(-1).screenshot = report.screenshots.at(-1);
+    evidence.screenshots.push(report.screenshots.at(-1)); await write();
+  }
   async function api(label, method, endpoint, body, status = 200) {
     const bytes = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
     const requestFile = `${prefix}-${label}-request.bin`;
@@ -1527,6 +1551,15 @@ export async function walkGbOutdoor({ page, base, viewport, out, root, expect, c
       state.title += ' · 已核对保存输入';
       await page.getByRole('textbox', { name: '研究名称', exact: true }).fill(state.title);
       await page.getByRole('button', { name: '保留草稿', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: '研究名称', exact: true })).toBeHidden();
+      const status = page.locator('.topbar .status-mark');
+      await expect(status).toHaveCount(1); await expect(status).toHaveAttribute('aria-expanded', 'true');
+      const scene = state.label === 'null-cell' ? '原表空格研究' : '同温研究';
+      await shot('D07' + scene + '修改名称后菜单敞开原状态');
+      await status.press('Escape');
+      await expect(status).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.getByRole('button', { name: '修改研究名称', exact: true })).toBeHidden();
+      await shot('D07' + scene + '通过Escape关闭已用完的状态菜单');
       await save(state, label, parameters, []);
     }
     async function preflight(state, label, expected) {

@@ -17,7 +17,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_all_capabilities_are_sealed_self_describing_and_assets_match(client):
     methods=client.get('/api/methods').json()
     contracts=client.get('/api/input-contracts').json()
-    assert len(methods)==12 and len(contracts)==55
+    assert len(methods)==12 and len(contracts)==56
     # Four-core creation advertises version 2; saved version-1 requests remain
     # exercised through the real creation API in test_type_creation.py.
     assert {'cablesim.cable-design-request/2','cablesim.core-layout-request/2'} <= {item['input_schema'] for item in contracts}
