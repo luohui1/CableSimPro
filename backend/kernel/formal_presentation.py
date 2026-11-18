@@ -46,6 +46,10 @@ _LAYOUTS = {
     'both_ends': '两端接地', 'single_point': '单点接地',
     'cross_bonded': '交叉互联',
 }
+_BASIS_NAMES = {
+    'design': '设计值', 'derived': '推导值', 'measurement': '实测值',
+    'manufacturer_limit': '厂家声明上限', 'unknown': '未明确',
+}
 
 
 def _hint(model, cell):
@@ -254,7 +258,10 @@ def apply_presentation(model):
                         if column.get('role') == 'unit' and len(measured) == 1 and cell['value'] == measured[0].get('unit'):
                             translated = unit_label(measured[0]['unit'], quantity_role(model, measured[0]))
                         else:
-                            translated = engineering_text(cell['raw_text'], names)
+                            # Basis enums are meaningful only in the saved
+                            # context column, not in user-supplied object names.
+                            display_names = {**_BASIS_NAMES, **names} if key == 'context' else names
+                            translated = engineering_text(cell['raw_text'], display_names)
                         if translated != cell['raw_text']:
                             cell['display_text'] = translated
                             prose(cell['raw_text'], translated, cell.get('value_ref'))
@@ -393,7 +400,7 @@ def validate_presentation(model):
                         raise ValueError('Unit-only display is reserved for missing quantities')
                     translated = (unit_label(measured[0]['unit'], quantity_role(model, measured[0]))
                         if column.get('role') == 'unit' and len(measured) == 1 and cell['value'] == measured[0].get('unit')
-                        else engineering_text(cell['raw_text'], names))
+                        else engineering_text(cell['raw_text'], {**_BASIS_NAMES, **names} if key == 'context' else names))
                     if cell_text(cell) != translated:
                         raise ValueError('Body prose or a separate unit cell differs from its declared translation')
                 elif 'display' in cell or 'display_unit' in cell:
