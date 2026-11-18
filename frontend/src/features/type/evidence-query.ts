@@ -85,8 +85,10 @@ export function fixedTypeEvidenceOptions(client: QueryClient, wid: string, runId
         ?? (await readTypeEvidenceForWorkspace(historyOptions, () => client.fetchQuery(historyOptions), signal, client))
           .find(item => item.run.id === runId)?.run;
       if (!reference) throw new Error('固定运行不存在或完整性未通过');
-      const saved = await fullTypeRun(wid, runId, reference, signal);
-      if (!savedTypeRunDestination(saved.run, { workspaceId: wid, studyId: saved.study.id, runId }))
+      // Older non-rating archives may carry only the already supported
+      // workspace alias. Validate that exact identity without rewriting it.
+      const saved = await fullTypeRun(wid, runId, reference, signal, true);
+      if (!savedTypeRunDestination(saved.run, { workspaceId: wid, studyId: saved.study.id, runId }, true))
         throw new Error('所选运行不是保存的型号结果，停止显示');
       return [saved];
     } });

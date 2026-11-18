@@ -32,7 +32,7 @@ const {dimensionBasis}=await server.ssrLoadModule('/src/features/type/dimension-
 const {methodErrorText,MethodErrorDetail}=await server.ssrLoadModule('/src/features/type/method-error.tsx');
 const {structureIssue}=await server.ssrLoadModule('/src/features/type/structure-issue.tsx');
 const {readTypeEvidenceForWorkspace}=await server.ssrLoadModule('/src/features/type/routes.tsx');
-const {fixedRatingEvidenceOptions,typeEvidenceOptions,typeRatingResultsOptions}=await server.ssrLoadModule('/src/features/type/evidence-query.ts');
+const {fixedRatingEvidenceOptions,fixedTypeEvidenceOptions,typeEvidenceOptions,typeRatingResultsOptions}=await server.ssrLoadModule('/src/features/type/evidence-query.ts');
 const {loadWorkspace}=await server.ssrLoadModule('/src/features/type/api.ts');
 const {ratingBody}=await server.ssrLoadModule('/src/features/type/rating-api.ts');
 const {api:typeApi}=await server.ssrLoadModule('/src/api/client.ts');
@@ -233,6 +233,71 @@ test('Other saved modules retain their existing workspace-alias archive compatib
     assert.equal(workspace.document.name,'Saved type input');
     assert.deepEqual(requests.map(item=>item.kind),['history','full']);
   },{history:()=>Response.json({items:[runProjection(archive)],next_cursor:null,history_complete:true})});
+});
+
+function electricalArchive() {
+  const archive=ratingArchive();
+  archive.snapshot.definition.method={plugin_id:'cablesim.type-electrical',capability:'electrical',version:'1.1.1',release_digest:'c'.repeat(64)};
+  archive.snapshot.definition.driver={kind:'single'};
+  archive.output.cases[0].artifacts={'x-cablesim.type-electrical':{schema:'cablesim.type-analysis/1',capability:'electrical',rows:[]}};
+  return archive;
+}
+test('Exact non-rating cold reads preserve canonical and existing workspace-alias archives without normalizing originals',async()=>{
+  for(const alias of [false,true]) {
+    const archive=electricalArchive(),client=evidenceClient();
+    if(alias){archive.snapshot.workspace=archive.workspace;delete archive.snapshot.workspace_id;}
+    const original=structuredClone(archive);
+    try {await withSavedRunReads(archive,async requests=>{
+      const selected=await client.fetchQuery(fixedTypeEvidenceOptions(client,archive.workspace,archive.id,'electrical'));
+      assert.deepEqual(requests.map(item=>item.kind),['history','full']);
+      const workspace=await loadWorkspace(archive.workspace,undefined,undefined,archive.id,Promise.resolve(selected));
+      assert.equal(workspace.revision,3);assert.equal(workspace.raw.historical,true);
+      assert.equal(workspace.raw.fixed_run,true);assert.equal(workspace.raw.can_undo,false);assert.equal(workspace.raw.can_redo,false);
+      assert.deepEqual(selected[0].run,original);assert.deepEqual(archive,original);
+      assert.equal(Object.hasOwn(selected[0].run.snapshot,'workspace_id'),!alias);
+    },{history:()=>Response.json({items:[runProjection(archive)],next_cursor:null,history_complete:true})});}
+    finally {client.clear();}
+  }
+});
+test('A real non-rating receipt reads its exact archive while the genuine history remains pending',async()=>{
+  const archive=electricalArchive(),client=evidenceClient();let finishHistory;
+  const response=new Promise(resolve=>{finishHistory=resolve;});
+  try {await withSavedRunReads(archive,async requests=>{
+    const historyOptions=typeEvidenceOptions(archive.workspace,true,'electrical');
+    const history=client.fetchQuery(historyOptions);
+    client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+    const selected=await client.fetchQuery(fixedTypeEvidenceOptions(client,archive.workspace,archive.id,'electrical'));
+    assert.deepEqual(requests.map(item=>item.kind),['history','full']);
+    assert.equal(client.getQueryData(historyOptions.queryKey),undefined);
+    assert.equal(client.getQueryState(historyOptions.queryKey).fetchStatus,'fetching');
+    assert.deepEqual(selected[0].run,archive);
+    finishHistory(Response.json({items:[runProjection(archive)],next_cursor:null,history_complete:true}));
+    assert.equal((await history).length,1);
+    assert.equal(requests.filter(item=>item.kind==='full').length,1);
+  },{history:()=>response});} finally {client.clear();}
+});
+test('Non-rating aliases reject explicit empty or conflicting identities and retain study, digest and revision checks',async()=>{
+  const mutations=[
+    run=>{run.snapshot.workspace_id=null;},run=>{run.snapshot.workspace_id='';},run=>{run.snapshot.workspace_id='wrong';},
+    run=>{run.snapshot.workspace_id=undefined;},run=>{run.snapshot.workspace='wrong';},
+    run=>{delete run.snapshot.workspace_id;run.snapshot.workspace='wrong';},
+    run=>{run.snapshot.study_id='wrong';},run=>{run.snapshot.workspace_revision=0;},run=>{run.snapshot.study_revision=0;},
+    run=>{run.input_digest='e'.repeat(64);},run=>{run.output_digest='f'.repeat(64);},
+  ];
+  for(const mutate of mutations) {
+    const archive=electricalArchive(),client=evidenceClient();archive.snapshot.workspace=archive.workspace;
+    try {await withSavedRunReads(archive,async()=>{
+      client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+      await assert.rejects(client.fetchQuery(fixedTypeEvidenceOptions(client,archive.workspace,archive.id,'electrical')));
+      assert.equal(client.getQueryData(['type-fixed-run',archive.workspace,archive.id]),undefined);
+    },{full:()=>{const value=structuredClone(archive);mutate(value);return value;}});} finally {client.clear();}
+  }
+  const archive=ratingArchive(),client=evidenceClient();archive.snapshot.workspace=archive.workspace;delete archive.snapshot.workspace_id;
+  try {await withSavedRunReads(archive,async()=>{
+    client.setQueryData(['saved-run',archive.workspace,archive.study,archive.id,'detail'],structuredClone(archive));
+    await assert.rejects(client.fetchQuery(fixedTypeEvidenceOptions(client,archive.workspace,archive.id,'rating-table')));
+    assert.equal(client.getQueryData(['type-fixed-rating-run',archive.workspace,archive.id]),undefined);
+  });} finally {client.clear();}
 });
 
 function pendingHistory() {

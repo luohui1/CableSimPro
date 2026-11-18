@@ -32,13 +32,15 @@ export function matchingTypeRun(wid: string, runId: string, reference: unknown, 
     throw new ApiError(409, '固定运行与保存身份或摘要不一致，停止显示');
   return run;
 }
-export async function fullTypeRun(wid: string, runId: string, reference: unknown, signal?: AbortSignal) {
+export async function fullTypeRun(wid: string, runId: string, reference: unknown, signal?: AbortSignal, allowWorkspaceAlias = false) {
   const expected = typeRunReceipt(wid, runId, reference), sid = text(expected.study);
   const run = matchingTypeRun(wid, runId, expected, await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {
     params: { path: { wid, sid, rid: runId }, query: { view: 'full' } }, signal,
   })));
   const snapshot = record(run.snapshot, '固定运行完整输入'), revision = numeric(snapshot.study_revision), workspaceRevision = numeric(snapshot.workspace_revision);
-  if (snapshot.workspace_id !== wid || snapshot.study_id !== sid || revision === null || revision < 1
+  const workspaceMatches = snapshot.workspace_id === wid
+    || allowWorkspaceAlias && !Object.hasOwn(snapshot, 'workspace_id') && snapshot.workspace === wid;
+  if (!workspaceMatches || snapshot.study_id !== sid || revision === null || revision < 1
     || workspaceRevision === null || workspaceRevision < 1
     || snapshot.workspace !== undefined && snapshot.workspace !== wid
     || snapshot.study !== undefined && snapshot.study !== sid)

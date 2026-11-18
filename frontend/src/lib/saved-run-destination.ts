@@ -16,7 +16,7 @@ const digest = (value: unknown): value is string => typeof value === 'string' &&
  * A null result is an ordinary research run; invalid/unsupported saved type
  * evidence throws so it cannot fall through to an unrelated ampacity view.
  */
-export function savedTypeRunDestination(run: unknown, expected: SavedRunIdentity): SavedTypeRunDestination | null {
+export function savedTypeRunDestination(run: unknown, expected: SavedRunIdentity, allowWorkspaceAlias = false): SavedTypeRunDestination | null {
   const { workspaceId, studyId, runId } = expected;
   if (![workspaceId, studyId, runId].every(nonempty) || !object(run)
     || run.id !== runId || run.workspace !== workspaceId || run.study !== studyId)
@@ -24,7 +24,8 @@ export function savedTypeRunDestination(run: unknown, expected: SavedRunIdentity
   if (run.integrity !== 'verified')
     throw new Error('保存运行尚未通过完整性校验，不能确定其结果入口。');
   const snapshot = run.snapshot;
-  if (!object(snapshot) || snapshot.workspace_id !== workspaceId || snapshot.study_id !== studyId
+  if (!object(snapshot) || (snapshot.workspace_id !== workspaceId
+    && !(allowWorkspaceAlias && !Object.hasOwn(snapshot, 'workspace_id') && snapshot.workspace === workspaceId)) || snapshot.study_id !== studyId
     || snapshot.workspace !== undefined && snapshot.workspace !== workspaceId
     || snapshot.study !== undefined && snapshot.study !== studyId
     || !revision(snapshot.workspace_revision) || !revision(snapshot.study_revision))
