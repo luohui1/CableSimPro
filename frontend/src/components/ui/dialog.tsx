@@ -51,6 +51,11 @@ function AppDialog({
                 event.target instanceof HTMLElement ? event.target : null;
               if (
                 event.key !== "Enter" ||
+                // Enter can confirm an IME candidate before it is a form action.
+                // Some engines report the final composition key as 229 after
+                // isComposing has already cleared; leave both events to the IME.
+                event.nativeEvent.isComposing ||
+                event.nativeEvent.keyCode === 229 ||
                 event.defaultPrevented ||
                 !target ||
                 target.closest(

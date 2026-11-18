@@ -148,7 +148,14 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await openGroup(group);
     await page.locator('.topbar-actions').getByRole('button', { name: '新建资源', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '新建资源', exact: true });
-    await expect(dialog.getByRole('button', { name: '保存资源草稿', exact: true })).toBeDisabled();
+    const save = dialog.getByRole('button', { name: '保存资源草稿', exact: true });
+    await expect(save).toBeDisabled();
+    await expect(dialog.locator('[aria-invalid="true"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-resource-required]')).toBeInViewport({ ratio: 1 });
+    check('资源表单初开不标红且禁用保存有可见缺项说明', await save.evaluate(button => {
+      const explanation = document.getElementById(button.getAttribute('aria-describedby'));
+      return !!explanation && explanation.textContent.includes('资源名称') && explanation.textContent.includes('来源说明');
+    }));
     const name = `隔离验收-表单-${knownKindLabels[kind]}-${marker}`;
     await dialog.getByRole('textbox', { name: '资源名称', exact: true }).fill(name);
     await choose('资源类别', knownKindLabels[kind], dialog);
@@ -165,6 +172,73 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     }
     await choose('来源类别 1', '工程师填写', dialog);
     await dialog.getByRole('textbox', { name: '来源说明 1', exact: true }).fill('隔离浏览器验收手工输入，用于验证表单、单位和版本操作；不是厂家、标准或工程推荐数据。');
+    if (kind === 'material' || kind === 'rule') {
+      const writes = report.writes.length;
+      const value = dialog.getByRole('textbox', { name: '参数数值 1', exact: true });
+      async function invalidField(control, expected) {
+        await expect(control).toBeFocused();
+        await expect(control).toBeInViewport({ ratio: 1 });
+        await expect(control).toHaveAttribute('aria-invalid', 'true');
+        const description = await control.evaluate(input => {
+          const error = document.getElementById(input.getAttribute('aria-describedby'));
+          const bounds = error?.getBoundingClientRect(), editor = input.closest('.resource-editor')?.getBoundingClientRect();
+          return { text: error?.textContent || '', visible: !!bounds && !!editor && bounds.width > 0 && bounds.height > 0
+            && bounds.top >= Math.max(editor.top, 0) && bounds.bottom <= Math.min(editor.bottom, innerHeight) };
+        });
+        check('资源校验定位首个错误控件且关联说明完整可见', description.visible && description.text.includes(expected), description);
+      }
+      if (kind === 'material') {
+        const version = dialog.getByRole('textbox', { name: '版本号', exact: true });
+        await version.fill('1.0');
+        await value.fill('NaN');
+        const resourceName = dialog.getByRole('textbox', { name: '资源名称', exact: true });
+        await resourceName.focus();
+        // Synthetic composition/keyboard events exercise the real dialog
+        // handler in Chromium. This is not a native desktop IME acceptance test.
+        await resourceName.dispatchEvent('compositionstart', { data: '中' });
+        await resourceName.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, isComposing: true, bubbles: true, cancelable: true });
+        await resourceName.dispatchEvent('compositionend', { data: '中' });
+        await expect(dialog.locator('[data-resource-validation]')).toHaveCount(0);
+        await expect(dialog.locator('[aria-invalid="true"]')).toHaveCount(0);
+        await resourceName.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: false, bubbles: true, cancelable: true });
+        await expect(dialog.locator('[data-resource-validation]')).toHaveCount(0);
+        await expect(dialog.locator('[aria-invalid="true"]')).toHaveCount(0);
+        await expect(resourceName).toBeFocused();
+        check('合成组合输入Enter和229键事件不触发表单校验或写入', report.writes.length === writes
+          && await resourceName.inputValue() === name && await version.inputValue() === '1.0' && await value.inputValue() === 'NaN',
+        { input: 'Chromium合成composition/keydown事件；不替代原生输入法实机验收', writes: report.writes.slice(writes) });
+        await capture('resource-composition-enter-keeps-draft');
+        // Reach the end of the long form before submitting with the keyboard.
+        // The first invalid field must be scrolled into view, not merely named.
+        await dialog.getByRole('textbox', { name: '来源说明 1', exact: true }).focus();
+        await save.press('Enter');
+        await invalidField(version, '三段数字');
+        await capture('resource-validation-version-focus');
+        await version.fill('1.0.0');
+        await save.click();
+        await invalidField(value, '有限数值');
+        await capture('resource-validation-value-focus');
+        await value.fill(String(parameter.quantity.value));
+        await dialog.getByRole('button', { name: '新增参数', exact: true }).click();
+        await dialog.getByRole('textbox', { name: '参数数值 2', exact: true }).fill('2');
+        await save.press('Enter');
+        await invalidField(dialog.getByRole('combobox', { name: '参数 2', exact: true }), '重复');
+        await capture('resource-validation-duplicate-focus');
+        await dialog.getByRole('button', { name: '移除参数 2', exact: true }).click();
+      } else {
+        await value.fill('-300');
+        await save.press('Enter');
+        await invalidField(value, '−273.15 °C');
+        await capture('resource-validation-temperature-range');
+        await value.fill(String(parameter.quantity.value));
+      }
+      await expect(dialog.locator('[aria-invalid="true"]')).toHaveCount(0);
+      await expect(dialog.locator('[data-resource-validation]')).toHaveCount(0);
+      await expect(save).toBeEnabled();
+      check('资源无效输入未发写请求，修正后保持原名称和物理量', report.writes.length === writes
+        && await dialog.getByRole('textbox', { name: '资源名称', exact: true }).inputValue() === name
+        && await value.inputValue() === String(parameter.quantity.value), { writes: report.writes.slice(writes), parameter });
+    }
     await capture(`${group}-typed-definition`);
     if (kind === 'material') {
       const limitation = dialog.getByText(/密度、电阻率及无量纲参数暂不能录入/);
