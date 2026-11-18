@@ -34,8 +34,16 @@ def rebuild():
     complete_lists={key:{'record_count':len(ids),'record_ids_sha256':sha256(
         json.dumps(sorted(ids),ensure_ascii=False,separators=(',',':')).encode()).hexdigest()}
         for key,ids in sorted(members.items()) if ids}
-    return {'plugin_version':manifest['version'],'data_sha256':sha256(raw).hexdigest(),
-        'records':{row['id']:sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest() for row in data['records']},
+    numbers_spec=importlib.util.spec_from_file_location('basis_catalog_numbers',Path(__file__).with_name('json_numbers.py'))
+    numbers=importlib.util.module_from_spec(numbers_spec);numbers_spec.loader.exec_module(numbers)
+    def digest(value):
+        return sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+    records={row['id']:digest(row) for row in data['records']}
+    # A browser writes integral floats back as integers. Pin that same content
+    # for the records where it hashes differently; the issuer digest stays primary.
+    content={row['id']:digest(numbers.json_numbers(row)) for row in data['records']}
+    return {'plugin_version':manifest['version'],'data_sha256':sha256(raw).hexdigest(),'records':records,
+        'content_records':{'schema':numbers.SCHEMA,'sha256':{key:value for key,value in sorted(content.items()) if value!=records[key]}},
         'complete_lists':complete_lists}
 
 if __name__=='__main__':
