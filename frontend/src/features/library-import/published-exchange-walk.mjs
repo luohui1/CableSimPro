@@ -25,6 +25,175 @@ async function fileEvidence(filename) { const bytes = await fs.readFile(filename
 function pythonJSON(script, args = []) {
   return JSON.parse(execFileSync(python, ['-c', script, ...args], { cwd: root, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, timeout: 120000 }));
 }
+async function frontendInventory(directory) {
+  const files = [];
+  async function visit(relative) {
+    for (const entry of (await fs.readdir(path.join(directory, relative), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+      const name = path.join(relative, entry.name);
+      if (entry.isDirectory()) await visit(name);
+      else {
+        assert.ok(entry.isFile(), `生产前端只接受构建产生的普通文件：${name}`);
+        const bytes = await fs.readFile(path.join(directory, name));
+        files.push({ path: name.split(path.sep).join('/'), bytes: bytes.length, sha256: digest(bytes) });
+      }
+    }
+  }
+  await visit('');
+  assert.ok(files.some(item => item.path === 'index.html'));
+  return { files, file_count: files.length, bytes: files.reduce((sum, item) => sum + item.bytes, 0), inventory_sha256: digest(JSON.stringify(files)) };
+}
+
+// Observe this one original POST before Chromium's fetch().blob() can evict its
+// Network.getResponseBody copy (microsoft/playwright#42862). No request is replayed
+// or fulfilled. The paused original is continued without overrides, after the
+// body command has completely settled; timing of this observation is recorded.
+async function observeExportResponses(page, base, directory, caseId, identity, report) {
+  const endpoint = new URL('/api/library/exchange/export', base).href;
+  const session = await page.context().newCDPSession(page), tasks = new Set(), actualRequests = new WeakMap();
+  const ledger = { case: caseId, endpoint, stage: 'Response', resource_type: 'Fetch', actions: [], unexpected: [], errors: [] };
+  report.export_observations.push(ledger);
+  let active = null, terminated = false, saving = Promise.resolve();
+  const persist = () => (saving = saving.then(() => write(path.join(directory, 'export-observations.json'), ledger)));
+  function failure(phase, error, detail = {}) {
+    const entry = { at: new Date().toISOString(), phase, message: String(error), ...detail };
+    ledger.errors.push(entry); report.errors.push({ case: caseId, kind: 'export-response-observation', ...entry });
+  }
+  async function bounded(label, operation, milliseconds = 120000) {
+    const timer = setTimeout(() => {
+      terminated = true; ledger.context_termination = { at: new Date().toISOString(), reason: `${label} 超过 ${milliseconds} ms` };
+      failure(label, ledger.context_termination.reason);
+      // Never continue/disable a request with getResponseBody still in flight.
+      // Abort the entire failed context instead of treating timeout as recovery.
+      void persist().catch(error => failure('保存超时证据', error));
+      void page.context().close().then(() => { ledger.context_closed_at = new Date().toISOString(); })
+        .catch(error => failure('关闭超时上下文', error));
+    }, milliseconds);
+    try { const value = await operation(); assert.equal(terminated, false, '导出观测超时，整个上下文已判失败'); return value; }
+    finally { clearTimeout(timer); }
+  }
+  const command = (method, params, timeout) => bounded(method, () => session.send(method, params), timeout);
+  function recordRequest(request) {
+    if (request.url() !== endpoint) return;
+    const record = { request_id: identity(request).id, at: new Date().toISOString(), method: request.method(), url: request.url(),
+      post_data: request.postData(), post_data_sha256: digest(request.postDataBuffer() ?? Buffer.alloc(0)) };
+    if (!active) { ledger.unexpected.push({ channel: 'Playwright', ...record }); failure('未武装的导出请求', '没有对应人工操作', record); return; }
+    active.requests.push(request); active.record.playwright_requests.push(record); actualRequests.set(request, active);
+  }
+  const networkRequests = new Map();
+  function recordNetwork(event) {
+    if (event.request.url !== endpoint) return;
+    const record = { network_id: event.requestId, at: new Date().toISOString(), timestamp: event.timestamp, wall_time: event.wallTime,
+      frame_id: event.frameId, type: event.type, method: event.request.method, url: event.request.url,
+      post_data: event.request.postData, post_data_sha256: digest(event.request.postData ?? ''), redirect: event.redirectResponse ?? null };
+    if (networkRequests.has(event.requestId)) failure('重复 CDP 请求身份', event.requestId, record);
+    networkRequests.set(event.requestId, { record, action: active });
+    if (active) active.record.network_requests.push(record);
+    else { ledger.unexpected.push({ channel: 'Network', ...record }); failure('未武装的 CDP 导出请求', '没有对应人工操作', record); }
+  }
+  function paused(event) {
+    const action = active;
+    const record = { fetch_request_id: event.requestId, network_id: event.networkId ?? null, at: new Date().toISOString(),
+      method: event.request.method, url: event.request.url, post_data: event.request.postData, resource_type: event.resourceType,
+      status: event.responseStatusCode, headers: event.responseHeaders ?? [], error_reason: event.responseErrorReason ?? null,
+      redirected_request_id: event.redirectedRequestId ?? null };
+    if (action) action.record.pauses.push(record); else ledger.unexpected.push({ channel: 'Fetch', ...record });
+    const work = (async () => {
+      try {
+        assert.ok(action, '没有人工操作对应此暂停响应');
+        assert.equal(record.url, endpoint); assert.equal(record.method, 'POST'); assert.equal(record.resource_type, 'Fetch');
+        assert.equal(record.error_reason, null); assert.equal(record.redirected_request_id, null);
+        assert.ok(record.network_id); assert.ok(record.status >= 200 && record.status < 300, '导出响应必须成功且不能重定向');
+        record.body_read_started_at = new Date().toISOString();
+        let body;
+        try { body = await command('Fetch.getResponseBody', { requestId: event.requestId }); }
+        finally { record.body_read_settled_at = new Date().toISOString(); }
+        record.base64_encoded = body.base64Encoded;
+        const bytes = Buffer.from(body.body, body.base64Encoded ? 'base64' : 'utf8');
+        const filename = path.join(directory, `export-fetch-${action.record.id}-${action.record.pauses.indexOf(record) + 1}.bin`);
+        await fs.writeFile(filename, bytes, { flag: 'wx' }); record.raw_response = await fileEvidence(filename);
+        assert.ok(bytes.length > 0, '原始导出响应正文不得为空');
+        await persist();
+      } catch (error) { record.failure = String(error); failure('读取原始导出响应', error, { fetch_request_id: event.requestId }); }
+      finally {
+        // Rejection also settles the body command. Only context termination skips
+        // continuation; that remains a recorded failure, never a successful case.
+        if (!terminated) {
+          record.continue_sent_at = new Date().toISOString();
+          try { await command('Fetch.continueRequest', { requestId: event.requestId }, 30000); record.continue_ack_at = new Date().toISOString(); }
+          catch (error) { record.continue_failure = String(error); failure('原样继续导出响应', error, { fetch_request_id: event.requestId }); }
+        } else record.continue_skipped = 'failed_context_terminated';
+        await persist();
+      }
+    })().catch(error => failure('导出响应任务', error));
+    tasks.add(work); if (action) action.tasks.push(work);
+    void work.then(() => tasks.delete(work));
+  }
+  page.on('request', recordRequest); session.on('Network.requestWillBeSent', recordNetwork); session.on('Fetch.requestPaused', paused);
+  await command('Network.enable', { maxPostDataSize: 65536 }, 30000);
+  await command('Fetch.enable', { patterns: [{ urlPattern: endpoint, resourceType: 'Fetch', requestStage: 'Response' }] }, 30000);
+  return {
+    async begin(label, selection) {
+      assert.equal(active, null); assert.equal(terminated, false);
+      const record = { id: ledger.actions.length + 1, label, armed_at: new Date().toISOString(), selection,
+        playwright_requests: [], network_requests: [], pauses: [], completed: false };
+      active = { record, requests: [], tasks: [] }; ledger.actions.push(record); await persist(); return active;
+    },
+    click(action) { assert.equal(action, active); action.record.click_started_at = new Date().toISOString(); },
+    async finish(action, response, download) {
+      const record = action.record;
+      try {
+        await Promise.all(action.tasks);
+        record.download = download; record.download_saved_at = new Date().toISOString();
+        record.playwright_response = { at: new Date().toISOString(), status: response.status(), headers: await response.allHeaders() };
+        record.playwright_body = await saveRawResponse(response, path.join(directory, `export-network-${record.id}.bin`));
+        record.playwright_body.empty_copy = record.playwright_body.size === 0;
+        const finished = await bounded('等待原始导出正文完成', () => response.finished(), 30000);
+        record.playwright_finished = { at: new Date().toISOString(), error: finished ? String(finished) : null };
+        assert.equal(finished, null); assert.equal(action, active); assert.ok(record.click_started_at);
+        assert.equal(action.requests.length, 1); assert.equal(record.network_requests.length, 1); assert.equal(record.pauses.length, 1);
+        assert.equal(action.requests[0], response.request(), '必须是实际点击产生的同一个 Playwright Request 对象');
+        assert.equal(actualRequests.get(response.request()), action);
+        const request = record.playwright_requests[0], network = record.network_requests[0], pause = record.pauses[0];
+        assert.equal(networkRequests.get(pause.network_id)?.action, action); assert.equal(pause.network_id, network.network_id);
+        assert.equal(request.method, 'POST'); assert.equal(network.method, 'POST'); assert.equal(network.type, 'Fetch'); assert.equal(network.redirect, null);
+        assert.equal(request.post_data, network.post_data); assert.equal(request.post_data, pause.post_data);
+        assert.equal(request.post_data_sha256, network.post_data_sha256); assert.deepEqual(JSON.parse(request.post_data), record.selection);
+        assert.equal(pause.failure, undefined); assert.ok(pause.continue_ack_at); assert.equal(pause.continue_failure, undefined);
+        assert.equal(response.status(), 200); assert.equal(pause.status, 200);
+        for (const name of ['x-content-sha256', 'x-bundle-sha256', 'content-length']) {
+          const values = pause.headers.filter(header => header.name.toLowerCase() === name);
+          assert.equal(values.length, 1, `同一原始响应必须具有唯一 ${name}`);
+          assert.equal(values[0].value, record.playwright_response.headers[name]);
+        }
+        assert.equal(download.bytes, pause.raw_response.bytes); assert.equal(download.bytes, Number(record.playwright_response.headers['content-length']));
+        assert.equal(download.sha256, pause.raw_response.sha256); assert.equal(download.sha256, record.playwright_response.headers['x-content-sha256']);
+        // Keep the real Network copy, whether empty or complete. A nonempty copy
+        // remains subject to the same byte/hash check; never replace it with Fetch.
+        if (record.playwright_body.size) {
+          assert.equal(record.playwright_body.size, download.bytes); assert.equal(record.playwright_body.sha256, download.sha256);
+        }
+        record.association = 'unique_armed_action_and_Request_object_with_identical_url_method_post_data_and_CDP_networkId';
+        record.completed = true; record.completed_at = new Date().toISOString(); active = null;
+        return { action_id: record.id, fetch_request_id: pause.fetch_request_id, network_id: pause.network_id,
+          request_id: request.request_id, original_response: pause.raw_response, playwright_body: record.playwright_body };
+      } finally { await persist(); }
+    },
+    async close() {
+      await Promise.all([...tasks]);
+      try {
+        if (!terminated) {
+          await command('Fetch.disable', {}, 10000); await command('Network.disable', {}, 10000);
+          await bounded('断开独立 CDP 会话', () => session.detach(), 10000);
+        }
+      } finally {
+        page.off('request', recordRequest); session.off('Network.requestWillBeSent', recordNetwork); session.off('Fetch.requestPaused', paused);
+        await persist();
+      }
+      assert.equal(active, null, '导出观测必须全部完成'); assert.deepEqual(ledger.unexpected, []); assert.deepEqual(ledger.errors, []);
+      assert.ok(ledger.actions.every(action => action.completed));
+    },
+  };
+}
 async function closed(url) {
   const address = new URL(url); assert.equal(address.hostname, '127.0.0.1');
   return new Promise((resolve, reject) => {
@@ -127,9 +296,22 @@ async function run(command, args, environment, logfile) {
 async function orchestrate() {
   await fs.mkdir(path.dirname(out), { recursive: true });
   await fs.mkdir(out, { recursive: false }); // A rerun may not reuse earlier evidence.
-  const report = { producer: null, manifest: null, phases: [], completed_cases: [], failures: [] };
+  const report = { production_frontend: null, producer: null, manifest: null, phases: [], completed_cases: [], failures: [] };
   const save = () => write(path.join(out, 'report.json'), report);
+  const buildDirectory = path.join(root, '.data/release/frontend'), servedDirectory = path.join(root, 'frontend/dist');
+  let linked = false, buildInventory = null;
   try {
+    assert.equal(process.env.E2E_DEV, '0', '独立发布交换只使用本轮真实 shipped production build');
+    const build = await fs.realpath(buildDirectory), inventory = await frontendInventory(build); buildInventory = inventory;
+    const frontendFile = path.join(out, 'production-frontend.json');
+    await write(frontendFile, { mode: 'production', source_commit: process.env.GITHUB_SHA ?? null,
+      build_directory: build, served_directory: servedDirectory, ...inventory });
+    report.production_frontend = { ...await fileEvidence(frontendFile), mode: 'production', inventory_sha256: inventory.inventory_sha256 };
+    if (!(await fs.lstat(servedDirectory).catch(error => { if (error.code !== 'ENOENT') throw error; return null; }))) {
+      await fs.symlink(path.relative(path.dirname(servedDirectory), build), servedDirectory, 'dir'); linked = true;
+    }
+    assert.equal(await fs.realpath(servedDirectory), build, 'runner 默认 dist 必须指向本轮 shipped build，不能消费残留构建');
+    assert.deepEqual(await frontendInventory(servedDirectory), inventory); await save();
     report.producer = await run(python, ['-m', 'pytest', '-n', '0', 'tests/test_published_project_exchange.py', '--junitxml=' + path.join(out, 'producer.xml')],
       { CABLESIM_PUBLISHED_EXCHANGE_EVIDENCE: path.join(out, 'source') }, path.join(out, 'producer.log'));
     await save(); assert.equal(report.producer.exit_code, 0, '真实源数据生产与后端门禁必须成功，不能复用旧库');
@@ -143,7 +325,8 @@ async function orchestrate() {
       const taskFile = path.join(directory, 'task.json'); if (task) await write(taskFile, task);
       const receipt = await run(process.execPath, [path.join(root, 'frontend/scripts/isolated-e2e.mjs'), 'library-exchange-walk.mjs'], {
         E2E_DATABASE_SOURCE: database, PUBLISHED_EXCHANGE_PHASE: phaseName, PUBLISHED_EXCHANGE_PHASE_OUT: directory,
-        PUBLISHED_EXCHANGE_MANIFEST: manifestFile, ...(task ? { PUBLISHED_EXCHANGE_TASK: taskFile } : {}),
+        PUBLISHED_EXCHANGE_MANIFEST: manifestFile, PUBLISHED_EXCHANGE_FRONTEND_MANIFEST: frontendFile,
+        ...(task ? { PUBLISHED_EXCHANGE_TASK: taskFile } : {}),
       }, path.join(directory, 'process.log'));
       const result = await read(path.join(directory, 'report.json')).catch(() => null);
       const lifecycle = { name, phase: phaseName, ...receipt, service: result?.service, closed: [], status: 'checking' };
@@ -194,7 +377,17 @@ async function orchestrate() {
     }
     assert.equal(report.completed_cases.length, 4);
   } catch (error) { report.failures.push({ message: String(error), stack: error.stack }); throw error; }
-  finally { await save(); }
+  finally {
+    try {
+      if (report.production_frontend) {
+        const actual = await frontendInventory(buildDirectory);
+        report.production_frontend.after = { inventory_sha256: actual.inventory_sha256, file_count: actual.file_count, bytes: actual.bytes };
+        assert.deepEqual(actual, buildInventory, '所有生产构建文件必须保持原字节');
+      }
+      if (linked) { assert.equal(await fs.realpath(servedDirectory), await fs.realpath(buildDirectory)); await fs.unlink(servedDirectory); report.production_frontend.temporary_link_removed = true; }
+    } catch (error) { report.failures.push({ phase: '生产构建字节与临时链接收尾', message: String(error), stack: error.stack }); throw error; }
+    finally { await save(); }
+  }
 }
 
 export async function runPublishedExchangePhase() {
@@ -205,11 +398,18 @@ export async function runPublishedExchangePhase() {
   for (const url of [base, backend]) assert.equal(new URL(url).hostname, '127.0.0.1');
   const manifestFile = process.env.PUBLISHED_EXCHANGE_MANIFEST, manifest = await read(manifestFile);
   const task = phase === 'source' ? null : await read(process.env.PUBLISHED_EXCHANGE_TASK);
-  const report = { phase, service: { backend_url: backend, frontend_url: base, database: process.env.CABLESIM_DB },
-    requests: [], http: [], console: [], errors: [], failures: [], layout_failures: [], screenshots: [], downloads: [], closed_before_start: [] };
+  const report = { phase, service: { backend_url: backend, frontend_url: base, database: process.env.CABLESIM_DB }, production_frontend: null,
+    requests: [], http: [], console: [], errors: [], failures: [], layout_failures: [], screenshots: [], downloads: [], closed_before_start: [], export_observations: [], served_entries: [], served_assets: [] };
   const save = () => write(path.join(directory, 'report.json'), report);
   let browser;
   try {
+    assert.equal(process.env.E2E_DEV, '0');
+    const frontendFile = process.env.PUBLISHED_EXCHANGE_FRONTEND_MANIFEST, frontend = await read(frontendFile);
+    assert.equal(frontend.mode, 'production'); assert.equal(await fs.realpath(frontend.served_directory), frontend.build_directory);
+    const inventory = await frontendInventory(frontend.served_directory);
+    assert.deepEqual(inventory.files, frontend.files); assert.equal(inventory.inventory_sha256, frontend.inventory_sha256);
+    const productionFiles = new Map(frontend.files.map(file => [file.path, file]));
+    report.production_frontend = { ...await fileEvidence(frontendFile), mode: frontend.mode, inventory_sha256: inventory.inventory_sha256 };
     for (const service of task?.stopped_services ?? []) for (const url of [service.backend_url, service.frontend_url]) {
       assert.ok(![base, backend].some(current => new URL(current).port === new URL(url).port), '来源、原目标与重启目标必须使用不同端口');
       report.closed_before_start.push(await closed(url));
@@ -243,14 +443,21 @@ export async function runPublishedExchangePhase() {
       page.on('response', response => {
         const record = identity(response.request()); record.status = response.status(); record.headers_received = new Date().toISOString();
         if (response.status() >= 400) report.errors.push({ case: item.id, kind: 'network', request_id: record.id, url: response.url(), status: response.status() });
-        if (!new URL(response.url()).pathname.startsWith('/api/')) return;
+        const url = new URL(response.url()), asset = url.origin === new URL(base).origin ? productionFiles.get(decodeURIComponent(url.pathname).slice(1)) : undefined;
+        if (!url.pathname.startsWith('/api/') && !asset) return;
         const work = (async () => {
           const error = await response.finished(); record.body_finished = { at: new Date().toISOString(), error: error ? String(error) : null };
           if (error) throw error;
-          record.raw_response = await saveRawResponse(response, path.join(caseDir, `http-${record.id}.bin`));
+          record.raw_response = await saveRawResponse(response, path.join(caseDir, `${asset ? 'asset' : 'http'}-${record.id}.bin`));
+          if (asset) {
+            report.served_assets.push({ case: item.id, request_id: record.id, asset: asset.path, url: response.url(), ...record.raw_response });
+            assert.equal(record.raw_response.size, asset.bytes, `实际生产资产长度必须与构建一致：${asset.path}`);
+            assert.equal(record.raw_response.sha256, asset.sha256, `实际生产资产字节必须与构建一致：${asset.path}`);
+          }
         })().catch(error => { record.body_error = String(error); report.errors.push({ case: item.id, kind: 'response-body', request_id: record.id, message: String(error) }); });
         bodies.add(work); void work.finally(() => bodies.delete(work));
       });
+      const exports = await observeExportResponses(page, base, caseDir, item.id, identity, report);
       async function capture(label, inspect = true) {
         await page.evaluate(() => document.fonts.ready);
         const filename = path.join(caseDir, `${String(++shot).padStart(2, '0')}-${label}.png`);
@@ -274,7 +481,13 @@ export async function runPublishedExchangePhase() {
         await page.getByRole('option', { name: value, exact: true }).click(); await expect(field).toHaveText(value);
       }
       async function enter(operation) {
-        await page.goto(base + '/resources/cables/structure-import');
+        const response = await page.goto(base + '/resources/cables/structure-import');
+        assert.ok(response); assert.equal(response.status(), 200);
+        const served = await saveRawResponse(response, path.join(caseDir, 'served-production-index.html'));
+        report.served_entries.push({ case: item.id, url: response.url(), request_id: identity(response.request()).id, ...served });
+        const expected = frontend.files.find(file => file.path === 'index.html');
+        assert.equal(served.sha256, expected.sha256); assert.equal(served.size, expected.bytes);
+        assert.ok(!report.requests.some(request => ['/@vite/client', '/@react-refresh'].includes(new URL(request.url).pathname)), '生产预览不能载入开发运行时');
         await page.getByRole('tab', { name: '数据交换', exact: true }).click();
         await select('交换内容', '材料、环境与工程'); await select('交换操作', operation);
       }
@@ -285,17 +498,19 @@ export async function runPublishedExchangePhase() {
         await expect(page.getByRole('table', { name: '已选择的交换内容', exact: true }).getByRole('row')).toHaveCount(2);
         await select('交换文件格式', item.format === 'json' ? 'JSON 交换文件' : 'Excel 交换文件');
         await capture(name + '只勾选明确工程');
+        const selection = { asset_ids: [], workspace_ids: [projectId], format: item.format };
+        const exportAction = await exports.begin(name, selection);
         const [exported, response] = await Promise.all([page.waitForEvent('download', { timeout: 180000 }),
           page.waitForResponse(value => new URL(value.url()).pathname === '/api/library/exchange/export' && value.request().method() === 'POST', { timeout: 180000 }),
-          Promise.resolve().then(() => page.getByRole('button', { name: '导出已选资料与工程', exact: true }).click())]);
+          Promise.resolve().then(() => { exports.click(exportAction); return page.getByRole('button', { name: '导出已选资料与工程', exact: true }).click(); })]);
         assert.equal(response.status(), 200, await response.text());
-        assert.deepEqual(response.request().postDataJSON(), { asset_ids: [], workspace_ids: [projectId], format: item.format });
+        assert.deepEqual(response.request().postDataJSON(), selection);
         const filename = path.join(caseDir, name + '.' + item.format); await exported.saveAs(filename); assert.equal(await exported.failure(), null);
         const saved = await fileEvidence(filename); assert.equal(saved.sha256, response.headers()['x-content-sha256']);
-        assert.equal(saved.sha256, digest(await response.body())); assert.equal(await response.finished(), null);
+        const observation = await exports.finish(exportAction, response, saved);
         const bundle = bundleEvidence(filename, manifestFile, phase === 'source' ? path.join(caseDir, 'source-project-raw.json') : undefined);
         assert.equal(bundle.bundle_sha256, response.headers()['x-bundle-sha256']);
-        await write(path.join(caseDir, name + '-download.json'), { request_id: identity(response.request()).id, request: response.request().postDataJSON(), download: saved, bundle });
+        await write(path.join(caseDir, name + '-download.json'), { request_id: identity(response.request()).id, request: response.request().postDataJSON(), download: saved, bundle, observation });
         await expect(page.getByRole('status').filter({ hasText: '已下载 cablesim-data.' })).toBeVisible();
         await page.getByRole('status').filter({ hasText: '已下载 cablesim-data.' }).scrollIntoViewIfNeeded(); await capture(name + '浏览器下载完成');
         return { download: saved, bundle };
@@ -417,8 +632,15 @@ export async function runPublishedExchangePhase() {
         catch (error) { report.failures.push({ case: item.id, phase: '完整上传观测', message: String(error) }); }
         try { await write(path.join(caseDir, 'upload-observations.json'), await observer.snapshot()); }
         catch (error) { report.failures.push({ case: item.id, phase: '保存上传观测快照', message: String(error) }); }
-        try { await expect.poll(() => pending.size).toBe(0); await Promise.all([...bodies]); }
+        try {
+          await expect.poll(() => pending.size).toBe(0); await Promise.all([...bodies]);
+          const loaded = report.served_assets.filter(asset => asset.case === item.id);
+          assert.ok(loaded.some(asset => asset.asset.endsWith('.js')), '必须实际加载并核对生产 JS 字节');
+          assert.ok(loaded.some(asset => asset.asset.endsWith('.css')), '必须实际加载并核对生产 CSS 字节');
+        }
         catch (error) { report.failures.push({ case: item.id, phase: '请求与响应正文收尾', message: String(error) }); }
+        try { await exports.close(); }
+        catch (error) { report.failures.push({ case: item.id, phase: '原始导出响应观测收尾', message: String(error), stack: error.stack }); }
         await context.close(); await save();
       }
     }

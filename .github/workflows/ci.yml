@@ -171,16 +171,6 @@ jobs:
           E2E_DATABASE_SOURCE: ${{ github.workspace }}/.data/release/engineering.sqlite
           LIBRARY_IMPORT_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk
         run: npm run test:library-import 2>&1 | tee ../.tmp/library-import-walk/browser.log
-      - name: Walk published projects after source stop and target restart
-        if: ${{ !cancelled() && runner.os == 'Linux' }}
-        timeout-minutes: 30
-        shell: bash
-        env:
-          PYTHON: python
-          CABLESIM_PLUGIN_PYTHON: ${{ github.workspace }}/.venv/bin/python
-          E2E_DEV: '1'
-          PUBLISHED_EXCHANGE_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk/published
-        run: node frontend/src/features/library-import/published-exchange-walk.mjs
       - name: Retain every public catalogue value and deviation
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         shell: bash
@@ -207,20 +197,9 @@ jobs:
         shell: bash
         run: |
           python scripts/verify_import_originals.py --output .tmp/catalogue-source-audit/imports 2>&1 | tee .tmp/catalogue-source-audit/imports.log
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() && runner.os == 'Linux' }}
-        with:
-          name: library-import-verification
-          retention-days: 14
-          include-hidden-files: true
-          path: |
-            .tmp/library-import-walk/
-            .tmp/library-release-acceptance/
-            .tmp/catalogue-source-audit/
-            .data/release/engineering.seed.json
-          if-no-files-found: error
       - uses: actions/cache/restore@v4
         id: occt
+        if: ${{ success() || (!cancelled() && runner.os == 'Linux') }}
         with:
           path: |
             .data/occt-toolchain
@@ -228,6 +207,7 @@ jobs:
             frontend/src/features/cad/node_modules/.cache/cablesim-occt
           key: release-occt-${{ runner.os }}-${{ hashFiles('frontend/src/features/cad/native/**', 'frontend/src/features/cad/prepare-runtime.mjs', 'scripts/prepare_release_frontend.py', 'scripts/release_toolchains.json') }}
       - name: Prepare verified OCCT assets from pinned sources
+        if: ${{ success() || (!cancelled() && runner.os == 'Linux') }}
         run: python scripts/prepare_release_frontend.py --jobs 4 --download-cache .data/occt-downloads
       - name: Preserve verified OCCT assets before installation checks
         if: steps.occt.outputs.cache-hit != 'true'
@@ -243,10 +223,34 @@ jobs:
           path: .data/python-downloads
           key: release-python-${{ runner.os }}-${{ hashFiles('scripts/python_runtime.lock.json') }}
       - name: Build the shipped frontend
+        id: shipped_frontend
+        if: ${{ success() || (!cancelled() && runner.os == 'Linux') }}
         working-directory: frontend
         run: |
           npm ci --ignore-scripts
           npm run build:release -- --outDir ../.data/release/frontend --emptyOutDir
+      - name: Walk published projects after source stop and target restart
+        if: ${{ !cancelled() && runner.os == 'Linux' && steps.shipped_frontend.outcome == 'success' }}
+        timeout-minutes: 30
+        shell: bash
+        env:
+          PYTHON: python
+          CABLESIM_PLUGIN_PYTHON: ${{ github.workspace }}/.venv/bin/python
+          E2E_DEV: '0'
+          PUBLISHED_EXCHANGE_EVIDENCE: ${{ github.workspace }}/.tmp/library-import-walk/published
+        run: node frontend/src/features/library-import/published-exchange-walk.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && runner.os == 'Linux' }}
+        with:
+          name: library-import-verification
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            .tmp/library-import-walk/
+            .tmp/library-release-acceptance/
+            .tmp/catalogue-source-audit/
+            .data/release/engineering.seed.json
+          if-no-files-found: error
       - name: Build a platform-specific offline release archive
         run: python scripts/build_release.py --frontend-dist .data/release/frontend --output artifacts/CableSimPro-${{ runner.os }}.zip
       - name: Prepare evidence tools using the actual bundled Python and shipped wheels
