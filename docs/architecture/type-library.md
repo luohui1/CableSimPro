@@ -34,7 +34,7 @@
 
 三组数据分别以真实 CSV 和 XLSX 走上传、选表、映射、预览、人工确认、旧 Types 入库。原件摘要、行列、SI 换算和原始未映射列均保留；仍缺少材料、制造数据或工况的条目保持 `incomplete` / `draft`，不产生批准或伪造的计算结果。
 
-明确声明的 `um_v` 同时保存在缺项候选规格和旧 Types 的 `rating.um`，完整三芯映射也保持该声明；未提供时保持未知。交换包中明确非空的 Um 必须与系列声明一致。旧候选没有此字段或保存为 `null` 时保留原有缺失，不从系列回填，不改写原候选摘要。历史 `1.0.0` / `1.1.0` 的“电缆近似重量”显示标签仍可随原事实原样搬运，不将旧事实改为新标签。发布种子修订为 19，通过既有身份检测、先备份再刷新流程采用上述保真语义。
+明确声明的 `um_v` 同时保存在缺项候选规格和旧 Types 的 `rating.um`，完整三芯映射也保持该声明；未提供时保持未知。交换包中明确非空的 Um 必须与系列声明一致。旧候选没有此字段或保存为 `null` 时保留原有缺失，不从系列回填，不改写原候选摘要。历史 `1.0.0` / `1.1.0` 的“电缆近似重量”显示标签仍可随原事实原样搬运，不将旧事实改为新标签。发布种子修订为 20，通过既有身份检测、先备份再刷新流程采用上述保真语义。研究示例只移除未被保存对象引用的迁移材料，并逐项记录原生成器已有的教学设计声明；保留其余数值及原出处，声明保持未审核，不作为厂家或现场数据。
 
 `python scripts/verify_import_originals.py --output <新目录>` 在 CI 中下载固定官方原件、检查 PDF 字节身份或网页原表内容，再运行这些真实导入测试；任何原件审计跳过都令门禁失败。日志、原件页图、JUnit 和来源回执进入既有 `library-import-verification` 产物，完整 PDF 不入库。离线复现可显式传入 `--chint-pdf`、`--jiangnan-html`、`--tai-i-pdf`，回执区分本地原件和当次官方下载。
 
@@ -64,6 +64,8 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 短路依据仍使用 `POST /api/types/{id}/short-circuit-basis`。电气与短路方法 `1.2.4` 修复浏览器把整数值浮点数（例如 `3450000.0`）序列化为同值整数后被误拒绝的问题。标准库的原始 `record_sha256`、版次、来源 PDF 摘要和 30 条记录内容不改；消费方法另外封签 `cablesim.basis-json-content/1` 内容摘要，只正规化精确等值的整数浮点表示，不采用误差容限，不接受布尔值或字符串替代数值。标准数据、查询、发行、原工件摘要、内外层条款及页码也必须一致，客户端无需重新计算或改写来源摘要。
 
+`tests/test_short_basis_browser_numbers.py` 使用 JavaScript `JSON.stringify` 生成实际请求正文，覆盖全部 30 条依据的保存、回读、再次保存、预检与运行；等值数字表示不改变原始标准记录身份，真实数值、单位、来源、版次及封签篡改仍须拒绝。
+
 返回的 `request_sha256` 仍是原 Executor 整批请求的追溯标识，包含当次运行身份，不能由一条引用重新验证；消费方法核验的是封签内容及确定的发行回执，不将这个请求标识当成已重新认证的执行证明。既存运行快照不改写，只有新建或重新运行的研究选择当前方法。回归通过真实 JSON.parse/JSON.stringify、保存、回读、再次保存、预检和普通运行验证 30 条依据，并分别拒绝数值、单位、条件、来源和回执篡改。
 
 ## 标准、材料与环境值
@@ -80,7 +82,7 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 基础 `Quantity` 支持 `mass_density/resistivity/volumetric_heat_capacity/dimensionless`，SI 单位分别为 `kg/m3`、`ohm.m`、`J/(m3.K)`、`1`；热阻率使用 `K.m/W`。原文 `kg/m³`、`Ω·m`、`J/(m³·K)`、`K·m/W` 等明确等值写法可以换算，原显示值与单位仍保留。绝对温度才允许 `°C/℃/degC → K`，不把温差当绝对温度。不同量纲、未知单位、布尔值或数字字符串均不能靠猜测转换。
 
-本轮 `backend/foundation/contracts.py` 同时追加回执契约和单位支持；依赖该文件的 `cablesim.native-reference` 已按依赖闭包重封签为发行 `1.0.8`，能力方法版本仍为 `1.0.0`。没有修改其计算算法，也不以封签校验代替原生仿真验证。
+`backend/foundation/contracts.py` 定义参考回执、冻结输入应用及其单位契约；依赖该文件的 `cablesim.native-reference` 已按依赖闭包重封签为发行 `1.0.9`，能力方法版本仍为 `1.0.0`。其计算算法未改变，封签校验不替代原生仿真验证。
 
 ### 资料草稿、人工确认与发布
 
@@ -133,11 +135,47 @@ T2 对含非空 `reference_evidence` 的资源只能查看和预览；以下四�
 
 运行行的可选 `environment_references` 仅从该历史 `BatchCase.metadata` 投影，保存 `human_confirmed:true`、`adopted_to:saved_rating_condition`、参考可信档及未批准状态。之后的资料派生、废止或发行变化不改写旧运行；没有采用记录的旧运行不新增空字段，旧批量请求身份也不因空引用列表变化。
 
-真实正例采用 IEC 60287-3-1—2017 `Table 2` 的 `iec60287-3-1-table2/r2/thermal_resistivity`：原值 1.0 K·m/W，SI 为 1.0 `K.m/W`，印刷第 7 页/PDF 第 39 页，方法版本 `0.9.0`。原件摘要为 `618e8d8cd829a15cb0bdcf08af4d73afc0b8928a3ea0eeb42bdc75cc87b08f63`，记录摘要为 `bcb4c7549feaaaa00890740eb50af37d3fa15ec84f1c3986cd1d2a5b31f6afaa`。测试以人民三芯公开结构为基础，另经旧 Types 保存有出处的三相 50 Hz 研究工况，在明确 `national_reference:unavailable`、`soil_moisture:moist`、`weather_pattern:regular_rain` 的研究场景中，将热阻率 1.2 改为 1.0 后运行旧载流量方法。这些场景条件不是厂家属性，也不是现场勘测结果。
+真实正例采用 IEC 60287-3-1—2017 `Table 2` 的 `iec60287-3-1-table2/r2/thermal_resistivity`：原值 1.0 K·m/W，SI 为 1.0 `K.m/W`，印刷第 7 页/PDF 第 39 页，方法版本 `0.9.1`。原件摘要为 `618e8d8cd829a15cb0bdcf08af4d73afc0b8928a3ea0eeb42bdc75cc87b08f63`，记录摘要为 `bcb4c7549feaaaa00890740eb50af37d3fa15ec84f1c3986cd1d2a5b31f6afaa`。测试以人民三芯公开结构为基础，另经旧 Types 保存有出处的三相 50 Hz 研究工况，在明确 `national_reference:unavailable`、`soil_moisture:moist`、`weather_pattern:regular_rain` 的研究场景中，将热阻率 1.2 改为 1.0 后运行旧载流量方法。这些场景条件不是厂家属性，也不是现场勘测结果。
 
 A.4 的 `laying_depth` 原始摘录可以浏览、创建参考草稿、发布和交换，但原文没有明确能映射到 `RatingRow.depth_m` 的中心测量基准。直埋和排管采用均返回 `ENVIRONMENT_DEPTH_REFERENCE_UNSUPPORTED`，用户补一个“中心”条件也不能替代来源证据。A.4 土壤热阻率 1–1.2 的区间不得取中点；1 m 深度的地温不能套到 0.7 m；110 kV 型号、缺系统电压或伪填低电压均不能绕过适用性检查。
 
-实现与回归依据为 `backend/kernel/resource_data.py`、`material_references.py`、`environment_references.py`、旧 `type_versions.py` / `type_library_operations.py`，以及 `tests/test_material_references.py`、`tests/test_environment_references.py`。这些受限字段接口不表示完整材料库、标准全文或两套完整行业示例已验收。普通 `component`、`assembly`、`study_template` 仍无通用应用接口；既有受限敷设模板继续使用 `POST /api/design/workspaces/{wid}/section-template`。
+实现与回归依据为 `backend/kernel/resource_data.py`、`material_references.py`、`environment_references.py`、旧 `type_versions.py` / `type_library_operations.py`，以及 `tests/test_material_references.py`、`tests/test_environment_references.py`。这些受限字段接口不表示完整材料库、标准全文或两套完整行业示例已验收。部件和研究输入另有下述严格限定的冻结输入应用合同；旧摘要及普通 `assembly` 不能推测成完整结构。既有受限敷设模板继续使用 `POST /api/design/workspaces/{wid}/section-template`。
+
+### 冻结部件与研究输入：供界面及 Agent 共用的合同
+
+一个资料版本仍是同一 `engineering_assets` 中的 `AssetRelease`。可选 `application` 使用 `cablesim.resource-application/1`，保存 `capture_version:1.0.0`、`kind:component|study_template`、完整固定 `method`、`source`、`payload` 与 `payload_sha256`。未携带此字段的旧资产不序列化空字段，原内容摘要不改变。不存在第二份部件库、研究库或算法实现。
+
+冻结 `source` 保存 `workspace_id/revision/name/document_sha256`、完整当时保存状态 `snapshot` 及 `snapshot_sha256`。研究另外保存 `study_id/study_revision/run_id/input_digest/output_digest`。完整输入与逐项出处都在载荷中，不用来源名称替代结构，也不从当前源工程回读已改变的数值。完整应用载荷限 2 MiB，超限明确拒绝；不截断来源以通过限制。域输入采用原合同单位，长度 m、截面 m²、电阻 Ω/m 等；旧 `*_deg` 字段保留 °，不将角度数值当成弧度。空字段保留 `null`，不是零值或候选默认值。
+
+下列 9 个接口共用 `/api/library/resources` 前缀。只读接口可以由 Agent 调用。所有写接口要求 `X-CableSim-Actor: human`、真正布尔值 `human_confirmed:true`；字符串或数字不能代替。采用还要求真正布尔值 `acknowledge_reference_limits:true`。`expected_revision` 与研究修订均是严格正整数。
+
+| 方法及路径 | 请求与成功响应 |
+| --- | --- |
+| `POST /components/capture-preview` | `{asset_id,version,name,workspace_id,expected_revision,selection}`；返回冻结草稿 `release`、`content_sha256`、`preview_digest`、完整证据及 `persisted:false`，不入库。 |
+| `POST /components/capture` | 上述请求加 `preview_digest,human_confirmed`；重新核对修订和预览后返回 `201 AssetDetail`，状态为草稿。 |
+| `POST /study-templates/capture-preview` | `{asset_id,version,name,workspace_id,expected_revision,study_id,expected_study_revision,source_run_id}`；响应与部件预览一致。 |
+| `POST /study-templates/capture` | 上述请求加 `preview_digest,human_confirmed`；返回 `201 AssetDetail` 草稿。 |
+| `GET /applications/{resource_id}/evidence` | 返回完整冻结 `application`、`source/method/fields/missing/trust/limitations`、`resource/dependencies/issues`，`read_only:true`。不查询当前源文档来补证据。 |
+| `POST /components/preview` | `{resource_id,content_sha256,workspace_id,expected_revision,target,target_material_id}`；返回指定目标槽位的 `before/proposed/changes/material_action/preview_digest` 与完整来源。 |
+| `POST /components/adopt` | 上述请求加 `request_id,preview_digest,human_confirmed,acknowledge_reference_limits`，可显式声明 `operation:adopt_resource_component`；返回 `200 WorkspaceSnapshot`。只提交该部件及明确材料引用到原工作空间历史，可沿原撤销接口恢复。 |
+| `POST /study-templates/preview` | `{resource_id,content_sha256,workspace_id,expected_revision,title,bindings}`；返回拟保存 `definition`、固定 `bindings`、真实方法 `preflight`、`source_run_status` 与 `preview_digest`。 |
+| `POST /study-templates/adopt` | 上述请求加 `request_id,preview_digest,human_confirmed,acknowledge_reference_limits`，可显式声明 `operation:adopt_resource_study_template`；返回 `201 {study,workspace_id,revision,run_started:false,approval:not_granted}`。 |
+
+`selection` 和 `target` 都是 `{cable_type_id,part,core_id,layer_index}`。`part` 为 `conductor/core_layer/common_layer`；导体须明确芯 ID，层号为空；芯层须明确芯 ID 和保存层号；公共层须明确层号，芯 ID 为空。相应 `selection` 同时出现在部件证据顶层及 `application.payload.selection`。层号只定位本次保存修订中的真实槽位，不按名称猜目标。类型来源与目标均须是独立单型号文档。目标部件类别必须相同；结构层还须具有相同用途、电压声明及完整内层几何，公共层包括完整线芯几何条件。
+
+部件 `payload` 保存 `selection/component/material/context`。每个展示字段为 `{path,label,value,unit,source,source_path}`；额外 `group/field` 标记原域部件或材料字段。`source_path` 是原始显式出处匹配的稳定路径或旧索引路径。没有明确来源的非空工程字段拒绝捕获；材料物性缺项保持空。真实厂家 R20 上限可以原样作为输入参考携带，但必须保留 `r20_basis:manufacturer_limit` 和原出处，不能转成目标的实测或批准。实测 R20、口径不明的非空 R20、实测厚度/丝径/金属层纵向电阻、相应出厂数据或 `kind:measurement` 来源均拒绝作为部件复制。
+
+部件采用预览逐字段返回 `{path,label,before,after,unit,source,previous_source,source_action}`；`source_action` 为 `replace|unchanged`。目标材料 ID 必须由操作者明确给出。不存在的 ID 创建完整冻结材料；已有 ID 仅在除标识与名称外的全部材料事实相同才返回 `material_action:reuse_identical`，共享材料数值和原来源保持不变。不同材料事实拒绝覆盖。采用写入完整所选部件，包括来源为空的可选字段，不能悄悄继承目标旧值；只更新所选槽位的来源，逐字段回执保留前值、原出处、目标出处、固定资源、捕获方法和未批准状态。原 `WorkspaceStore.commit`、锁、修订比较与撤销历史继续生效。
+
+研究捕获当前只覆盖 `cablesim.iec60287:steady-rating` 的完整已保存 `domain` 输入、`single` 驱动、无模块/交叉核对/候选补全/验证配置的研究。必须选择同一工程、同一研究、当前文档修订和研究修订的真实成功运行，原输入/输出摘要须通过既有运行完整性核验；不能凭一个成功状态或外部运行 ID 建立本机捕获。完整研究定义的所有显式字段保留，缺 `driver/input_source` 等字段也拒绝，不通过模型默认值补全。
+
+研究 `payload` 为 `{definition,bindings,parameter_schema}`。`method` 固定 `plugin_id/capability/version/release_digest/name/method_version`；参数数值与单位来自保存定义和该固定方法契约。完整来源和目标 Domain 中的每个保存数值也须有对应或明确父路径来源，测量记录可用其自身的明确来源；不能用参数的出处代替材料、几何、系统和敷设输入的出处。无来源数值返回 `RESOURCE_DOMAIN_SOURCE_MISSING` 及完整 `fields` 路径，须在原输入中明确声明并真实重算，捕获不自动补来源。`bindings` 是 `{cable_type_ids,circuit_ids,cable_ids}` 三个完整、有序且唯一的稳定 ID 数组。采用须逐项确认与来源及目标相同的 ID，目标完整型号、材料和回路事实也须一致；不根据名称或相似结构自动映射。环境仍使用目标当前保存输入并经同一 IEC 方法真实预检。缺项、方法/契约不匹配、锁冲突或目标不适用均返回可解释的 4xx；预检拒绝包含完整 `preflight`，不保存研究。
+
+研究采用只调用原 `Research.save` 新建独立研究，保留来源的固定方法、参数和驱动，以及原 `input_sources`；新的 `/resource_application` 回执保留原链上的 `previous_application_source`。它不修改目标 Domain、工作空间修订、原研究或原结果，也不发起计算。需要计算时继续调用既有研究预检和运行接口，由操作者另行明确确认范围。本机有原运行时，采用核对其完整原身份及摘要并返回 `verified_local_run`；本机完全没有原运行记录时仅返回 `external_declared_run`。本机存在相同运行但身份/内容损坏时拒绝，不能降级成外部声明。
+
+所有证据和预览统一声明 `trust.grade:reference`、`approval:not_granted`；发布资料、采用输入及真实求解都不能替代目标工程人工批准。两个采用接口复用旧 Types 请求回执：相同请求 ID 和相同正文可安全重试；复用 ID 改正文拒绝。CAS、完整资源摘要、依赖状态及预览摘要在写入事务中再次核对。研究摘要固定完整原/目标输入、方法、绑定和预检 readiness/case 状态，不含每次真实预检的执行 ID、耗时或缓存诊断；采用时仍重新执行全部真实预检。冻结 `type_resource_bindings` 的每个完整固定 pin 必须是外层 `release.dependencies` 的精确子集，允许额外显式依赖，剥离或换摘要在资产合同和读取边界拒绝。依赖图每条路径均比较 SHA，不能先经间接正确 pin 遍历、再借去重跳过直接错误 pin。普通资产导入、更新、审核、发布、废止与派生只要新旧定义任一含 `application`，同样要求人工确认，删除载荷不能绕过。
+
+JSON/XLSX 继续用原 `/api/library/exchange/export|preview|import`，完整传输 `AssetRelease.application` 及原摘要。新机资料为草稿，不继承来源发布/审核；原运行只保留声明身份，不伪造本机运行或复制计算结果。需要同时带入目标工程时显式导出其保存输入，沿既有工程输入证明、锁和独立副本规则处理。受限捕获和采用的真实回归在 `tests/test_resource_applications.py`：全新发布 seed、华远公开结构及明确参考输入、城南固定 IEC 单次研究、三类部件原撤销、JSON/XLSX 跨库后真实重新计算、人工/CAS/摘要/依赖/来源拒绝。运行日志和浏览器截图作为 CI 产物保存，不写进仓库。
 
 ## 公开样本对照
 
@@ -175,7 +213,7 @@ Agent 应展示每项的 `source`、`method`、`confidence`、`usage`、`conditi
 
 ### 220 kV 制造数据与固定限值
 
-标准核对方法 `1.8.3` 继续通过原有要求依据接口消费封签的 GB/T 18890.2—2015 记录。三项共用范围为 127/220 kV、裸铜导体、XLPE，截面仅为表列 400、500、630、800、1000、1200、1400、1600、1800、2000、2200、2500 mm²；不插值或套用其他电压。制造输入沿 `engineering_inputs` 给出的稳定来源路径保存，形如 `/cable_types/{escaped_id}/common_layers/{role}/engineering/{field}`；层在线芯内时使用对应 `cores/{escaped_core_id}/layers/{role}` 路径。
+标准核对方法 `1.8.5`（插件发行 `1.8.6`）继续通过原有要求依据接口消费封签的 GB/T 18890.2—2015 记录。三项共用范围为 127/220 kV、裸铜导体、XLPE，截面仅为表列 400、500、630、800、1000、1200、1400、1600、1800、2000、2200、2500 mm²；不插值或套用其他电压。制造输入沿 `engineering_inputs` 给出的稳定来源路径保存，形如 `/cable_types/{escaped_id}/common_layers/{role}/engineering/{field}`；层在线芯内时使用对应 `cores/{escaped_core_id}/layers/{role}` 路径。
 
 | 字段 | 层与数据性质 | 单位及适用条件 |
 | --- | --- | --- |
@@ -190,13 +228,13 @@ Agent 应展示每项的 `source`、`method`、`confidence`、`usage`、`conditi
 
 型号使用 `/api/type-library/exchange/export`（`{series_ids,format:json|xlsx}`）；材料与已保存工程输入使用 `/api/library/exchange/export`（`{asset_ids,workspace_ids,format}`）。每组接口都有 multipart `/preview` 和 `/import`：提交 `file`、预览的 `reviewed_sha256`、`confirmed:true`、`request_id` 及人工头。
 
-材料和 `installation` 环境资料都通过同一资源交换接口搬运。JSON/XLSX 保留完整 `AssetRelease.parameters/sources/reference_evidence`、固定身份及 `content_sha256`，不把回执缩成来源文字，也不替换原记录或条件。导入校验结构、摘要、参数和回执的一致性；新资源成为本机草稿，`approval_inherited:false`。同身份同内容的本机资源可复用并保留本机状态，同版本异内容整包拒绝。来源方发布状态只作为交换证据，不能批准本机资源或自动采用数值；新采用仍须在本机重新核对封签依据、固定版本及适用条件。环境运行的 `BatchCase.metadata` 和完整审批/运行历史不在此输入交换范围内，需要原样搬运时使用数据库备份恢复。
+材料、`installation` 环境资料及带完整 `application` 的部件/研究输入都通过同一资源交换接口搬运。JSON/XLSX 保留完整 `AssetRelease.parameters/sources/reference_evidence/application`、固定身份及 `content_sha256`，不把回执缩成来源文字，也不替换原记录或条件。导入校验结构、摘要、参数和回执的一致性；新资源成为本机草稿，`approval_inherited:false`。同身份同内容的本机资源可复用并保留本机状态，同版本异内容整包拒绝。来源方发布状态只作为交换证据，不能批准本机资源或自动采用数值；新采用仍须在本机重新核对封签依据、固定版本及适用条件。环境运行的 `BatchCase.metadata` 和完整审批/运行历史不在此输入交换范围内，需要原样搬运时使用数据库备份恢复。
 
 Excel 含可读索引与完整传输内容，JSON 与 Excel 具有相同语义摘要。导入前验证原件、型号/资源/工程摘要和身份关系；任何同名系列或版本冲突整包拒绝。型号包携带当前版本与原始结构表；新机创建草稿并记录来源机的版本身份，不继承批准或运行历史。交换元数据采用固定字段白名单，不能指定本机对象、工作区、审核状态或运行身份；重新计算文件摘要也不能绕过此检查。尚未改版的设计修改须先建立新版本才能导出。完整历史、所有附件和运行备份继续使用 `scripts/workspace_db.py backup/restore`。
 
 型号交换还逐项核对事实与原件：非空且不重复的字段、原显示值与 SI 换算、单位、方法版本、可信分档、文件摘要和原表单元格必须一致；系列共用值须对应原声明，逐值来源须与型号保留的来源集合一致。固定标准限值通过本机封签依据核验同一版次、条件和记录摘要；标准方法版本、数据摘要与发行摘要也须匹配本机已核验的发行。当前发布包不含历史方法发行归档，不同方法版本即使保留相同记录也明确拒绝，原资料保留，不改写成当前版本；恢复对应封签发行后才能重试。兼容历史结构表导入方法 `1.0.0` 与 `1.1.0`，改版后的工程结构可以保留不同于原表的设计值，原表事实继续作为历史证据保真保存。
 
-工程输入交换中的候选型号同时保留完整原始 `CableModelVersion` 来源快照和研究实际使用的电缆/材料投影，并核验原始内容摘要。目标工程使用独立的 `exchange-model:` 快照身份，保存来源型号标识和来源状态作为证据，本机绑定状态为草稿；不会解析成目标机器上的同名或同标识候选，也不创建已批准型号。来源机器关闭后仍可导入、重启和再次导出，原有结构与材料锁保持生效。`/api/library/exchange` 每工程输入限 1 MiB、4096 条锁，包含完整来源快照、逐项出处与锁记录；整包仍限 8 MiB、100 个资料版本及 20 个工程。发布示例的这些证明超过旧单对象导入的 120 KiB 限制，城北示例的 644 条真实型号锁也超过早期交换入口的 500 条上限，交换接口保留完整输入，不截断来源或锁以迁就旧限制。单工程超限或需要完整历史时使用备份恢复；其他旧单对象接口的大小合同不变。
+工程输入交换中的候选型号同时保留完整原始 `CableModelVersion` 来源快照和研究实际使用的电缆/材料投影，并核验原始内容摘要。目标工程使用独立的 `exchange-model:` 快照身份，保存来源型号标识和来源状态作为证据，本机绑定状态为草稿；不会解析成目标机器上的同名或同标识候选，也不创建已批准型号。来源机器关闭后仍可导入、重启和再次导出，原有结构与材料锁保持生效。`/api/library/exchange` 每工程输入限 1 MiB、4096 条锁，包含完整来源快照、逐项出处与锁记录；整包仍限 8 MiB、100 个资料版本及 20 个工程。发布示例保留完整来源快照与锁记录；城北示例的 644 条真实型号锁超过早期工程交换入口的 500 条上限。交换接口保留完整输入，不截断来源或锁以迁就旧限制。单工程超限或需要完整历史时使用备份恢复；其他旧单对象接口的大小合同不变。
 
 新导出的来源证明 `cablesim.exchange-cable-source/2` 用 `source_reference_order` 完整且不重复地记录用于重现来源正文的来源键顺序，绑定来源说明必须等于这些完整 `reference` 的原文串联；一条来源内部的分号不能拆开重配。既有 `/1` 证明按完整声明及其重复次数进行有界精确匹配，复杂度超限明确拒绝，不猜测或改写原文；再次导出仅在导出副本补充顺序证明，保存的工程、原始型号摘要与来源正文均不改变。
 
@@ -204,16 +242,12 @@ Excel 含可读索引与完整传输内容，JSON 与 Excel 具有相同语义�
 
 已发布型号的引用还需要发行记录与冻结规格书的完整证明链，当前工程输入交换不覆盖，明确返回 `EXCHANGE_PUBLISHED_MODEL_PROOF`，不能以投影摘要代替发行摘要。此类工程以及需要完整运行、审批或附件历史的搬运应使用数据库备份恢复。
 
-## T3 收尾已知限制（不构成 Ready 门禁）
+## 数据与交换能力边界
 
-| 范围 | 当前事实及未覆盖 | 后续处置 |
-| --- | --- | --- |
-| 厂家制造数据 | People 46、Bahra 13，共 59 个规格：外径、重量、电阻、载流量四项严格全部通过为 **0**；逐规格偏差、未刊载字段及原因保留，不猜参数 | 待真实制造表和测量工况后重核 |
-| FEM 原始证据 | 城南三份封签原始证据包缺失；摘要或截图不等于原包 | 原保管方提供可核验的原件及 SHA |
-| 制造/型式条款 | 仅已实现、已封签的 GB/T 12706、GB/T 11017 等对应条款；未覆盖材料构造实测、工艺公差、完整型式试验及缺失条件/版次，按规则覆盖清单及逐规格缺项列示 | 待有原件依据的条款逐项补齐并正式封签 |
-| Cable Studio 宿主/存储 | 不在本轮清理 Studio 独立宿主与型号存储；Agent 使用旧后端 | 后续整体迁移，避免两套生产存储 |
-| 完整证明链/大小 | 已发布型号证明链及审批、运行历史依赖数据库备份恢复；既有单对象工程交换 **120 KiB** 限制仍在，新交换每工程 1 MiB/4096 锁、整包 8 MiB 仍在 | 超限拒绝，不截断锁和来源 |
-| 截图 | 不要求 PR 内嵌原图，以当轮 CI 产物入口为准 | 审阅双尺寸原图 |
-
-短路依据的数字封签身份允许浏览器将数值相等的 3450000.0 序列化为 3450000，同时仍拒绝真实数值、单位、来源、版次及封签篡改。tests/test_short_basis_browser_numbers.py 用 JavaScript JSON 生成页面同型请求正文，覆盖全部 30 条依据、保存、回读、再次保存、预检与运行。
-
+| 范围 | 能力与限制 |
+| --- | --- |
+| 公开样本偏差对照 | 随附人民电缆 46 个、Bahra 13 个规格保留原件数值、单位、出处、逐项偏差和缺项。原件不足以独立复现某项性能时，该项不比较，不以读回声明值的零偏差替代计算验证。明确确认后的研究参考计算与真实厂家数据比较分别保存，不计入真实厂家四项通过数。 |
+| FEM 原始证据 | 主范围与城南附加范围依据各自封签索引校验原始证据包。缺少所需原包时只保存研究输入并等待真实超算结果；文件损坏或摘要不符时拒绝导入。摘要、截图及已有结果文字不能替代原包。 |
+| 标准与制造条款 | 覆盖范围以封签插件规则清单中列明的标准版次、结构、条件及条款为准。已支持的制造声明和实测输入必须保留其真实来源，标准限值不能作为厂家实测值。未实现的条款、缺失条件以及完整型式或预鉴定认证仍不在覆盖范围内，单项通过不代表完整产品符合性。 |
+| 工程输入交换 | `/api/library/exchange` 每工程最多 1 MiB、4096 条锁，整包最多 8 MiB、100 个资料版本及 20 个工程。完整来源快照、逐项出处与锁记录均计入限制，超限明确拒绝，不截断证明。含已发布 Types 型号引用的工程需要发行记录与冻结规格书完整证明链，当前输入交换返回 `EXCHANGE_PUBLISHED_MODEL_PROOF`；这类工程及完整运行、审批、附件历史使用数据库备份恢复。 |
+| 型号库与宿主存储 | 本型号库通过已有 `domain_cable_models`、Types、普通 Study/Run 及本文列出的 API 保存和操作数据。仓库中的 Studio 独立宿主仍使用自己的 `library.sqlite`，与此服务之间没有自动迁移或同步合同，不能将其独立状态视为本型号库状态。 |

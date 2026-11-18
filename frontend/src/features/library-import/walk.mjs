@@ -10,6 +10,7 @@ import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 import { walkShortBasis } from './short-basis-walk.mjs';
 import { walkManufacturer } from './manufacturer-walk.mjs';
 import { walkResources } from './resource-walk.mjs';
+import { walkResourceApplications } from './resource-application-walk.mjs';
 import { exportResourceExchange, safeRequestHeaders, saveRawResponse } from './resource-exchange-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
@@ -641,8 +642,12 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
           ['materials.insulation_loss_tangent', '绝缘介质损耗因数', '手册仅给出含 tanδ 的介质损耗公式，没有公布 tanδ 数值；旧版独立参考情景使用 IEC 参考值 0.004。'],
         ];
         for (const row of compared.rows) for (const [field, label, reason] of lossReasons) assert.deepEqual(row.metrics.ampacity.missing_fields.find(item => item.field === field), { field, label, reason });
-        const firstManufacturer = page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('row').nth(1);
-        const visibleReasons = lossReasons.map(([, label, reason]) => firstManufacturer.getByText(`${label}：${reason}`, { exact: true }));
+        // Every Bahra row shares one refusal: it is written once above the table, item reasons on demand, and the table drops its reason column.
+        const shared = page.getByRole('region', { name: '载流量共同说明', exact: true });
+        await expect(shared).toContainText(`适用于全部 ${sample.count} 个规格`);
+        await expect(page.getByRole('table', { name: '载流量逐规格对照', exact: true }).getByRole('columnheader', { name: '原因、方法与可信分档' })).toHaveCount(0);
+        await shared.locator('summary').first().click();
+        const visibleReasons = lossReasons.map(([, label, reason]) => shared.getByText(`${label}：${reason}`, { exact: true }));
         await visibleReasons[0].evaluate(element => element.scrollIntoView({ block: 'center' }));
         for (const reason of visibleReasons) await expect(reason).toBeInViewport({ ratio: 1 });
         await capture('Bahra电容量指南与介质损耗缺项范围');
@@ -755,9 +760,9 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       const calculatedRow = page.getByRole('table', { name: '研究情景载流量逐规格对照', exact: true }).getByRole('row').nth(firstCalculated + 1);
       await expect(calculatedRow).toContainText(calculated.rows[firstCalculated].metrics.ampacity.value.toLocaleString('zh-CN', { maximumFractionDigits: 3, useGrouping: false }));
       await expect(calculatedRow).toContainText('研究参考值，非厂家核验');
-      await expect(calculatedRow).toContainText('厂家核验仍为拒绝计算');
+      await expect(page.getByLabel('研究参考情景说明', { exact: true })).toContainText('厂家缺项与拒算原因不变');
       await calculatedRow.evaluate(element => element.scrollIntoView({ block: 'center' }));
-      await capture(`${sample.id}-研究参考数值差异与厂家拒绝并列`);
+      await capture(`${sample.id}-研究参考数值差异与共同说明`);
       await page.getByRole('button', { name: '厂家数据与缺项', exact: true }).click();
       const manufacturerTable = page.getByRole('table', { name: '载流量逐规格对照', exact: true });
       await expect(manufacturerTable.getByRole('row').nth(1)).toContainText('未给出结果');
@@ -1025,6 +1030,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       previousCalculation: { request: ratedResponse.request().postDataJSON(), response: rated } });
     const resourceAudit = JSON.parse(await fs.readFile(path.join(out, `${viewport.width}-resources-summary.json`), 'utf8'));
     exchangeTasks.push(await exportResourceExchange({ page, base, viewport, out, root, expect, capture, readApi, resourceAudit, report }));
+    await walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report });
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

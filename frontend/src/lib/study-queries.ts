@@ -116,7 +116,10 @@ export function studyContextQuery(client: QueryClient, workspace: string | undef
 export function workspaceQuery(wid: string | undefined) {
   return queryOptions({
     queryKey: ["workspace", wid],
-    queryFn: ({ signal }) => responseData(api.GET("/api/workspaces/{wid}", { params: { path: { wid: wid! } }, signal })).then(value => record(value, "工程")),
+    // 路由的 studyContextQuery 也在等待这个共享请求。不要消费组件观察者的
+    // AbortSignal：StrictMode 重挂时，尚未启用的观察者会取消请求，让外层
+    // 上下文永久停在 pending。读完后保留在共用缓存，错误仍由页面正常呈现。
+    queryFn: () => responseData(api.GET("/api/workspaces/{wid}", { params: { path: { wid: wid! } } })).then(value => record(value, "工程")),
   });
 }
 

@@ -38,7 +38,8 @@ try {
   await zones();
   const tabs = page.getByRole("tablist", { name: "属性分页" });
   await tabs.getByRole("tab", { name: "Agent" }).click();
-  await expect(page.locator(".inspector-agent .agent-panel-model")).toHaveText(/已连接|deepseek|服务尚未部署|未连接模型|检查中/);
+  const panel = page.locator(".inspector-agent");
+  await expect(panel.locator('iframe[title="当前对象的 Agent 对话"]').or(panel.getByText("Agent 对话服务未连接", { exact: true }))).toBeVisible();
   await tabs.getByRole("tab", { name: "输入" }).click();
   await expect(page.locator(".workbench-inspector").getByRole("heading", { name: "本次计算" })).toBeVisible();
 
@@ -63,12 +64,11 @@ try {
   assert.equal(created.definition.input_sources["/parameters"].kind, "derived", "方法参数应记录沿用来源");
   await zones();
 
-  // Agent 模式：左栏换成任务列表，中间是对话与输入栏；不再摆工具注册表
+  // Agent 模式嵌入融合入口，未启动边车时明确说明；真实对话与审批由 studio walk:fusion 验收。
   await go(`/agent?workspace=${project.id}`);
-  await expect(page.locator('[data-page="agent"]')).toBeVisible();
-  await expect(page.getByRole("link", { name: "新任务" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "要 Agent 做什么？" })).toBeVisible();
-  await expect(page.getByLabel("给 Agent 的任务")).toBeEditable();
+  const agent = page.locator('[data-page="agent"]');
+  await expect(agent).toBeVisible();
+  await expect(agent.locator('iframe[title="Agent 对话"]').or(agent.getByText("Agent 对话服务未连接", { exact: true }))).toBeVisible();
   await expect(page.getByText("可调用的工具")).toHaveCount(0);
 
   // 设置 · AI 模型：可在界面填写连接；未配置时如实显示，密钥框不回显

@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-integrity/1",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "files": {
     "records-lv.json": {
       "sha256": "59ca00d4d6cb31d6ac058453e08b92c5dc26c695777fe64c29bf76fd183a808a",
@@ -95,12 +95,12 @@
       "size_bytes": 184744
     },
     "basis.json": {
-      "sha256": "fc2aa8ce45d8eda28d8a84317b66436393681ebe1e8bd665a18cb60c017f5052",
+      "sha256": "a0a1652bd9f7f5274b9c5e77232dbf70d4720bd3f89f3984fc1d235e69e985f5",
       "size_bytes": 428684
     },
     "verification.json": {
-      "sha256": "fa8b9f74c16a4fcf07aa560da19c26f09093a44eb183c21d29862f6cd611237e",
-      "size_bytes": 501838
+      "sha256": "2ac909bea67874028b4327abe166a209dcac391aaaf66c92e08aa160f06e4e1f",
+      "size_bytes": 502828
     }
   }
 }

@@ -58,31 +58,42 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   return <div className="settings-row"><div className="settings-row-label"><span>{label}</span>{hint && <small>{hint}</small>}</div><div className="settings-row-control">{children}</div></div>;
 }
 
-/** AI 模型：连接（预设 · 地址 · 模型 · 密钥 · 测试）、自定义指令、超时。密钥只写不读。 */
+/** AI 模型：连接、自定义指令、上下文额度与超时。密钥只写不读。 */
 type AiEditState = 'loading' | 'error' | 'dirty' | 'saving' | 'saved' | 'unconfigured' | 'environment';
+const tokenText = (value: number | null | undefined) => value == null ? '' : String(value);
+const modelForm = (data: AgentSettings) => ({ base_url: data.base_url, model: data.model, key: '',
+  instructions: data.instructions, timeout: tokenText(data.model_timeout_s),
+  context_window: tokenText(data.context_window), max_output_tokens: tokenText(data.max_output_tokens) });
 function AiSettings({ onState }: { onState: (state: AiEditState) => void }) {
   const formElement = useRef<HTMLFormElement>(null);
   const queries = useQueryClient();
   const settings = useQuery({ queryKey: ["agent-settings"], queryFn: ({ signal }) => agentSettings(signal), retry: false });
   const status = useQuery({ queryKey: ["agent-status"], queryFn: ({ signal }) => agentStatus(signal), retry: false, staleTime: 60_000 });
-  const [form, setForm] = useState({ base_url: "", model: "", key: "", instructions: "", timeout: "" });
+  const [form, setForm] = useState({ base_url: "", model: "", key: "", instructions: "", timeout: "", context_window: "", max_output_tokens: "" });
   const [clearKey, setClearKey] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [probe, setProbe] = useState<AgentProbe | null>(null);
   useEffect(() => {
     if (!settings.data || loaded) return;
-    setForm({ base_url: settings.data.base_url, model: settings.data.model, key: "", instructions: settings.data.instructions, timeout: settings.data.model_timeout_s ? String(settings.data.model_timeout_s) : "" });
+    setForm(modelForm(settings.data));
     setLoaded(true);
   }, [settings.data, loaded]);
   const set = (name: keyof typeof form) => (value: string) => { setForm((current) => ({ ...current, [name]: value })); setProbe(null); };
   const refresh = (data: AgentSettings) => {
     queries.setQueryData(["agent-settings"], data);
     void queries.invalidateQueries({ queryKey: ["agent-status"] });
-    setForm({ base_url: data.base_url, model: data.model, key: '', instructions: data.instructions, timeout: data.model_timeout_s ? String(data.model_timeout_s) : '' }); setClearKey(false);
+    setForm(modelForm(data)); setClearKey(false);
   };
   const timeout = form.timeout.trim() ? Number(form.timeout) : null;
+  const contextWindow = form.context_window.trim() ? Number(form.context_window) : null;
+  const maxOutputTokens = form.max_output_tokens.trim() ? Number(form.max_output_tokens) : null;
+  const effectiveContext = contextWindow ?? 64000;
+  const defaultOutput = Math.min(16384, effectiveContext - 8192);
+  const contextInvalid = contextWindow !== null && (!Number.isInteger(contextWindow) || contextWindow < 16384 || contextWindow > 2000000);
+  const outputInvalid = maxOutputTokens !== null && (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 256 || maxOutputTokens > 131072 || maxOutputTokens > effectiveContext - 8192);
   const save = useMutation({
     mutationFn: () => saveAgentSettings({ base_url: form.base_url.trim(), model: form.model.trim(), instructions: form.instructions, model_timeout_s: timeout,
+      context_window: contextWindow, max_output_tokens: maxOutputTokens,
       ...(form.key.trim() ? { api_key: form.key.trim() } : clearKey ? { api_key: "" } : {}) }),
     onSuccess: refresh,
   });
@@ -90,13 +101,14 @@ function AiSettings({ onState }: { onState: (state: AiEditState) => void }) {
   const test = useMutation({ mutationFn: () => testAgentSettings({ base_url: form.base_url.trim(), model: form.model.trim(), ...(form.key.trim() ? { api_key: form.key.trim() } : {}) }), onSuccess: setProbe });
   const data = settings.data;
   const preset = PRESETS.find((item) => item.base === form.base_url.trim());
-  const dirty = !!data && (form.base_url !== data.base_url || form.model !== data.model || !!form.key.trim() || clearKey || form.instructions !== data.instructions || form.timeout !== (data.model_timeout_s ? String(data.model_timeout_s) : ""));
+  const dirty = !!data && (form.base_url !== data.base_url || form.model !== data.model || !!form.key.trim() || clearKey || form.instructions !== data.instructions || form.timeout !== tokenText(data.model_timeout_s)
+    || form.context_window !== tokenText(data.context_window) || form.max_output_tokens !== tokenText(data.max_output_tokens));
   // 环境变量的密钥只在地址不变时沿用
   const keyNeeded = !!data && data.key_source === "environment" && form.base_url.trim().replace(/\/$/, "") !== data.base_url.replace(/\/$/, "") && !form.key.trim();
   const timeoutInvalid = timeout !== null && (!Number.isInteger(timeout) || timeout < 10 || timeout > 180);
   const baseInvalid = !!form.base_url.trim() && (() => { try { return !['http:', 'https:'].includes(new URL(form.base_url.trim()).protocol); } catch { return true; } })();
   const busy = save.isPending || reset.isPending;
-  const canSave = dirty && !busy && !timeoutInvalid && !baseInvalid && !keyNeeded && !!form.base_url.trim() && !!form.model.trim();
+  const canSave = dirty && !busy && !timeoutInvalid && !contextInvalid && !outputInvalid && !baseInvalid && !keyNeeded && !!form.base_url.trim() && !!form.model.trim();
   const editState: AiEditState = settings.isError || save.error || reset.error ? 'error' : settings.isPending || !loaded ? 'loading' : busy ? 'saving' : dirty ? 'dirty' : !data?.configured ? 'unconfigured' : data.source === 'environment' ? 'environment' : 'saved';
   useEffect(() => onState(editState), [onState, editState]);
   useEffect(() => {
@@ -170,6 +182,20 @@ function AiSettings({ onState }: { onState: (state: AiEditState) => void }) {
           placeholder="例如：先用一句话给结论；温度用 °C；回路按“回路 1、回路 2”称呼；结论后列出需要人工核对的输入。" />
         <FieldDescription>每次对话都会带上。只影响表达方式和关注点，不能放宽权限、数值核验或批准规则。{form.instructions.length > 0 && `（${form.instructions.length} / ${INSTRUCTIONS_LIMIT}）`}</FieldDescription>
       </Field>
+      <div className="settings-form-pair">
+        <Field>
+          <FieldLabel htmlFor="ai-context">上下文窗口（token）</FieldLabel>
+          <Input id="ai-context" type="number" min={16384} max={2000000} step={1} value={form.context_window} placeholder="64000" aria-invalid={contextInvalid}
+            onChange={(event) => set("context_window")(event.target.value)} />
+          {contextInvalid ? <FieldError>填写 16384–2000000 之间的整数。</FieldError> : <FieldDescription>按服务商给该模型的实际额度填写；不知道时留空，使用 64000。长对话接近额度时自动整理摘要。</FieldDescription>}
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="ai-output">最大输出（token）</FieldLabel>
+          <Input id="ai-output" type="number" min={256} max={Math.min(131072, effectiveContext - 8192)} step={1} value={form.max_output_tokens}
+            placeholder={String(contextInvalid ? 16384 : defaultOutput)} aria-invalid={outputInvalid} onChange={(event) => set("max_output_tokens")(event.target.value)} />
+          {outputInvalid ? <FieldError>填写 256–131072 之间的整数，且至少给输入留 8192 token。</FieldError> : <FieldDescription>须在服务商支持的输出额度内。留空默认最多 16384，较小上下文会相应降低。</FieldDescription>}
+        </Field>
+      </div>
       <Field className="settings-timeout">
         <FieldLabel htmlFor="ai-timeout">单次模型请求超时</FieldLabel>
         <div className="settings-inline"><Input id="ai-timeout" type="number" min={10} max={180} step={1} value={form.timeout} placeholder="30" aria-invalid={timeoutInvalid}

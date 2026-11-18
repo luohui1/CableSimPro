@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 from hashlib import sha256
 import json
 import os
@@ -132,12 +133,27 @@ def main() -> int:
 
     browser_host = "127.0.0.1" if args.host == "0.0.0.0" else "[::1]" if args.host in ("::", "::1") else args.host
     url = f"http://{browser_host}:{args.port}"
+    # The Agent owns no engineering data. Its private link and process live only
+    # for this launch; all tools and model credentials remain with the backend.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from studio.fusion.launch import prepare, running
+    backend_host = "[::1]" if ":" in args.host else "127.0.0.1"
+    prepare(ROOT, RELEASE, npm, environment, f"http://{backend_host}:{args.port}", skip_install=args.skip_install)
+    children = ExitStack()
+    sidecar = children.enter_context(running(ROOT, environment))
     print(f"Starting CableSimPro at {url}/\nPress Ctrl+C to stop. Demo data: {RELEASE}", flush=True)
-    process = subprocess.Popen([python, "-m", "uvicorn", "scripts.run_demo:create_release_app", "--factory",
-                                "--host", args.host, "--port", str(args.port)], cwd=ROOT, env=environment)
+    try:
+        process = subprocess.Popen([python, "-m", "uvicorn", "scripts.run_demo:create_release_app", "--factory",
+                                    "--host", args.host, "--port", str(args.port)], cwd=ROOT, env=environment)
+    except BaseException:
+        children.close()
+        raise
     try:
         ready = False
         for _ in range(150):
+            if sidecar.poll() is not None:
+                raise RuntimeError("Agent 对话服务启动失败；请检查上面的边车错误。")
             if process.poll() is not None:
                 return process.returncode or 1
             try:
@@ -168,6 +184,7 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        children.close()
 
 
 if __name__ == "__main__":

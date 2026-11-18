@@ -94,7 +94,7 @@ class Scenario:
         case = self.run()
         assert case.status == 'succeeded', case.error
         report = case.artifacts['x-cablesim.standard-check']
-        assert report['method_version'] == '1.8.4'
+        assert report['method_version'] == '1.8.5'
         assert report['conclusion'] != 'satisfied'
         return report
 

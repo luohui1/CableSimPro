@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-basis/1",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "rights": {
     "status": "not_assessed",
     "use": "用户持有标准的受控结构化摘录；不包含标准全文；不宣称许可已评估或合规批准"

@@ -105,6 +105,10 @@ export const studiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/studies",
   validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; kind?: string; workspace?: string } => ({ ...themeSearch(search), kind: ['simulation','ampacity'].includes(String(search.kind)) ? String(search.kind) : undefined, workspace: typeof search.workspace === 'string' ? search.workspace : undefined }),
+  beforeLoad: async ({ search }) => {
+    // The project page is nested inside the route component, so preload it before rendering.
+    if (search.workspace) await ProjectHome.preload?.();
+  },
   // 带工程身份时是工程首页（与研究工作台同一骨架），否则是全部研究的列表
   component: function StudiesPage() {
     const search = studiesRoute.useSearch();

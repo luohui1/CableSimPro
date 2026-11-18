@@ -15,6 +15,12 @@ if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
 const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs', 'verify-regularity.mjs', 'verify-performance.mjs', 'verify-loading-trace.mjs'].includes(script);
 const realUseScript = script === 'verify-real-use.mjs';
+if (realUseScript && (['agent', 'history', 'undo-history'].includes(process.env.REAL_USE_MODE)
+    || process.env.REAL_USE_PHASE === 'agent-real-use' || process.env.REAL_USE_TASKS
+    || ['REAL_USE_HISTORY', 'REAL_USE_RESUME_MISSING', 'REAL_USE_RESUME_TASKS'].some(name => process.env[name] === '1'))
+  || script === 'verify-form-real-use.mjs' && process.env.FORMS_REAL_USE_HISTORY_ONLY === '1'
+  || script === 'verify-public-workflows.mjs' && process.env.PUBLIC_MODE === 'agent-decisions')
+  throw Error('旧 Agent 浏览器场景已迁移，请运行 cd studio && npm run walk:fusion；真实模型验收另行记录。');
 const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs', 'verify-public-read-use.mjs', 'verify-read-path.mjs'].includes(script);
 const apiGenerationScript = script === 'generate-api.mjs';
 const serverTrace = script === 'verify-loading-trace.mjs' || script === 'verify-performance.mjs' && !!process.env.LOADING_SERVER_TRACE;
@@ -133,15 +139,14 @@ try {
     ...process.env,
     CABLESIM_DB: database,
     E2E_PYTHON: python,
-    // 普通验收禁用系统凭据；真实使用仅让平台按来源库账户正常鉴权，不改模型或密钥。
-    CABLESIM_AGENT_KEY_STORE: realUseScript ? 'system' : 'memory',
+    // 工作台验收不调用模型，不复用来源库的系统凭据。
+    CABLESIM_AGENT_KEY_STORE: 'memory',
     CABLESIM_DATASETS_DIR: path.join(scratch, "datasets"),
     CABLESIM_REPRODUCTION_LIBRARY: reproductionLibrary,
     TEMP: scratch,
     TMP: scratch,
     BACKEND_URL: "http://127.0.0.1:" + backendPort,
     E2E_SEED_RECEIPT: seedReceipt,
-    ...(realUseScript ? { E2E_SOURCE_DATABASE: path.resolve(process.env.E2E_AGENT_ACCOUNT_SOURCE || source) } : {}),
   };
   if (serverTrace) {
     const output = path.resolve(process.env.LOADING_TRACE_OUTPUT || path.join(root, '.data/fix-round/shared-shell/loading-path/trace'));
@@ -211,7 +216,6 @@ try {
             "app.state.research.executor.profile=root/('administrator-profile.json' if os.environ.get('REAL_USE_MODE')=='readonly' else '.data/hpc/config.json')",
             "app.state.research.executor.root=root/'hpc-runs'",
             "app.state.research.executor.ledger=root/'hpc-budget.sqlite'",
-            ...(realUseScript ? ["from backend.harness.model_settings import KeyStore", "app.state.harness.settings.keys.account=KeyStore(os.environ['E2E_SOURCE_DATABASE']).account"] : []),
           ] : []),
           "app.state.previews.jobs=root/'cad-jobs'",
           "app.state.previews.jobs.mkdir()",
@@ -332,9 +336,8 @@ try {
   }
 } finally {
   if ((realUseScript || script === 'verify-client-real-use.mjs') && process.env.REAL_USE_CAPTURE_DATABASE === '1' && existsSync(database)) {
-    // Keep actual saved sessions for subsequent read-only inspection.
-    const phase = process.env.REAL_USE_PHASE === 'agent-real-use' ? 'agent-real-use' : 'real-use';
-    const evidence = path.join(root, '.data/fix-round/shared-shell', phase, script === 'verify-client-real-use.mjs' ? 'client-observed.sqlite' : 'observed.sqlite');
+    // Keep actual workspace/configuration state for subsequent read-only inspection.
+    const evidence = path.join(root, '.data/fix-round/shared-shell/real-use', script === 'verify-client-real-use.mjs' ? 'client-observed.sqlite' : 'observed.sqlite');
     await run(python, ['-c', "import sqlite3,sys; from pathlib import Path; a=sqlite3.connect(Path(sys.argv[1]).resolve().as_uri()+'?mode=ro',uri=True); b=sqlite3.connect(sys.argv[2]); a.backup(b); b.close(); a.close()", database, evidence], {stdio:'inherit'}).catch(error => console.error('真实使用记录备份失败：' + error.message));
   }
   if (previewShutdownUrl) {

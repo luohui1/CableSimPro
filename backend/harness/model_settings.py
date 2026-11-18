@@ -1,6 +1,6 @@
 """Agent model settings chosen in the UI.
 
-Non-secret values (API base, model, instructions, timeout) live in the workspace
+Non-secret values (API base, model, instructions, timeout, token limits) live in the workspace
 database. The API key lives in the operating system credential store when one is
 available, otherwise only in this process; it never enters the database, files,
 responses or logs. Saved settings take precedence over CABLESIM_LLM_* variables.
@@ -20,6 +20,17 @@ from .security import remember_secret
 SERVICE = 'CableSimPro'
 TIMEOUT_RANGE = (10, 180)
 INSTRUCTIONS_LIMIT = 2000
+DEFAULT_CONTEXT_WINDOW = 64000
+DEFAULT_MAX_OUTPUT_TOKENS = 16384
+
+
+def token_limits(context_window=None, max_output_tokens=None):
+    context = context_window if context_window is not None else DEFAULT_CONTEXT_WINDOW
+    output = max_output_tokens if max_output_tokens is not None else min(DEFAULT_MAX_OUTPUT_TOKENS, context - 8192)
+    if output > context - 8192:
+        raise HTTPException(422, {'code': 'MODEL_TOKEN_LIMITS_INVALID',
+            'message': '最大输出须比上下文窗口至少少 8192 token，给指令、工具和对话保留输入空间。'})
+    return {'context_window': context, 'max_output_tokens': output}
 
 
 def valid_base(base):
@@ -98,7 +109,14 @@ class ModelSettings:
 
     @staticmethod
     def environment():
-        return {name: os.environ.get('CABLESIM_LLM_' + name.upper(), '').strip() for name in ('base_url', 'model', 'api_key')}
+        original = {name: os.environ.get('CABLESIM_LLM_' + name.upper(), '').strip() for name in ('base_url', 'model', 'api_key')}
+        fallback = {name: os.environ.get('CABLE_STUDIO_MODEL_' + suffix, '').strip()
+                    for name, suffix in (('base_url', 'BASE_URL'), ('model', 'ID'), ('api_key', 'API_KEY'))}
+        # Keep endpoint, model and credential together. Never combine the key of
+        # one provider with the address of another partially configured provider.
+        result = original if all(original.values()) else fallback if all(fallback.values()) else original if any(original.values()) else fallback
+        remember_secret(result['api_key'])
+        return result
 
     def resolve(self):
         """The connection the provider uses: saved settings first, then the host environment."""
@@ -120,6 +138,10 @@ class ModelSettings:
     def model_timeout(self):
         return self.saved().get('model_timeout_s')
 
+    def token_limits(self):
+        saved = self.saved()
+        return token_limits(saved.get('context_window'), saved.get('max_output_tokens'))
+
     def public(self):
         current, saved = self.resolve(), self.saved()
         key = current['api_key']
@@ -127,6 +149,7 @@ class ModelSettings:
                 'has_key': bool(key), 'key_hint': ('…' + key[-4:]) if len(key) >= 8 else None, 'key_source': current['key_source'],
                 'key_storage': self.keys.storage, 'configured': bool(current['base_url'] and current['model'] and key),
                 'instructions': saved.get('instructions', ''), 'model_timeout_s': saved.get('model_timeout_s'),
+                'context_window': saved.get('context_window'), 'max_output_tokens': saved.get('max_output_tokens'),
                 'environment': {'base_url': bool(self.environment()['base_url']), 'model': bool(self.environment()['model']), 'api_key': bool(self.environment()['api_key'])}}
 
     def update(self, body):
@@ -142,9 +165,11 @@ class ModelSettings:
         timeout = body.model_timeout_s
         if timeout is not None and not TIMEOUT_RANGE[0] <= timeout <= TIMEOUT_RANGE[1]:
             raise HTTPException(422, {'code': 'TIMEOUT_INVALID', 'message': f'单次请求超时取 {TIMEOUT_RANGE[0]}–{TIMEOUT_RANGE[1]} 秒。'})
+        token_limits(body.context_window, body.max_output_tokens)
         if body.api_key is not None:
             self.keys.set(body.api_key.strip())
-        values = {'base_url': base, 'model': model, 'instructions': instructions, 'model_timeout_s': timeout}
+        values = {'base_url': base, 'model': model, 'instructions': instructions, 'model_timeout_s': timeout,
+                  'context_window': body.context_window, 'max_output_tokens': body.max_output_tokens}
         with self.lock, self.store.db(True) as db:
             for name, value in values.items():
                 db.execute('INSERT INTO agent_settings(name,value,updated) VALUES (?,?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value,updated=excluded.updated',

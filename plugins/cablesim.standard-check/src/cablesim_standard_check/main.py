@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.8.4'
+VERSION = '1.8.5'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -1047,7 +1047,7 @@ def check(document, parameters):
                 row.update(limit=limit,margin=None if actual is None else actual-limit,comparison='>=',
                     verdict='missing' if actual is None else 'passed' if actual>=limit-1e-12 else 'failed',
                     reason=None if actual is not None else '缺字段：实际标称尺寸。',
-                    basis_query=calculated['queries'][source_key],basis_reference={**ref,'calculation_steps':calculated['trace']},
+                    basis_query=calculated['queries'][source_key],basis_reference={**ref,'query':calculated['queries'][source_key],'calculation_steps':calculated['trace']},
                     citation=record['citation'],source_status='original-verified',standard=record['standard']+'—'+record['edition'],
                     printed_page=record['printed_page'],pdf_page=record['pdf_page'],clause=record['table'] or record['clause'],source_digest=record['source_sha256'])
     elif annex_error:
