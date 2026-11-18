@@ -27,18 +27,26 @@ function LabeledSelect({
   const id = useId();
   const emptyChoice = id + "-empty";
   const hasEmptyChoice = options.some((option) => option.value === "");
+  const fieldError = error || (!loading && value !== undefined && value !== "" && !options.some(option => option.value === value)
+    ? "已保存的选项不在当前可选范围内，请核对后重新选择。" : undefined);
   return (
     <div className="select-field" data-field-path={path}>
       <label htmlFor={id}>{label}</label>
       <Primitive.Root
         value={value === "" && hasEmptyChoice ? emptyChoice : value}
-        onValueChange={(next) => onChange(next === emptyChoice ? "" : next)}
+        onValueChange={(next) => {
+          // Radix's hidden native select can emit an empty change while its
+          // options register inside a form. Only declared choices are edits;
+          // keep saved values intact, including explicit empty/null choices.
+          const selected = options.find(option => (option.value === "" ? emptyChoice : option.value) === next && !option.disabled);
+          if (selected && !disabled && !loading) onChange(selected.value);
+        }}
         disabled={disabled || loading}
       >
         <Primitive.Trigger
           id={id}
-          aria-invalid={!!error}
-          aria-describedby={error ? `${id}-error` : undefined}
+          aria-invalid={!!fieldError}
+          aria-describedby={fieldError ? `${id}-error` : undefined}
           aria-busy={loading || undefined}
           className="select-trigger"
         >
@@ -75,9 +83,9 @@ function LabeledSelect({
           </Primitive.Content>
         </Primitive.Portal>
       </Primitive.Root>
-      {error && (
+      {fieldError && (
         <p id={`${id}-error`} className="field-error" role="alert">
-          {error}
+          {fieldError}
         </p>
       )}
     </div>

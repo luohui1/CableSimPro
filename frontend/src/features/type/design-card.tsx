@@ -11,9 +11,11 @@ import { useState, type ReactNode } from 'react';
 
 export function DesignCard({ document, raw, onClose, extra }: { document: DomainDocument; raw: Record<string, unknown>; onClose?: () => void; extra?: ReactNode }) {
   const card = designSummary(document, raw), status = publicationStatus(raw), creation = optionalRecord(raw.type_creation), source = optionalRecord(creation.source);
+  const planName = text(optionalRecord(raw.type_lifecycle).name);
   const [relationsFor, setRelationsFor] = useState('');
   return <div className="type-design-card" data-type-card data-closable={!!onClose}><PropertyPanel title="型号名片" collapsed={false} onToggle={onClose || (() => {})} extra={extra} groups={[
     { label: '基本信息', items: [
+      ...(planName ? [{ label: '方案', value: planName }, { label: '型号名称', value: document.name }] : []),
       { label: '类别', value: '型号设计' }, { label: '基准版本', value: card.version },
       { label: '状态', value: <StatusMark kind={status === 'published' ? 'locked' : status === 'review' ? 'proposal' : 'draft'} label={publicationLabels[status]} /> },
       { label: '来源', value: <span title={card.sourceDetail}>{card.source}</span> },

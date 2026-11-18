@@ -1,4 +1,4 @@
-import { internalTokens } from './visible-names.mjs';
+import { engineeringReferenceException, internalTokens } from './visible-names.mjs';
 import { STATUS_WORDS, TASK_NAMES } from '../src/lib/status-vocabulary.ts';
 
 export const categories = { uuid: 'UUID', hash: '长十六进制摘要', pointer: 'JSON 路径', snake: '内部键名', enum: '英文枚举码', edition: '标准版次', internal: '内部标识' };
@@ -16,7 +16,8 @@ export const whitelist = [
   { id: 'mathematical-notation', reason: '坐标 x/z、物理符号比值 Y/C、sigma/epsilon、sigma/mu、k/mu、I2/I1，角度序列 Angles0/90/180，以及边界名 Dirichlet/Robin 和积分方法 BDF1/2，均为工程数学记号，不能当成 JSON 路径。只允许这些完整记号。' },
   { id: 'source-terminology', reason: '仅允许已核对的 TB 880 书目标题中的 rating 和公开算例“Unit RMS current normalization”中的 current；它们是原文工程术语，不是任务或状态枚举。其他位置仍检查。' },
   { id: 'connection-directory', reason: '仅允许设置 → 计算位置的远程工作目录、环境目录输入值；工程师必须查看、编辑完整绝对路径。按页面和两个字段定位限制，不能豁免其他界面的内部标识、错误或结果。' },
-  { id: 'standard-annex', reason: '仅允许带 GB/T 或 IEC 标准号的正文中“附录 A/B”这一附录编号记号；A/B 单独出现、JSON 路径和其他标识仍检查。' },
+  { id: 'standard-annex', reason: '仅允许明确写作“附录 A/B”的附录编号；标准号可能在相邻表格单元格。A/B 单独出现、路径和其他标识仍检查，来源原文不改写。' },
+  { id: 'tb880-examples', reason: '仅允许已核对教学来源中带 TB 880 书号的 Case2/10 算例引用。未带书号的 Case2/10、其他路径和内部标识仍检查，来源原文不改写。' },
 ];
 export function identifyText(text) {
   const matches = [], occupied = [];
@@ -46,7 +47,10 @@ export function exceptionFor(hit) {
   if (/^\/settings\/compute(?:\?|$)/.test(hit.page || '') && ['#hpc-directory', '#hpc-environment'].includes(hit.selector) && /^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\/?$/.test(hit.text)) return whitelist.find(item => item.id === 'connection-directory');
   if (hit.category === 'internal' && /^(?:A|W)\/km$/.test(hit.token)) return whitelist.find(item => item.id === 'engineering-notation');
   if (hit.category === 'internal' && ['x/z', 'Y/C', 'sigma/epsilon', 'sigma/mu', 'k/mu', 'I2/I1', 'Angles0/90/180', 'Dirichlet/Robin', 'BDF1/2'].includes(hit.token)) return whitelist.find(item => item.id === 'mathematical-notation');
-  if (hit.category === 'internal' && hit.token === 'A/B' && /\b(?:GB\/T|IEC)\s+\d/.test(hit.text) && /附录\s+A\/B\b/.test(hit.text)) return whitelist.find(item => item.id === 'standard-annex');
+  if (hit.category === 'internal') {
+    const reference = engineeringReferenceException(hit.text, hit.token);
+    if (reference) return whitelist.find(item => item.id === reference);
+  }
   if (hit.category === 'enum' && ((hit.token === 'rating' && hit.text === 'CIGRE WG B1.56 (2022). TB 880: Power cable rating examples for calculation tool verification. 官方目录') || (hit.token === 'current' && hit.text === 'R1=R2=1mm,d=2.5mm,sigma=55MS/m,f=40kHz. Unit RMS current normalization.'))) return whitelist.find(item => item.id === 'source-terminology');
   if (hit.category === 'snake' && /^[^\n<>]+\.(?:pdf|docx?|xlsx?|csv|step|stp|json)$/i.test(hit.text.trim())) return whitelist.find(item => item.id === 'original-filename');
   return null;

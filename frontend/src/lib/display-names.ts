@@ -275,6 +275,13 @@ export const displayNames: Readonly<Record<string, string>> = {
   metallic_sheath: "金属护套",
   bedding: "内衬层",
   oversheath: "外护套",
+  // Exact labels written by the v0 migration; the saved names remain unchanged.
+  "v0 semiconductor": "旧版半导电材料",
+  "v0 insulation": "旧版绝缘材料",
+  "v0 screen, construction unspecified": "旧版金属屏蔽（构造未明确）",
+  "v0 oversheath": "旧版外护套材料",
+  "v0 soil": "旧版土壤材料",
+  "v0 buried section": "旧版直埋截面",
   armour: "铠装",
   "cablesim.cable-geometry": "电缆实体建模",
   "cablesim.standard-check": "产品标准尺寸核对",
