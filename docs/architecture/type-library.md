@@ -22,6 +22,25 @@
 
 1 至 16 芯缺项资料可保存为现有型号草稿，2 芯、5 芯等多芯记录不猜坐标、层厚、导体直径或温限；不完整型号不能计算。完整型号也只是工程草稿，来源确认与产品审核是不同的动作。已被系列、型号设计、资料提案或研究引用的原始型号不能删除，避免破坏来源和历史版本。
 
+### 按实际材料用途声明物性
+
+结构表预览沿用同一 `series.material_properties`：`{材料用途:{物性字段:{value,unit,reference}}}`，不新增导入接口。`value` 必须为有限数值，不能使用布尔值或数字字符串；`reference` 为 1–2000 字符的非空出处。可声明下列十项物性，单位只接受列明的等值 SI 写法，不猜测或换算其他单位：
+
+| 物性字段 | 接受的单位 |
+| --- | --- |
+| `density` | `kg/m3`、`kg/m³` |
+| `volumetric_heat_capacity` | `J/(m3.K)`、`J/(m³·K)`、`J/(m^3*K)` |
+| `thermal_resistivity` | `K.m/W`、`K*m/W`、`K·m/W` |
+| `electrical_resistivity_20` | `ohm.m`、`ohm*m`、`Ω·m` |
+| `temperature_coefficient_20` | `1/K`、`K^-1` |
+| `relative_permittivity`、`loss_tangent`、`relative_permeability`、`emissivity`、`solar_absorptivity` | `1` |
+
+中压适配在现有构造器成功形成完整电缆后，按实际芯和层的用途匹配材料；例如 `conductor` 或 `insulation` 必须存在于该行结构，且该用途只能指向一个确定材料。用途不存在或对应多个材料、未知物性、单位不符、违反 `Material` 约束，均产生 `TABLE_MATERIAL_INVALID` 行错误及 `material_properties.<用途>.<物性>` 等字段定位，该行不形成可入库载荷。不允许覆盖构造器已有的非空不同值后继续沿用原派生结果；须按新物性重新构造。
+
+共用材料不扩大声明的作用域：导体和屏蔽共用铜材料时，仅声明导体密度会为导体建立独立材料引用，屏蔽的物性、来源和已有电阻保持不变。所有声明先完整校验再应用于该行；未声明字段不补值，单芯明示构造继续沿原入口，缺项草稿不会因此获得不存在的材料或完整计算输入。
+
+映射方法为“明示材料物性映射” `1.0.0`；数值及完整 `value/unit/reference` 保存在稳定且按 JSON Pointer 转义的 `/materials/{材料id}/{物性}` 来源中，标为 `kind:user`、`confidence:reference`、`reviewed:false`。分离共用材料时同时保存材料引用变更及映射依据，不改原表事实，不将声明变成厂家实测或产品批准。人工确认、预览摘要、错误行处理与原导入合同相同。此十项显式声明与后述六类封签参考采用是不同入口，不能据此声称完整材料库或机械参数已齐全。
+
 ### 真实厂家表的跨电压导入回归
 
 `tests/fixtures/` 中另有三组可通过同一接口上传的原表摘录；它们核验的是数据保真与缺项拒绝，不是完整产品认证。重量的通用字段名称为“电缆重量”，具体是近似值、最大值还是其他口径，仍读取原表表头及逐值来源。
@@ -90,7 +109,7 @@ Agent 可以上传原件、提出映射、请求预览和展示结果；不能�
 
 | 接口 | 请求与结果 |
 | --- | --- |
-| `POST /materials/draft-preview` | `{asset_id,version,name,selections:[{parameter,selection:Selection}]}`，1–5 个不重复物性。返回完整 `release/content_sha256/preview_digest`、`schema_version:cablesim.material-reference-draft/1`、`persisted:false`。 |
+| `POST /materials/draft-preview` | `{asset_id,version,name,selections:[{parameter,selection:Selection}]}`，1–6 个不重复物性。返回完整 `release/content_sha256/preview_digest`、`schema_version:cablesim.material-reference-draft/1`、`persisted:false`。 |
 | `POST /environment/draft-preview` | `{asset_id,version,name,selections:[Selection]}`，1–3 个不重复目标字段。返回完整 `release/content_sha256/preview_digest` 和参考可信档。 |
 | `POST /materials/draft`、`POST /environment/draft` | 原预览请求增加 `preview_digest` 和严格布尔值 `human_confirmed:true`，并要求 `X-CableSim-Actor: human`；服务端重新核对后返回 201 和普通资源草稿详情。 |
 
@@ -111,7 +130,7 @@ T2 对含非空 `reference_evidence` 的资源只能查看和预览；以下四�
 
 ### 材料逐属性采用与旧 Types 修订
 
-材料目标仅支持 `density`、`volumetric_heat_capacity`、`electrical_resistivity_20`、`relative_permittivity`、`thermal_resistivity`。原记录的物理量必须与目标字段一致，不从热导率倒算热阻率，不从名称推断材料配方。
+材料参考采用仅支持 `density`、`volumetric_heat_capacity`、`electrical_resistivity_20`、`relative_permittivity`、`thermal_resistivity`、`loss_tangent` 六类目标。损耗角正切仅映射原记录的 `dimensionless/tan_delta`，同为无量纲的其他量不能代替；原有材料、交流、电压与温度等适用条件仍须核对。原记录的物理量必须与目标字段一致，不从热导率倒算热阻率，不从名称推断材料配方。
 
 先通过 `GET /api/types/{wid}/resources` 获取目标与已发布资源，再使用原有 `POST /api/types/{wid}/resources/bind`，请求 `{request_id,expected_revision,role:"material",target_id:material_id,resource_id}`；也可走既有 `/resources/material-preview`、`/resources/material-confirm`。绑定只固定资源版本及输入身份。绑定发生变化会产生新修订；后续预览必须使用返回的当前工作空间修订号。
 
