@@ -137,6 +137,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install build and evidence inspection dependencies
         run: python -m pip install -r backend/requirements-dev.txt
+      - name: Real HTTP requests, graceful stop and immediate same-port restart
+        run: >-
+          python -m pytest -n 0 tests/test_release_installation.py
+          -k "restarts_immediately_after_requests or port_probe_rejects_live_listener"
+          --junitxml=artifacts/release-restart-${{ runner.os }}.xml
       - name: Install Linux runtime system libraries
         if: runner.os == 'Linux'
         run: |
@@ -215,4 +220,5 @@ jobs:
           path: |
             artifacts/installation-${{ runner.os }}/
             artifacts/firewall-preflight-${{ runner.os }}/
+            artifacts/release-restart-${{ runner.os }}.xml
           if-no-files-found: error

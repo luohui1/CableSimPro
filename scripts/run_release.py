@@ -299,15 +299,27 @@ def companions(settings: dict, env: dict) -> list[tuple[subprocess.Popen, bool, 
         raise
 
 
+def check_server_port(host: str, port: int) -> None:
+    """Reject a live listener before preparing an upgrade or touching the DB."""
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family) as probe:
+        if os.name == "nt":
+            # Windows SO_REUSEADDR can also admit an occupied listening port.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            # Match Uvicorn's bind policy after graceful shutdown: completed
+            # requests can leave server-side TIME_WAIT on this same port.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind((host, port))
+
+
 def serve(settings: dict, bundle: dict, no_browser: bool) -> int:
     directory = settings["data_dir"]
     server = settings["server"]
     env = environment(settings, ROOT)
     os.environ.update(env)
     own_windows_tree()
-    family = socket.AF_INET6 if ":" in server["host"] else socket.AF_INET
-    with socket.socket(family) as probe:
-        probe.bind((server["host"], server["port"]))
+    check_server_port(server["host"], server["port"])
     recover_pending(directory)
     pending = prepare_upgrade(directory, bundle)
     processes = []
