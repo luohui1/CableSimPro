@@ -7,7 +7,7 @@ import { Icon } from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import { WorkingMark } from "./working-mark";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { agentSessions, type AgentSessionSummary } from "./agent-api";
 
 const WAITING: Record<string, string> = { missing_input: "待补齐输入", scope_confirmation: "待确认运行范围", external_job: "等待外部作业", capability: "需人工处理", budget: "预算已用尽", human_review: "待审核方案" };
@@ -52,7 +52,9 @@ export function AgentTaskList({ theme }: { theme: "light" | "dark" }) {
     <Button asChild variant="secondary" className="sidebar-new"><Link to="/agent" search={{ theme, workspace: search.workspace }}><Icon name="action/edit" /><span>新任务</span></Link></Button>
     <div className="agent-task-filters">
       <Input value={query} onChange={event => setQuery(event.target.value)} type="search" aria-label="搜索任务" placeholder="搜索任务或工程" />
-      <Tabs value={filter} onValueChange={setFilter}><TabsList aria-label="筛选任务"><TabsTrigger value="all">全部</TabsTrigger><TabsTrigger value="review">待审核</TabsTrigger><TabsTrigger value="running">执行中</TabsTrigger></TabsList></Tabs>
+      <ToggleGroup type="single" value={filter} onValueChange={value => { if (value) setFilter(value); }} aria-label="筛选任务" size="sm">
+        <ToggleGroupItem value="all">全部</ToggleGroupItem><ToggleGroupItem value="review">待审核</ToggleGroupItem><ToggleGroupItem value="running">执行中</ToggleGroupItem>
+      </ToggleGroup>
     </div>
     <div className="sidebar-scroll agent-tasks" aria-label="任务列表">
       {sessions.isPending ? <div className="tree-empty" role="status">正在读取任务列表</div>

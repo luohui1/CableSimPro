@@ -236,8 +236,8 @@
 
 .agent-task-filters { display: flex; flex-direction: column; gap: var(--space-2); padding: 0 var(--space-2) var(--space-3); }
 .agent-task-filters input { width: 100%; }
-.agent-task-filters [role="tablist"] { width: 100%; }
-.agent-task-filters [role="tab"] { flex: 1; }
+.agent-task-filters [data-slot="toggle-group"] { width: 100%; }
+.agent-task-filters [data-slot="toggle-group-item"] { flex: 1; }
 .agent-panel-connection { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-note); }
 .agent-panel-connection p { margin: 0; flex: 1 1 12rem; line-height: 1.6; color: var(--text-secondary); }
 .agent-policy { font-size: var(--text-note); color: var(--text-secondary); }
