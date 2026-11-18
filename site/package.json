@@ -8,8 +8,11 @@
   "scripts": {
     "content": "node scripts/prepare-content.mjs",
     "dev": "node scripts/prepare-content.mjs && astro dev",
-    "build": "node scripts/prepare-content.mjs && astro build && node scripts/check-internal.mjs",
+    "build": "node scripts/prepare-content.mjs && node --max-old-space-size=1536 node_modules/astro/bin/astro.mjs build && node scripts/check-internal.mjs",
     "check:internal": "node scripts/check-internal.mjs",
+    "check:links": "node scripts/check-links.mjs",
+    "check:search": "node scripts/check-search.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "preview": "astro preview"
   },
   "dependencies": {

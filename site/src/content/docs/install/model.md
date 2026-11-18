@@ -1,0 +1,60 @@
+---
+title: 接入模型
+description: 为 Agent 接入 OpenAI 兼容接口的模型服务，包括内网私有化部署的模型。
+sidebar:
+  order: 5
+---
+
+Agent 通过 **OpenAI 兼容的 Chat Completions 接口**（`<服务地址>/chat/completions`，Bearer 密钥）调用模型。不配置模型时，除 Agent 对话外的全部功能照常可用；计算和导出从不依赖模型。
+
+:::note[Agent 的权限边界]
+无论接入哪个模型，Agent 都只能读取和提出方案；保存修改、运行计算、批准和发布都要由人确认。详见 [Agent 的用法和边界](../../guide/agent/)。
+:::
+
+## 在界面里配置（推荐）
+
+打开“设置 → AI 模型”：
+
+1. **服务商**：从 DeepSeek、通义千问、智谱 GLM、Kimi、本机 Ollama 中选择，或选“其他兼容服务”。
+2. **服务地址**：API 基址，必须以 `http://` 或 `https://` 开头，不能包含账号密码、查询串或片段，例如 `https://llm.example.com/v1`。
+3. **模型名** 和 **API 密钥**。密钥留空表示保留已保存的密钥。
+4. 点 **测试连接**，通过后 **保存**。
+
+其他选项：
+
+- **自定义指令**：每次对话都会带上，只影响表达方式和关注点，不能放宽权限、数值核验或批准规则。
+- **单次模型请求超时**：默认 30 秒，网络慢或模型较大时调高，对新建任务生效。
+- **长期记忆**：按工程和研究隔离地记住偏好与经验，需要先安装对应依赖；记忆不是工程依据，也不代表批准。
+
+### 密钥保存在哪里
+
+服务地址、模型名、自定义指令和超时保存在工程库里；**API 密钥保存在操作系统的凭据管理器中**（Windows 凭据管理器、Linux 密钥环等）。系统没有可用的凭据管理器时，密钥只保存在当前进程内存里，重启后需要重新输入。密钥不会写进工程库、文件、接口响应或日志。
+
+## 用 release.toml 预设（适合批量部署）
+
+在 [release.toml](../configuration/) 的 `[model]` 中填写服务地址和模型名，密钥放在环境变量里：
+
+```toml
+[model]
+base_url = "https://llm.example.com/v1"
+model = "qwen-plus"
+api_key_env = "CABLESIM_LLM_API_KEY"
+```
+
+```powershell
+# Windows：为当前用户设置环境变量后重新打开终端，再启动 CableSimPro
+setx CABLESIM_LLM_API_KEY "<你的密钥>"
+```
+
+```sh
+# Linux：在启动服务的同一会话中设置
+export CABLESIM_LLM_API_KEY='<你的密钥>'
+```
+
+界面中保存过的设置优先于 release.toml；界面只改了模型名、服务地址不变时，继续使用环境变量里的密钥。
+
+## 私有化部署的模型
+
+内网里自建的模型服务只要提供 OpenAI 兼容的 Chat Completions 接口即可接入，例如本机或内网的 Ollama、vLLM 等推理服务。把服务地址填成它的 API 基址（Ollama 通常是 `http://<主机>:11434/v1`），模型名填服务中已部署的模型。
+
+Agent 会调用多个工具完成任务，请选择支持工具调用（function calling）的模型。接入后在 Agent 页面试一个只读问题，例如“列出这个工程里的研究和最近一次运行结果”，确认模型能正确调用工具。

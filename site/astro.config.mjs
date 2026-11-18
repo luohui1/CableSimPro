@@ -47,6 +47,8 @@ export default defineConfig({
             base: 'develop/api',
             schema: openapiSchema,
             sidebar: { label: '接口参考', group: apiGroup, operations: { badges: true, labels: 'path' } },
+            // 只保留 curl 调用示例；按模式自动生成的请求体与响应示例体积很大，构建内存成倍增加，且字段表已完整列出
+            snippets: { operation: { clients: { shell: ['curl'] } }, requestBody: false, response: false },
           },
         ]),
       ],

@@ -1,5 +1,5 @@
 {
-  "$comment": "文档站点的发布清单。pages 中的文件在构建前从仓库 docs/ 同步到站点（副本不入库），unpublished 列出明确不发布的文件和目录及原因；两边都没列的 docs/ 文件默认不发布，构建时会提示。新增公开页面前先确认其中没有内部主机名、本机路径、个人信息、密钥和内部过程记录。",
+  "$comment": "文档站点的发布清单。pages 中的文件（docs/ 下的文档或插件 README）在构建前同步到站点（副本不入库），unpublished 列出明确不发布的文件和目录及原因；两边都没列的 docs/ 文件默认不发布，构建时会提示。新增公开页面前先确认其中没有内部主机名、本机路径、个人信息、密钥和内部过程记录。",
   "repository": "https://github.com/luohui1/CableSimPro",
   "pages": [
     { "source": "docs/architecture/release-installation.md", "slug": "install/reference/release-installation", "label": "离线发行技术说明", "order": 90 },
@@ -7,6 +7,7 @@
 
     { "source": "docs/METHOD.md", "slug": "methods/notes/rating-basis", "label": "载流量口径与热网络参考", "order": 1 },
     { "source": "docs/plugins/IEC60287_SINGLE_CORE.md", "slug": "methods/notes/iec-60287", "label": "IEC 60287 逐项依据与算例", "order": 2 },
+    { "source": "plugins/cablesim.gb50217-correction/README.md", "slug": "methods/notes/gb-50217", "title": "GB 50217 校正插件说明", "label": "GB 50217 校正插件说明", "order": 3 },
     { "source": "docs/plugins/TYPE_ELECTRICAL.md", "slug": "methods/notes/type-electrical", "label": "型号电气参数与短路容量", "order": 3 },
     { "source": "docs/plugins/TYPE_RATING_TABLE.md", "slug": "methods/notes/type-rating-table", "label": "型号载流量表", "order": 4 },
     { "source": "docs/plugins/STANDARD_CHECK.md", "slug": "methods/notes/standard-check", "label": "产品标准尺寸核对", "order": 5 },

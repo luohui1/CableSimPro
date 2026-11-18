@@ -1,6 +1,52 @@
 ---
 title: 热网络交叉校核
-description: 可审计的稳态热网络参考方法，用于与 IEC 结果交叉校核。
+description: 可审计的简化稳态热网络参考方法：原理、适用范围、输入要求、验证依据和已知限制。
+sidebar:
+  label: 热网络交叉校核
 ---
 
-热网络参考方法用于交叉校核，不替代 IEC 60287 正式计算。
+import PluginMethods from '../../../components/PluginMethods.astro';
+
+插件 `cablesim.thermal-network`（参考方法 MV-THERMAL）是一个**可审计的简化稳态热网络**，用于在同一份输入上与 IEC 60287 等方法交叉校核。它不是完整的 IEC 60287 实现，不能替代正式计算。
+
+## 原理
+
+电缆各同心层的径向热阻：
+
+$$
+T_k = \frac{\rho_{th,k}}{2\pi}\,\ln\frac{r_{k+1}}{r_k}
+$$
+
+均匀半空间土壤中三根电缆之间的热阻矩阵（镜像法，地表恒温）：
+
+$$
+G_{ii} = \frac{\rho_{soil}}{2\pi}\,\operatorname{arcosh}\frac{h_i}{r_5}, \qquad
+G_{ij} = \frac{\rho_{soil}}{2\pi}\,\ln\frac{D'_{ij}}{D_{ij}}\quad (i \ne j)
+$$
+
+$h_i$ 为电缆中心埋深，$r_5$ 为电缆外半径，$D_{ij}$ 为两缆中心距，$D'_{ij}$ 为电缆 $i$ 到电缆 $j$ 镜像的距离。导体相对环境的温升向量：
+
+$$
+\mathbf{u} = H\,\mathbf{q}_c + \mathbf{d}, \qquad
+H = (1+\lambda)\,G + \operatorname{diag}\!\Big(\sum_k T_k + \lambda T_4\Big)
+$$
+
+$\mathbf{q}_c$ 为各相导体损耗，$\lambda$ 为屏蔽损耗比，$\mathbf{d}$ 为介质损耗的温升贡献。导体电阻随温度线性变化，三相温度和电阻逐相求解，最热一相达到温限时的电流即为参考载流量。
+
+## 适用范围
+
+- 单回路、三根相同的无铠装单芯电缆；同心层；水平或等边三角排列。
+- 均匀土壤，地表恒温，轴向无限长；三相平衡电流。
+- 交流附加系数和屏蔽损耗比是**输入假设**，不自动计算集肤、邻近效应或护套环流。
+
+不支持排管、空气敷设、回填分区、干燥带、多回路、铠装、外部热源、接头与端部、谐波、暂态、周期与应急负荷，也不做绝缘配合校核。
+
+## 输入要求
+
+导体截面与 R₂₀、各层厚度与热阻率、埋深与排列、土壤热阻率、地表温度、导体温限，以及显式给出的交流附加系数和屏蔽损耗比。
+
+## 验证依据与限制
+
+<PluginMethods id="cablesim.thermal-network" />
+
+完整的推导、单位约定、结果核算和图形说明见[载流量口径与热网络参考](../notes/rating-basis/)。

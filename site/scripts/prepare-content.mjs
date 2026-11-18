@@ -47,8 +47,10 @@ for (const page of pages) {
   if (!/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/.test(page.slug)) throw Error(`publish.json：网址不合规 ${page.slug}`);
   if (slugs.has(page.slug)) throw Error(`publish.json：网址重复 ${page.slug}`);
   if (bySource.has(page.source)) throw Error(`publish.json：重复发布 ${page.source}`);
-  if (!page.source.startsWith('docs/') || !existsSync(path.join(repo, page.source)))
-    throw Error(`publish.json：找不到来源文件 ${page.source}`);
+  // 来源只能是 docs/ 下的文档或插件自带的 README
+  const allowed = page.source.startsWith('docs/') || /^plugins\/[^/]+\/README\.md$/.test(page.source);
+  if (!allowed || !existsSync(path.join(repo, page.source)))
+    throw Error(`publish.json：来源不在 docs/ 或插件 README，或文件不存在：${page.source}`);
   const excluded = publish.unpublished.find((item) => page.source.startsWith(item.source));
   if (excluded) throw Error(`publish.json：${page.source} 同时列在 unpublished（${excluded.source}）`);
   slugs.add(page.slug);
