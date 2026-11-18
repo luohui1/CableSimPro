@@ -106,9 +106,25 @@ export async function assertLayout(page, label, nameOptions) {
     const primaryScope = document.querySelector('[role="dialog"]') || document;
     const primary = [
       ...primaryScope.querySelectorAll(".button-primary,.button-run"),
-    ].filter(
-      (node) => node.getBoundingClientRect().height && !node.disabled,
-    ).length;
+    ].filter((node) => {
+      if (node.disabled || node.closest('[aria-hidden="true"],[inert]')) return false;
+      const folded = node.closest('details:not([open])');
+      if (folded && !folded.querySelector(':scope > summary')?.contains(node)) return false;
+      if (!node.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return false;
+      const box = node.getBoundingClientRect();
+      let left = Math.max(0, box.left), top = Math.max(0, box.top);
+      let right = Math.min(innerWidth, box.right), bottom = Math.min(innerHeight, box.bottom);
+      for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor), bounds = ancestor.getBoundingClientRect();
+        if (/(hidden|auto|scroll|clip)/.test(style.overflowX)) {
+          left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
+        }
+        if (/(hidden|auto|scroll|clip)/.test(style.overflowY)) {
+          top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
+        }
+      }
+      return right - left > 1 && bottom - top > 1;
+    }).length;
     return {
       overflow:
         document.documentElement.scrollWidth > innerWidth + 1 ||

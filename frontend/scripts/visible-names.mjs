@@ -15,6 +15,7 @@ export function internalTokens(text) {
     .replace(/\bkg\/(?:100m|km)\b/g, "质量单位")
     .replace(/\bGB\s*\/\s*T(?=\d|\b)/g, "国标")
     .replace(/K[·*]m\/W/g, "热阻率单位")
+    .replace(/A[·∙]√s\/mm²/g, "短路电流系数单位")
     .replace(/\b(?:MS\/m|Rc\/Rs|YJV\/YJV22|U0\/U|F\/km)\b/g, "工程记号");
   return [
     ...new Set(
