@@ -4,6 +4,8 @@ import { savedTypeRunDestination } from '@/lib/saved-run-destination';
 import { fullTypeRun, matchingTypeRun, typeEvidence, typeRunReceipt } from './api';
 import { ratingResults } from './rating-api';
 
+type TypeEvidence = Awaited<ReturnType<typeof typeEvidence>>;
+
 export function typeEvidenceOptions(wid: string, history: boolean, module: string) {
   return queryOptions({ queryKey: ['type-evidence', wid, history ? 'history' : 'recent', history ? 'all' : module],
     queryFn: ({ signal }) => typeEvidence(wid, AbortSignal.any([signal, AbortSignal.timeout(20000)]), !history, module),
@@ -75,7 +77,7 @@ export function fixedRatingEvidenceOptions(client: QueryClient, wid: string, run
 /** Read an exact immutable result without making the full history its warm-link gate. */
 export function fixedTypeEvidenceOptions(client: QueryClient, wid: string, runId: string, module: string) {
   if (module === 'rating-table') return fixedRatingEvidenceOptions(client, wid, runId);
-  return queryOptions({ queryKey: ['type-fixed-run', wid, runId], staleTime: 0, retry: false,
+  return queryOptions<TypeEvidence, Error, TypeEvidence, string[]>({ queryKey: ['type-fixed-run', wid, runId], staleTime: 0, retry: false,
     refetchInterval: query => query.state.data?.some(item => ['accepted', 'queued', 'running', 'validating'].includes(String(item.run.status))) ? 2000 : false,
     queryFn: async ({ signal }) => {
       const historyOptions = typeEvidenceOptions(wid, true, module);
