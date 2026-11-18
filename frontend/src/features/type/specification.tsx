@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, array, message, numeric, optionalRecord, text } from '@/api/client';
 import { DataTable } from '@/components/data-table';
@@ -78,12 +78,12 @@ export function TypeSpecification({ tab }: { tab: string }) {
   const chapters = spec ? array(spec.payload.chapters, '规格书章节').map((value, index) => audience === 'customer' && index === 6 ? '标准核对表' : index === 7 ? '文档修订记录与来源' : text(value)) : [];
   const markers = ['cover', 'standards', 'structure', 'electrical', 'rating', 'short-circuit', 'checks', 'revisions'];
   const chapterLabels=['封面','标准','结构','电气','载流','短路','核对','修订'];
-  let iframeHtml = spec?.html || '';
-  if (spec && tab === 'content') {
+  const iframeHtml = useMemo(() => {
+    if (!spec?.html || tab !== 'content') return spec?.html || '';
     const document = new DOMParser().parseFromString(spec.html, 'text/html');
     const style=document.createElement('style');style.textContent='@media screen {html,body{width:auto;min-width:0;max-width:100%;margin:0}body{box-sizing:border-box;padding:var(--space-4)}table{max-width:100%;table-layout:fixed}th,td{overflow-wrap:anywhere}.page,.specification{width:auto;max-width:100%;min-width:0}}';document.head.append(style);
-    iframeHtml = '<!doctype html>' + document.documentElement.outerHTML;
-  }
+    return '<!doctype html>' + document.documentElement.outerHTML;
+  }, [spec?.html, tab]);
   const revisionRows = spec ? array(spec.payload.revisions, '文档修订记录').map((value, index) => ({ ...optionalRecord(value), id: String(index) }) as Record<string, unknown> & { id: string }) : [];
   const blockedTarget = destinations[blockedChannel];
   const inCommand=useTypeCommand({id:'specification-generate',label:status==='published'?'导出 PDF':'生成规格书',role:'primary',loading:busy,disabledReason:!spec?'规格书尚未读取':reason||(state.readOnly&&status!=='published'?'此版本不可生成':undefined),onSelect:()=>void generate()});

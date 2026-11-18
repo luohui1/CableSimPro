@@ -2150,10 +2150,46 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await expect(page.getByTitle('正式规格书预览')).toBeVisible();
     const before = await api(`/api/types/${main.id}/specification?audience=internal&view=detail`);
     const chapters = page.getByRole('navigation', { name: '规格书章节', exact: true });
-    await chapters.getByRole('button', { name: '结构尺寸表', exact: true }).click();
-    await expect(chapters.getByRole('button', { name: '结构尺寸表', exact: true })).toHaveAttribute('aria-current', 'page');
-    await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="structure"]')).toBeVisible();
-    await capture('规格书-内部审核稿结构章节与缺项');
+    const frame = page.getByTitle('正式规格书预览');
+    await expect.poll(() => frame.evaluate(node => node.contentDocument?.readyState)).toBe('complete');
+    await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="cover"]')).toBeVisible();
+    // Observe actual rendering while a person reads the unchanged document.
+    // No source/result is substituted, and the original browser API is restored.
+    const previewObservation = await frame.evaluateHandle(node => {
+      const original = DOMParser.prototype.parseFromString;
+      const observation = { node, document: node.contentDocument, source: node.srcdoc, parses: 0, loads: 0 };
+      const loaded = () => observation.loads++;
+      node.addEventListener('load', loaded);
+      DOMParser.prototype.parseFromString = function(source, type) {
+        if (type === 'text/html' && String(source).includes('data-specification-section')) observation.parses++;
+        return original.call(this, source, type);
+      };
+      return { observation, restore: () => { DOMParser.prototype.parseFromString = original; node.removeEventListener('load', loaded); } };
+    });
+    const readingWrites = report.writes.length;
+    try {
+      const structureChapter = chapters.getByRole('button', { name: '结构尺寸表', exact: true });
+      await structureChapter.click();
+      await expect(structureChapter).toHaveAttribute('aria-current', 'page');
+      await expect(page.frameLocator('iframe[title="正式规格书预览"]').locator('[data-specification-section="structure"]')).toBeVisible();
+      const coverChapter = chapters.getByRole('button', { name: '封面', exact: true });
+      await coverChapter.focus(); await coverChapter.press('Enter');
+      await expect(coverChapter).toHaveAttribute('aria-current', 'page');
+      await structureChapter.focus(); await structureChapter.press('Enter');
+      await expect(structureChapter).toHaveAttribute('aria-current', 'page');
+      await capture('规格书-内部审核稿结构章节与缺项');
+      const retained = await previewObservation.evaluate(({ observation: value }) => ({
+        sameElement: value.node === document.querySelector('iframe[title="正式规格书预览"]'),
+        sameDocument: value.node.contentDocument === value.document, sameSource: value.node.srcdoc === value.source,
+        parses: value.parses, loads: value.loads,
+      }));
+      check('规格书章节鼠标与键盘往返复用同一原文与预览，不重复解析或写入',
+        retained.sameElement && retained.sameDocument && retained.sameSource && retained.parses === 0
+        && retained.loads === 0 && report.writes.length === readingWrites, { ...retained, writes: report.writes.slice(readingWrites) });
+    } finally {
+      await previewObservation.evaluate(value => value.restore());
+      await previewObservation.dispose();
+    }
     const finishPdfEvidence = observeOriginalPdf(main.id, '内部审核稿');
     let downloaded;
     try {

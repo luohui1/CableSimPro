@@ -36,7 +36,7 @@ import './type.css';
 import { cleanLabel } from './labels';
 import { StructurePropertyInputs, StructureSourceInput, TypeRatingInputs } from './property-inputs';
 import { TypeInspectorContext } from './inspector';
-const TypeModulePage = deferredView(() => import('./module-page').then(module => ({ default: module.TypeModulePage })));
+import { TypeModulePage } from './module-page';
 import { DesignCard } from './design-card';
 import { typeComparison, typeSpecification } from './version-api';
 import { ResourceBindings } from './resource-bindings';
