@@ -162,6 +162,25 @@ jobs:
           .venv/bin/python frontend/scripts/seed-engineering-demo.py --release --database .data/release/engineering.sqlite
           cd frontend
           if [ ! -x /usr/bin/google-chrome ]; then npx playwright install --with-deps chromium; fi
+      - name: Generate API types from the isolated formal host
+        if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
+        id: workbench-openapi
+        working-directory: frontend
+        env:
+          E2E_PYTHON: ${{ github.workspace }}/.venv/bin/python
+        run: node scripts/isolated-e2e.mjs generate-api.mjs
+      - name: Preserve formally generated API types for review
+        if: ${{ !cancelled() && steps.workbench-openapi.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-openapi
+          retention-days: 14
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            frontend/src/api/generated/schema.ts
+            frontend/src/api/generated/endpoints.ts
+            .data/frontend-integration/openapi.json
       - name: Walk ampacity research at both screen sizes
         if: ${{ !cancelled() && steps.workbench-environment.outcome == 'success' }}
         working-directory: frontend
