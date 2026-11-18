@@ -12,9 +12,11 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import type { ChatView, Proposal } from '../shared/types.ts';
 import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
-  installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState, type GbFixture } from './fusion-scripts.ts';
+  installDeliveryWorkflow, installStudyRead, installStudyWorkflow, installTypeRead, installTypeWorkflow,
+  prepareGbFixture, ratingConditions, type FlowState, type GbFixture } from './fusion-scripts.ts';
 import { scriptedModel, steps, toolText } from './support.ts';
 import { importInventory, installMissingStructureSource, installStructureImport, manufacturerWorkbook } from './fusion-import-scripts.ts';
+import { budgetedModel, CONTEXT_TOKENS, OUTPUT_TOKENS, tokenCounts } from './fusion-budget.ts';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const home = mkdtempSync(join(tmpdir(), 'cablesim-fusion-integration-'));
@@ -528,4 +530,147 @@ test('missing engineering input or a filename without an actual attachment is re
   assert.equal((await api<any[]>(`/api/workspaces/${fixture.workspace}/studies`)).length, before_);
   assert.equal((await api('/api/index/objects?kind=type&limit=1')).total, typesBefore);
   assert.deepEqual(importInventory(REPO, join(home, 'engineering.sqlite')), importsBefore);
+});
+
+test('all six maintainer workflows finish with actual tool results under a 64k context budget', { timeout: 240_000 }, async t => {
+  const bounded = await budgetedModel();
+  await sidecar.close();
+  sidecar = createSidecar({ backendUrl: url, token: TOKEN, home: join(home, 'bounded-sidecar'), port: 8111, runtime: bounded.runtime });
+  const completed: string[] = [];
+  const finish = (phase: string, state: FlowState, view: ChatView) => {
+    assert.equal(state.failure, undefined, `${phase}: ${state.failure}`);
+    assert.equal(state.done, true, `${phase} must finish after the bounded provider receives every real tool result`);
+    assert.equal(view.running, false);
+    assert.equal(view.waiting.length, 0);
+    assert.ok(steps(view).every(step => step.status === 'done'), `${phase} contains an unfinished or rejected tool`);
+    completed.push(phase);
+  };
+  try {
+    bounded.phase('研究结论和限制');
+    const read = installStudyRead(bounded.faux, fixture);
+    const reading = await sidecar.agent.send(undefined, '这项研究的结论是什么，受什么限制？',
+      { workspace_id: fixture.workspace, study_id: fixture.study, label: '当前研究' });
+    await sidecar.agent.idle(reading.session);
+    finish('研究结论和限制', read, await sidecar.agent.view(reading.session));
+
+    bounded.phase('型号结构和主要参数');
+    const source = (await ratingSource()).type;
+    const type = installTypeRead(bounded.faux, source.workspace);
+    const typed = await sidecar.agent.send(undefined, '这个型号的结构和主要参数是什么，哪些输入还缺？',
+      { workspace_id: source.workspace, label: source.name });
+    await sidecar.agent.idle(typed.session);
+    finish('型号结构和主要参数', type, await sidecar.agent.view(typed.session));
+    assert.ok(type.result!.items.length > 20, 'the budget includes actual continuation pages, not a shortened fixture');
+
+    bounded.phase('新建直埋校核并计算');
+    const created = installStudyWorkflow(bounded.faux, { ...fixture, title: '上下文预算验收 · 直埋校核', exportBook: false });
+    const study = await sidecar.agent.send(undefined, '复制当前保存工况，新建一项直埋校核并计算。',
+      { workspace_id: fixture.workspace, study_id: fixture.study, label: '当前研究' });
+    const createApprovals: string[] = [];
+    const createdView = await acceptEach(study.session, async proposal => { createApprovals.push(proposal.operation); });
+    finish('新建直埋校核并计算', created, createdView);
+    assert.deepEqual(createApprovals, ['propose_study', 'propose_study_run']);
+    assert.ok(created.study && created.run);
+
+    bounded.phase('改条件重算并对比');
+    const workspace = await api(`/api/workspaces/${fixture.workspace}`);
+    const soil = workspace.domain.materials.find((material: any) => /soil/.test(material.id) && typeof material.thermal_resistivity === 'number');
+    assert.ok(soil, 'use the saved soil material, not an invented input path');
+    const escape = (value: string) => value.replaceAll('~', '~0').replaceAll('/', '~1');
+    const changed = installConditionWorkflow(bounded.faux, { workspace: fixture.workspace, study: created.study!, run: created.run!,
+      path: `/materials/${escape(soil.id)}/thermal_resistivity`, value: 1.2 });
+    // Keep the preceding creation and run in this same conversation: resetting history would conceal cumulative overflow.
+    await sidecar.agent.send(study.session, '把土壤热阻率改为1.2 K·m/W，重算并与刚才那次比较。');
+    const changeApprovals: string[] = [];
+    const changedView = await acceptEach(study.session, async proposal => { changeApprovals.push(proposal.operation); });
+    finish('改条件重算并对比', changed, changedView);
+    assert.deepEqual(changeApprovals, ['propose_domain_changes', 'propose_study_run']);
+    assert.notEqual(changed.run, created.run);
+    const comparison = await api(`/api/workspaces/${fixture.workspace}/study-comparisons`, { run_ids: [created.run, changed.run] });
+    assert.ok(Math.max(...Object.values(tokenCounts(JSON.stringify(comparison)))) > CONTEXT_TOKENS,
+      'the real unsummarized comparison must exceed the context window even before the prompt, schemas and history');
+    for (const quantity of changed.comparison!.differences[0].quantities) {
+      const saved = comparison.differences[0].quantities.find((row: any) => row.key === quantity.key && row.entity === quantity.entity
+        && row.case_id === quantity.case_id && row.condition === quantity.condition && row.unit === quantity.unit);
+      assert.ok(saved, 'a model-facing difference must have a corresponding saved comparison quantity');
+      assert.equal(quantity.baseline, saved.baseline);
+      assert.equal(quantity.value, saved.value);
+      assert.equal(quantity.difference, saved.difference);
+    }
+
+    bounded.phase('导出计算书');
+    const delivery = installDeliveryWorkflow(bounded.faux, { workspace: fixture.workspace, run: changed.run! });
+    await sidecar.agent.send(study.session, '把刚才重算的结果导出计算书。');
+    const deliveryApprovals: string[] = [];
+    const deliveryView = await acceptEach(study.session, async proposal => { deliveryApprovals.push(proposal.operation); });
+    finish('导出计算书', delivery, deliveryView);
+    assert.deepEqual(deliveryApprovals, ['propose_delivery']);
+    const document = await fetch(url + delivery.file!);
+    assert.ok(document.ok);
+    assert.match(await document.text(), /计算|电流|研究/);
+    assert.ok(steps(deliveryView).some(step => step.card?.kind === 'saved_file'));
+
+    bounded.phase('厂家表导入并核对');
+    const workbook = manufacturerWorkbook(REPO);
+    const imported = installStructureImport(bounded.faux, { workspace: fixture.workspace, seriesName: '上下文预算验收 · 人民电器三芯结构表' });
+    const importing = await sidecar.agent.send(undefined, '将附上的厂家结构表导入为型号草稿并逐项核对，每次写入都先给我审阅。',
+      { workspace_id: fixture.workspace, label: '当前工程' }, [{ filename: workbook.filename, content_base64: workbook.content_base64 }]);
+    const importApprovals: string[] = [];
+    let fullImportReviewCharacters = 0;
+    const importedView = await acceptEach(importing.session, async proposal => {
+      importApprovals.push(proposal.operation);
+      if (proposal.operation === 'propose_structure_import') fullImportReviewCharacters = JSON.stringify(proposal.changes).length;
+    });
+    finish('厂家表导入并核对', imported, importedView);
+    assert.deepEqual(importApprovals, ['propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check']);
+    assert.ok(fullImportReviewCharacters > 12_000, 'complete immutable import changes must still reach the person reviewing them');
+    const cards = steps(importedView).map(step => step.card);
+    const preview = cards.find(card => card?.kind === 'structure_preview');
+    assert.ok(preview?.kind === 'structure_preview');
+    assert.equal(preview.view.rows.length, 11);
+    assert.equal(preview.view.complete, true);
+    assert.ok(preview.view.rows.every(row => row.values.length > 0 && row.values.every(value => value.source)), 'all source facts remain on the card');
+    const checked = cards.find(card => card?.kind === 'structure_check');
+    assert.ok(checked?.kind === 'structure_check');
+    assert.equal(checked.view.items.length, 11);
+    const series = await api(`/api/type-library/series/${imported.imported!.series_id}`);
+    assert.equal(series.specs.length, 11);
+    for (const item of imported.checked!.items) {
+      const run = await api(`/api/workspaces/${item.workspace_id}/studies/${item.study_id}/runs/${item.run_id}`);
+      assert.equal(run.status, 'succeeded');
+      assert.equal(run.integrity, 'verified');
+      assert.equal(run.input_digest, item.input_digest);
+      assert.equal(run.output_digest, item.output_digest);
+    }
+
+    assert.equal(completed.length, 6);
+    assert.equal(new Set(bounded.requests.map(request => request.phase)).size, 6);
+    assert.equal(bounded.requests.length, bounded.faux.state.callCount, 'every provider request, including continuations, is budgeted');
+    assert.ok(bounded.requests.every(request => request.systemBytes > 0 && request.toolSchemaBytes > 0 && request.historyBytes > 0));
+    assert.ok(bounded.requests.every(request => request.totalTokens <= CONTEXT_TOKENS && request.reservedOutput === OUTPUT_TOKENS));
+    const results = [...bounded.toolResults.values()];
+    assert.ok(results.every(result => result.characters <= 12_000), 'every model tool result obeys the shared hard character limit');
+    for (const name of ['study_compare', 'propose_structure_preview', 'propose_structure_import']) {
+      const result = results.find(result => result.tool === name);
+      assert.ok(result, `the budgeted model actually received ${name}`);
+      const value = JSON.parse(result.text);
+      assert.ok(!value.data?.proposal?.changes, 'full approval changes belong to cards and saved records');
+      if (name === 'propose_structure_preview') assert.equal(value.data.receipt.preview, undefined);
+    }
+  } finally {
+    if (completed.length !== 6) t.diagnostic(JSON.stringify({ backendExit: process_.exitCode, backendSignal: process_.signalCode,
+      backendLog: serverLog.slice(-18_000) }));
+    t.diagnostic(JSON.stringify({ completed, contextTokens: CONTEXT_TOKENS, reservedOutput: OUTPUT_TOKENS,
+      requests: bounded.requests.length, highestBudget: bounded.requests.toSorted((a, b) => b.totalTokens - a.totalTokens)[0],
+      phases: Object.fromEntries([...new Set(bounded.requests.map(request => request.phase))].map(phase => {
+        const requests = bounded.requests.filter(request => request.phase === phase);
+        return [phase, { requests: requests.length, largestInputTokens: Math.max(...requests.map(request => request.inputTokens)),
+          largestTotalTokens: Math.max(...requests.map(request => request.totalTokens)) }];
+      })),
+      largestResults: [...bounded.toolResults.values()].toSorted((a, b) => b.characters - a.characters).slice(0, 6)
+        .map(({ tool, characters }) => ({ tool, characters })),
+      regressionResults: [...bounded.toolResults.values()].filter(result =>
+        ['study_compare', 'propose_structure_preview', 'propose_structure_import'].includes(result.tool))
+        .map(({ tool, characters }) => ({ tool, characters })) }));
+  }
 });

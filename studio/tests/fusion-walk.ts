@@ -468,6 +468,9 @@ try {
       const ratingText = await rating.innerText();
       record(`${viewport.width}/saved-value`, ratingText.includes(current), { workspace: source.workspace, study: source.study, run: source.run,
         backendAmpacity: current, cardText: ratingText });
+      record(`${viewport.width}/saved-card-no-probe-text`, !/(?:^|\s)x(?:\s|$)/.test(ratingText)
+        && await rating.getByRole('meter', { name: '导体温度' }).count() === 1,
+      { cardText: ratingText, accessibleTemperatureMeter: true });
       await rating.scrollIntoViewIfNeeded();
       await shot(page, frame, 'result-card', { run: source.run, ampacityA: current });
       const frameIdentity = await frame.evaluate(() => { (window as any).__fusionWalkIdentity = Math.random(); return (window as any).__fusionWalkIdentity; });
@@ -856,6 +859,9 @@ try {
           const standardField = firstRow.locator('[data-structure-field="r20"]');
           const standardSource = standardField.locator('[data-source-origin="standard"]');
           const standardText = await standardSource.innerText();
+          const resistanceText = await standardField.locator('td').nth(1).innerText();
+          record(`${viewport.width}/import-resistance-display-unit`, resistanceText.trim() === `${standardFact.display_value} Ω/km`,
+            { shown: resistanceText, stored: standardFact.value, storedUnit: standardFact.unit, display: standardFact.display_value, displayUnit: standardFact.display_unit });
           for (const value of ['标准查询', '标准上限（非厂家实测）', standardRecord.citation, standardRecord.quantity.name]) {
             assert.ok(standardText.includes(value), 'R20必须显示其真实标准记录与上限口径');
           }

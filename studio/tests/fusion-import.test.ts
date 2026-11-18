@@ -274,7 +274,8 @@ for (const status of ['running', 'interrupted'] as const) {
       await agent.idle(session);
       assert.equal(isError, true, 'the model must receive an error state for the unfinished batch');
       assert.equal(told.status, 'error');
-      assert.deepEqual(told.data?.receipt, unfinished(status));
+      assert.deepEqual(told.data?.receipt, { ...unfinished(status), items: [{ ...CHECK_ITEM, check_counts: {}, checks: [] }],
+        item_count: 1, statuses: { succeeded: 1 }, check_counts: {}, engineering_approval: false });
       assertUnfinished(steps(await agent.view(session))[0], status);
       assert.deepEqual(platform.decisions, [{ id: pending.id, accept: true }]);
       assert.equal(platform.calls.length, 1, 'the batch is not automatically proposed or executed again');

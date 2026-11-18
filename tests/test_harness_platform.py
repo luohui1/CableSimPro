@@ -5,7 +5,7 @@ import pytest
 
 from backend.harness.context_builder import compress_result, encoded
 from backend.harness.evidence import grounded_text, quantity_facts
-from backend.harness.platform import evidence_view
+from backend.harness.platform import evidence_view, page
 from test_harness import fake_model, session, send, call, answer
 from test_harness_adaptive import batch
 from test_research import client
@@ -31,6 +31,52 @@ def register(client,path,endpoint,methods):
     route=client.app.router.routes.pop()
     index=next(i for i,r in enumerate(client.app.router.routes) if getattr(r,'path',None)=='/api/{path:path}')
     client.app.router.routes.insert(index,route)
+
+
+@pytest.mark.parametrize('collection', ['object', 'array'])
+def test_result_directory_with_long_unicode_paths_remains_navigable(collection):
+    key = '规格/来源~' * 24
+    entries = [{'position': index, 'description': '保存的完整来源说明。' * 400} for index in range(12)]
+    value = {key: {str(index): entry for index, entry in enumerate(entries)} if collection == 'object' else entries}
+    original = encoded(value)
+    root = page(value, budget=2400)
+    assert len(root['items']) == 1 and root['next_offset'] is None and not root['complete']
+    directory = root['items'][0]
+    path = '/' + key.replace('~', '~0').replace('/', '~1')
+    assert directory['path'] == path and directory['omitted'] and directory['total_children'] == 12
+    assert 0 < len(directory['children']) < directory['total_children']
+    assert len(encoded(root['items'])) <= 2400
+    positions, offset = [], 0
+    while offset is not None:
+        current = page(value, path, offset, 3, budget=2400)
+        assert current['items'] and len(encoded(current['items'])) <= 2400
+        for item in current['items']:
+            assert item['omitted']
+            leaf = page(value, item['path'] + '/position', budget=2400)
+            assert leaf['complete']
+            positions.append(leaf['value'])
+        continuation = current['next_offset']
+        assert continuation is None or continuation > offset
+        offset = continuation
+    assert positions == list(range(12)) and encoded(value) == original
+
+
+def test_an_unpageable_key_stops_with_a_reason_instead_of_a_repeating_cursor():
+    value = {'first': '完整的第一项', '过长的字段名' * 500: {'source': '保存内容' * 1000}, 'last': '仍在原始记录'}
+    first = page(value, budget=2400)
+    assert first['items'] == [{'path': '/first', 'value': '完整的第一项'}]
+    assert first['next_offset'] == 1
+    blocked = page(value, offset=first['next_offset'], budget=2400)
+    assert blocked['items'] == [] and blocked['omitted'] and not blocked['complete']
+    assert blocked['total'] == 3 and blocked['offset'] == 1 and blocked['next_offset'] is None
+    assert '路径' in blocked['reason'] and '未跳过或截断' in blocked['reason']
+    assert len(encoded(blocked)) < 2400
+
+
+def test_a_zero_length_page_is_rejected_before_it_can_repeat_forever():
+    with pytest.raises(HTTPException) as rejected:
+        page([{'source': '保存内容' * 1000}], limit=0, budget=2400)
+    assert rejected.value.detail['code'] == 'PLATFORM_PAGE_INVALID'
 
 
 def test_platform_discovers_actual_modules_new_routes_and_reads_original_data(client):

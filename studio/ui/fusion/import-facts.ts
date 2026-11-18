@@ -1,4 +1,7 @@
 // Display the saved field provenance. A row's associated upload is not evidence that a declared or queried value was in that row.
+import { resultValue } from '../../shared/products.ts';
+import type { StructurePreviewRow } from '../../shared/fusion-types.ts';
+
 export interface ImportFieldSourceView {
   origin: 'table' | 'series' | 'standard' | 'unknown';
   label: string;
@@ -50,4 +53,12 @@ export function importSiValue(value: unknown): string {
   if (!Number.isFinite(value) || Number.isInteger(value)) return String(value);
   const shorter = Number(value.toPrecision(15));
   return String(Math.abs(value - shorter) <= Math.abs(value) * Number.EPSILON ? shorter : value);
+}
+
+/** Use the field's saved display contract; older previews that contain SI resistance only still read in Ω/km. */
+export function importFieldValue(fact: StructurePreviewRow['values'][number]): { value: string; unit: string } {
+  const value = fact.display_value === undefined ? fact.value : fact.display_value;
+  const unit = fact.display_unit ?? fact.unit;
+  if (typeof value === 'number' && ['ohm/m', 'Ω/m'].includes(unit)) return resultValue({ value, unit });
+  return { value: importSiValue(value), unit: unit === 'ohm/km' ? 'Ω/km' : unit };
 }

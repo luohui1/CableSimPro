@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import asyncio
 import hmac
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -36,6 +37,7 @@ from .tool_broker import ToolBroker, failure
 from .external_actions import SCOPES as ACTION_SCOPES, tools as action_tools
 from .external_stream import event as model_event, safe_sse, MAX_RESPONSE
 from .external_imports import AttachmentInput, stage_attachment
+from . import external_results
 from backend.kernel.workspace import stamp
 
 # The tools offered, and where the scope of each comes from: nothing (global), a project (workspace) or a cable-type design (type).
@@ -54,6 +56,7 @@ MAX_MODEL_REQUEST = 8 * 1024 * 1024
 MAX_FORWARD_BODY = 2 * 1024 * 1024
 DISABLED = 'Agent 的对话服务没有启用：需要设置边车令牌并启动它，方法见 studio/README.md 的“并入老版本的 Agent”一节。'
 UNREACHABLE = 'Agent 的对话服务没有运行，暂时不能使用。方法见 studio/README.md 的“并入老版本的 Agent”一节。'
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -142,7 +145,7 @@ class ExternalTools:
             tool = self.hosts[name]
             definition = tool.model()['function']
             rows.append({'name': name, 'title': tool.title, 'kind': tool.kind, 'scope': scope,
-                         'description': definition['description'], 'parameters': definition['parameters']})
+                         'description': definition['description'], 'parameters': external_results.parameters(tool, definition['parameters'])})
         return rows
 
     def open(self, body):
@@ -192,22 +195,34 @@ class ExternalTools:
         scope = TOOL_SCOPES.get(body.tool)
         if scope is None:
             raise HTTPException(403, {'code': 'TOOL_NOT_ALLOWED', 'message': '这个工具不在外部 Agent 的白名单中；不能调用批准、发布或任意接口。'})
+        tool = self.hosts[body.tool]
+        arguments, selection = external_results.split(tool, body.arguments)
         if body.session is None:
             if scope != 'global':
                 raise HTTPException(422, {'code': 'SESSION_REQUIRED', 'message': body.tool + ' 要在绑定工程的会话里调用；先开会话。'})
             audit = DiscoveryAudit(self.harness, body)
             broker = ToolBroker(self.harness.research, audit, self.harness.registry, self.harness.proposals)
             broker.platform = self.harness.platform
-            node = {'id': audit.identifier, 'tool': body.tool, 'arguments': body.arguments, 'input_identity': {}}
+            node = {'id': audit.identifier, 'tool': body.tool, 'arguments': arguments, 'input_identity': {}}
             value = broker.execute(STATELESS_TASK, node, self.hosts[body.tool]).model_dump(mode='json')
+            # Audit the complete response, including the identity used by later
+            # pages. Pagination must not replace the saved source evidence.
+            value = external_results.project(tool, arguments, value, None)
             audit.finish(value)
-            return value
+            return external_results.project(tool, arguments, value, selection) if selection is not None else value
         # Parallel provider tool calls must not create several pending actions
         # before the first one suspends its turn. A second request rechecks the
         # persisted turn after the first has finished and is refused if needed.
         session = str(body.session)
         with self.session_locks.setdefault(session, Lock()):
-            return self.in_session(session, body.turn, body.tool, body.arguments)
+            value = self.in_session(session, body.turn, body.tool, arguments)
+            projected = external_results.project(tool, arguments, value, selection)
+            if selection is not None and projected.get('status') == 'ok':
+                self.harness.tasks.emit(session, 'external.result.projected', {
+                    'turn_id': body.turn, 'tool': body.tool, **selection,
+                    'result_digest': projected.get('result_digest'),
+                })
+            return projected
 
     def in_session(self, session, turn, name, arguments):
         harness = self.harness
@@ -252,8 +267,37 @@ class ExternalTools:
         return json.loads(row['result']) if row and row['result'] else None
 
 
-def upstream_failure(message, status):
-    return JSONResponse({'error': {'message': message, 'type': 'upstream_error'}}, status_code=status)
+def upstream_failure(message, status, code=None):
+    return JSONResponse({'error': {'message': message, 'type': 'upstream_error', **({'code': code} if code else {})}}, status_code=status)
+
+
+async def model_response(client, url, content, headers, deadline):
+    """Recover one cold connection/gateway failure before a model response starts.
+
+    This retries only model transport, never a business tool. A successful
+    response's headers end the retry window: partial SSE/tool arguments must
+    never be replayed. Both attempts and the short backoff share one deadline.
+    Log only an error class/status; exception strings may contain credentials.
+    """
+    for attempt in range(2):
+        remaining = deadline - perf_counter()
+        if remaining <= 0:
+            raise TimeoutError
+        try:
+            upstream = await asyncio.wait_for(client.send(client.build_request('POST', url, content=content,
+                headers=headers), stream=True), timeout=remaining)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError, httpx.RemoteProtocolError) as error:
+            if attempt:
+                raise
+            reason = type(error).__name__
+        else:
+            if upstream.status_code not in (502, 503) or attempt:
+                return upstream
+            reason = 'HTTP_' + str(upstream.status_code)
+            await upstream.aclose()
+        LOGGER.warning('Model transport retry before response: %s (attempt 1/2)', reason)
+        await asyncio.sleep(min(0.15, max(0, deadline - perf_counter())))
+    raise AssertionError('unreachable')
 
 
 def model_preferences(payload, instructions):
@@ -393,15 +437,21 @@ def make_router(harness, link):
         client = httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=min(8.0, timeout)), follow_redirects=False,
                                    verify=tls() if tls else True)
         try:
-            upstream = await asyncio.wait_for(client.send(client.build_request('POST', base.rstrip('/') + '/chat/completions', content=json.dumps(payload).encode(),
-                headers={'Authorization': 'Bearer ' + current['api_key'], 'Content-Type': 'application/json',
-                         'Accept': request.headers.get('accept', '*/*')}), stream=True), timeout=timeout)
+            upstream = await model_response(client, base.rstrip('/') + '/chat/completions', json.dumps(payload).encode(),
+                {'Authorization': 'Bearer ' + current['api_key'], 'Content-Type': 'application/json',
+                 'Accept': request.headers.get('accept', '*/*')}, deadline)
         except (TimeoutError, httpx.TimeoutException):
             await client.aclose()
-            return upstream_failure('模型服务没有及时响应。', 504)
-        except httpx.HTTPError:
+            return upstream_failure('模型服务没有及时响应。', 504, 'LLM_TIMEOUT')
+        except httpx.HTTPError as error:
             await client.aclose()
-            return upstream_failure('连不上模型服务；请检查网络、代理或地址。', 502)
+            LOGGER.warning('Model transport failed before response: %s', type(error).__name__)
+            return upstream_failure('连不上模型服务；请检查网络、代理或地址。', 502, 'LLM_CONNECTION_FAILED')
+        except BaseException:
+            # Cancellation must close an in-flight connection and propagate;
+            # it cannot turn into a retry or leave a provider request running.
+            await client.aclose()
+            raise
         if upstream.status_code != 200:
             try:
                 text = (await asyncio.wait_for(upstream.aread(), timeout=max(0, deadline - perf_counter()))).decode('utf-8', 'replace')[:4000]
@@ -410,7 +460,8 @@ def make_router(harness, link):
             finally:
                 await upstream.aclose()
                 await client.aclose()
-            return upstream_failure(redact(' '.join(text.split()))[:1000] or '模型服务拒绝了请求。', upstream.status_code)
+            return upstream_failure(redact(' '.join(text.split()))[:1000] or '模型服务拒绝了请求。', upstream.status_code,
+                                    'LLM_AUTH_FAILED' if upstream.status_code in (401, 403) else 'LLM_PROVIDER_ERROR')
 
         async def relay():
             streaming = upstream.headers.get('content-type', '').split(';')[0].strip() == 'text/event-stream'
@@ -432,6 +483,13 @@ def make_router(harness, link):
             except (TimeoutError, httpx.TimeoutException):
                 error = {'error': {'message': '模型请求超过设置的时间限制；请在“设置 · AI 模型”调整超时后重试。', 'type': 'timeout'}}
                 yield model_event(error) if streaming else json.dumps(error, ensure_ascii=False)
+                if streaming:
+                    yield 'data: [DONE]\n\n'
+            except httpx.HTTPError as error:
+                LOGGER.warning('Model response interrupted without replay: %s', type(error).__name__)
+                failure = {'error': {'message': '模型响应中途断开，未重新请求；请核对已显示的步骤后重试。',
+                                     'type': 'upstream_transport_error', 'code': 'LLM_STREAM_INTERRUPTED'}}
+                yield model_event(failure) if streaming else json.dumps(failure, ensure_ascii=False)
                 if streaming:
                     yield 'data: [DONE]\n\n'
             finally:

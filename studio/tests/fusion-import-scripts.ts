@@ -70,7 +70,7 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
   const afterCheck: Reply = context => {
     state.checked = receipt(context);
     assert.equal(state.checked.kind, 'structure_check');
-    assert.equal(state.checked.items.length, 11);
+    assert.equal(state.checked.items.length, 11, 'the model must receive all eleven check summaries, not a silently truncated item list');
     assert.ok(state.checked.items.every((item: any) => item.workspace_id && item.run_id && item.input_digest && item.output_digest),
       'every reported completed check must name its actual ordinary saved run');
     return advance(faux, state, finish, 'type_read', { type_id: state.typeId, view: 'input', limit: 20 });
@@ -81,7 +81,7 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
     assert.equal(state.imported.created, 11);
     assert.equal(state.imported.state, 'draft');
     assert.equal(state.imported.preview_digest, state.preview!.preview_digest);
-    assert.equal(state.imported.specs.length, 11);
+    assert.equal(state.imported.specs.length, 11, 'the next check proposal must reference all eleven actually imported specifications');
     state.typeId = state.imported.specs[0].workspace_id;
     return advance(faux, state, afterCheck, 'propose_structure_check', { workspace_id: input.workspace,
       series_id: state.imported.series_id, spec_ids: state.imported.specs.map((spec: any) => spec.id) });
@@ -98,9 +98,23 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
     assert.equal(state.preview.error_count, 0);
     assert.equal(state.preview.incomplete_count, 0);
     assert.equal(state.preview.sha256, state.upload!.sha256);
-    assert.equal(state.preview.preview.rows.length, 11, 'the review card receives the actual complete row projection');
+    assert.equal(state.preview.row_count, 11, 'the model receives the row count; complete rows belong to the review/result card');
     return advance(faux, state, afterReadPreview, 'structure_import_read', { workspace_id: input.workspace,
       kind: 'preview', id: state.preview.preview_id, view: '/valid_count', limit: 20 });
+  };
+  const afterDeclaration: Reply = context => {
+    const saved = data(context);
+    assert.equal(saved.resource.kind, 'upload');
+    assert.equal(saved.resource.upload_id, state.upload!.upload_id);
+    assert.equal(saved.resource.sha256, state.upload!.sha256, 'read the declaration from the same accepted original workbook');
+    assert.match(saved.source.response_digest, /^[0-9a-f]{64}$/);
+    const declaration = saved.page.value;
+    assert.equal(declaration?.table, 'three-core');
+    assert.ok(declaration.mapping && declaration.series, 'read the complete actual declaration before preparing the preview');
+    const { table: _table, ...request } = structuredClone(declaration);
+    request.series.name = input.seriesName;
+    return advance(faux, state, afterPreview, 'propose_structure_preview', { workspace_id: input.workspace,
+      upload_id: state.upload!.upload_id, sha256: state.upload!.sha256, request });
   };
   const afterUpload: Reply = context => {
     state.upload = receipt(context);
@@ -108,10 +122,13 @@ export function installStructureImport(faux: Faux, input: { workspace: string; s
     assert.equal(state.upload.sha256, state.attachment!.sha256);
     const declaration = state.upload.declarations?.find((item: any) => item.table === 'three-core');
     assert.ok(declaration, 'only the actual source digest can provide this sample declaration');
-    const { table: _table, ...request } = structuredClone(declaration);
-    request.series.name = input.seriesName;
-    return advance(faux, state, afterPreview, 'propose_structure_preview', { workspace_id: input.workspace,
-      upload_id: state.upload.upload_id, sha256: state.upload.sha256, request });
+    assert.equal(declaration.next_read?.tool, 'structure_import_read');
+    const args = declaration.next_read.arguments;
+    assert.equal(args.workspace_id, input.workspace);
+    assert.equal(args.kind, 'upload');
+    assert.equal(args.id, state.upload.upload_id);
+    assert.match(args.view, /^\/declarations\/\d+$/);
+    return advance(faux, state, afterDeclaration, declaration.next_read.tool, args);
   };
   const afterAttachment: Reply = context => {
     state.attachment = data(context).page.value;

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
-import { importFieldSource, importSiValue } from '../ui/fusion/import-facts.ts';
+import { importFieldSource, importFieldValue, importSiValue } from '../ui/fusion/import-facts.ts';
 
 const catalogue = JSON.parse(readFileSync(new URL('../core/studio_core/catalogues/people_mv_xlpe.json', import.meta.url), 'utf8'));
 const associatedUpload = { file: '人民电器公开结构表.xlsx', sheet: '表2 YJV', row: 5, column: null, reviewed: false };
@@ -87,4 +87,16 @@ test('SI display removes conversion tails without changing saved values or disca
   for (const value of [1.234567890123456, 1234567890123456, 0.000727, 1e-20, Number.MIN_VALUE])
     assert.equal(importSiValue(value), String(value), 'meaningful saved precision and small nonzero values must remain visible');
   assert.equal(importSiValue('0.0045000000000000005'), '0.0045000000000000005', 'a supplied textual value is not numeric conversion noise');
+});
+
+test('import resistance uses Ω/km for both saved display contracts and older SI-only records without inventing missing values', () => {
+  const fact = { key: 'r20', label: '20 °C 直流电阻', value: 0.0000601, unit: 'ohm/m',
+    source: { kind: 'standard', origin: 'standard', reviewed: false } };
+  const original = structuredClone(fact);
+  assert.deepEqual(importFieldValue(fact), { value: '0.0601', unit: 'Ω/km' });
+  assert.deepEqual(importFieldValue({ ...fact, unit: 'Ω/m' }), { value: '0.0601', unit: 'Ω/km' });
+  assert.deepEqual(importFieldValue({ ...fact, display_value: 0.0601, display_unit: 'Ω/km' }), { value: '0.0601', unit: 'Ω/km' });
+  assert.deepEqual(importFieldValue({ ...fact, display_value: 0.0601, display_unit: 'ohm/km' }), { value: '0.0601', unit: 'Ω/km' });
+  assert.deepEqual(importFieldValue({ ...fact, value: null, display_value: null, display_unit: 'Ω/km' }), { value: '—', unit: 'Ω/km' });
+  assert.deepEqual(fact, original, 'SI and the actual standard provenance remain available for tracing, not altered by formatting');
 });

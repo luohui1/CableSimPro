@@ -11,6 +11,8 @@ export interface ToolResult {
   data: Record<string, any>;
   diagnostics: Diagnostic[];
   next_actions: string[];
+  /** Digest of the complete audited data, for read-only result pagination. */
+  result_digest?: string;
 }
 export type Scope = 'global' | 'workspace' | 'type';
 export interface BackendTool { name: string; title: string; kind: string; scope: Scope; description: string; parameters: Schema }

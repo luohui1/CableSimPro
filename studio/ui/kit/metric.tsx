@@ -1,6 +1,5 @@
 // The number a screen exists for, and a value set against its limit.
-import { Meter } from '@base-ui/react/meter';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const SIZE = {
@@ -51,18 +50,26 @@ export function LimitMeter({ label, value, limit, from = 0, unit, format = (n: n
   caption?: ReactNode;
   className?: string;
 }) {
+  const labelId = useId();
   const over = value > limit;
-  return <Meter.Root value={Math.min(value, limit)} min={from} max={limit} className={cn('flex min-w-0 flex-col gap-2', className)}
+  const bounded = Math.min(limit, Math.max(from, value));
+  const percent = limit > from ? (bounded - from) / (limit - from) * 100 : 0;
+  // This is a read-only result, not an input. Keep its complete meter semantics without Base UI's hidden "x" probe,
+  // which becomes stray text when an engineer copies the saved result or reads the card's text content.
+  return <div role="meter" aria-labelledby={labelId} aria-valuenow={bounded} aria-valuemin={from} aria-valuemax={limit}
+    className={cn('flex min-w-0 flex-col gap-2', className)}
     aria-valuetext={`${format(value)} ${unit}，限值 ${limit} ${unit}`}>
     <div className="flex items-baseline justify-between gap-3">
-      <Meter.Label className="truncate text-sm text-ink-2">{label}</Meter.Label>
+      <span id={labelId} className="truncate text-sm text-ink-2">{label}</span>
       <span className="text-sm whitespace-nowrap text-ink-2 tabular-nums">
         <span className={cn('font-semibold', over ? 'text-error' : 'text-ink')}>{format(value)}</span> / {limit} {unit}
       </span>
     </div>
-    <Meter.Track className="h-1.5 overflow-hidden rounded-full bg-subtle">
-      <Meter.Indicator className={cn('h-full rounded-full transition-all duration-std', over ? 'bg-error' : 'bg-ink')} />
-    </Meter.Track>
+    <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-subtle">
+      <svg viewBox="0 0 100 6" preserveAspectRatio="none" className="block h-full w-full">
+        <rect width={percent} height={6} className={over ? 'fill-error' : 'fill-ink'} />
+      </svg>
+    </div>
     {caption && <span className="text-sm text-ink-2">{caption}</span>}
-  </Meter.Root>;
+  </div>;
 }

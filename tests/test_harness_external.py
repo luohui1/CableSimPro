@@ -2,14 +2,16 @@
 and that the model key stays in this process."""
 import json
 import threading
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.harness.external import READ_TOOLS, TOOL_SCOPES
 from backend.main import create_app
-from test_research import study
+from test_research import request as run_request, study
 
 TOKEN = 'test-sidecar-token-0123456789'
 KEY = 'sk-test-upstream-key-0123456789'
@@ -71,6 +73,12 @@ def test_the_catalogue_offers_only_reads_and_reviewed_proposals(client):
     registry = client.app.state.harness.registry.hosts
     assert {tool.name for tool in registry if tool.kind != 'read'}.isdisjoint(READ_TOOLS)
     assert {row['name']: row['scope'] for row in rows}['run_read'] == 'workspace'
+    paging = {'result_view', 'result_offset', 'result_digest'}
+    for row in rows:
+        properties = row['parameters']['properties']
+        assert paging <= properties.keys() if row['kind'] == 'read' else paging.isdisjoint(properties)
+    # The advertised extension must not mutate the broker's original contracts.
+    assert all(paging.isdisjoint(tool.parameters['properties']) for tool in registry)
 
 
 @pytest.mark.parametrize('tool', ['approve', 'study_preflight', 'study_preview', 'draft_update', 'platform_prepare',
@@ -113,6 +121,149 @@ def test_a_call_outside_a_session_is_only_for_tools_that_need_no_project(client)
     assert found['status'] == 'ok' and [card['id'] for card in found['data']['items']] == [s['id']]
     refused = call(client, 'workspace_read')
     assert refused.status_code == 422 and refused.json()['detail']['code'] == 'SESSION_REQUIRED'
+
+
+def test_real_saved_comparison_pages_preserve_full_audit_and_allow_exact_child_reads(client):
+    w, s = study(client)
+    runs = []
+    for index in range(2):
+        if index:
+            saved = client.put(f'/api/workspaces/{w["id"]}/studies/{s["id"]}', json={**s['definition'],
+                'parameters': {**s['definition']['parameters'], 'ks': 0.8},
+                'expected_revision': w['revision'], 'expected_study_revision': s['revision']})
+            assert saved.status_code == 200, saved.text
+            s = saved.json()
+        root, body = run_request(client, w, s)
+        run = client.post(root + '/runs', json=body)
+        assert run.status_code == 200 and run.json()['status'] == 'succeeded', run.text
+        runs.append(run.json()['id'])
+    opened = open_session(client, w)
+    session, turn = opened['session'], opened['turn']
+    arguments = {'run_ids': runs}
+    full = call(client, 'study_compare', arguments, session, turn)
+    assert full.status_code == 200 and full.json()['status'] == 'ok', full.text
+    assert len(full.content) > 10000  # Actual snapshots exceed the small model-result/page budget.
+    data, digest = full.json()['data'], full.json()['result_digest']
+    calls = 1
+    def read_page(args):
+        nonlocal calls
+        response = call(client, 'study_compare', args, session, turn)
+        calls += 1
+        assert response.status_code == 200 and response.json()['status'] == 'ok', response.text
+        value = response.json()
+        assert value['result_digest'] == digest and value['data']['projection'] == 'result_page'
+        assert value['data']['source']['response_digest'] == digest
+        assert len(response.content) < 8000
+        return value['data']
+    directory = read_page({**arguments, 'result_view': '', 'result_digest': digest})
+    comparison = next(item for item in directory['page']['items'] if item['path'] == '/comparison')
+    assert comparison['omitted'] and '/comparison/sources' in comparison['children']
+    child = read_page({**arguments, 'result_view': '/comparison/sources/0/snapshot/definition/title',
+                       'result_digest': digest})
+    assert child['page']['complete'] and child['page']['value'] == s['definition']['title']
+    quantities, cursor, page_count = [], {**arguments, 'result_view': '/comparison/differences/0/quantities',
+                                        'result_digest': digest}, 0
+    while cursor:
+        page_count += 1
+        assert page_count <= 12, 'pagination must advance within the tool budget'
+        projected = read_page(cursor)
+        selected = projected['page']
+        quantities.extend(selected['value'] if 'value' in selected else [row['value'] for row in selected['items']])
+        continuation = projected.get('next_read')
+        cursor = continuation['arguments'] if continuation else None
+        if continuation:
+            assert continuation['tool'] == 'study_compare' and cursor['run_ids'] == runs
+            assert cursor['result_offset'] > selected['offset'] and cursor['result_digest'] == digest
+    assert page_count > 1 and quantities == data['comparison']['differences'][0]['quantities']
+    assert any(row['difference'] != 0 for row in quantities)
+    with client.app.state.harness.tasks.db() as db:
+        rows = db.execute('SELECT arguments,result FROM agent_steps WHERE task_id=? ORDER BY rowid', (session,)).fetchall()
+    assert len(rows) == calls
+    assert all(json.loads(row['arguments']) == arguments for row in rows)
+    assert all(json.loads(row['result'])['data'] == data for row in rows)
+    record = client.app.state.harness.tasks.record(session, model_context=True)
+    assert record['budget']['tool_calls'] == calls
+
+
+def test_global_result_pages_reject_changed_sources_and_keep_discovery_budget(client, monkeypatch):
+    for index in range(13):
+        response = client.post('/api/workspaces', json={'scenario': {
+            'name': f'华东沿海产业园110kV电缆通道扩建及既有线路迁改工程·直埋段、排管段与工作井联合设计·标段{index + 1}'}})
+        assert response.status_code == 201, response.text
+    tasks = client.app.state.harness.tasks
+    monkeypatch.setattr(tasks, 'limits', replace(tasks.limits, max_tool_calls=3))
+    discovery = str(uuid4())
+    def read(arguments):
+        return client.post('/api/agent/external/calls', headers=AUTH,
+            json={'tool': 'workspace_list', 'arguments': arguments, 'discovery': discovery})
+    first = read({'result_view': '/workspaces'})
+    assert first.status_code == 200 and first.json()['status'] == 'ok', first.text
+    continued = first.json()['data']['next_read']
+    assert continued['tool'] == 'workspace_list' and continued['arguments']['result_offset'] > 0
+    unbound = read({'result_view': '/workspaces', 'result_offset': continued['arguments']['result_offset']})
+    assert unbound.status_code == 422 and unbound.json()['detail']['code'] == 'RESULT_PAGE_INVALID'
+    second = read(continued['arguments'])
+    assert second.status_code == 200, second.text
+    assert first.json()['result_digest'] == second.json()['result_digest']
+    pages = [value.json()['data']['page'] for value in (first, second)]
+    identifiers = [row['value']['id'] for page in pages for row in page['items']]
+    assert len(identifiers) == len(set(identifiers)) == 13
+    assert pages[-1]['next_offset'] is None
+    added = client.post('/api/workspaces', json={})
+    assert added.status_code == 201, added.text
+    changed = read(continued['arguments'])
+    assert changed.status_code == 409 and changed.json()['detail']['code'] == 'RESULT_CHANGED'
+    spent = read({'result_view': ''})
+    assert spent.status_code == 429 and spent.json()['detail']['code'] == 'BUDGET_EXCEEDED'
+    with tasks.db() as db:
+        rows = db.execute('SELECT result FROM agent_external_reads WHERE discovery=? ORDER BY rowid', (discovery,)).fetchall()
+    assert [len(json.loads(row['result'])['data']['workspaces']) for row in rows] == [13, 13, 14]
+
+
+def test_result_paging_preserves_argument_scope_and_proposal_boundaries(client):
+    w, s = study(client)
+    other, foreign = study(client)
+    opened = open_session(client, w)
+    session, turn = opened['session'], opened['turn']
+    invalid = call(client, 'study_read', {'study_id': s['id'], 'result_view': '', 'bogus': True}, session, turn)
+    assert invalid.status_code == 200 and invalid.json()['status'] == 'error'
+    assert invalid.json()['diagnostics'][0]['code'] == 'TOOL_ARGUMENTS_INVALID'
+    outside = call(client, 'study_read', {'study_id': foreign['id'], 'result_view': ''}, session, turn)
+    assert outside.status_code == 200 and outside.json()['status'] == 'error'
+    assert not outside.json()['data']
+    args = {'title': '必须人工接受的研究', 'source_study_id': s['id']}
+    paged_write = call(client, 'propose_study', {**args, 'result_view': ''}, session, turn)
+    assert paged_write.status_code == 200 and paged_write.json()['status'] == 'error'
+    assert paged_write.json()['diagnostics'][0]['code'] == 'TOOL_ARGUMENTS_INVALID'
+    record = client.app.state.harness.tasks.record(session)
+    assert not record['proposals']
+    assert len(client.get(f'/api/workspaces/{w["id"]}/studies').json()) == 1
+    proposed = call(client, 'propose_study', args, session, turn)
+    assert proposed.status_code == 200 and proposed.json()['status'] == 'ok', proposed.text
+    assert proposed.json()['data']['proposal']['id']
+    repeated = call(client, 'propose_study', {**args, 'result_view': ''}, session, turn)
+    assert repeated.status_code == 409 and repeated.json()['detail']['code'] == 'TURN_NOT_ACTIVE'
+    record = client.app.state.harness.tasks.record(session)
+    assert len(record['proposals']) == 1
+    assert len(client.get(f'/api/workspaces/{w["id"]}/studies').json()) == 1
+
+
+def test_result_paging_charges_the_original_scoped_tool_budget(client, monkeypatch):
+    w, s = study(client)
+    tasks = client.app.state.harness.tasks
+    monkeypatch.setattr(tasks, 'limits', replace(tasks.limits, max_tool_calls=2))
+    opened = open_session(client, w)
+    session, turn = opened['session'], opened['turn']
+    first = call(client, 'study_read', {'study_id': s['id'], 'result_view': ''}, session, turn)
+    assert first.status_code == 200 and first.json()['status'] == 'ok', first.text
+    second = call(client, 'study_read', {'study_id': s['id'], 'result_view': '/definition/title',
+                                      'result_digest': first.json()['result_digest']}, session, turn)
+    assert second.status_code == 200 and second.json()['data']['page']['value'] == s['definition']['title']
+    spent = call(client, 'study_read', {'study_id': s['id'], 'result_view': ''}, session, turn)
+    assert spent.status_code == 200 and spent.json()['status'] == 'error'
+    assert spent.json()['diagnostics'][0]['code'] == 'BUDGET_EXCEEDED'
+    record = tasks.record(session)
+    assert record['budget']['tool_calls'] == len(record['steps']) == 2
 
 
 class Upstream(BaseHTTPRequestHandler):

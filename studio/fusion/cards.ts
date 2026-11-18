@@ -4,6 +4,7 @@
 import type { CardRef } from '../shared/types.ts';
 import type { SavedRunView } from '../shared/fusion-types.ts';
 import { compact, fixed } from '../shared/format.ts';
+import { resultValue } from '../shared/products.ts';
 import type { Backend, ToolResult } from './backend.ts';
 import { savedRatingTable } from './rating-table.ts';
 import { structureImportCard } from './structure-import.ts';
@@ -180,7 +181,7 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
     const structure = structureImportCard(tool, args, result);
     if (structure) return { ...shown, card: structure };
     if (result.data.receipt?.kind === 'structure_preview' && result.data.receipt.preview_omitted === true)
-      return { ...shown, notes: ['预览已保存，但完整字段尚未读取；请按平台给出的 next_read 和摘要逐段读取。当前没有可据以核对全部规格的结果卡。'] };
+      return { ...shown, notes: ['预览已保存，但完整字段尚未读取；请按保存记录的分页提示查看所需明细。当前结果卡不能据以核对全部规格。'] };
     if (tool === 'resource_read' && result.data.resource?.kind === 'rating_table' && (args.offset === undefined || args.offset === 0)) {
       const table = await savedRatingTable(backend, result.data.resource, signal);
       if (table) return { ...shown, ...table };
@@ -227,8 +228,13 @@ export async function describeResult(backend: Backend, tool: string, args: Recor
     if (tool === 'type_read' && typeof args.type_id === 'string') {
       const data = result.data;
       const fields = (data.items ?? []).filter((item: any) => item.section === 'structure' && (typeof item.value === 'number' || item.material?.name))
-        .map((item: any) => ({ label: item.label, value: item.material?.name ?? compact(item.value), unit: item.unit && item.unit !== '1' ? item.unit : null,
-          source: item.source?.provenance?.reviewed ? '来源已人工核对' : '保存的设计输入，来源待核对' }));
+        .map((item: any) => {
+          const resistance = typeof item.value === 'number' && ['ohm/m', 'Ω/m'].includes(item.unit)
+            ? resultValue({ value: item.value, unit: item.unit }) : undefined;
+          return { label: item.label, value: item.material?.name ?? resistance?.value ?? compact(item.value),
+            unit: resistance?.unit ?? (item.unit && item.unit !== '1' ? item.unit : null),
+            source: item.source?.provenance?.reviewed ? '来源已人工核对' : '保存的设计输入，来源待核对' };
+        });
       if (fields.length) return { ...shown, card: { kind: 'saved_type', href: href('type', args.type_id), view: {
         title: data.object?.name ?? nameOf(args.type_id) ?? '型号设计', fields,
         checks: (data.items ?? []).filter((item: any) => item.section === 'checks' && typeof item.message === 'string').map((item: any) => item.message),

@@ -150,3 +150,23 @@ test('an accepted run receipt uses the same honest fallback and keeps its saved-
   assert.equal(shown.card?.kind, 'open');
   assert.equal(shown.card?.href, HREF);
 });
+
+test('saved type cards display resistance in Ω/km while leaving the exact saved input and identity intact', async () => {
+  const backend = new Backend('http://127.0.0.1:9', 'unused');
+  for (const unit of ['ohm/m', 'Ω/m']) {
+    const result: ToolResult = { status: 'ok', summary: '已读取型号保存输入。', diagnostics: [], next_actions: [], data: {
+      object: { id: 'type-identity', name: '厂家型号 · 300 mm²' }, next_page: null,
+      items: [{ section: 'structure', path: '/cable_types/cable~1type/cores/core~11/conductor/r20',
+        label: '20 °C 直流电阻', value: 0.0000601, unit, source: { provenance: { reviewed: false } } }],
+    } };
+    const original = structuredClone(result);
+    const shown = await describeResult(backend, 'type_read', { type_id: 'type-identity' }, result, 'type-identity');
+    assert.equal(shown.card?.kind, 'saved_type');
+    if (shown.card?.kind !== 'saved_type') return;
+    assert.equal(shown.card.view.title, '厂家型号 · 300 mm²');
+    assert.deepEqual(shown.card.view.fields, [{ label: '20 °C 直流电阻', value: '0.0601', unit: 'Ω/km',
+      source: '保存的设计输入，来源待核对' }]);
+    assert.equal(shown.card.href, 'cablesim:type/type-identity');
+    assert.deepEqual(result, original, 'display conversion must not rewrite the saved SI value, its source or stable path');
+  }
+});

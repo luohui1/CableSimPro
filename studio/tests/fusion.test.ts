@@ -13,6 +13,7 @@ import { Backend, type ToolResult } from '../fusion/backend.ts';
 import { describeResult } from '../fusion/cards.ts';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
 import { backendTools, ScopeBook } from '../fusion/tools.ts';
+import { MODEL_RESULT_MAX_CHARS, MODEL_RESULT_MAX_BYTES } from '../fusion/model-result.ts';
 import { lastText, scriptedModel, steps, toolText } from './support.ts';
 
 const TOKEN = 'test-token-0123456789';
@@ -142,16 +143,22 @@ test('without the platform the Agent says so, not that no model is configured', 
   }
 });
 
-test('a structured tool result beyond 24k remains complete JSON including its final saved value', async () => {
+test('a large structured tool result is bounded valid JSON, retains the final quantity and identifies a read-only detail page', async () => {
   let parsed: any;
+  let text = '';
   faux.setResponses([
     fauxAssistantMessage([fauxToolCall('object_find', { q: '完整证据' })], { stopReason: 'toolUse' }),
-    context => { parsed = JSON.parse(toolText(context)); return fauxAssistantMessage([fauxText('完整证据已读到。')]); },
+    context => { text = toolText(context); parsed = JSON.parse(text); return fauxAssistantMessage([fauxText('摘要已读取；未展开的长文本仍在保存记录。')]); },
   ]);
   const { session } = await sidecar.agent.send(undefined, '读取完整保存证据');
   await sidecar.agent.idle(session);
-  assert.equal(parsed.data.saved_evidence.length, '保存输入与限制。'.length * 4000);
+  assert.ok(text.length <= MODEL_RESULT_MAX_CHARS && Buffer.byteLength(text) <= MODEL_RESULT_MAX_BYTES);
+  assert.equal(parsed.data.saved_evidence.omitted, true);
+  assert.equal(parsed.data.saved_evidence.characters, '保存输入与限制。'.length * 4000);
   assert.equal(parsed.data.final_value, 612.3456);
+  assert.equal(parsed.detail.truncated, true);
+  assert.deepEqual(parsed.detail.read, { tool: 'object_find', arguments: { q: '完整证据', result_view: '', result_offset: 0 } });
+  assert.ok(parsed.detail.omitted_paths.includes('/saved_evidence'));
   assert.ok(steps(await sidecar.agent.view(session)).every(step => step.status === 'done'));
 });
 

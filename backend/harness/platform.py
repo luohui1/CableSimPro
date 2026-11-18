@@ -66,6 +66,8 @@ def pointer(value, path):
 
 
 def page(value, view='', offset=0, limit=10, budget=4000):
+    if type(offset) is not int or offset < 0 or type(limit) is not int or limit < 1 or type(budget) is not int or budget < 1:
+        fail('PLATFORM_PAGE_INVALID', '分页偏移须为非负整数，每页条数与上下文上限须为正整数。')
     selected = pointer(value, view)
     if fits(selected, budget) and not offset:
         return {'view': view, 'value': selected, 'complete': True}
@@ -84,7 +86,20 @@ def page(value, view='', offset=0, limit=10, budget=4000):
                 keys = list(child) if isinstance(child, dict) else list(range(len(child)))
                 row['children'] = [path + '/' + str(k).replace('~', '~0').replace('/', '~1') for k in keys[:12]]
                 row['total_children'] = len(keys)
-        if not fits(items + [row], budget): break
+                # Long Unicode paths can make even a directory larger than the
+                # page. Keep its exact parent path/count and only the children
+                # that fit; callers can still open the parent to list the rest.
+                while row['children'] and not fits([row], budget):
+                    row['children'].pop()
+        if not fits(items + [row], budget):
+            if not items:
+                # An unpageable key is not a cursor. Returning this same offset
+                # would make every continuation repeat forever or spend the
+                # tool budget without ever disclosing another item.
+                return {'view': view, 'items': [], 'total': len(pairs), 'offset': offset,
+                        'omitted': True, 'complete': False, 'next_offset': None,
+                        'reason': '单个条目的路径或说明超出上下文上限；未跳过或截断条目，请在该平台对象的家查看完整记录。'}
+            break
         items.append(row)
     end = offset + len(items)
     return {'view': view, 'items': items, 'total': len(pairs), 'offset': offset,

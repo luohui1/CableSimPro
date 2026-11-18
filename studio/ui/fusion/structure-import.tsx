@@ -5,12 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CardAction, CardFrame } from '@/kit/chat/cards';
 import { Disclosure } from '@/kit/disclosure';
-import { importFieldSource, importSiValue } from './import-facts';
+import { importFieldSource, importFieldValue } from './import-facts';
 import { useOpen } from './open';
 
 const PREVIEW_STATUS: Record<string, string> = { ready: '可保存 · 待核对', incomplete: '缺项草稿', error: '错误行' };
 const CHECK_STATUS: Record<string, string> = { succeeded: '运行已完成', completed: '运行已完成', partial: '部分完成', failed: '失败', running: '仍在运行 · 未完成', interrupted: '已中断 · 未完成' };
-const text = (value: unknown): string => value === null || value === undefined ? '—' : typeof value === 'string' ? value : JSON.stringify(value);
 const typeHref = (workspace: string) => `cablesim:type/${encodeURIComponent(workspace)}`;
 
 function SavedDetails({ value }: { value: unknown }) {
@@ -44,16 +43,18 @@ function PreviewRow({ row }: { row: StructurePreviewRow }) {
         </li>)}</ul>}
         <Table>
           <TableHeader><TableRow><TableHead>字段</TableHead><TableHead numeric>值与单位</TableHead><TableHead>字段依据</TableHead></TableRow></TableHeader>
-          <TableBody>{row.values.map((fact, index) => <TableRow key={`${fact.key}/${index}`} data-structure-field={fact.key}>
-            <TableCell className="whitespace-normal">{fact.label}</TableCell>
-            <TableCell numeric className="whitespace-normal">
-              <span>{fact.display_value === undefined ? importSiValue(fact.value) : text(fact.display_value)} {fact.display_unit ?? fact.unit}</span>
-              {fact.display_unit && fact.display_unit !== fact.unit && <span className="mt-1 block text-xs text-ink-2" title={text(fact.value)}>保存值 {importSiValue(fact.value)} {fact.unit}</span>}
-            </TableCell>
-            <TableCell className="max-w-xs whitespace-normal"><ImportFieldSource value={fact.source} /></TableCell>
-          </TableRow>)}</TableBody>
+          <TableBody>{row.values.map((fact, index) => {
+            const shown = importFieldValue(fact);
+            return <TableRow key={`${fact.key}/${index}`} data-structure-field={fact.key}>
+              <TableCell className="whitespace-normal">{fact.label}</TableCell>
+              <TableCell numeric className="whitespace-normal">
+                <span>{shown.value} {shown.unit}</span>
+              </TableCell>
+              <TableCell className="max-w-xs whitespace-normal"><ImportFieldSource value={fact.source} /></TableCell>
+            </TableRow>;
+          })}</TableBody>
         </Table>
-        <Disclosure title="完整字段来源与建模记录">
+        <Disclosure title="保存值、完整字段来源与建模记录">
           <SavedDetails value={{ values: row.values, missing: row.missing, issues: row.issues, warnings: row.warnings ?? [], derivation: row.derivation, closure: row.closure }} />
         </Disclosure>
       </div>

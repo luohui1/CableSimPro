@@ -19,6 +19,7 @@ import { SYSTEM_PROMPT } from './prompt.ts';
 import { backendTools, ScopeBook, type AdoptedScopes, type Entry, type ReviewCall, type ReviewDecision } from './tools.ts';
 import { attachmentInputs, isStructureAttachment } from './attachments.ts';
 import { createdTypeScopes, savedStructureCheck, unfinishedStructureCheck } from './structure-import.ts';
+import { modelResult, projectHistory, resultText, MODEL_RESULT_MAX_CHARS, MODEL_RESULT_MAX_BYTES } from './model-result.ts';
 
 const SKILLS = resolve(dirname(fileURLToPath(import.meta.url)), '../skills');
 const PROPOSAL_ENTRY = 'cablesim.fusion.proposal';
@@ -300,8 +301,12 @@ export class FusionAgent {
         const details = accepted && (!failed || savedCheck) && proposal.operation.startsWith('propose_structure_')
           ? await describeResult(this.#backend, proposal.operation, {}, { status: 'ok', summary: proposal.note ?? '', data: { receipt: decision.receipt }, diagnostics: [], next_actions: [] }, proposal.project_id)
           : undefined;
+        const tool = (await this.#tools()).find(tool => tool.name === proposal.operation);
+        const result = { status: accepted && !failed ? 'ok' as const : 'error' as const,
+          summary: unfinished ? '已接受，但批量核对尚未完成；保留已保存的逐项结果，不得自动重新运行，请先核对保存批次。' : uncertain ? '已接受，但结果尚不能确定；可能已保存原件或预览，不得自动重复执行。' : failed ? '已接受，但平台未完成执行；请按保存诊断继续。' : proposal.note ?? '',
+          data: { receipt: decision.receipt ?? {} }, diagnostics: [], next_actions: [] };
         manager.appendMessage({ role: 'toolResult', toolCallId: proposal.step_id, toolName: proposal.operation,
-          content: [{ type: 'text', text: JSON.stringify({ status: accepted && !failed ? 'ok' : 'error', summary: unfinished ? '已接受，但批量核对尚未完成；保留已保存的逐项结果，不得自动重新运行，请先核对保存批次。' : uncertain ? '已接受，但结果尚不能确定；可能已保存原件或预览，不得自动重复执行。' : failed ? '已接受，但平台未完成执行；请按保存诊断继续。' : proposal.note, data: { receipt: decision.receipt ?? {} } }) }],
+          content: [{ type: 'text', text: resultText(tool ? modelResult(tool, { workspace_id: proposal.project_id }, result, details) : result, [this.home]) }],
           ...(details ? { details: JSON.parse(JSON.stringify(details)) } : {}), isError: !accepted || failed, timestamp: Date.now() });
       }
     }
@@ -424,8 +429,15 @@ export class FusionAgent {
     });
     await loader.reload();
     const { skills } = loader.getSkills();
-    const tools = [...backendTools(this.#backend, catalog, () => (live.scopes ??= this.#scopes(live, '继续当前任务')), [this.home], call => this.#review(live, call)),
-      skillReader(skills, path => readFileSync(path, 'utf-8'))];
+    const readSkill = skillReader(skills, path => readFileSync(path, 'utf-8'));
+    const read = readSkill.execute;
+    readSkill.execute = async (...args) => {
+      const result = await read(...args);
+      return { ...result, content: result.content.map(part => part.type !== 'text'
+        || (part.text.length <= MODEL_RESULT_MAX_CHARS && Buffer.byteLength(part.text) <= MODEL_RESULT_MAX_BYTES) ? part
+        : { ...part, text: resultText({ status: 'error', summary: '技能内容超过单次上下文边界；请按技能的 offset 分页读取。' }) }) };
+    };
+    const tools = [...backendTools(this.#backend, catalog, () => (live.scopes ??= this.#scopes(live, '继续当前任务')), [this.home], call => this.#review(live, call)), readSkill];
     const { session } = await createAgentSession({
       cwd: this.#cwd, agentDir: this.#agentDir, modelRuntime: config.models, model: config.model, thinkingLevel: config.thinking,
       settingsManager, resourceLoader: loader, tools: tools.map(tool => tool.name), customTools: tools, sessionManager: manager,
@@ -436,7 +448,7 @@ export class FusionAgent {
     // after that projection also includes files selected while the model was busy, without changing user/tool message order.
     const prepare = session.agent.transformContext;
     session.agent.transformContext = async (messages, signal) => {
-      const ready = prepare ? await prepare(messages, signal) : messages;
+      const ready = projectHistory(prepare ? await prepare(messages, signal) : messages, catalog, [this.home]);
       const files = [...live.attachments.values()];
       if (!files.length) return ready;
       const leading = ready.findIndex(message => message.role === 'system');

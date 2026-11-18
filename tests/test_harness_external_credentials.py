@@ -1,8 +1,11 @@
 """No provider credential in successful, failed or fragmented model responses."""
+import asyncio
 import json
+import socket
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler
 from threading import Event
+from time import perf_counter
 from uuid import uuid4
 
 import httpx
@@ -178,3 +181,186 @@ def test_model_request_timeout_stops_header_wait_and_open_stream(client, monkeyp
     else:
         assert response.status_code == 504 and '没有及时响应' in response.json()['error']['message']
     assert key not in response.text + caplog.text and TOKEN not in response.text
+
+
+@pytest.mark.parametrize('initial_failure', ['disconnect', 502, 503])
+def test_first_model_request_recovers_one_transient_connection_failure(client, monkeypatch, caplog, initial_failure):
+    """Two fresh conversations, real TCP: each initial connection fails once."""
+    key = 'sentinel-' + uuid4().hex
+    received = {}
+    class Provider(BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers['Content-Length']))
+            message = json.loads(raw)['messages'][0]['content']
+            attempts = received.setdefault(message, [])
+            attempts.append((raw, self.headers['Authorization']))
+            if len(attempts) == 1:
+                if initial_failure == 'disconnect':
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                    self.connection.close()
+                    return
+                self.send_response(initial_failure)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': {'message': key}}).encode())
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.end_headers()
+            self.wfile.write(b'data: {"choices":[{"delta":{"content":"ready"}}]}\n\ndata: [DONE]\n\n')
+    server = serve(Provider)
+    monkeypatch.setenv('CABLESIM_LLM_BASE_URL', f'http://127.0.0.1:{server.server_port}/v1')
+    monkeypatch.setenv('CABLESIM_LLM_MODEL', 'configured-model')
+    monkeypatch.setenv('CABLESIM_LLM_API_KEY', key)
+    try:
+        for name in ('first private conversation', 'second private conversation'):
+            response = client.post('/internal/llm/v1/chat/completions', headers=AUTH,
+                json={'messages': [{'role': 'user', 'content': name}], 'stream': True})
+            assert response.status_code == 200 and 'ready' in response.text and '[DONE]' in response.text
+            assert len(received[name]) == 2 and received[name][0] == received[name][1]
+            assert received[name][1][1] == 'Bearer ' + key
+            assert key not in response.text + caplog.text and TOKEN not in response.text + caplog.text
+            assert name not in caplog.text
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert caplog.text.count('Model transport retry before response:') == 2
+
+
+@pytest.mark.parametrize('status', [400, 401, 403, 429, 502, 'disconnect'])
+def test_model_proxy_bounds_retries_and_preserves_provider_rejections(client, monkeypatch, caplog, status):
+    key = 'sentinel-' + uuid4().hex
+    calls = []
+    class Provider(BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_POST(self):
+            calls.append(self.rfile.read(int(self.headers['Content-Length'])))
+            if status == 'disconnect':
+                self.connection.shutdown(socket.SHUT_RDWR)
+                self.connection.close()
+                return
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': {'message': key}}).encode())
+    server = serve(Provider)
+    monkeypatch.setenv('CABLESIM_LLM_BASE_URL', f'http://127.0.0.1:{server.server_port}/v1')
+    monkeypatch.setenv('CABLESIM_LLM_MODEL', 'configured-model')
+    monkeypatch.setenv('CABLESIM_LLM_API_KEY', key)
+    try:
+        response = client.post('/internal/llm/v1/chat/completions', headers=AUTH, json={'messages': []})
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert response.status_code == (502 if status == 'disconnect' else status)
+    assert len(calls) == (2 if status in (502, 'disconnect') else 1)
+    expected_code = 'LLM_CONNECTION_FAILED' if status == 'disconnect' else 'LLM_AUTH_FAILED' if status in (401, 403) else 'LLM_PROVIDER_ERROR'
+    assert response.json()['error']['code'] == expected_code
+    if status != 'disconnect':
+        assert '[凭据已隐藏]' in response.json()['error']['message']
+    assert key not in response.text + caplog.text and TOKEN not in response.text + caplog.text
+
+
+def test_model_retry_and_response_share_the_original_timeout(client, monkeypatch):
+    release = Event()
+    calls = []
+    class Provider(BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_POST(self):
+            calls.append(self.rfile.read(int(self.headers['Content-Length'])))
+            if len(calls) == 1:
+                # Spend part of the configured budget on the cold attempt.
+                release.wait(0.2)
+                self.send_response(502)
+                self.end_headers()
+                return
+            release.wait(3)
+            try:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"choices":[{"message":{"content":"late"}}]}')
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+    server = serve(Provider)
+    monkeypatch.setenv('CABLESIM_LLM_BASE_URL', f'http://127.0.0.1:{server.server_port}/v1')
+    monkeypatch.setenv('CABLESIM_LLM_MODEL', 'configured-model')
+    monkeypatch.setenv('CABLESIM_LLM_API_KEY', 'sentinel-' + uuid4().hex)
+    tasks = client.app.state.harness.tasks
+    monkeypatch.setattr(tasks, 'limits', replace(tasks.limits, model_timeout_s=1))
+    try:
+        began = perf_counter()
+        response = client.post('/internal/llm/v1/chat/completions', headers=AUTH, json={'messages': []})
+        elapsed = perf_counter() - began
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+    assert response.status_code == 504 and response.json()['error']['code'] == 'LLM_TIMEOUT'
+    assert len(calls) == 2 and elapsed < 1.5 and 'late' not in response.text
+
+
+def test_partial_model_stream_is_reported_without_replay(client, monkeypatch, caplog):
+    calls = []
+    class Provider(BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_POST(self):
+            calls.append(self.rfile.read(int(self.headers['Content-Length'])))
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Content-Length', '99999')
+            self.end_headers()
+            # A tool argument prefix is not a complete executable model intent.
+            self.wfile.write(b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"study_read","arguments":"{"}}]}}]}\n\n')
+            self.wfile.flush()
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
+    server = serve(Provider)
+    monkeypatch.setenv('CABLESIM_LLM_BASE_URL', f'http://127.0.0.1:{server.server_port}/v1')
+    monkeypatch.setenv('CABLESIM_LLM_MODEL', 'configured-model')
+    monkeypatch.setenv('CABLESIM_LLM_API_KEY', 'sentinel-' + uuid4().hex)
+    try:
+        response = client.post('/internal/llm/v1/chat/completions', headers=AUTH, json={'messages': [], 'stream': True})
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert len(calls) == 1 and response.status_code == 200
+    assert 'study_read' in response.text and 'LLM_STREAM_INTERRUPTED' in response.text
+    assert response.text.endswith('data: [DONE]\n\n')
+    assert 'without replay: RemoteProtocolError' in caplog.text
+
+
+def test_cancelled_model_request_closes_connection_without_retry(client, monkeypatch):
+    received, disconnected = Event(), Event()
+    calls = []
+    class Provider(BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_POST(self):
+            calls.append(self.rfile.read(int(self.headers['Content-Length'])))
+            received.set()
+            self.connection.settimeout(3)
+            try:
+                if self.connection.recv(1) == b'':
+                    disconnected.set()
+            except ConnectionResetError:
+                disconnected.set()
+            except TimeoutError:
+                pass
+    server = serve(Provider)
+    monkeypatch.setenv('CABLESIM_LLM_BASE_URL', f'http://127.0.0.1:{server.server_port}/v1')
+    monkeypatch.setenv('CABLESIM_LLM_MODEL', 'configured-model')
+    monkeypatch.setenv('CABLESIM_LLM_API_KEY', 'sentinel-' + uuid4().hex)
+    async def cancel():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=client.app), base_url='http://testserver') as local:
+            task = asyncio.create_task(local.post('/internal/llm/v1/chat/completions', headers=AUTH, json={'messages': []}))
+            assert await asyncio.to_thread(received.wait, 3), 'provider did not receive request'
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert await asyncio.to_thread(disconnected.wait, 1), 'cancelled request left its connection open'
+    try:
+        asyncio.run(cancel())
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert len(calls) == 1

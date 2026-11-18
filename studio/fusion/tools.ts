@@ -4,10 +4,11 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { randomUUID } from 'node:crypto';
 import type { Schema } from '@earendil-works/pi-schema';
-import { failureText, scrubValue } from '../host/agent-tools.ts';
+import { failureText } from '../host/agent-tools.ts';
 import { Backend, BackendError, type BackendProposal, type BackendTool, type ToolResult, type WorkbenchContext } from './backend.ts';
 import { describeResult, remember } from './cards.ts';
 import { createdTypeScopes, savedStructureCheck, unfinishedStructureCheck } from './structure-import.ts';
+import { modelResult, resultText, MODEL_RESULT_MAX_CHARS, MODEL_RESULT_MAX_BYTES } from './model-result.ts';
 
 export interface Entry { session: string; turn: string }
 export interface AdoptedScopes { types: Set<string>; studies: Map<string, string> }
@@ -104,16 +105,6 @@ function modelSchema(tool: BackendTool): Schema {
   return parameters as unknown as Schema;
 }
 
-/** What the model reads of a result: the summary, the data, why it failed and what to do next; no execution or artifact bookkeeping. */
-function brief(result: ToolResult): Record<string, unknown> {
-  return {
-    status: result.status, summary: result.summary,
-    ...(Object.keys(result.data).length ? { data: result.data } : {}),
-    ...(result.diagnostics.length ? { diagnostics: result.diagnostics.map(({ code, message, path }) => ({ code, message, ...(path ? { path } : {}) })) } : {}),
-    ...(result.next_actions.length ? { next_actions: result.next_actions } : {}),
-  };
-}
-
 /** The names of the methods, by their sealed identity: the model is given a name to say, never an identifier to repeat. */
 const methodNames = new WeakMap<Backend, { at: number; names: Map<string, string> }>();
 async function namesOfMethods(backend: Backend): Promise<Map<string, string>> {
@@ -189,14 +180,19 @@ export function backendTools(backend: Backend, catalog: readonly BackendTool[], 
         }
         const shown = await describeResult(backend, tool.name, rest, result, workspace, signal);
         // Method discovery must retain the exact sealed identity the next tool requires; result-only prose uses method names.
-        const keepIdentity = ['method_list', 'plugin_inspect', 'plugin_query', 'study_read', 'structure_import_read',
+        const keepIdentity = result.data.projection === 'result_page' || ['method_list', 'plugin_inspect', 'plugin_query', 'study_read', 'structure_import_read',
           'propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check'].includes(tool.name);
-        const told = JSON.stringify(scrubValue(named(brief(result), await namesOfMethods(backend), keepIdentity), roots)) ?? 'null';
-        // The backend owns bounded/paginated projections. Cutting serialized JSON breaks numeric evidence and can hide the
-        // exact method identity required by the next step; preserve the complete structured result supplied by that contract.
+        const projected = modelResult(tool, params, result, shown);
+        // Pagination arguments are exact tool inputs; naming a sealed method must never rewrite those identities.
+        const { detail, ...facts } = projected;
+        const told = resultText({ ...named(facts, await namesOfMethods(backend), keepIdentity) as Record<string, unknown>,
+          ...(detail ? { detail } : {}) }, roots);
         return { content: [{ type: 'text' as const, text: told }], details: shown, ...(result.status === 'error' ? { isError: true } : {}) };
       } catch (error) {
-        throw new Error(failureText(error, roots));
+        const message = failureText(error, roots);
+        // Error text is also shown directly by the step/refusal card. Keep it readable, and bound it even for a verbose provider.
+        throw new Error(message.length <= MODEL_RESULT_MAX_CHARS && Buffer.byteLength(message) <= MODEL_RESULT_MAX_BYTES
+          ? message : message.slice(0, 3000) + '…（错误详情过长，未全部送给模型；请核对平台保存诊断，不要重复写入。）');
       }
     },
   } satisfies ToolDefinition));

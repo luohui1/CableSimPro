@@ -59,7 +59,7 @@ export function installStudyRead(faux: Faux, input: { workspace: string; study: 
   return state;
 }
 
-export function installStudyWorkflow(faux: Faux, input: { workspace: string; study: string; title?: string }): FlowState {
+export function installStudyWorkflow(faux: Faux, input: { workspace: string; study: string; title?: string; exportBook?: boolean }): FlowState {
   const state: FlowState = { done: false };
   const finish: Reply = context => {
     const result = receipt(context);
@@ -71,6 +71,10 @@ export function installStudyWorkflow(faux: Faux, input: { workspace: string; stu
   const afterRead: Reply = context => {
     state.result = data(context);
     assert.equal(state.result.status, 'succeeded');
+    if (input.exportBook === false) {
+      state.done = true;
+      return text('直埋校核研究和本次运行均已保存；结论、输入与限制见对应结果卡。');
+    }
     return advance(faux, state, finish, 'propose_delivery', { workspace_id: input.workspace, run_ids: [state.run] });
   };
   const afterRun: Reply = context => {
@@ -89,6 +93,41 @@ export function installStudyWorkflow(faux: Faux, input: { workspace: string; stu
     return advance(faux, state, afterCreate, 'propose_study', { workspace_id: input.workspace, source_study_id: input.study,
       title: input.title ?? 'Agent 验收 · 复制保存工况直埋校核' });
   }, 'study_read', { workspace_id: input.workspace, study_id: input.study }), 'read', { path: 'ampacity-rating' })]);
+  return state;
+}
+
+export function installDeliveryWorkflow(faux: Faux, input: { workspace: string; run: string }): FlowState {
+  const state: FlowState = { done: false, run: input.run };
+  faux.setResponses([() => advance(faux, state, () => advance(faux, state, context => {
+    const saved = receipt(context);
+    assert.equal(saved.kind, 'delivery');
+    assert.ok(saved.download_url, 'the answer needs the actual saved calculation book');
+    state.file = saved.download_url;
+    state.done = true;
+    return text('已从指定的保存运行生成计算书，可从文件卡预览和下载。');
+  }, 'propose_delivery', { workspace_id: input.workspace, run_ids: [input.run] }), 'read', { path: 'spec-and-report' })]);
+  return state;
+}
+
+/** Read the actual type input pages; the scripted answer does not invent geometry or claim unread standard evidence. */
+export function installTypeRead(faux: Faux, typeId: string): FlowState {
+  const state: FlowState = { done: false, typeId };
+  const entries: Record<string, any>[] = [];
+  const collect: Reply = context => {
+    const result = data(context);
+    assert.equal(result.view, 'input');
+    assert.equal(result.type_id, typeId);
+    entries.push(...result.items);
+    if (result.next_page) return advance(faux, state, collect, 'type_read', result.next_page);
+    assert.equal(entries.length, result.total, 'read every declared input page, including missing fields');
+    assert.ok(entries.some(entry => entry.section === 'structure' && /\/layers\/insulation\/thickness$/.test(entry.path)),
+      'the read answer includes the actual insulation thickness');
+    state.result = { ...result, items: entries };
+    state.done = true;
+    return text('已读取型号保存结构与主要参数；声明来源和草稿缺项以保存记录为准，输入完整不代表工程核对通过。');
+  };
+  faux.setResponses([() => advance(faux, state, () => advance(faux, state, collect, 'type_read',
+    { type_id: typeId, view: 'input', limit: 20 }), 'read', { path: 'cable-revision' })]);
   return state;
 }
 
@@ -350,6 +389,7 @@ export function gbRequest(input: GbFixture, reviewed: boolean): string {
 export function installGbWorkflow(faux: Faux, input: GbFixture & { baselineReviewed: boolean }): FlowState {
   const state: FlowState = { done: false };
   let method: Record<string, any>;
+  let contractDigest: string;
   const finish: Reply = context => { const saved = receipt(context); assert.equal(saved.kind, 'delivery'); state.file = saved.download_url; state.done = true;
     const current = state.result!.headlines.find((row: any) => row.key === 'ampacity').display_value;
     return text(`GB 50217 校正后允许电流为 ${current.toFixed(1)} A，计算书来自该次保存运行。\n基准是工程师明确核对的已保存IEC参考结果，不是厂家保证值；适用条件、校正系数与标准出处请在工作台核对。`); };
@@ -367,10 +407,8 @@ export function installGbWorkflow(faux: Faux, input: GbFixture & { baselineRevie
   };
   const afterCreate: Reply = context => { state.study = receipt(context).study_id;
     return advance(faux, state, afterRun, 'propose_study_run', { workspace_id: input.workspace, study_id: state.study }); };
-  const afterContract: Reply = context => {
-    const contract = data(context).contracts?.find((item: any) => item.method.plugin_id === method.plugin_id && item.method.capability === method.capability);
-    assert.ok(contract, 'read the actual installed GB parameter contract');
-    const basis = contract.parameter_schema.properties.basis_release_digest.default;
+  const proposeCorrection = (basis: unknown) => {
+    assert.ok(typeof basis === 'string', 'the fixed standard basis must come from the sealed parameter contract');
     assert.match(basis, /^[0-9a-f]{64}$/);
     return advance(faux, state, afterCreate, 'propose_study', { workspace_id: input.workspace, title: 'Agent 验收 · GB 50217 明示基准温度校正', method,
       parameters: { baseline_current_a: input.baselineCurrent, baseline_ambient_k: 298.15, baseline_soil_rho: 1.2,
@@ -378,6 +416,30 @@ export function installGbWorkflow(faux: Faux, input: GbFixture & { baselineRevie
         // This fixture cites its real IEC run/PDF, not a manufacturer guarantee.
         baseline_kind: 'manufacturer', baseline_source: input.baselineSource, baseline_sha256: input.baselineDigest,
         baseline_page: input.baselinePage, baseline_depth_m: 0.8, baseline_reviewed: input.baselineReviewed, basis_release_digest: basis } });
+  };
+  const afterBasisContract: Reply = context => {
+    const saved = data(context);
+    assert.equal(saved.projection, 'result_page');
+    assert.equal(saved.source.response_digest, contractDigest, 'the extra field must belong to the same inspected contract');
+    return proposeCorrection(saved.page.value?.default);
+  };
+  const afterContract: Reply = context => {
+    const contracts = data(context).contracts as Record<string, any>[] | undefined;
+    const index = contracts?.findIndex(item => item.method.plugin_id === method.plugin_id && item.method.capability === method.capability) ?? -1;
+    assert.ok(contracts && index >= 0, 'read the actual installed GB parameter contract');
+    const basis = contracts[index].parameter_schema?.properties?.basis_release_digest?.default;
+    if (typeof basis === 'string') return proposeCorrection(basis);
+    // A plugin's full domain/schema tree can exceed the result budget. Follow the authenticated read reference for the one
+    // required field; do not restore the whole schema to the context or substitute a digest from a fixture or configuration.
+    const read = JSON.parse(toolText(context)).detail?.read;
+    assert.equal(read?.tool, 'plugin_inspect', 'an omitted contract field needs an actual read-only continuation');
+    assert.equal(read.arguments.workspace_id, input.workspace);
+    assert.equal(read.arguments.plugin_id, method.plugin_id);
+    assert.equal(read.arguments.capability, method.capability);
+    contractDigest = read.arguments.result_digest;
+    assert.match(contractDigest, /^[0-9a-f]{64}$/);
+    return advance(faux, state, afterBasisContract, read.tool, { ...read.arguments,
+      result_view: `/contracts/${index}/parameter_schema/properties/basis_release_digest`, result_offset: 0 });
   };
   const afterMethods: Reply = context => {
     const entry = data(context).methods.find((row: any) => row.method.plugin_id === 'cablesim.gb50217-correction');
