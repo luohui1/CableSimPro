@@ -186,20 +186,26 @@ async function scan(surface, size, layer = 'ordinary') {
   }
   shellHoverSizes.add(size.width);
 }
-async function save() {
-  if (performanceAudit) { await performanceAudit.save(report); return; }
+let surfacesSinceCheckpoint = 0;
+async function save({ force = false } = {}) {
+  if (performanceAudit) { await performanceAudit.save(report, { force }); return; }
+  // A cancelled process leaves its last complete checkpoint explicitly incomplete.
+  if (!force && ++surfacesSinceCheckpoint < 32) return;
+  surfacesSinceCheckpoint = 0;
   if (regularity) { await regularity.save(report); if (!withVisibleText) return; }
   const ordinary = report.findings.length, counts = {};
   for (const hit of report.findings) counts[hit.owner] = (counts[hit.owner] || 0) + 1;
   const secondaryByLayer = {};
   for (const hit of report.secondary) secondaryByLayer[hit.layer] = (secondaryByLayer[hit.layer] || 0) + 1;
   report.counts = { ordinary, secondary: report.secondary.length, secondaryByLayer, whitelistedVisible: report.allowed.length, byOwner: counts };
-  await fs.writeFile(path.join(out, 'audit.json'), JSON.stringify(report, null, 2));
   const cell = value => String(value ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
   const rows = report.findings.map(h => `| ${cell(h.label)} (${h.width}) | ${cell(h.text)} | ${h.categoryLabel} | ${h.owner} | ${cell(h.selector)} | [定位](${h.screenshot}) |`);
   await fs.writeFile(path.join(out, 'findings.md'), `# 可见文字巡检\n\n完成：${report.complete}；普通界面 ${ordinary} 项；悬停/折叠/技术层 ${report.secondary.length} 项（允许但单独计数）；可见白名单 ${report.allowed.length} 项。\n\n扫描 ${report.pages.length} 个页面/视口；未覆盖 ${report.uncovered.length} 项。标识仅在巡检证据中保留，不改业务数据。\n\n| 页面 | 文字 | 类别 | 负责线程 | 位置 | 截图 |\n| --- | --- | --- | --- | --- | --- |\n${rows.join('\n')}\n\n## 白名单\n\n${whitelist.map(w => `- ${w.id}：${w.reason}`).join('\n')}\n\n## 未覆盖\n\n${report.uncovered.map(u => '- ' + cell(u.page || u.label) + (u.width ? ` (${u.width})` : '') + (u.owner ? ' · ' + u.owner : '') + '：' + cell(u.reason) + (u.screenshot ? ` [定位](${u.screenshot})` : '')).join('\n') || '无'}\n`);
+  await fs.writeFile(path.join(out, 'audit.json.pending'), JSON.stringify(report, null, 2));
+  await fs.rename(path.join(out, 'audit.json.pending'), path.join(out, 'audit.json'));
 }
 try {
+  await save({ force: true });
   const [spaces, types, studies, plugins, assets, cables, runs, deliveries, documents, validations, tasks] = await Promise.all([
     get('/api/workspaces'), get('/api/design/type-workspaces'), all('study'), all('plugin'), all('asset'), all('cable_version'), all('run'), all('delivery'), all('document'), all('validation'), all('agent_task'),
   ]);
@@ -362,6 +368,7 @@ try {
       }
       report.pages.push({ ...surface, actualUrl: surfaceUrl, readiness, ...size });
     } catch (error) {
+      if (error.auditPersistence) throw error;
       const screenshot = 'uncovered-' + createHash('sha256').update(surface.route + size.width).digest('hex').slice(0, 12) + '.png';
       // Keep the performance report's uncovered images in its early artifact,
       // instead of leaving them only in the separate text-traversal directory.
@@ -434,15 +441,23 @@ try {
       console.log('公共页面外观：' + JSON.stringify(check));
     }
   }
-  report.complete = true; await save();
-  if (performanceAudit) {
-    console.log(JSON.stringify(performanceAudit.report.counts));
-    if (performanceAudit.report.pages.some(p => !p.mainPassed || p.framePassed === false || p.blockedWrites.length)) process.exitCode = 1;
+  if (regularity) {
+    await save({ force: true }); // Include the final partial batch in the overview while complete remains false.
+    await regularity.overview();
   }
-  if (regularity) { await regularity.overview(); console.log(JSON.stringify({ pages: report.pages.length, ...regularity.report.counts, uncovered: report.uncovered.length, errors: report.errors.length })); }
-  console.log(JSON.stringify({ pages: report.pages.length, ...report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
-  const strict = process.env.VISIBLE_TEXT_STRICT || 'all';
-  if (report.errors.length || report.blockedWrites.length || report.uncovered.some(u => u.page) || report.findings.some(h => strict === 'all' || h.owner === '前端公共')) process.exitCode = 1;
-  if (regularity?.report.findings.length) process.exitCode = 1;
-} catch (error) { report.failure = error.stack; process.exitCode = 1; await save(); console.error(error); }
-finally { await session.close(); }
+  report.complete = true;
+} catch (error) {
+  report.complete = false; report.failure = error.stack; process.exitCode = 1; console.error(error);
+} finally {
+  try { await save({ force: true }); }
+  finally { await session.close(); }
+}
+if (performanceAudit) {
+  console.log(JSON.stringify(performanceAudit.report.counts));
+  if (performanceAudit.report.pages.some(p => !p.mainPassed || p.framePassed === false || p.blockedWrites.length)) process.exitCode = 1;
+}
+if (regularity) console.log(JSON.stringify({ pages: report.pages.length, ...regularity.report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
+console.log(JSON.stringify({ pages: report.pages.length, ...report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
+const strict = process.env.VISIBLE_TEXT_STRICT || 'all';
+if (report.errors.length || report.blockedWrites.length || report.uncovered.some(u => u.page) || report.findings.some(h => strict === 'all' || h.owner === '前端公共')) process.exitCode = 1;
+if (regularity?.report.findings.length) process.exitCode = 1;

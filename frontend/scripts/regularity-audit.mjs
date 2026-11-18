@@ -194,6 +194,7 @@ export async function createRegularityAudit({ page, context, root }) {
   }
   async function save(traversal) {
     report.complete = traversal.complete;
+    report.failure = traversal.failure;
     report.uncovered = traversal.uncovered;
     report.errors = traversal.errors;
     report.blockedWrites = traversal.blockedWrites;
@@ -208,7 +209,6 @@ export async function createRegularityAudit({ page, context, root }) {
     }
     report.counts = { findings: report.findings.length, byOwner, byCategory };
     report.patterns = [...patterns.values()].sort((a,b) => b.count - a.count);
-    await fs.writeFile(path.join(out, 'audit.json'), JSON.stringify(report, null, 2));
     const cell = value => String(value ?? '').replaceAll('|','\\|').replaceAll('\n',' ');
     await fs.writeFile(path.join(out, 'patterns.md'), '# 按组件归并的问题\n\n完整实例与视口位置见 findings.md；同一组件跨页面重复出现只在此归为一项，不改变原始计数。\n\n| 线程 | 问题 | 组件 | 实际 | 应为 | 实例数 | 示例 |\n|---|---|---|---|---|---|---|\n' + report.patterns.map(p => `| ${p.owner} | ${p.category} | ${cell(p.component)} | ${cell(p.actual)} | ${cell(p.expected)} | ${p.count} | ${cell(p.example.label)} · [定位](${p.example.screenshot}) |`).join('\n') + '\n');
     const rows = report.findings.map(h => `| ${cell(h.label)} (${h.width}) | ${h.owner} | ${h.category} | ${cell(h.text)} | ${cell(h.actual)} | ${cell(h.expected)} | ${cell(h.selector)} · x${Math.round(h.rect.x)} y${Math.round(h.rect.y)} | [页面](${h.screenshot}) |`);
@@ -228,6 +228,8 @@ ${rows.join('\n')}
 
 ${traversal.uncovered.map(u => '- ' + cell(u.label || u.page) + '：' + cell(u.reason)).join('\n') || '无'}
 `);
+    await fs.writeFile(path.join(out, 'audit.json.pending'), JSON.stringify(report, null, 2));
+    await fs.rename(path.join(out, 'audit.json.pending'), path.join(out, 'audit.json'));
   }
   async function overview() {
     const gallery = await context.newPage();

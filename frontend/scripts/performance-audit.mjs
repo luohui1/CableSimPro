@@ -5,9 +5,13 @@ import { installReadinessObserver, waitForPageReady, readinessSnapshot } from '.
 
 async function writeReport(file, content) {
   for (let attempt = 0; ; attempt++) {
-    try { await fs.writeFile(file, content); return; }
+    try {
+      await fs.writeFile(file + '.pending', content);
+      await fs.rename(file + '.pending', file);
+      return;
+    }
     catch (error) {
-      if (error.code !== 'EBUSY' || attempt === 4) throw error;
+      if (error.code !== 'EBUSY' || attempt === 4) throw Object.assign(error, { auditPersistence: true });
       // Windows readers may briefly lock the report. This only retries output I/O.
       await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)));
     }
@@ -56,6 +60,23 @@ export async function createPerformanceAudit({ page, context, root, base }) {
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   let workers = [], failures = [], blocked = [], requests = new Map();
+  const checkpointEvery = 32, measurementLog = path.join(out, 'measurements.jsonl');
+  let journalStarted = false, checkpointMeasurements = 0, checkpointSurfaces = 0, traversedSurfaces = 0;
+  report.persistence = { measurementLog: 'measurements.jsonl', checkpointEvery, persistedMeasurements: 0 };
+  async function startJournal() {
+    if (!journalStarted) { await writeReport(measurementLog, ''); journalStarted = true; }
+  }
+  async function appendMeasurement(row) {
+    try {
+      await startJournal();
+      await fs.appendFile(measurementLog, JSON.stringify(row) + '\n');
+      report.persistence.persistedMeasurements++;
+    } catch (error) {
+      report.complete = false;
+      report.persistenceFailure = error.stack || String(error);
+      throw Object.assign(error, { auditPersistence: true });
+    }
+  }
   page.on('request', request => requests.set(request, { url: request.url().replace(base, ''), startedAt: Date.now(), initiator: request.resourceType() }));
   page.on('requestfinished', request => { const timing = requests.get(request); if (timing) timing.finishedAt = Date.now(); });
   page.on('worker', worker => workers.push({ url: worker.url().replace(base, ''), observedAt: Date.now() }));
@@ -139,18 +160,36 @@ export async function createPerformanceAudit({ page, context, root, base }) {
       row.screenshot = 'page-' + createHash('sha256').update(surface.route + kind).digest('hex').slice(0,12) + '.png';
       await page.screenshot({ path: path.join(out, row.screenshot) }).catch(() => {});
     }
+    await appendMeasurement(row);
     report.pages.push(row);
     console.log('页面加载：' + JSON.stringify({ page: row.page, kind, mainMs: row.mainMs, frameMs: row.frameMs, mainPassed: row.mainPassed, framePassed: row.framePassed }));
     await save();
     return row;
   }
-  async function save(traversal) {
-    if (traversal) { report.complete = traversal.complete; report.scope = traversal.scope; report.uncovered = traversal.uncovered; report.errors = traversal.errors; report.runChecks = traversal.runChecks; }
-    report.counts = { measurements: report.pages.length, pages: new Set(report.pages.map(p => p.page)).size, mainOverBudget: report.pages.filter(p => !p.mainPassed).length, frameOverBudget: report.pages.filter(p => p.framePassed === false).length,
-      terminalErrorStates: report.pages.filter(p => p.terminalErrors.length).length, blockedWrites: report.pages.reduce((n,p) => n + p.blockedWrites.length,0) };
-    await writeReport(path.join(out,'audit.json'),JSON.stringify(report,null,2));
-    await writeReport(path.join(out,'findings.md'), performanceFindings(report));
-    await writeReport(path.join(out,'problems.md'), performanceProblems(report));
+  async function save(traversal, { force = false } = {}) {
+    if (traversal) {
+      report.complete = traversal.complete && !traversal.failure && !report.persistenceFailure;
+      report.scope = traversal.scope; report.uncovered = traversal.uncovered; report.errors = traversal.errors; report.runChecks = traversal.runChecks;
+      report.failure = traversal.failure;
+      traversedSurfaces = traversal.pages.length + traversal.uncovered.length;
+    }
+    if (traversal?.complete || traversal?.failure) force = true;
+    // Rows are written individually; only rebuild the growing compatibility reports in bounded batches.
+    if (!force && report.pages.length - checkpointMeasurements < checkpointEvery && traversedSurfaces - checkpointSurfaces < checkpointEvery) return;
+    try {
+      await startJournal();
+      report.counts = { measurements: report.pages.length, pages: new Set(report.pages.map(p => p.page)).size, mainOverBudget: report.pages.filter(p => !p.mainPassed).length, frameOverBudget: report.pages.filter(p => p.framePassed === false).length,
+        terminalErrorStates: report.pages.filter(p => p.terminalErrors.length).length, blockedWrites: report.pages.reduce((n,p) => n + p.blockedWrites.length,0) };
+      await writeReport(path.join(out,'findings.md'), performanceFindings(report));
+      await writeReport(path.join(out,'problems.md'), performanceProblems(report));
+      // Publish complete only after the auxiliary reports have also been written.
+      await writeReport(path.join(out,'audit.json'),JSON.stringify(report,null,2));
+      checkpointMeasurements = report.pages.length; checkpointSurfaces = traversedSurfaces;
+    } catch (error) {
+      report.complete = false;
+      report.persistenceFailure = error.stack || String(error);
+      throw Object.assign(error, { auditPersistence: true });
+    }
   }
   return { measure, save, report, out };
 }
