@@ -14,7 +14,6 @@ const site = fileURLToPath(new URL('..', import.meta.url));
 const repo = path.resolve(site, '..');
 const synced = path.join(site, 'src/content/docs/_synced');
 const generated = path.join(site, '.generated');
-const brandOut = path.join(site, 'src/assets/generated');
 const skipOpenapi = process.argv.includes('--skip-openapi');
 
 const publish = JSON.parse(await readFile(path.join(site, 'publish.json'), 'utf8'));
@@ -223,21 +222,11 @@ if (!skipOpenapi || !existsSync(openapi)) {
   if (run.status !== 0) throw Error(`OpenAPI 导出失败（${python}）。请先安装 backend/requirements.txt，或用 PYTHON 指定解释器。`);
 }
 
-// ---- 5. 品牌标记 ----
-const tokens = await readFile(path.join(repo, 'design/tokens.css'), 'utf8');
-const [lightBlock, darkBlock = ''] = tokens.split('[data-theme="dark"]');
-const palette = (block) => Object.fromEntries([...block.matchAll(/--([a-z-]+):\s*(#[0-9A-Fa-f]{6});/g)].map((m) => [m[1], m[2]]));
-const light = palette(lightBlock);
-const dark = { ...light, ...palette(darkBlock) };
-const mark = await readFile(path.join(repo, 'design/brand/mark.svg'), 'utf8');
-const paint = (colors) =>
-  mark
-    .replace(/var\(--([a-z-]+), currentColor\)/g, (_, name) => colors[name] || colors.text)
-    .replace(/currentColor/g, colors.text);
-await mkdir(brandOut, { recursive: true });
-await writeFile(path.join(brandOut, 'mark-light.svg'), paint(light));
-await writeFile(path.join(brandOut, 'mark-dark.svg'), paint(dark));
+// ---- 5. 网站图标 ----
+// 与正式前端用同一个图标文件
+const favicon = await readFile(path.join(repo, 'frontend/src/assets/brand/favicon.svg'), 'utf8');
 await mkdir(path.join(site, 'public'), { recursive: true });
-await writeFile(path.join(site, 'public/favicon.svg'), paint(light));
+await writeFile(path.join(site, 'public/favicon.svg'), favicon);
+await writeFile(path.join(site, 'app/icon.svg'), favicon);
 
 console.log(`内容已准备：${pages.length} 篇同步页面，${plugins.length} 个插件清单，${examples.length} 个示例文件（来源提交 ${ref.slice(0, 12)}）。`);

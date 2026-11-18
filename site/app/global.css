@@ -7,6 +7,8 @@
   --font-sans: var(--font-geist-sans), 'Noto Sans SC Variable', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono: var(--font-geist-mono), 'Noto Sans SC Variable', ui-monospace, monospace;
   --font-pixel: var(--font-geist-pixel-square), var(--font-geist-mono), monospace;
+  /* 标题用得意黑（Smiley Sans，SIL OFL），随站点打包 */
+  --font-display: 'Smiley Sans Oblique', var(--font-geist-sans), 'Noto Sans SC Variable', sans-serif;
 
   /* 暖白纸色底，铜色取自 design/tokens.css 的 --copper */
   --color-fd-background: #f2f0ea;
@@ -28,6 +30,20 @@
 
   --color-brand: #aa5827;
   --color-brand-soft: #f3d9bf;
+  /* 反色色带（深底）上的铜色 */
+  --color-brand-invert: #e08a4c;
+}
+
+/* 品牌标记与正式前端共用的颜色（design/tokens.css 的 --brand-* 与 --conductor） */
+:root {
+  --brand-ink: #12283a;
+  --brand-primary: #0064bc;
+  --brand-signal: #00a6e4;
+  --brand-insulation: #a3abb3;
+  --brand-insulation-edge: #cdd2d7;
+  --brand-core: #182838;
+  --brand-strand-edge: #b56a40;
+  --conductor: #c47a3d;
 }
 
 .dark {
@@ -50,6 +66,15 @@
 
   --color-brand: #e08a4c;
   --color-brand-soft: #4a2d18;
+  --color-brand-invert: #aa5827;
+
+  --brand-ink: #d7e2ec;
+  --brand-primary: #4fa3e8;
+  --brand-signal: #4cc8f4;
+  --brand-insulation: #6c747c;
+  --brand-insulation-edge: #8a929a;
+  --brand-core: #0b0c0e;
+  --brand-strand-edge: #8c4e2c;
 }
 
 .dark #nd-sidebar {

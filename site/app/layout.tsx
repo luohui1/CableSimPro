@@ -1,4 +1,5 @@
 import '@fontsource-variable/noto-sans-sc';
+import '@chinese-fonts/dyh/dist/SmileySans-Oblique/result.css';
 import 'katex/dist/katex.min.css';
 import './global.css';
 import { GeistMono } from 'geist/font/mono';

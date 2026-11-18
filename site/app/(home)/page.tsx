@@ -1,9 +1,13 @@
-import { ArrowRight, ArrowUpRight } from 'lucide-react';
-import Image from 'next/image';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
+import catalog from '@/.generated/plugins.json';
+import { primaryButton, secondaryButton } from '@/components/landing/buttons';
+import { Hero } from '@/components/landing/hero';
+import { CountUp, PixelWordmark, Reveal } from '@/components/landing/motion-bits';
+import { RulerBar } from '@/components/landing/ruler-bar';
 import { ScreenshotTabs } from '@/components/landing/screenshot-tabs';
-import { CornerMarks, Window } from '@/components/landing/window';
+import { SourceChain } from '@/components/landing/source-chain';
 import importMapping from '@/src/assets/screenshots/factory/import-mapping.webp';
 import specPdf from '@/src/assets/screenshots/factory/spec-pdf.webp';
 import typeRating from '@/src/assets/screenshots/factory/type-rating-table.webp';
@@ -18,133 +22,103 @@ const sections = [
 ];
 
 const points = [
-  '导入厂家结构表，按产品标准核对尺寸与电阻。',
-  'IEC 60287 载流量、有限元仿真和规格书，在一个工程里完成。',
-  '缺数据就拒算，结果都追得到输入、方法和版本。',
+  '厂家结构表直接导入，尺寸和电阻按产品标准逐项核对。',
+  'IEC 60287 算载流量，有限元上超算，两边结果互相对照。',
+  '数据不够就停下来告诉你缺什么，不拿默认值凑数。',
 ];
 
 const shots = [
-  { label: '载流量研究', src: resultBase, alt: '载流量研究：敷设截面、工况输入与允许电流' },
   { label: '结构表导入', src: importMapping, alt: '结构表导入：列映射' },
+  { label: '载流量研究', src: resultBase, alt: '载流量研究：敷设截面、工况输入与允许电流' },
   { label: '型号载流量表', src: typeRating, alt: '型号载流量表' },
   { label: '规格书', src: specPdf, alt: '规格书 PDF 中的载流量表页' },
   { label: '运行对比', src: compare, alt: '两次运行的对比' },
 ];
 
-// 一个结果从输入到交付经过的环节，每一环都保存版本
-const chain = ['厂家结构表', '型号版本', '载流量研究', '运行快照', '计算书 / 规格书'];
+// 数字在构建时从插件清单（plugins/*/plugin.json）统计，不手写
+const pluginList = catalog.plugins as unknown as { capabilities: { validation: { cases: unknown[] } }[] }[];
+let capabilityCount = 0;
+let caseCount = 0;
+for (const plugin of pluginList) {
+  capabilityCount += plugin.capabilities.length;
+  for (const capability of plugin.capabilities) caseCount += capability.validation.cases.length;
+}
+const stats = [
+  { value: pluginList.length, label: '第一方插件' },
+  { value: capabilityCount, label: '计算与核对能力' },
+  { value: caseCount, label: '核对算例' },
+];
 
 export default function HomePage() {
   return (
-    <main className="w-full">
-      {/* 首屏 */}
-      <section className="mx-auto grid max-w-[1400px] items-center gap-14 px-6 pb-16 pt-16 md:pt-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12">
-        <div>
-          {/* 字号按各断点的栏宽取，第二行九个字始终一行放下 */}
-          <h1 className="text-[34px] font-normal leading-[1.25] tracking-[-0.01em] sm:text-5xl xl:text-[60px] 2xl:text-[68px]">
-            <span className="text-brand">电缆计算</span>，
-            <br />
-            <span className="whitespace-nowrap">每一步都有据可查。</span>
-          </h1>
-          <div className="mt-10 flex flex-wrap items-center gap-3">
-            <Link
-              href="/docs/quickstart/factory/"
-              className="inline-flex items-center gap-2 border border-fd-foreground bg-brand px-5 py-2.5 text-[15px] font-medium text-white transition hover:brightness-110 dark:text-fd-background"
-            >
-              电缆厂上手
-              <ArrowRight className="size-4" />
-            </Link>
-            <Link
-              href="/docs/quickstart/research/"
-              className="inline-flex items-center border border-fd-foreground/70 bg-fd-card px-5 py-2.5 text-[15px] transition hover:bg-fd-accent"
-            >
-              研究院上手
-            </Link>
-            <Link
-              href="/docs/methods/iec-60287/"
-              className="inline-flex items-center gap-1 px-2 py-2.5 text-[15px] underline decoration-fd-foreground/30 underline-offset-[6px] transition hover:decoration-fd-foreground"
-            >
-              方法与依据
-              <ArrowUpRight className="size-4" />
-            </Link>
-          </div>
-        </div>
-
-        <div className="relative mx-6 lg:mx-0 lg:mr-6">
-          <CornerMarks />
-          <Window title="直埋载流量 — CableSimPro">
-            <div className="relative">
-              <Image src={resultBase} alt="载流量研究：敷设截面、工况输入与允许电流" className="block w-full" priority />
-              {/* 标注截图里的允许电流（数值取自截图本身） */}
-              <span className="absolute left-[43.6%] top-[25.6%] h-[4.4%] w-[5.6%] border-[1.5px] border-brand" />
-              <span className="absolute left-[46.4%] top-[calc(-26px-14px)] h-[calc(25.6%+40px)] w-px bg-brand" />
-              <span className="absolute left-[46.4%] top-[calc(-26px-44px)] -translate-x-1/2 whitespace-nowrap bg-fd-foreground px-2.5 py-1 font-mono text-xs text-fd-background shadow-[3px_3px_0_0_var(--color-brand)]">
-                IEC 60287 · 允许电流 944.8 A
-              </span>
-            </div>
-          </Window>
-        </div>
-      </section>
-
-      {/* 刻度尺与分区导航 */}
-      <div className="ruler h-4 w-full border-b border-fd-foreground/60 text-fd-foreground/45" />
-      <nav className="flex items-center justify-between gap-3 border-b border-fd-foreground/60 px-3 py-1.5">
-        <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-xs text-fd-muted-foreground">
-          <span className="size-2 animate-pulse rounded-full bg-brand" />
-          就绪
-        </span>
-        <div className="flex min-w-0 overflow-x-auto whitespace-nowrap text-[13px]">
-          {sections.map((item, index) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={
-                index === 0
-                  ? 'border border-fd-foreground/70 bg-brand-soft px-2.5 py-0.5'
-                  : 'border border-l-0 border-fd-foreground/70 px-2.5 py-0.5 transition-colors hover:bg-fd-accent'
-              }
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      </nav>
+    <main className="w-full overflow-x-clip">
+      <Hero />
+      <RulerBar sections={sections} />
 
       {/* 是什么 */}
       <section className="mx-auto max-w-[1400px] px-6 py-20 md:py-24">
-        <h2 className="text-3xl font-normal leading-snug tracking-[-0.01em] text-balance sm:text-[40px]">
-          CableSimPro 是给<span className="text-brand">电缆厂技术部</span>和<span className="text-brand">研究院</span>
-          用的电缆计算平台。
-        </h2>
-        <ul className="mt-8 space-y-3 text-[15px] text-fd-foreground/85">
-          {points.map((point) => (
-            <li key={point} className="flex items-start gap-3">
-              <span className="mt-[9px] size-1.5 shrink-0 rounded-full bg-brand" />
-              {point}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-14 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
+        <Reveal>
+          <h2 className="font-display text-[34px] leading-snug text-balance sm:text-[46px]">
+            给<span className="whitespace-nowrap text-brand">电缆厂技术部</span>和
+            <span className="whitespace-nowrap text-brand">研究院</span>的<span className="whitespace-nowrap">电缆计算工作台。</span>
+          </h2>
+          <ul className="mt-8 space-y-3 text-base text-fd-foreground/85">
+            {points.map((point) => (
+              <li key={point} className="flex items-start gap-3">
+                <span className="mt-[10px] size-1.5 shrink-0 rotate-45 bg-brand" />
+                {point}
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+        <Reveal className="mt-14 grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]" delay={0.1}>
           <ScreenshotTabs shots={shots} />
-          <Window title="来源链" bodyClassName="flex flex-col items-center px-6 py-8">
-            {chain.map((step, index) => (
-              <div key={step} className="flex flex-col items-center">
-                {index > 0 && <span className="h-7 w-px bg-fd-foreground/60" />}
-                <span
-                  className={
-                    index === 0
-                      ? 'border border-fd-foreground/70 bg-brand-soft px-4 py-1.5 font-mono text-sm'
-                      : 'border border-fd-foreground/70 bg-fd-background px-4 py-1.5 font-mono text-sm'
-                  }
-                >
-                  {step}
-                </span>
+          <SourceChain />
+        </Reveal>
+      </section>
+
+      {/* 插件与核对：反色色带 */}
+      <section className="border-y border-fd-foreground/60 bg-fd-foreground text-fd-background">
+        <div className="mx-auto grid max-w-[1400px] gap-10 px-6 py-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] lg:items-end">
+          <Reveal>
+            <h2 className="font-display text-[34px] leading-snug sm:text-[44px]">
+              算法全在<span className="text-brand-invert">插件</span>里，
+              <br />
+              逐个封签，逐个核对。
+            </h2>
+          </Reveal>
+          <Reveal className="grid grid-cols-3 border border-fd-background/25" delay={0.1}>
+            {stats.map((item, index) => (
+              <div key={item.label} className={index > 0 ? 'border-l border-fd-background/25 px-4 py-6 sm:px-6' : 'px-4 py-6 sm:px-6'}>
+                <CountUp value={item.value} className="font-pixel text-5xl tabular-nums text-brand-invert sm:text-7xl" />
+                <p className="mt-3 text-xs text-balance text-fd-background/70 sm:text-sm">{item.label}</p>
               </div>
             ))}
-            <p className="mt-8 text-center text-sm text-fd-muted-foreground">每一环都保存版本，结果可以追回源头。</p>
-          </Window>
+          </Reveal>
         </div>
       </section>
+
+      {/* 收尾 */}
+      <section className="mx-auto max-w-[1400px] px-6 pb-6 pt-20 text-center md:pt-24">
+        <Reveal>
+          <h2 className="font-display text-[34px] leading-snug text-balance sm:text-[46px]">
+            <span className="whitespace-nowrap">挑一条工作线，</span>
+            <span className="whitespace-nowrap">照着走一遍。</span>
+          </h2>
+          <div className="mt-9 flex flex-wrap justify-center gap-4">
+            <Link href="/docs/quickstart/factory/" className={primaryButton}>
+              电缆厂：结构表到规格书
+              <ArrowRight className="size-4" />
+            </Link>
+            <Link href="/docs/quickstart/research/" className={secondaryButton}>
+              研究院：工程到计算书
+            </Link>
+          </div>
+        </Reveal>
+      </section>
+      <div className="mt-10 overflow-hidden pb-4">
+        <PixelWordmark text="CableSimPro" />
+      </div>
     </main>
   );
 }
