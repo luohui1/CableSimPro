@@ -40,11 +40,19 @@ export function engineeringReferenceException(text, token) {
   return remaining.includes(token) ? null : citation.id;
 }
 
+/** Only the catalogue's manufacturer series group label is an engineering name. */
+export const cableSeriesLabelSelector = '[data-page="cable-versions"] table[aria-label="电缆型号版本"] tr.group-row > th[scope="rowgroup"] > button > strong';
+export function cableSeriesException({ page, text, token, cableSeriesLabel } = {}) {
+  return /^\/resources\/cables(?:[?#]|$)/.test(page || '')
+    && cableSeriesLabel === true && text === token && token === 'CU/XLPE/LC/PVC'
+    ? 'cable-series-label' : null;
+}
+
 export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
   const violations = [];
   for (const frame of includeFrames ? page.frames() : [page.mainFrame()]) {
     const texts = await frame
-      .evaluate(() => {
+      .evaluate(cableSeriesSelector => {
         const result = [],
           walker = document.createTreeWalker(
             document.body,
@@ -76,18 +84,22 @@ export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
           if (style.visibility === "hidden" || style.display === "none")
             continue;
           const text = node.textContent.trim();
-          if (text) result.push(text);
+          if (text) result.push({ text, page: location.pathname, cableSeriesLabel: parent.matches(cableSeriesSelector) });
         }
         return result;
-      })
+      }, cableSeriesLabelSelector)
       .catch(() => []);
-    for (const text of texts)
+    for (const entry of texts) {
+      // String entries preserve callers that provide text-only audit fixtures.
+      const context = typeof entry === 'string' ? { text: entry } : entry;
+      const { text } = context;
       for (const token of internalTokens(text))
-        if (!engineeringReferenceException(text, token)) violations.push({
+        if (!engineeringReferenceException(text, token) && !cableSeriesException({ ...context, token })) violations.push({
           frame: frame === page.mainFrame() ? "页面" : "文档",
           token,
           text: text.slice(0, 200),
         });
+    }
   }
   return violations;
 }

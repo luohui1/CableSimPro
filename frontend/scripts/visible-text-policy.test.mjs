@@ -56,3 +56,28 @@ test('文献引用豁免不放行裸编号、混合露出或扩展路径', async
   const violations = await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame });
   for (const text of texts) assert.ok(violations.some(item => item.text === text), text);
 });
+
+test('厂家系列只在真实型号目录分组标题豁免，普通节点与内部标识仍报告', async () => {
+  const text = 'CU/XLPE/LC/PVC';
+  const matches = identifyText(text);
+  assert.deepEqual(matches.map(item => item.token), [text], '全局识别仍保留此路径形记号');
+  const context = { page: '/resources/cables?item=fixed-version', text, layer: 'ordinary', cableSeriesLabel: true };
+  assert.equal(exceptionFor({ ...context, ...matches[0] })?.id, 'cable-series-label');
+  for (const changes of [
+    { cableSeriesLabel: false }, { cableSeriesLabel: undefined },
+    { page: '/resources/cables/structure-import' }, { page: '/resources/materials' },
+    { page: '/types' }, { text: text + '；内部值' },
+  ]) assert.equal(exceptionFor({ ...context, ...matches[0], ...changes }), null);
+  for (const token of ['CU/XLPE/LC/PVC/parameters', 'cablesim.type-electrical', 'input_schema', 'steady-rating']) {
+    assert.ok(identifyText(token).some(match => !exceptionFor({ ...context, text: token, ...match })), token);
+  }
+  const frame = { evaluate: async () => [
+    context,
+    { ...context, cableSeriesLabel: false },
+    { ...context, page: '/resources/cables/structure-import' },
+    { ...context, text: 'cablesim.type-electrical' },
+    { ...context, text: 'CU/XLPE/LC/PVC/parameters' },
+  ] };
+  const violations = await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame });
+  assert.deepEqual(violations.map(item => item.token), [text, text, 'cablesim.type-electrical', 'CU/XLPE/LC/PVC/parameters']);
+});
