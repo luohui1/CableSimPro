@@ -31,6 +31,7 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
         "scripts/workspace_db.py", "scripts/release_python.sh", "scripts/release.toml",
         "scripts/start_release.sh", "scripts/start_release.cmd",
         "scripts/release_python_runtime.py", "scripts/python_runtime.lock.json",
+        "scripts/release_node_runtime.py", "scripts/node_runtime.lock.json",
         "frontend/scripts/seed-engineering-demo.py", "frontend/scripts/engineering_resources.py",
         "design/tokens.css", "docs/architecture/release-installation.md",
         "docs/architecture/database-operations.md",
@@ -50,7 +51,8 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
     assert {"scripts/install_release.py", "scripts/run_release.py", "scripts/release_python.sh",
             "frontend/scripts/seed-engineering-demo.py", "design/tokens.css",
             "release.toml", "start.sh", "start.cmd",
-            "scripts/release_python_runtime.py", "scripts/python_runtime.lock.json"} <= names
+            "scripts/release_python_runtime.py", "scripts/python_runtime.lock.json",
+            "scripts/release_node_runtime.py", "scripts/node_runtime.lock.json"} <= names
     assert not any(".sqlite" in name or ".env" in name or "node_modules" in name
                    or "__pycache__" in name or "private_customer_report" in name for name in names)
 

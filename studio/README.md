@@ -148,7 +148,7 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 
 ### 启动与验收融合入口
 
-按仓库演示说明运行 `python scripts/run_demo.py` 时，启动器会构建并一起拉起边车；退出时回收子进程。开发时也可分别运行后端、`cd studio && npm run build:fusion && npm run fusion` 和老前端 Vite。手动启动时，Python 与 Node 共用临时 `CABLESIM_AGENT_SIDECAR_TOKEN`；Python 设置 `CABLESIM_AGENT_SIDECAR_URL`（默认 `http://127.0.0.1:8111`）和 `CABLESIM_AGENT_UI`（默认 `studio/dist-fusion`）；Node 设置 `FUSION_BACKEND_URL`、`FUSION_PORT`（默认 8111）、`FUSION_HOME`（对话目录）。不要把令牌或模型密钥写入受版本控制的文件。
+离线安装包（Windows / Linux）自带 Node.js 和这里的边车，由 `scripts/run_release.py` 按 `release.toml` 的 `[agent]` 一起启动和退出，无需任何手动设置，说明见 `docs/architecture/release-installation.md` 的“Agent 对话”。按仓库演示说明运行 `python scripts/run_demo.py` 时，启动器会构建并一起拉起边车；退出时回收子进程。开发时也可分别运行后端、`cd studio && npm run build:fusion && npm run fusion` 和老前端 Vite。手动启动时，Python 与 Node 共用临时 `CABLESIM_AGENT_SIDECAR_TOKEN`；Python 设置 `CABLESIM_AGENT_SIDECAR_URL`（默认 `http://127.0.0.1:8111`）和 `CABLESIM_AGENT_UI`（默认 `studio/dist-fusion`）；Node 设置 `FUSION_BACKEND_URL`、`FUSION_PORT`（默认 8111）、`FUSION_HOME`（对话目录）。不要把令牌或模型密钥写入受版本控制的文件。
 
 ```sh
 # 仓库根目录；声明的 CAD 环境用于生成真实发布演示，不运行有限元。
