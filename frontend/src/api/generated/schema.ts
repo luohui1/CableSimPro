@@ -7925,6 +7925,10 @@ export interface components {
             instructions?: string;
             /** Model Timeout S */
             model_timeout_s?: number | null;
+            /** Context Window */
+            context_window?: number | null;
+            /** Max Output Tokens */
+            max_output_tokens?: number | null;
         };
         /** NewModelIdentity */
         NewModelIdentity: {
@@ -8448,13 +8452,20 @@ export interface components {
             /** Checks */
             checks: string[];
             /**
+             * Assumptions
+             * @description Declared method limits, separate from the operation effects.
+             */
+            assumptions?: string[];
+            /**
              * Status
              * @default pending
              * @enum {string}
              */
             status?: "pending" | "approved" | "rejected";
             /** Kind */
-            kind?: ("domain" | "parameters" | "study" | "type" | "draft_workflow") | null;
+            kind?: ("domain" | "parameters" | "study" | "type" | "draft_workflow" | "external_action") | null;
+            /** Action */
+            action?: string | null;
             /** Type Id */
             type_id?: string | null;
             /** Base Revision */
@@ -8478,6 +8489,10 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "rejected";
+            /** Receipt */
+            receipt?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
         };
         /** ProposalRequest */
         ProposalRequest: {

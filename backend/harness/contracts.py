@@ -64,6 +64,8 @@ class ModelSettingsUpdate(StrictModel):
     api_key: str | None = Field(default=None,max_length=500)
     instructions: str = Field(default='',max_length=4000)
     model_timeout_s: int | None = None
+    context_window: int | None = Field(default=None, strict=True, ge=16384, le=2000000)
+    max_output_tokens: int | None = Field(default=None, strict=True, ge=256, le=131072)
 
 
 class ModelSettingsTest(StrictModel):
@@ -148,14 +150,17 @@ class Proposal(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
+    assumptions: list[str] = Field(default_factory=list, description='Declared method limits, separate from the operation effects.')
     status: Literal['pending','approved','rejected'] = 'pending'
-    kind: Literal['domain','parameters','study','type','draft_workflow'] | None = None
+    kind: Literal['domain','parameters','study','type','draft_workflow','external_action'] | None = None
+    action: str | None = None
     type_id: UUID | None = None
     base_revision: int | None = None
 
 
 class ProposalDecision(StrictModel):
     status: Literal['approved','rejected']
+    receipt: dict[str,JsonValue] = Field(default_factory=dict)
 
 
 class AuditEvent(StrictModel):
@@ -230,7 +235,9 @@ class ProposalCreated(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
-    kind: Literal['domain','parameters','study','type','draft_workflow'] | None = None
+    assumptions: list[str] = Field(default_factory=list, description='Declared method limits, separate from the operation effects.')
+    kind: Literal['domain','parameters','study','type','draft_workflow','external_action'] | None = None
+    action: str | None = None
     type_id: UUID | None = None
     base_revision: int | None = None
 

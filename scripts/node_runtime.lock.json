@@ -1,0 +1,24 @@
+{
+  "format": "cablesim.node-runtime-lock/1",
+  "distribution": "nodejs.org official binary distribution (Node.js 24 LTS Krypton)",
+  "version": "24.22.3",
+  "metadata_source": "https://nodejs.org/dist/v24.22.3/SHASUMS256.txt; its detached signature SHASUMS256.txt.sig verified with Node.js release key 5BE8A3F6C8A5C01D106C0AD820B1A390B168D356 (github.com/nodejs/release-keys)",
+  "targets": {
+    "linux": {
+      "architecture": "x86_64",
+      "url": "https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-x64.tar.gz",
+      "sha256": "061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2",
+      "archive": "tar.gz",
+      "root": "node-v24.22.3-linux-x64",
+      "executable": "bin/node"
+    },
+    "win32": {
+      "architecture": "x86_64",
+      "url": "https://nodejs.org/dist/v24.22.3/node-v24.22.3-win-x64.zip",
+      "sha256": "e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f",
+      "archive": "zip",
+      "root": "node-v24.22.3-win-x64",
+      "executable": "node.exe"
+    }
+  }
+}

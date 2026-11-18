@@ -17,7 +17,7 @@ def is_notice(name: str) -> bool:
         re.search(r'(?:^|[._ -])(?:licen[cs]e|copyright|copying|notice|ofl)(?:$|[._ -])', basename))
 
 
-def collect(wheels: Path, output: Path, node_modules: Path | None = None) -> None:
+def collect(wheels: Path, output: Path, node_modules: Path | list[Path] | None = None) -> None:
     sections = ['CableSimPro third-party notices. Licenses apply to their respective components, '
                 'not an automatic license grant for the whole application.\n']
     for wheel in sorted(wheels.glob('*.whl')):
@@ -29,11 +29,13 @@ def collect(wheels: Path, output: Path, node_modules: Path | None = None) -> Non
             for entry in sorted(archive.namelist()):
                 if is_notice(entry) and not entry.endswith('/'):
                     sections.extend([entry, archive.read(entry).decode('utf-8', errors='replace')])
-    if node_modules and node_modules.is_dir():
+    for tree in [node_modules] if isinstance(node_modules, Path) else list(node_modules or []):
+        if not tree.is_dir():
+            continue
         # Include package notices, including locally shipped font licenses.
         # Do not follow symlinked workspaces outside the build dependency tree.
-        for package_json in sorted(node_modules.rglob('package.json')):
-            if package_json.is_symlink() or not package_json.resolve().is_relative_to(node_modules.resolve()):
+        for package_json in sorted(tree.rglob('package.json')):
+            if package_json.is_symlink() or not package_json.resolve().is_relative_to(tree.resolve()):
                 continue
             try:
                 record = json.loads(package_json.read_text('utf-8'))
@@ -55,6 +57,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wheelhouse', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--node-modules', type=Path)
+    parser.add_argument('--node-modules', type=Path, action='append', help='May be given more than once')
     args = parser.parse_args()
     collect(args.wheelhouse, args.output, args.node_modules)

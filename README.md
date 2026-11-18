@@ -1,139 +1,102 @@
 # CableSimPro
 
-电缆行业垂直的设计 / 计算平台。以工程项目为中心，在同一份可追溯的数据上完成电缆结构定义、敷设配置、研究计算、结果复核和计算书交付。
+电缆行业的设计与计算平台：在同一份可追溯的工程数据上完成**电缆型号设计、载流量计算、仿真复核和正式交付文件**。计算方法全部以插件提供，宿主只负责工程、版本、运行快照、来源追溯、审批与交付；每个结果都能追溯到输入、方法和版本。
 
-**核心理念是插件式**：宿主提供工程底座（工程与版本、研究 / 运行快照、来源追溯、结果工件、报告、审批），计算方法在插件子进程中执行。简化热网络、竖向与场分析归入 `plugins/cablesim.thermal-network`，IEC 方法归入 `plugins/cablesim.iec60287`，原生 CAD / 网格 / FEM / 电热 / 线源实现归入 `plugins/cablesim.native-reference`。旧接口通过适配层调用这些实现。
+![工作台首页](docs/images/workbench-home.webp)
 
-- 产品需求与分期：[docs/product/PRD.md](docs/product/PRD.md)
-- 系统架构：[docs/design/SYSTEM_ARCHITECTURE.md](docs/design/SYSTEM_ARCHITECTURE.md) · [模块实施细则](docs/design/MODULE_DESIGN.md)
-- 插件规范：[唯一现行规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md) · [插件说明](docs/plugins/)
-- 独立插件仓库：[CableSimPro-Plugins](https://github.com/luohui1/CableSimPro-Plugins)（私有）：维护三个第一方插件包、封签校验、测试与打包。当前宿主仍读取本仓库的 `plugins/`，尚未接入跨仓自动同步；核心插件继续随产品内置交付。
-- 计算方法与适用边界：[docs/METHOD.md](docs/METHOD.md)
+- **产品文档**：[`site/`](site/) 是中文文档网站（Astro Starlight），含下载安装、两条快速上手、各模块用法、计算方法与插件开发；`npm --prefix site ci` 后用 `npm --prefix site run dev` 本地预览
+- 产品需求：[docs/product/PRD.md](docs/product/PRD.md) · 系统架构：[docs/design/SYSTEM_ARCHITECTURE.md](docs/design/SYSTEM_ARCHITECTURE.md) · 计算方法：[docs/METHOD.md](docs/METHOD.md)
 - 开发约定与仓库卫生规则：[AGENTS.md](AGENTS.md)
 
-## 版本
-已发布版本 **0.1.0**（git 标签 `v0.1.0`；版本号唯一来源为 `backend/__init__.py`）。本分支包含尚未发布的 D4–D6 后端增量；本仓库不包含许可未确认的第三方图片或字体。
+## 能做什么
 
-## 当前能力
+| 模块 | 内容 |
+| --- | --- |
+| 型号库与型号设计 | 导入厂家结构表（CSV/XLSX）；按分层截面编辑结构、尺寸与用料；按 GB/T 12706、GB/T 3956 核对结构尺寸和导体电阻；计算电气参数与短路容量；审核、发布型号版本并生成规格书 |
+| 载流量计算 | IEC 60287 稳态载流量与运行温度研究，参数扫描，候选型号选型，交叉热源降额，GB 50217 校正，型号载流量表 |
+| 仿真复核 | 有限元稳态、暂态与电热耦合，提交到超算执行（本机不运行原生求解器），与 IEC 结果对照 |
+| Agent 助手 | 在对话中查询、计算、导入厂家表、生成计算书与规格书；所有写操作都是提案，必须由人在对话中接受 |
+| 正式交付 | 计算书、规格书、载流量表（PDF 与 Excel），四签栏，逐值追溯页，显示修约按 GB/T 8170 |
+| 工程底座 | 工程版本与撤销、不可变运行快照、来源追溯、数据库备份恢复；12 个插件全部封签校验 |
 
-正式界面位于 [frontend/](frontend/README.md)，使用路径路由连接宿主 API；功能与验收范围见 [前端需求](docs/design/FRONTEND_REQUIREMENTS.md)。旧原型与其浏览器脚本已退役，设计素材保留在 `design/`，OCCT 源码位于 `frontend/src/features/cad/native/`。
-
-- **工程与版本**：本机 SQLite 工作区，参数锁、版本冲突检测、撤销 / 重做，工程输入 JSON 导入 / 导出，另存为独立方案。
-- **领域模型**：SI 工程事实（电缆类型、回路、截面、负荷、判据）、引用校验与显式 v0 转换。
-- **计算**：方法插件经 `/api/methods` 发现；简化热网络载流量 / 网络参数 / 竖向 / 截面场、IEC 60287 单芯接触品字形、原生有限元 / 电热 / 线源校核。
-- **结果与交付**：不可变运行快照、历史比较、HTML 计算书，不重新计算。
-
-新增研究 API：`GET /api/methods` 发现精确方法版本；在工程内保存 `studies`，先 `preflight`，再凭工程 / 研究版本、请求 UUID、锁摘要和范围确认发起 `runs`。结果与工件固定保存，导出只读取指定运行；接口示例与行为测试见 `tests/test_research.py`。领域转换需显式调用 `domain/conversion`，原版本保留；转换后的 v0 接口只读。扫描、阈值选型、比较和交叉校核均通过保存研究执行，单点失败保留，不自动应用候选或判定工程合格。
-
-目录职责：`backend/kernel/` 负责研究编排、不可变运行与交付；`backend/domain/` 负责 SI 工程事实、引用校验与转换；`backend/plugin_host/` 负责通用子进程协议；`backend/plugins/` 保留 v1 安装、锁定及传输兼容；`plugins/<id>/src/` 存放计算实现。领域模型和插件仍有明确支持子集，见[实施范围](docs/design/DOMAIN_MODEL.md)。
-
-## 工程边界
-
-研究工具，**不是**完整 IEC 60287 / GB 实现、通用有限元软件或经认证的设计系统，不应直接用于最终设计签审。
-
-稳态直埋限于单回路、三根相同无铠装单芯电缆、均匀土壤。竖向为给定换热系数的单根轴向模型，不求解井道气流。电场 / 磁场为范围明确的解析模型，不是全耦合电磁热 FEM。FEM 插件只在声明的基准工况上验证过。标准目录只做范围检查，不代表条款已实现。
+| | |
+| --- | --- |
+| ![型号设计](docs/images/type-design.webp) | ![载流量研究](site/src/assets/screenshots/research/result-base.webp) |
+| 型号设计：分层截面、分层表与型号名片 | 载流量研究：敷设截面、工况与允许电流 |
+| ![Agent 对话](docs/images/agent-chat.webp) | ![型号库](site/src/assets/screenshots/factory/series.webp) |
+| Agent：读取保存的研究结论并给出结果卡片 | 型号库：厂家结构表导入后的系列与规格 |
 
 ## 快速开始
 
-这部分面向电缆厂工程师，按“打开程序 → 完成计算 → 导出文件”的顺序操作。首页的教学型号和研究可用于练习；接客户任务时，要换成核对过的产品数据和实际敷设工况。
-
-### 环境与首次启动
-
-以下命令以 **Windows 64 位**为例。先安装 **Python 3.11、Node.js 22.12 或更新版本（含 npm）、Git**，并确认终端能找到 `python`、`node`、`npm`、`git`。首次安装依赖和准备 CAD 资产需要联网。
-
-在能看到本文件 `README.md` 的仓库根目录打开 PowerShell，首次及以后启动都执行：
+需要 **Python 3.11+、Node.js 22.12+（含 npm）和 Git**，首次启动需要联网安装依赖。在仓库根目录执行：
 
 ```powershell
 python scripts/run_demo.py
 ```
 
-启动器会先自动执行 `python frontend/src/features/cad/native/prepare.py --jobs 4`，下载校验工具链并准备 OCCT 的 JS/WASM 文件；有效缓存直接复用，首次构建可能较慢。准备失败会立即停止，不继续构建前端或启动服务。需要单独排查 CAD 资产时，也可在仓库根目录手动执行这条准备命令。
+启动器会准备 CAD 资产、独立 Python 环境和正式前端，首次启动时用教学输入生成演示工程库，然后打开 <http://127.0.0.1:8100/>。工程数据保存在 `.data/release/engineering.sqlite`，以后启动沿用已有数据；按 `Ctrl+C` 退出。
 
-CAD 资产准备成功后，启动器会准备独立 Python 环境、构建正式前端，并在首次启动时生成发布演示库。看到 `Homepage ready` 后，浏览器会自动打开 [http://127.0.0.1:8100/](http://127.0.0.1:8100/)。没有自动打开时，手动输入这个地址即可。使用期间保留终端窗口，退出时在该窗口按 `Ctrl+C`。
-
-工程数据默认保存在 `.data/release/engineering.sqlite`，后续启动保留已有数据。启动器固定使用这份发布库，不采用外部设置的 `CABLESIM_DB`，也不读取开发库或线程测试库。前端和 `/api` 共用 8100 端口，不需要另开开发前端。服务默认只供本机使用。
-
-**CAD 视口资产与 CAD 计算环境是两回事。** 三维几何和规格书的结构推导还需要 CadQuery。若出现 `No module named 'cadquery'`，请维护人员在启动器创建的发布 Python 环境中安装仓库锁定的原生依赖，再重启：
-
-```powershell
-.\.data\release\venv\Scripts\python.exe -m pip install -r plugins/requirements-native.txt
-```
-
-### 客户询价：选型号并出计算书
-
-新建问询前，型号库须有客户要比较的原始规格。当前新建问询入口提供 **300–400 mm²** 的厂家候选范围；若提示没有候选，先补齐型号库。只是熟悉软件时，可打开首页已有的“客户询价 · 400 A 直埋选型（教学输入）”，从核对工况开始。
-
-1. 在首页或研究列表点 **新建研究**，选择 **客户问询选型**，填写研究名称、客户要求的目标电流，选好候选型号范围，再点 **建立研究**。
-2. 在 **补录工程师给定参数** 中填写缺少的材料、屏蔽等数据，同时填写来源和出处，点 **保存并预检**。“采用参考输入”只用于练习，正式任务要核对其是否适用。
-3. 先核对 **电缆、敷设截面、工况**：型号是否正确，回路和排管是否对应现场，埋深、土壤热阻率、环境温度和负荷是否齐全。有修改就保存，再预检；不要直接沿用演示工况。
-4. 点 **预检并运行**，查看缺项和适用范围提示。补齐问题后重新预检；通过后点 **确认并运行**，等待运行完成。
-5. 在 **问询选型 → 候选结果** 查看哪些型号满足目标、电流余量多少，以及不满足的原因。出现超温、缺项或不适用时，按提示处理；“计算完成”不等于“满足要求”。
-6. 确认选中的是本次已保存输入对应的当前运行，点 **生成客户计算书**，或进入 **计算书** 模块生成。生成后会下载客户 PDF，也可在页面预览。
-7. 复核计算书里的型号、工况、结果和来源。需要再次下载时，在 **PDF 版本** 中选 **客户版**或**内部审核版**，点 **下载 PDF**；修改输入后要重新计算、重新生成，不能继续交付旧结果。
-
-### 参数扫描：比较变化并导出 CSV
-
-建议先用一个已经能正常计算的研究作为基础。练习时，可直接打开首页的“参数扫描 · 土壤热阻率（教学输入）”。
-
-1. 打开已有研究；若需新建，在 **新建研究** 中选 **额定载流量**或**运行温度**，选定型号版本和计算方法，建立研究并核对电缆、敷设与工况。
-2. 进入 **参数扫描 → 设置**，选择一个 **扫描变量**，例如土壤热阻率。变量列表来自这份研究已经保存的输入。
-3. 填写 **起点、终点、步长**和**范围出处**，按字段显示的单位输入。终点要大于起点、步长要大于零，采样点数需在 2–100 个之间。
-4. 点 **应用扫描设置**，核对方法参数，再保存研究。其他工况保持一致，才能看清这个变量带来的影响。
-5. 点 **预检并运行**，处理缺项或不适用的采样点，确认范围后点 **确认并运行**，等待逐点计算结束。
-6. 在 **曲线**和**扫描点**中检查变化趋势及每个点的状态。失败点没有可靠计算值，不要把空值当成零，也不要只挑成功点下结论。
-7. 点 **导出逐点 CSV**，用 Excel 等工具打开，核对参数值、结果单位和逐点状态；同时保留这次研究，方便以后查回计算依据。
-
-### 改型号：保存草稿并出规格书
-
-1. 在型号列表点 **新建型号**，选择基准型号版本，再点 **建立型号草稿**；也可打开已有草稿。练习可使用首页的 YJV22 3×300 规格书演示型号，不要直接覆盖已发布版本。
-2. 在 **结构设计** 中选择线芯或材料层，修改截面、尺寸、厚度和材料。查看 **截面、分层表、外径与用料**，确认没有漏层或尺寸冲突后点 **保存**。
-3. 核对 **要求与标准**，查看 **标准核对**中的不符合项和待补项。缺少依据的输入应补来源，不要把未核对项直接当作合格。
-4. 分别检查 **电气参数、短路容量、载流量表**的**方法参数**，补齐温度、频率、短路时间和敷设工况等条件，并保存。
-5. 进入 **规格书**，先选 **内部审核版**，点 **生成规格书**。程序会逐项预检和计算；若停在某一项，按页面的“查看……条件”返回补齐，再重新生成。
-6. 在 **内容**和**预览**中复核型号名称、结构、用料、计算条件及各项结果。确认后切换为 **客户版**并生成，成功后下载 PDF；已发布版本显示 **导出 PDF**。
-7. 需要正式发布时，进入 **审核与发布**，处理阻止发布的项目，按页面完成 **采纳为版本草稿、提交评审、人工批准、发布型号版本**。下载了 PDF 并不代表已完成厂内审核或型号发布。
-
-### 数据备份与恢复
-
-下面的命令使用启动器准备好的 Python 环境。在仓库根目录执行，可备份已经提交到工程库的输入、版本、计算结果和文档；备份时可以保持程序运行。
-
-```powershell
-.\.data\release\venv\Scripts\python.exe scripts/workspace_db.py backup --database .data/release/engineering.sqlite --output .data/snapshots/engineering.sqlite
-```
-
-命令会生成备份文件及校验记录（例如 `engineering.sqlite.json`）。**每次备份换一个未使用的文件名**，程序不会覆盖旧备份。把这两个文件一起复制到另一块磁盘或厂内备份位置；同一磁盘上的副本不能应对磁盘损坏。
-
-恢复会替换整个发布工程库。换电脑时，先按上面的步骤完成首次启动。然后在启动终端按 `Ctrl+C` 停服，确认要恢复的备份文件，读取随备份保存的校验值并恢复：
-
-```powershell
-$backupFile = '.data/snapshots/engineering.sqlite'
-$backupHash = (Get-Content -LiteralPath ($backupFile + '.json') -Raw | ConvertFrom-Json).sha256
-.\.data\release\venv\Scripts\python.exe scripts/workspace_db.py restore --database .data/release/engineering.sqlite --source $backupFile --sha256 $backupHash --confirm-replace
-python scripts/run_demo.py
-```
-
-恢复前程序会保存替换前的安全副本；若提示数据库正在使用、校验值不符或版本过新，先处理原因，不要强行替换文件。这份数据库备份不包含 Python 环境、插件安装包、OCCT 工具链或超算原始作业目录，后者需另行保存。
+- **Agent 对话**：一键演示会同时启动 Agent 边车（需要 Node.js 22.12+）。模型在“设置 · AI 模型”中配置，密钥只从环境变量或系统凭据读取，不写入文件，见文档 [接入模型](site/src/content/docs/install/model.md)。
+- **离线安装包**：`scripts/build_release.py` 生成 Windows/Linux 离线包，自带 Python 和固定版本的 Node.js 与 Agent 边车，安装后不需要联网；安装、升级和配置见文档 [下载与安装](site/src/content/docs/install/index.mdx)。
+- **备份恢复**：`scripts/workspace_db.py backup / restore`，步骤见文档 [升级与恢复](site/src/content/docs/install/upgrade-restore.md)。
 
 ### 常见问题
 
 | 遇到的情况 | 怎么处理 |
 | --- | --- |
-| 8100 端口被占用，或提示同一地址只能使用一次 | 先检查是不是已经启动过本程序，已有窗口可直接继续使用。否则在原启动终端按 `Ctrl+C` 停掉自己的实例；不要结束其他程序。也可执行 `python scripts/run_demo.py --port 8101`，改用 [http://127.0.0.1:8101/](http://127.0.0.1:8101/)。 |
-| CAD 发布资产缺失，或 OCCT 源码/资产摘要不一致 | 在仓库根目录重新运行 `python frontend/src/features/cad/native/prepare.py --jobs 4`。准备失败时保留终端错误交给维护人员处理；此时发布构建不会继续，首页也不会启动。 |
-| 页面能打开，但三维或规格书提示缺少 `cadquery` | 按上面的原生依赖命令安装到 `.data/release/venv/`，重启后再试。安装到另一个 Python 环境不会解决发布服务的缺项。 |
-| 提示插件摘要、封签或依赖不一致，接口返回 409 | 把完整报错交给维护人员核对程序和插件版本；在修复前不要继续发起计算，也不要改工程参数来绕过这个错误。 |
-| 新建问询提示“没有此范围的厂家候选” | 当前入口需要 300–400 mm² 的厂家原始规格；先补齐型号库。已有教学研究可以用于熟悉流程，但不能作为真实客户产品数据。 |
-| 超算未配置、连接不上或不可用 | 需要超算执行的温度场、暂态、电磁/护套损耗、电热耦合、原生批量仿真等任务不能取得新的计算结果，依赖这些新结果的对比或报告也不能完成。已提交任务先查执行状态，不要因暂时收不到结果就反复提交。 |
-| 超算不可用，其他工作还能做吗？ | 本机环境和输入齐全时，IEC 标准代数计算、使用该方法的参数扫描、输入编辑和数据库备份仍可进行。已经保存且校验通过的结果可查看、导出；新规格书还需要本机 CAD 等相应依赖。历史结果不能代替修改后的重新计算。 |
+| 8100 端口被占用 | 先确认是否已经启动过本程序；否则执行 `python scripts/run_demo.py --port 8101`，改用 <http://127.0.0.1:8101/> |
+| 三维视图或规格书提示缺少 `cadquery` | 在启动器创建的环境中安装原生依赖后重启：`.\.data\release\venv\Scripts\python.exe -m pip install -r plugins/requirements-native.txt` |
+| 提示插件摘要、封签或依赖不一致（接口返回 409） | 把完整报错交给维护人员核对程序和插件版本；修复前不要改工程参数绕过 |
+| 超算未配置或不可用 | 有限元、暂态、电热耦合和批量仿真拿不到新结果；IEC 代数计算、参数扫描、输入编辑、导出和备份照常可用，已保存且校验通过的结果可查看 |
 
-## 测试
+## 插件
+
+| 插件 | 版本 | 作用 |
+| --- | --- | --- |
+| `cablesim.iec60287` | 1.2.1 | IEC 60287 稳态温度与允许电流：单芯或独立屏蔽三芯，直埋、排管与回填 |
+| `cablesim.gb50217-correction` | 1.0.7 | GB 50217 附录 D 载流量校正，系数由标准依据库核验 |
+| `cablesim.type-electrical` | 1.2.5 | 型号电气参数与短路容量（IEC 60287、IEC 60949） |
+| `cablesim.standard-check` | 1.8.6 | 按 GB 产品标准逐条核对结构尺寸和导体 R₂₀ |
+| `cablesim.standards-basis` | 0.9.1 | 离线只读的标准依据库：尺寸、电阻和试验数值及原页出处 |
+| `cablesim.cable-geometry` | 1.1.1 | 电缆实体建模：分层截面、外径与理论用料，OCCT 实体与 STEP |
+| `cablesim.simulation` | 1.7.2 | 有限元仿真：多区域稳态导热、时谐涡流、稳态/暂态热 |
+| `cablesim.native-reference` | 1.0.9 | CAD、网格、有限元、电热与线源参考 |
+| `cablesim.hybrid-rating` | 1.1.1 | IEC 基线加有限元热场修正的混合载流量研究（默认仅参考） |
+| `cablesim.thermal-network` | 1.0.2 | 简化热网络，用于同输入方法对比 |
+| `cablesim.datasheet-extract` | 1.0.2 | 厂家资料参数提取，结果只作为待人工核对的候选 |
+| `cablesim.comsol-bridge` | 1.0.4 | 可选：调用用户已安装的 COMSOL 做内部基准比较，平台计算不依赖它 |
+
+插件规范见 [CableSimPro-Plugins/SPEC.md](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md) 与 [docs/plugins/](docs/plugins/)；清单位于 `plugins/<id>/plugin.json`，`plugins/registry.json` 是由清单生成的发布索引。
+
+## 工程边界
+
+- 这是工程计算与复核工具，不是经认证的设计系统；正式签审前必须由工程师复核，下载了 PDF 不代表已完成厂内审核或型号发布。
+- 每个方法只在其声明的适用范围内计算，超出范围明确拒绝；缺少数据时列出缺项，不用推测值补齐。
+- 标准数据只覆盖已逐格核验的条款；未覆盖的条款在核对结果中标为“未覆盖”。
+- 有限元、批量仿真等原生计算只提交到超算执行；超算不可用时，这些新结果无法取得，IEC 代数计算、扫描、编辑和导出不受影响。
+
+## 目录
+
+| 目录 | 内容 |
+| --- | --- |
+| `backend/` | FastAPI 宿主：工程、研究、运行快照、比较与交付（`kernel/`），SI 领域事实（`domain/`），插件执行器（`plugin_host/`），Agent 工具层（`harness/`） |
+| `frontend/` | 正式 React 前端与浏览器回归脚本 |
+| `studio/` | Agent 对话界面与 Node 边车（pi 内核） |
+| `plugins/` | 12 个第一方插件，各自的 `src/` 与 v2 清单 |
+| `cablesim_sdk/`、`plugin-spec/` | 插件与宿主共用的契约和 JSON Schema |
+| `site/` | 文档网站（Astro Starlight） |
+| `docs/` | 需求、架构、插件说明和计算方法 |
+| `tests/`、`plugin-tests/` | 后端测试；原生插件测试需要原生环境 |
+
+## 开发与测试
 
 ```sh
 python -m pip install -r backend/requirements-dev.txt
-python -m pytest                                  # 后端 + 仓库卫生检查
-python -m pytest plugin-tests                     # 原生插件（需原生环境）
+python -m pytest                    # 后端与仓库卫生检查
+npm --prefix frontend test          # 前端单元测试
+python scripts/plugin_sdk.py verify # 插件清单与封签
 ```
 
-CI（`.github/workflows/ci.yml`）在 main 和每个 PR 上运行：卫生与插件目录检查、后端 Python 3.11–3.13、Linux / Windows 原生插件，全部通过后才打包演示版。
+CI（`.github/workflows/ci.yml`）在 main 和每个 PR 上运行：卫生与插件目录检查、后端 Python 3.11–3.13、Agent 实测与浏览器走查、Windows/Linux 离线安装验收。原生仿真回归只在超算自托管 runner 上运行。本地中间文件用 `python scripts/clean.py` 清理。
 
-本地中间文件用 `python scripts/clean.py` 清理。
+版本号的唯一来源是 `backend/__init__.py`。

@@ -1,0 +1,19 @@
+{
+  "$comment": "快速上手正文引用的数值。由 npm run screenshots 在研究院主线结束后，按页面上实际显示的结论写入；不要手改。",
+  "research": {
+    "base": {
+      "ampacity_a": "944.8",
+      "load_a": "350.0",
+      "hottest_conductor_c": "33.5",
+      "limit_c": "90.0",
+      "margin_k": "56.5"
+    },
+    "changed": {
+      "ampacity_a": "801.1",
+      "load_a": "350.0",
+      "hottest_conductor_c": "36.9",
+      "limit_c": "90.0",
+      "margin_k": "53.1"
+    }
+  }
+}

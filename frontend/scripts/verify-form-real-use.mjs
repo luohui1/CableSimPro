@@ -7,6 +7,8 @@ import { checkLayout } from '../src/features/type/tests/ui-checks.mjs';
 import { readOnlyPost } from './visible-text-policy.mjs';
 
 assert.equal(process.env.E2E_ISOLATED, '1', '只能在发布库隔离副本使用');
+assert.notEqual(process.env.FORMS_REAL_USE_HISTORY_ONLY, '1', '旧 Agent 历史验收已迁移，请运行 cd studio && npm run walk:fusion。');
+// Agent history and approvals are covered by the real-platform fusion browser walk.
 const base = process.env.FRONTEND_URL, expect = baseExpect.configure({ timeout: 45000 });
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/forms-real-use');
 await fs.mkdir(out, { recursive: true });
@@ -57,7 +59,6 @@ async function preflight() {
 }
 const issues = data => (data.cases || []).flatMap(row => row.error?.issues?.length ? row.error.issues : row.error ? [row.error] : []);
 try {
-  if (process.env.FORMS_REAL_USE_HISTORY_ONLY !== '1') {
   for (const project of await get('/api/workspaces')) {
     study = (await get(`/api/workspaces/${project.id}/studies`)).find(row => config(row).method.capability === 'iec-thermal-field');
     if (study) break;
@@ -106,40 +107,7 @@ try {
   assert.deepEqual(config(await save()).parameters.domain_options.bounds_m, expected);
   const repaired = await preflight(); assert.ok(!issues(repaired).some(row => row.path?.includes('/bounds_m')), '修好后范围缺项须消失');
   await page.keyboard.press('Escape'); await appearance('真实修复范围并重新预检', '.range-field');
-  }
-  // Real saved Agent history only. Do not call a model or create substitute tasks before the next round.
-  const tasks = await get('/api/agent/sessions'); record.agentHistory = { states: [...new Set(tasks.map(task => task.state))], checked: [] };
-  for (const state of ['waiting', 'blocked', 'failed']) {
-    const task = tasks.find(task => task.state === state); if (!task) { record.agentHistory.checked.push({ state, covered: false, reason: '来源隔离库无此类真实保存任务；不造任务、不调用模型。' }); continue; }
-    await go(`/agent?task=${task.id}&workspace=${task.workspace_id}&theme=light`);
-    await expect(page.locator('.agent-next-step').last()).toBeVisible();
-    await appearance('真实保存 Agent ' + state + ' 任务', '.agent-page');
-    record.agentHistory.checked.push({ state, covered: true, task: task.id, text: await page.locator('.agent-next-step').last().innerText() });
-    if (state === 'blocked') {
-      await expect(page.locator('.agent-steps-head').last()).toContainText('已结束');
-      await expect(page.getByRole('button', { name: '重试这次提问', exact: true })).toHaveCount(0);
-      await page.locator('.agent-thread').evaluate(node => node.scrollTop = node.scrollHeight);
-      await page.screenshot({ path: path.join(out, 'agent-blocked-history-light.png') });
-      await page.getByRole('button', { name: '在工作台处理', exact: true }).last().click(); await expect(page).not.toHaveURL(/\/agent\?/);
-      const endpoint = '**/api/agent/sessions/' + task.id;
-      let release, started, delivered;
-      const gate = new Promise(resolve => release = resolve), entered = new Promise(resolve => started = resolve), done = new Promise(resolve => delivered = resolve);
-      await page.route(endpoint, async route => { try { const response = await route.fetch(); started(); await gate; await route.fulfill({ response }); } finally { delivered(); } });
-      record.fixtures.push('任务记录慢网：仅延迟实际宿主响应，不改变任务状态、内容或方案。');
-      await go(`/agent?task=${task.id}&workspace=${task.workspace_id}&theme=light`); await entered;
-      await expect(page.getByText('正在读取任务记录', { exact: true })).toBeVisible();
-      try { await appearance('实际任务记录慢网加载', '.agent-page'); } finally { release(); await done; await page.unroute(endpoint); }
-      await expect(page.locator('.agent-next-step').last()).toBeVisible();
-      await page.route(endpoint, route => route.abort('internetdisconnected'));
-      record.fixtures.push('任务记录断网：仅中断 GET；不制造模型失败任务。');
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(page.getByText(/任务记录读取失败/)).toBeVisible(); await appearance('任务记录读取断网及重试', '.agent-page');
-      await page.unroute(endpoint); await page.getByRole('button', { name: '重新读取任务', exact: true }).click();
-      await expect(page.locator('.agent-next-step').last()).toBeVisible();
-      record.actions.push({ action: '真实受阻任务回工作台、记录加载与断网重试', task: task.id });
-    }
-  }
   assert.deepEqual(record.errors, []); assert.deepEqual(record.blocked, []); record.passed = true;
 } catch (error) { record.failure = error.stack; process.exitCode = 1; await page.screenshot({ path: path.join(out, 'failure.png') }).catch(() => {}); console.error(error); }
-finally { record.finished = new Date().toISOString(); await fs.writeFile(path.join(out, process.env.FORMS_REAL_USE_HISTORY_ONLY === '1' ? 'agent-history.json' : 'evidence.json'), JSON.stringify(record, null, 2)); await session.close(); }
+finally { record.finished = new Date().toISOString(); await fs.writeFile(path.join(out, 'evidence.json'), JSON.stringify(record, null, 2)); await session.close(); }
 console.log(JSON.stringify({ passed: record.passed, variants: record.variants.length, errors: record.errors.length, blocked: record.blocked.length, failure: record.failure?.split('\n')[0] }));

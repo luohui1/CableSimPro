@@ -92,6 +92,6 @@ GetDP 按当前温度更新逐点电导率与焦耳损耗，热场按该损耗�
 - `tests/test_research_simulation_inputs.py`：缺热容量、未对齐负荷时间、来源/拓扑缺项及越界拒绝。
 - `tests/test_hpc_executor.py`：断网恢复、原作业复用、输入/输出/方法摘要篡改及超时/崩溃错误码。
 
-所有含求解器的验证通过 `python scripts/run_plugin_tests_hpc.py --test <测试文件>` 提交 dg83。复现与基准 CLI 在各插件 `validation/`；详细复现范围、来源和限制见 [仿真插件说明](../plugins/SIMULATION.md)。上述数值验证不代替任意用户模型的网格/外域收敛证明，也不产生工程审批。
+所有含求解器的验证通过 `python scripts/run_plugin_tests_hpc.py --test <测试文件>` 提交 Slurm 超算集群。复现与基准 CLI 在各插件 `validation/`；详细复现范围、来源和限制见 [仿真插件说明](../plugins/SIMULATION.md)。上述数值验证不代替任意用户模型的网格/外域收敛证明，也不产生工程审批。
 
 本机 `.data/simulation/performance/transient-refinement/` 保留本轮加密证据。Fourier 平板 0–4000 s：h=0.0005 m、dt=10 s 的 Elmer 全步误差 0.112159 K；仅 h 减半为 0.114833 K；dt=5 s、2.5 s 分别为 0.054560 K、0.025533 K。COMSOL h=0.0005 m、dt=2.5 s 的已保存测点曲线误差 0.069482 K，两求解器在全部 102 个共同保存时刻最大差 0.056992 K；Elmer 保存 1601 个逐步统计。此算例显示时间离散主导，未把离散采样门槛解释成任意连续时间/任意模型的误差上界。

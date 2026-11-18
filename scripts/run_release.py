@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import secrets
 import signal
 import socket
 import subprocess
@@ -19,8 +20,10 @@ from uuid import uuid4
 import webbrowser
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts.release_support import (InstallLock, ROOT, atomic_json, config, environment, installation,
-                                    manifest, native_runtime_policy, python_path, run_installed, utf8_output)
+from scripts import release_node_runtime
+from scripts.release_support import (InstallLock, ROOT, agent_payload, atomic_json, config, environment, installation,
+                                    manifest, native_runtime_policy, node_runtime_policy, python_path, run_installed,
+                                    utf8_output)
 
 
 def create_release_app():
@@ -299,6 +302,58 @@ def companions(settings: dict, env: dict) -> list[tuple[subprocess.Popen, bool, 
         raise
 
 
+def connect_host(host: str) -> str:
+    """The address a local client uses to reach a server bound to ``host``, as it appears in a URL."""
+    if host in {"0.0.0.0", "localhost"}:
+        return "127.0.0.1"
+    if host in {"::", "::1"}:
+        return "[::1]"
+    return "[" + host + "]" if ":" in host else host
+
+
+def agent_link(settings: dict, env: dict, app: Path) -> dict | None:
+    """The Agent sidecar of this launch: command, isolated environment, and what the platform needs to find it.
+
+    The link token is made here, once per launch, and exists only in the environment of the two processes that
+    share it: never in a file, a log or the configuration. The sidecar receives no model credential at all (an
+    allow-list environment); the platform keeps the key and relays model requests, which is why configuring the
+    model in one place (settings page, release.toml or the environment) is enough.
+    """
+    agent = settings["agent"]
+    if not agent["enabled"]:
+        return None
+    try:
+        payload = agent_payload(app)
+        if payload is None:
+            print("此发行包不含 Agent 运行时；Agent 对话不可用。", file=sys.stderr, flush=True)
+            return None
+        node_runtime_policy(app)
+        node = release_node_runtime.installed_node(app)
+        history = settings["data_dir"] / "agent"
+        history.mkdir(parents=True, exist_ok=True)
+    except (OSError, RuntimeError, ValueError) as error:
+        # An Agent that cannot be prepared never stops the workbench: say why and carry on without it.
+        print(f"Agent 对话不可用：{error}。工作台其余功能不受影响；可在 release.toml 的 [agent] 设 enabled = false 隐藏此提示。",
+              file=sys.stderr, flush=True)
+        return None
+    token, port = secrets.token_urlsafe(32), agent["port"]
+    backend = f"http://{connect_host(settings['server']['host'])}:{settings['server']['port']}"
+    return {"port": port, "command": [str(node), payload["entry"]], "cwd": app / "agent",
+            "backend_env": {"CABLESIM_AGENT_SIDECAR_TOKEN": token, "CABLESIM_AGENT_SIDECAR_URL": f"http://127.0.0.1:{port}",
+                            "CABLESIM_AGENT_UI": str(app / "agent" / payload["ui"])},
+            "env": release_node_runtime.isolated_environment(env, {
+                "CABLESIM_AGENT_SIDECAR_TOKEN": token, "FUSION_PORT": str(port),
+                "FUSION_BACKEND_URL": backend, "FUSION_HOME": str(history)})}
+
+
+def agent_listening(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
 def check_server_port(host: str, port: int) -> None:
     """Reject a live listener before preparing an upgrade or touching the DB."""
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
@@ -317,9 +372,19 @@ def serve(settings: dict, bundle: dict, no_browser: bool) -> int:
     directory = settings["data_dir"]
     server = settings["server"]
     env = environment(settings, ROOT)
+    link = agent_link(settings, env, ROOT)
+    # The launcher and every process it starts except the platform inherit `env`; the link token is made for the
+    # platform and the sidecar alone, so it never enters `env` or this process's environment.
+    backend_env = {**env, **(link["backend_env"] if link else {})}
     os.environ.update(env)
     own_windows_tree()
     check_server_port(server["host"], server["port"])
+    if link:
+        try:
+            check_server_port("127.0.0.1", link["port"])
+        except OSError as error:
+            raise RuntimeError(f"Agent 边车端口 {link['port']} 已被占用：请先停止占用它的程序，或在 release.toml 的 [agent] "
+                               "里改 port，或设 enabled = false（其余功能不受影响）。") from error
     recover_pending(directory)
     pending = prepare_upgrade(directory, bundle)
     processes = []
@@ -334,12 +399,18 @@ def serve(settings: dict, bundle: dict, no_browser: bool) -> int:
     try:
         initialize_examples(directory, settings)
         process = spawn([str(python_path(ROOT)), "-m", "uvicorn", "scripts.run_release:create_release_app", "--factory",
-                         "--host", server["host"], "--port", str(server["port"])], cwd=ROOT, env=env)
+                         "--host", server["host"], "--port", str(server["port"])], cwd=ROOT, env=backend_env)
         processes.append((process, True, "CableSimPro"))
+        sidecar = None
+        if link:
+            try:
+                sidecar = spawn(link["command"], cwd=link["cwd"], env=link["env"])
+                processes.append((sidecar, False, "Agent"))
+            except OSError as error:
+                print(f"Agent 边车未能启动（{error}）。工作台其余功能不受影响；请查看杀毒软件是否拦截了 runtime/node，"
+                      "或在 release.toml 的 [agent] 设 enabled = false。", file=sys.stderr, flush=True)
         processes.extend(companions(settings, env))
-        browser_host = "127.0.0.1" if server["host"] in {"0.0.0.0", "localhost"} else (
-            "[::1]" if server["host"] in {"::", "::1"} else server["host"])
-        url = f"http://{browser_host}:{server['port']}"
+        url = f"http://{connect_host(server['host'])}:{server['port']}"
         opener = build_opener(ProxyHandler({}))
         deadline = time.monotonic() + server["startup_timeout_seconds"]
         ready = False
@@ -365,15 +436,33 @@ def serve(settings: dict, bundle: dict, no_browser: bool) -> int:
         activate(directory, bundle, pending)
         healthy = True
         print(json.dumps({"status": "ready", "url": url + "/", "build_id": bundle["build_id"],
-                          "data_dir": str(directory)}, ensure_ascii=False), flush=True)
+                          "data_dir": str(directory), **({"agent": {"enabled": True, "port": link["port"]}} if link else {})},
+                         ensure_ascii=False), flush=True)
         if server["open_browser"] and not no_browser:
             webbrowser.open(url + "/")
+        reported = set()
+        # The sidecar is checked without holding the browser back; a slow first start of Node.js is not a failure.
+        agent_until = time.monotonic() + 90 if sidecar is not None else None
         while True:
+            if agent_until is not None:
+                if agent_listening(link["port"]):
+                    agent_until = None
+                    print("Agent 对话服务已就绪。", flush=True)
+                elif sidecar.poll() is not None or time.monotonic() > agent_until:
+                    agent_until = None
+                    print("Agent 对话服务没有起来：工作台其余功能可用，Agent 页会显示原因。请查看上面的边车输出。",
+                          file=sys.stderr, flush=True)
             for child, required, name in processes:
-                if required and child.poll() is not None:
+                if child.poll() is None:
+                    continue
+                if required:
                     if child is process:
                         return child.returncode or 0
                     raise RuntimeError("必需伴随进程已退出：" + name)
+                if name not in reported:
+                    reported.add(name)
+                    print(f"可选伴随进程 {name} 已退出（退出码 {child.returncode}）；工作台其余功能不受影响。",
+                          file=sys.stderr, flush=True)
             time.sleep(.2)
     except KeyboardInterrupt:
         return 0

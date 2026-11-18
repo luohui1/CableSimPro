@@ -11,9 +11,13 @@
     "build": "node scripts/ui-lint.ts && tsc --noEmit && vite build",
     "lint:ui": "node scripts/ui-lint.ts",
     "start": "node host/server.ts",
+    "build:fusion": "tsc --noEmit && vite build --config vite.fusion.config.ts",
+    "fusion": "node fusion/server.ts",
     "test": "node --test --test-concurrency=1 \"tests/*.test.ts\"",
     "walk": "node tests/walk.ts",
-    "walk:agent": "node tests/agent-walk-run.ts"
+    "walk:agent": "node tests/agent-walk-run.ts",
+    "walk:fusion": "node tests/fusion-walk.ts",
+    "test:fusion": "node --test tests/fusion-integration.ts"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.36",
@@ -65,6 +69,7 @@
     "@types/three": "0.187.0",
     "@vitejs/plugin-react": "6.3.0",
     "babel-plugin-react-compiler": "1.0.0",
+    "js-tiktoken": "1.0.21",
     "playwright": "1.63.0",
     "tailwindcss": "4.3.5",
     "typescript": "7.0.2",

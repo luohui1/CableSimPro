@@ -173,8 +173,8 @@ def host_tools():
                 'requires':{'type':'array','minItems':1,'maxItems':8,'items':object_schema({
                     'tool':TEXT,'arguments':{'type':'object'}},['tool','arguments'])}},['id','description','requires'])}},['goals'])),
         ('inbox_read','读取统一待办','read','跨工程只读首页同一待办索引：完整对象名片、类别、原因原文及人工下一步；不代办。默认10项、上限20项、6KiB，按next_page继续；不能把未展开条目称为已处理。',object_schema(deepcopy(INBOX))),
-        ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书；数值带单位来源，按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
-            'type_id':TEXT,'view':{'enum':['summary','structure','requirements','plans','runs','specification','review']},
+        ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书。修改字段前用input视图完整分页读取保存输入、单位、来源、锁和草稿缺项；input不读取运行或核对结论。structure仍含已有几何证据，requirements/review读取核对。按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
+            'type_id':TEXT,'view':{'enum':['summary','input','structure','requirements','plans','runs','specification','review']},
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},
             'expected_revision':{'type':'integer','minimum':1}},['type_id'])),
         ('propose_type_changes','提出型号修改方案','propose','仅本会话型号工作区：使用type_read返回稳定字段path，长度值用mm；材料仅引用已导入文档的材料ID。等待人工保存，不发布、不批准。',object_schema({
@@ -182,7 +182,7 @@ def host_tools():
                 'path':{'type':'string','minLength':1,'maxLength':500},'value':{'type':['number','string','boolean','null']},
                 'unit':{'type':['string','null'],'maxLength':40}},['path','value'])},
             'reason':{'type':'string','minLength':1,'maxLength':500}},['type_id','changes','reason'])),
-        ('object_find','查找对象','read','按统一索引查对象名片；validation保留保存偏差、状态、收敛和出处，限制说明按整条省略，total_limitations/omitted_limitations与detail_ref标明全文位置。declared仅为声明。next_offset 非空时继续分页。',object_schema({
+        ('object_find','查找对象','read','按统一索引查对象名片；validation保留保存偏差、状态、收敛和出处，限制说明按整条省略，total_limitations/omitted_limitations与detail_ref标明全文位置。declared仅为声明。next_offset 非空时继续分页。用户给出对象名称时，exact_matches 中名称完全一致的对象优先；没有完全一致、有多个同名或相近名称、或与对话中刚处理的对象不是同一个时，先向用户确认，不按最近操作的对象猜测。',object_schema({
             'kind':{'enum':list(get_args(Kind))},'q':{'type':'string','maxLength':200},
             'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0}})),
         ('object_relations','查关联','read','读取名片的保存引用、版本与当前性；验证限制的省略条数与全文位置见target.validation；unresolved也会说明复现库错误，不猜关联。保持 kind/id 并按next_offset分页。',object_schema({

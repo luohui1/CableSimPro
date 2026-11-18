@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "IEC 60287 载流量",
   "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
@@ -2686,9 +2686,9 @@
               "description": "相邻迭代温度变化的停止阈值，不代表模型准确度。",
               "x-unit": {
                 "si": "K",
-                "display": "°C",
+                "display": "K",
                 "scale": 1,
-                "offset": -273.15
+                "offset": 0
               },
               "x-group": "numerical",
               "x-order": 20,

@@ -244,7 +244,8 @@ class Proposals:
             task,proposal,previous=self.tasks.proposal(db,pid)
             if previous:
                 if previous['status']!=decision:raise HTTPException(409,'此方案已经完成另一项人工决定。')
-                return {'status':decision}
+                return {'status':decision,'receipt':previous.get('receipt',{
+                    key:previous[key] for key in ('workspace_revision','study_id','study_revision','type_id') if key in previous})}
             if task['active_turn']:raise HTTPException(409,'请等待当前 Agent 消息处理完成后再决定方案。')
             if decision=='approved' and time()>proposal['expires']:raise HTTPException(409,'此方案已过期，请重新读取输入并生成方案。')
             db.execute('UPDATE agent_tasks SET active_turn=?,owner_epoch=?,updated=? WHERE id=?',
@@ -252,6 +253,9 @@ class Proposals:
             self.tasks.event(db,task['id'],'proposal.decision.intent',{'id':pid,'status':decision,
                 'operation_id':pid,'actor':getpass.getuser(),'source':'human.route','engineering_approval':False})
         try:
+            if proposal['kind']=='external_action':
+                from .external_actions import ExternalActions
+                return ExternalActions(self.external_broker).apply(pid,decision,marker)
             return self.apply_decision(pid,decision,marker)
         finally:
             with self.workspace.db(True) as db:
@@ -349,4 +353,4 @@ class Proposals:
             pending=db.execute("SELECT 1 FROM agent_plan_revisions p WHERE p.task_id=? AND p.proposal_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agent_events e WHERE e.task_id=p.task_id AND e.type='proposal.decision' AND json_extract(e.data,'$.id')=p.proposal_id) LIMIT 1",(task['id'],)).fetchone()
             db.execute('UPDATE agent_tasks SET state=?,waiting_reason=?,active_turn=NULL,updated=? WHERE id=?',
                 ('reviewing' if pending else 'completed','human_review' if pending else None,stamp(),task['id']))
-        return {'status':decision}
+        return {'status':decision,'receipt':receipt}

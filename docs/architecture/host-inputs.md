@@ -55,7 +55,7 @@
 
 | 作业接口 | 记录字段与语义 |
 | --- | --- |
-| GET `/api/hpc/jobs`；POST `/api/hpc/jobs/{id}/cancel`、`/refresh` | 分页 `items/total/next_offset`；每项含 `workspace_id/workspace_name`、`study_id/study_name`、`run_id`、`job_id`、`type`（single 单次 / convergence 收敛 / batch 批量）、`status`、`queue_position/queue_position_basis`、`used_core_hours/budget_core_hours`、`started/finished`（UTC）、`cancellable`；收敛另含 `convergence_id/convergence_level/phase/workflow_budget_core_hours`。排队位置为 dg83 可见待调度作业的优先序，非预计开跑顺序；未知位置为 null。预检没有运行时 run_id 为 null；历史缺失身份或预算列入 missing_fields，不猜测。原 workspace/study/kind/core_hours/execution 字段保留兼容。GET 只读本地回执；refresh 查询原 Slurm 作业，不重新提交。跨对象目录属于 `/runs` 记录页，设置只保留连接配置。 |
+| GET `/api/hpc/jobs`；POST `/api/hpc/jobs/{id}/cancel`、`/refresh` | 分页 `items/total/next_offset`；每项含 `workspace_id/workspace_name`、`study_id/study_name`、`run_id`、`job_id`、`type`（single 单次 / convergence 收敛 / batch 批量）、`status`、`queue_position/queue_position_basis`、`used_core_hours/budget_core_hours`、`started/finished`（UTC）、`cancellable`；收敛另含 `convergence_id/convergence_level/phase/workflow_budget_core_hours`。排队位置为 Slurm 超算集群可见待调度作业的优先序，非预计开跑顺序；未知位置为 null。预检没有运行时 run_id 为 null；历史缺失身份或预算列入 missing_fields，不猜测。原 workspace/study/kind/core_hours/execution 字段保留兼容。GET 只读本地回执；refresh 查询原 Slurm 作业，不重新提交。跨对象目录属于 `/runs` 记录页，设置只保留连接配置。 |
 
 ## 版本过期与明确重算
 

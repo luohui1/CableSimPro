@@ -44,7 +44,7 @@
         "cases": []
       },
       "limitations": [
-        "本轮仅定义声明，不启用运行时，不代表工程批准。"
+        "仅定义声明，不启用运行时，不代表工程批准。"
       ],
       "category": "report",
       "report_template": {

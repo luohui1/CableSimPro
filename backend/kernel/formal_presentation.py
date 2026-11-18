@@ -13,14 +13,16 @@ import re
 
 from .formal_contracts import is_number, raw_text, referenced_value, resolve_pointer, jsonsha
 
-POLICY_ID = 'cablesim.engineering-display/1'
+POLICY_ID = 'cablesim.engineering-display/2'
 POLICY = {
     'id': POLICY_ID, 'standard': 'GB/T 8170-2008 3.2, 3.3',
     'rounding': 'ROUND_HALF_EVEN', 'conversion': 'decimal(saved JSON lexeme) * scale + offset',
-    'round_once': True, 'source_values_unchanged': True,
+    'round_once': True, 'source_values_unchanged': True, 'notation': 'plain decimal, never E notation',
     'precisions': {'current_A': '1', 'temperature_degC': '0.1', 'diameter_mm': '0.1',
                    'thickness_mm': '0.01', 'mass_kg_per_km': '1', 'resistance': '4 significant digits',
                    'other_quantities': 'at most 4 significant digits'},
+    'units': {'thermal_compounds': 'K (K·m/W, W/(m·K), J/(kg·K), J/(m³·K), W/(m²·K), K/W)',
+              'capacitance': 'μF/km', 'inductance': 'mH/km', 'resistivity': 'Ω·mm²/m'},
 }
 DECLARATION = (
     '显示修约按 GB/T 8170-2008 第 3.2、3.3 条：'
@@ -29,14 +31,35 @@ DECLARATION = (
     '本文选定的显示精度：电流 1 A；'
     '温度 0.1 °C；外径及直径 0.1 mm；'
     '厚度 0.01 mm；质量 1 kg/km；'
-    '电阻 4 位有效数字，其他工程量最多 4 位有效数字。'
-    '截面用 mm²，单位长度电阻用 Ω/km。'
+    '电阻 4 位有效数字，其他工程量最多 4 位有效数字，不用科学记数法。'
+    '截面用 mm²，单位长度电阻用 Ω/km，电容用 μF/km，电感用 mH/km，电阻率用 Ω·mm²/m；'
+    '热阻率等含温差的复合单位按 IEC 60287 用开尔文表示，如 K·m/W。'
     '温差及温度系数不作绝对温度偏移。'
     '原始 SI 值、换算关系及修约间隔见追溯页。'
     '修约不改变原保存的合格判定。'
 )
 _LONG_DECIMAL = re.compile(r'\d+\.\d{7,}')
+# Visible body numbers: an unrounded value has 7+ decimals AND 5+ significant
+# digits. A once-rounded small value (0.0001235, 4 digits) is plain decimal.
+_UNROUNDED = re.compile(r'(?<![\d.])(?:[1-9]\d*\.\d{7,}|0\.(?=\d{7,})0*[1-9]\d{4,})')
+# Prose is never converted, so any kelvin token sends it to the trace.
 _BARE_K = re.compile(r'(?<![A-Za-z])K(?![A-Za-z])')
+# Visible body text: K is allowed only inside a declared thermal compound unit
+# (joined by a middle dot, or K/W); a bare K would be a raw kelvin value.
+_BODY_K = re.compile(r'(?<![A-Za-z·])K(?![A-Za-z·])(?!/W)')
+# Declared temperature-difference compounds keep K, written with a middle dot.
+THERMAL_UNITS = {
+    'K·m/W': 'K·m/W', 'K*m/W': 'K·m/W', 'K.m/W': 'K·m/W', 'm·K/W': 'K·m/W', 'm*K/W': 'K·m/W',
+    'K/W': 'K/W',
+    'W/(m·K)': 'W/(m·K)', 'W/(m*K)': 'W/(m·K)', 'W/(m.K)': 'W/(m·K)',
+    'W/(m²·K)': 'W/(m²·K)', 'W/(m2*K)': 'W/(m²·K)', 'W/(m^2*K)': 'W/(m²·K)',
+    'J/(kg·K)': 'J/(kg·K)', 'J/(kg*K)': 'J/(kg·K)', 'J/(kg.K)': 'J/(kg·K)',
+    'J/(m³·K)': 'J/(m³·K)', 'J/(m3*K)': 'J/(m³·K)', 'J/(m^3*K)': 'J/(m³·K)',
+}
+# Per-length quantities whose SI values are tiny: shown in customary units.
+SCALED_UNITS = {'F/m': ('μF/km', Decimal('1000000000')), 'H/m': ('mH/km', Decimal('1000000')),
+                'Ω·m': ('Ω·mm²/m', Decimal('1000000')), 'ohm*m': ('Ω·mm²/m', Decimal('1000000'))}
+_KEEP_ZEROS = ('Ω/km', 'Ω', 'Ω·m', 'Ω·mm²/m')
 _CASE = re.compile(r'\bcase-(\d+)\b')
 _LAYOUTS = {
     'three_core_buried_single': '三芯直埋单回',
@@ -93,6 +116,10 @@ def unit_label(unit, role='quantity'):
         return 'kg/km'
     if unit in ('m', 'mm') and role in ('diameter', 'thickness', 'dimension'):
         return 'mm'
+    if unit in THERMAL_UNITS:
+        return THERMAL_UNITS[unit]
+    if unit in SCALED_UNITS:
+        return SCALED_UNITS[unit][0]
     return unit.replace('K', '°C') if isinstance(unit, str) else unit
 
 
@@ -124,9 +151,13 @@ def number_display(value, unit, role='quantity'):
     elif unit in ('m', 'mm') and role in ('diameter', 'thickness', 'dimension'):
         target, scale = 'mm', Decimal('1000') if unit == 'm' else Decimal(1)
         interval = Decimal('0.01') if role == 'thickness' else Decimal('0.1')
+    elif unit in THERMAL_UNITS:
+        target = THERMAL_UNITS[unit]
+    elif unit in SCALED_UNITS:
+        target, scale = SCALED_UNITS[unit]
     # A kelvin interval is one Celsius degree. Never apply an affine offset
     # to thermal resistivity, specific heat or a resistance coefficient.
-    if 'K' in target and unit not in ('K', '°C', '℃'):
+    if 'K' in target and unit not in ('K', '°C', '℃') and unit not in THERMAL_UNITS:
         target = target.replace('K', '°C')
     with localcontext() as ctx:
         ctx.prec = max(64, len(original.as_tuple().digits) + abs(original.adjusted()) + 32)
@@ -137,12 +168,10 @@ def number_display(value, unit, role='quantity'):
         rounded = converted.quantize(interval, rounding=ROUND_HALF_EVEN)
         if not rounded:
             rounded = rounded.copy_abs()  # Do not print -0; the original sign is in trace.
+        # Plain decimal only: a customer document never shows E notation.
         text = format(rounded, 'f')
-        if not fixed:
-            if rounded and rounded.as_tuple().exponent < -6:
-                text = format(rounded, 'E')
-            elif '.' in text and target not in ('Ω/km', 'Ω', 'Ω·m'):
-                text = text.rstrip('0').rstrip('.')
+        if not fixed and '.' in text and target not in _KEEP_ZEROS:
+            text = text.rstrip('0').rstrip('.')
         if len(text) > 80:
             raise ValueError('Displayed number exceeds the readable engineering field width')
     return {'policy': POLICY_ID, 'text': text, 'unit': target, 'scale': str(scale), 'offset': str(offset),
@@ -331,7 +360,10 @@ def prepare_engineering_body(model):
             section['paragraphs'] = [{'text': '关键工程输入与结果使用同一显示规则。完整输入、迭代容差和方法参数见追溯记录。',
                                       'source_ref': None, 'verbatim': False}]
         for table_id in list(section['table_ids']):
-            if table_id.endswith(':parameters') or (model['kind'] == 'rating_table' and not model['tables'][table_id].get('matrix_source')):
+            # 3-D model internals (modelled length, volumes, densities) are
+            # evidence for the usage figures, not specification content.
+            if (table_id.endswith((':parameters', ':model-internals'))
+                    or (model['kind'] == 'rating_table' and not model['tables'][table_id].get('matrix_source'))):
                 section['table_ids'].remove(table_id)
                 trace['table_ids'].append(table_id)
     assumptions = {'id': 'engineering-assumptions', 'role': 'body', 'heading': '适用范围与工况前提',
@@ -454,7 +486,7 @@ def validate_presentation(model):
                 covered(cell)
                 if cell['raw_text'] != raw_text(referenced_value(model, cell['value_ref'])) or cell['display'] != expected_display(model, cell):
                     raise ValueError('Diagram dimension is not the declared display of its saved diameter')
-    if any(_LONG_DECIMAL.search(text) or _BARE_K.search(text) or _CASE.search(text)
+    if any(_UNROUNDED.search(text) or _BODY_K.search(text) or _CASE.search(text)
            or re.search(r'\bthree_core_[a-z_]+', text) for text in visible):
         raise ValueError('Engineering body contains an unrounded decimal, kelvin unit or internal case/layout identifier')
 
