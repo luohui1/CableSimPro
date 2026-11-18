@@ -182,7 +182,7 @@ def host_tools():
                 'path':{'type':'string','minLength':1,'maxLength':500},'value':{'type':['number','string','boolean','null']},
                 'unit':{'type':['string','null'],'maxLength':40}},['path','value'])},
             'reason':{'type':'string','minLength':1,'maxLength':500}},['type_id','changes','reason'])),
-        ('object_find','查找对象','read','按统一索引查对象名片；validation保留保存偏差、状态、收敛和出处，限制说明按整条省略，total_limitations/omitted_limitations与detail_ref标明全文位置。declared仅为声明。next_offset 非空时继续分页。',object_schema({
+        ('object_find','查找对象','read','按统一索引查对象名片；validation保留保存偏差、状态、收敛和出处，限制说明按整条省略，total_limitations/omitted_limitations与detail_ref标明全文位置。declared仅为声明。next_offset 非空时继续分页。用户给出对象名称时，exact_matches 中名称完全一致的对象优先；没有完全一致、有多个同名或相近名称、或与对话中刚处理的对象不是同一个时，先向用户确认，不按最近操作的对象猜测。',object_schema({
             'kind':{'enum':list(get_args(Kind))},'q':{'type':'string','maxLength':200},
             'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0}})),
         ('object_relations','查关联','read','读取名片的保存引用、版本与当前性；验证限制的省略条数与全文位置见target.validation；unresolved也会说明复现库错误，不猜关联。保持 kind/id 并按next_offset分页。',object_schema({

@@ -141,6 +141,55 @@ def test_four_real_decisions_preserve_source_rows_and_run_standard_checks(client
         'propose_structure_upload', 'propose_structure_preview', 'propose_structure_import', 'propose_structure_check'))
 
 
+@pytest.mark.parametrize('style', ['changes', 'sparse-series'])
+def test_recognised_original_declaration_is_the_reviewed_series(client, style):
+    """A real model often states only the name and defaults; the original's declaration still applies."""
+    current = scope(client)
+    current, upload = uploaded(client, current)
+    declared = deepcopy(upload['declarations'][1])
+    request = {key: declared[key] for key in ('sheet', 'first_data_row', 'mapping')}
+    arguments = {'upload_id': upload['upload_id'], 'sha256': upload['sha256'], 'request': request}
+    if style == 'changes':
+        arguments['series_changes'] = {'name': 'Agent 验收系列'}
+    else:
+        original = declared['series']
+        request['series'] = {'name': 'Agent 验收系列', 'manufacturer': original['manufacturer'] + '（改写）',
+            'designation': original['designation'], 'cores': original['cores'], 'u0_v': original['u0_v'], 'u_v': original['u_v'],
+            'common': {}, 'common_basis': {}, 'modelling': {}, 'standards': [], 'resistance_basis': 'stated'}
+    schemas = {row['name']: row['parameters'] for row in client.get('/api/agent/external/tools', headers=AUTH).json()}
+    Draft202012Validator(schemas['propose_structure_preview']).validate(arguments)
+    proposal = propose(client, current, 'propose_structure_preview', arguments)
+    deviations = {row['label'] for row in proposal['changes'] if row['label'].endswith('（与原件声明不同）')}
+    expected = {'系列声明 · 系列名称（与原件声明不同）'} | ({'系列声明 · 厂家（与原件声明不同）'} if style == 'sparse-series' else set())
+    assert deviations == expected
+    assert any(row['label'] == '系列声明底稿' for row in proposal['changes'])
+    reviewed = next(row['after'] for row in proposal['changes'] if row['label'] == '系列声明及来源')
+    original = declared['series']
+    assert original['common'] and reviewed['common'] == pytest.approx(original['common'])
+    assert original['modelling'] and set(reviewed['modelling']) == set(original['modelling'])
+    assert reviewed['resistance_basis'] == original['resistance_basis'] == 'standard_limit' and reviewed['name'] == 'Agent 验收系列'
+    receipt = decide(client, proposal)['receipt']
+    # The same rows are complete as when the full declaration is proposed (11 valid, none incomplete).
+    assert receipt['valid_count'] == receipt['row_count'] == 11 and receipt['incomplete_count'] == 0, receipt
+
+
+def test_series_is_required_without_a_recognised_declaration(client):
+    current = scope(client)
+    workbook = load_workbook(BytesIO(sample_bytes('people-mv')))
+    stream = BytesIO()
+    workbook.save(stream)
+    attachment = attach(client, current, stream.getvalue(), '厂家表.xlsx')
+    proposal = propose(client, current, 'propose_structure_upload', {
+        'attachment_id': attachment['id'], 'expected_sha256': attachment['sha256']})
+    upload = decide(client, proposal)['receipt']
+    current = resume(client, current)
+    assert not match_sample(upload['sha256'])
+    response = call(client, 'propose_structure_preview', {'upload_id': upload['upload_id'], 'sha256': upload['sha256'],
+        'request': {'sheet': '表3 YJV22', 'first_data_row': 5, 'mapping': {'area': 0}}, 'series_changes': {'name': '无声明'}},
+        current['session'], current['turn']).json()
+    assert response['status'] == 'error' and 'IMPORT_SERIES_REQUIRED' in json.dumps(response, ensure_ascii=False), response
+
+
 def test_attachment_token_filename_limit_metadata_and_conversation_scope(client):
     current = scope(client)
     before = counts(client)

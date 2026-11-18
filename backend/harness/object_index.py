@@ -33,19 +33,38 @@ def entry_view(group,row):
     return row
 
 
+def exact_matches(index,kind,q):
+    """Every card named exactly as asked, whatever page time order puts it on."""
+    term=q.casefold().strip()
+    if not term:return []
+    found,offset=[],0
+    while True:
+        page=index.objects(kind=kind,q=q,limit=100,offset=offset)
+        found+=[{'kind':card['kind'],'id':card['id'],'name':card['name']} for card in page['items']
+                if term in (card['name'].casefold().strip(),card['id'].casefold())]
+        offset+=100
+        if offset>=page['total']:return found
+
+
 def read(research,name,args):
     index=get_index(research);offset=args.get('offset',0);limit=args.get('limit',10)
     if name=='object_find':
         page=index.objects(kind=args.get('kind'),q=args.get('q',''),limit=limit,offset=offset)
         entries=[('items',row) for row in page['items']];total=page['total']
         data={'items':[],'total':total,'offset':offset,'next_offset':None}
+        # Results are newest first; a same-named object can sit behind newer
+        # related cards or a similarly named draft. Name the exact ones.
+        data['exact_matches']=exact_matches(index,args.get('kind'),args.get('q',''))
     else:
         page=index.relations(args['kind'],args['id'])
         entries=[(group,row) for group in ('uses','used_by','unresolved') for row in page[group]]
         total=len(entries);entries=entries[offset:offset+limit]
         data={group:[] for group in ('uses','used_by','unresolved')}
         data.update(total=total,offset=offset,next_offset=None)
-    result=ToolResult(status='ok',summary='已读取统一索引名片与保存关联；未批准或修改对象。',data=data)
+    summary='已读取统一索引名片与保存关联；未批准或修改对象。'
+    if data.get('exact_matches'):
+        summary+='名称完全一致：'+'、'.join(item['name']+'（'+item['kind']+'）' for item in data['exact_matches'][:5])+'；优先采用。'
+    result=ToolResult(status='ok',summary=summary,data=data)
     result.data['source_errors']=page.get('source_errors',[])
     count=0
     for group,row in entries:

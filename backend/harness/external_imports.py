@@ -94,16 +94,66 @@ def stage_attachment(store, body):
     return {'id': identifier, 'filename': name, 'sha256': parsed['sha256'], 'size': len(content)}
 
 
+SERIES_LABELS = {'name': '系列名称', 'manufacturer': '厂家', 'designation': '型号', 'cores': '芯数',
+                 'u0_v': '额定相电压 U₀', 'u_v': '额定线电压 U', 'um_v': '最高系统电压 Um', 'origin': '数据身份',
+                 'standards': '执行标准', 'common': '系列公共值', 'common_basis': '公共值依据',
+                 'modelling': '建模参数', 'source': '来源', 'reference': '参考声明', 'resistance_basis': '电阻依据',
+                 'material_properties': '材料物性'}
+SERIES_MAPS = ('common', 'common_basis', 'modelling', 'source', 'reference', 'material_properties')
+
+
+def declared_series(saved, request, changes):
+    """The original's own declaration, as the import wizard prefills it, is the draft.
+
+    Only the uploaded file's recognised declaration is used, never a guess from its
+    name. A stated field equal to the declaration default says nothing and keeps the
+    original; every other difference from the original is listed for the reviewer.
+    """
+    from backend.kernel.type_import_models import SeriesDeclaration
+    fields = SeriesDeclaration.model_fields
+    candidate = next((item for item in saved.get('declarations') or [] if item.get('sheet') == request.get('sheet')), None)
+    stated = request.get('series')
+    for key in list((stated or {})) + list(changes or {}):
+        if key not in fields:
+            fail('IMPORT_SERIES_FIELD', '系列声明没有字段 ' + key + '。', path='/request/series/' + key)
+    if candidate is None:
+        if stated is None:
+            fail('IMPORT_SERIES_REQUIRED', '此原件没有可识别的系列声明；请按原件逐项填写系列名称、厂家、型号、芯数、电压及来源。',
+                 path='/request/series')
+        return {**deepcopy(stated), **deepcopy(changes or {})}, None, []
+    original = deepcopy(candidate['series'])
+    series = deepcopy(original)
+    for statement, values in (('series', stated or {}), ('changes', changes or {})):
+        for key, value in values.items():
+            info = fields[key]
+            default = info.default_factory() if info.default_factory else info.default
+            if statement == 'series' and value == default and key in original:
+                continue
+            series[key] = ({**series[key], **value} if key in SERIES_MAPS and isinstance(value, dict)
+                           and isinstance(series.get(key), dict) else deepcopy(value))
+    deviations = [{'path': '/request/series/' + key, 'label': '系列声明 · ' + SERIES_LABELS.get(key, key) + '（与原件声明不同）',
+                   'before': original.get(key), 'after': series[key], 'unit': None}
+                  for key in series if series[key] != original.get(key)]
+    return series, candidate, deviations
+
+
 def tools():
+    changes = {'type': 'object'}
     try:
         from backend.kernel.type_library import Preview
         request = Preview.model_json_schema()
         definitions = request.pop('$defs', {})
         request['properties'].pop('upload_id')
         request['required'].remove('upload_id')
+        if 'SeriesDeclaration' in definitions:
+            # A recognised original declaration supplies the series; the model
+            # then states only the fields the user asked to change.
+            request['required'].remove('series')
+            definitions['SeriesChanges'] = {**deepcopy(definitions['SeriesDeclaration']), 'title': 'SeriesChanges', 'required': []}
+            changes = {'$ref': '#/$defs/SeriesChanges'}
     except ImportError:
         request, definitions = object_schema(), {}
-    preview = object_schema({'upload_id': IDENTIFIER, 'sha256': DIGEST, 'request': request},
+    preview = object_schema({'upload_id': IDENTIFIER, 'sha256': DIGEST, 'request': request, 'series_changes': changes},
                             ['upload_id', 'sha256', 'request'])
     if definitions:
         # Pydantic refs are rooted at the tool, not the nested request object.
@@ -121,7 +171,9 @@ def tools():
          '只使用本对话用户实际选择的附件及其 SHA256；文件名不能代替附件。接受后才保存到原型号库上传区，不预览或入库。',
          object_schema({'attachment_id': IDENTIFIER, 'expected_sha256': DIGEST}, ['attachment_id', 'expected_sha256'])),
         ('propose_structure_preview', '提出保存结构表预览', 'propose',
-         '明确选择已接受原件的工作表、起始行、列映射与系列声明。保留原行、单位和来源；接受后调用原预览服务，尚不创建型号。', preview),
+         '明确选择已接受原件的工作表、起始行与列映射。原件附带该表的系列声明（上传记录 declarations）时以原件声明为准：'
+         '省略 request.series，只在 series_changes 写用户明确要求修改的字段（如系列名称），不改写厂家、型号、电压或来源；'
+         '与原件不同之处在待审卡逐项列出。没有原件声明的文件须完整填写 request.series。保留原行、单位和来源；接受后调用原预览服务，尚不创建型号。', preview),
         ('propose_structure_import', '提出结构表草稿入库', 'propose',
          '按准确保存预览及摘要创建系列和型号草稿。必须明确 skip_errors；每行事实、缺项及错误均待人审，不审核、不发布。',
          object_schema({'preview_id': IDENTIFIER, 'preview_digest': DIGEST, 'skip_errors': {'type': 'boolean'}},
@@ -335,10 +387,14 @@ class StructureImports:
             saved = self.saved(conversation, 'upload', args['upload_id'])
             if saved['sha256'] != args['sha256']:
                 fail('IMPORT_SOURCE_CHANGED', '上传原件摘要不一致，请重新读取。', 409)
-            request = Preview.model_validate({'upload_id': args['upload_id'], **args['request']})
+            series, candidate, deviations = declared_series(saved, args['request'], args.get('series_changes'))
+            request = Preview.model_validate({'upload_id': args['upload_id'], **args['request'], 'series': series})
             action['request'] = request.model_dump(mode='json', exclude_none=True, exclude={'upload_id'})
             with self.store.db() as db: parsed = service._upload(db, args['upload_id'])
             rows, skipped = mapped_rows(parsed, request.sheet, request.first_data_row, request.mapping)
+            if candidate is not None:
+                self.change(changes, '系列声明底稿', '原件附带的“' + candidate['sheet'] + '”系列声明；以下列出与原件不同的字段')
+            changes.extend(deviations)
             self.source_changes(changes, {**saved, **action['request']})
             self.row_changes(changes, rows, raw=True)
             if skipped: self.change(changes, '不作为规格的原表说明行', skipped)
