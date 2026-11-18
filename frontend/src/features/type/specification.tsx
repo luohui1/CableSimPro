@@ -16,6 +16,7 @@ import { EvidenceDigest } from './evidence-digest';
 import { useTypeCommand } from './command-slot';
 import { ReviewIssues } from './review-issues';
 import { MethodErrorDetail, methodErrorText } from './method-error';
+import { FormalExport } from '@/components/formal-export';
 
 const statuses = { draft: '草稿', submitted: '待人工审核', approved: '已批准', published: '已发布' };
 const channelLabels: Record<string, string> = { geometry: '结构推导', electrical: '电气参数', rating: '载流量表', short_circuit: '短路容量', standards: '标准核对' };
@@ -89,6 +90,9 @@ export function TypeSpecification({ tab }: { tab: string }) {
   const inCommand=useTypeCommand({id:'specification-generate',label:status==='published'?'导出 PDF':'生成规格书',role:'primary',loading:busy,disabledReason:!spec?'规格书尚未读取':reason||(state.readOnly&&status!=='published'?'此版本不可生成':undefined),onSelect:()=>void generate()});
   return <div className="type-page" data-type-page="specification-results" data-type-state={bodyState}>
     <div className="type-result-toolbar">{!inCommand&&<Button variant="primary" size="compact" loading={busy} disabled={!spec || !!reason || state.readOnly && status !== 'published'} onClick={() => void generate()}>{status === 'published' ? '导出 PDF' : '生成规格书'}</Button>}
+      <FormalExport kind="specification" source={spec && /^[a-f0-9]{64}$/.test(spec.digest) ? {
+        workspace_id: state.workspace!.id, expected_revision: state.workspace!.revision, specification_digest: spec.digest,
+      } : null} disabledReason={reason || (historical ? '当前规格书来源已过期，请先重新生成并保存。' : '')} />
       <Select label="文档版本" value={audience} disabled={busy} options={[{ value: 'customer', label: '客户版' }, { value: 'internal', label: '内部审核版' }]} onChange={value => setAudience(value as SpecificationAudience)} />
       {audience === 'internal' && <Button size="compact" disabled={!spec || !!reason || busy} onClick={() => void generate(true)}>导出内部审核稿</Button>}
       {spec && <StatusMark kind={historical ? 'historical' : status === 'published' || status === 'approved' ? 'success' : 'draft'} label={historical ? '已过期' : statuses[status as keyof typeof statuses]} detail={historical ? '输入或来源已变化；重新生成后才能交付当前客户版。' : undefined} />}{reason && <span className="muted">{reason}</span>}
