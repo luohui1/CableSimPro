@@ -28,6 +28,7 @@ from backend.domain.models import DomainDocument
 from backend.foundation.contracts import AssetRelease, content_hash
 from backend.schemas import Scenario, StrictModel
 from .project_exchange import prepare_reference, validate_reference
+from . import published_project_proof as published_proof
 from .workspace import fingerprint, stamp
 
 
@@ -69,7 +70,16 @@ class ExportSelection(StrictModel):
 def _project_inputs(value):
     if not isinstance(value, dict) or set(value) - PROJECT_KEYS or not {'scenario', 'locks', 'sources'} <= set(value):
         fail('EXCHANGE_PROJECT_FIELDS', '工程输入字段不完整或包含运行、审批等不允许导入的字段。')
-    if len(encoded(value)) > PROJECT_LIMIT:
+    # Only a fully validated, separately bounded published proof gets its own
+    # budget. All ordinary input, provenance and locks retain the 1 MiB limit.
+    ordinary = value
+    binding = value.get('study_cable_reference')
+    proof = binding.get('source_snapshot') if isinstance(binding, dict) else None
+    if isinstance(proof, dict) and proof.get('schema') == published_proof.SCHEMA:
+        validate_reference(binding)
+        ordinary = {**value, 'study_cable_reference': {
+            key: item for key, item in binding.items() if key != 'source_snapshot'}}
+    if len(encoded(ordinary)) > PROJECT_LIMIT:
         fail('EXCHANGE_PROJECT_TOO_LARGE', '单个工程输入超过 1 MiB；请使用数据库备份恢复，不能删减来源或锁记录。', 413)
     scenario = Scenario.model_validate(value['scenario']).model_dump(mode='json')
     if scenario != value['scenario']:
@@ -237,8 +247,8 @@ def parse_file(filename, data, *, validator=validate_bundle):
 
 
 class ResourceExchange:
-    def __init__(self, store, assets):
-        self.store, self.assets = store, assets
+    def __init__(self, store, assets, types=None):
+        self.store, self.assets, self.types = store, assets, types
 
     def initialize(self):
         with self.store.db(True) as db:
@@ -248,7 +258,15 @@ class ResourceExchange:
 
     def export(self, body: ExportSelection):
         assets, projects, seen = [], [], set()
+        member_bytes = 0
         with self.store.read_snapshot() as db:
+            def account(item):
+                nonlocal member_bytes
+                member_bytes += len(encoded(item))
+                # Refuse as soon as complete members exceed the final file
+                # ceiling, rather than accumulating twenty large proofs first.
+                if member_bytes > MAX_BYTES:
+                    fail('EXCHANGE_TOO_LARGE', '完整交换内容超过 8 MiB，请分批导出或使用数据库备份；未删减证明。', 413)
             def include_asset(identifier):
                 detail = self.assets._detail(db, self.assets._load(db, identifier))
                 key = (detail['asset_id'], detail['version'])
@@ -264,17 +282,30 @@ class ResourceExchange:
                     if row is None or row['content_sha256'] != dependency['content_sha256']:
                         fail('EXCHANGE_DEPENDENCY', '资源依赖缺失或摘要不一致，未生成不完整交换包。', 409)
                     include_asset(row['id'])
-                assets.append({'origin_id': identifier, 'origin_status': detail['status'],
-                               'release': release, 'content_sha256': detail['content_sha256']})
+                item = {'origin_id': identifier, 'origin_status': detail['status'],
+                        'release': release, 'content_sha256': detail['content_sha256']}
+                account(item)
+                assets.append(item)
             for identifier in body.asset_ids:
                 include_asset(identifier)
             for identifier in body.workspace_ids:
                 row, state = self.store.load(db, identifier)
                 inputs = {key: deepcopy(value) for key, value in state.items() if key in PROJECT_KEYS}
-                prepare_reference(db, inputs)
+                prepare_reference(db, inputs, types=self.types)
                 _project_inputs(inputs)
-                projects.append({'origin_id': identifier, 'origin_revision': row['revision'],
-                                 'inputs': inputs, 'input_sha256': fingerprint(inputs)})
+                proof = (inputs.get('study_cable_reference') or {}).get('source_snapshot', {})
+                if isinstance(proof, dict) and proof.get('schema') == published_proof.SCHEMA:
+                    for dependency in proof['dependencies']:
+                        release = dependency['release']
+                        dependency_row = db.execute('SELECT id,content_sha256 FROM engineering_assets WHERE asset_id=? AND version=?',
+                                         (release['asset_id'], release['version'])).fetchone()
+                        if dependency_row is None or dependency_row['content_sha256'] != dependency['content_sha256']:
+                            fail('EXCHANGE_DEPENDENCY', '本库缺少发布来源的准确资源定义，未生成不完整交换包。', 409)
+                        include_asset(dependency_row['id'])
+                item = {'origin_id': identifier, 'origin_revision': row['revision'],
+                        'inputs': inputs, 'input_sha256': fingerprint(inputs)}
+                account(item)
+                projects.append(item)
         payload = {'schema_version': SCHEMA, 'created': stamp(), 'assets': assets, 'projects': projects}
         return validate_bundle({**payload, 'sha256': fingerprint(payload)})
 
@@ -300,14 +331,43 @@ class ResourceExchange:
                 if (not row or row['content_sha256'] != dependency['content_sha256']
                         or content_hash(AssetRelease.model_validate_json(row['release_json'])) != dependency['content_sha256']):
                     fail('EXCHANGE_DEPENDENCY', '交换包与本机均缺少准确的资源依赖。', 409)
-        return {'sha256': bundle['sha256'], 'assets': asset_items,
-                'projects': [{'origin_id': item['origin_id'], 'name': (item['inputs'].get('domain') or item['inputs']['scenario'])['name'],
-                              'action': 'create_independent_input_copy'} for item in bundle['projects']],
+        for project in bundle['projects']:
+            proof = (project['inputs'].get('study_cable_reference') or {}).get('source_snapshot', {})
+            if not isinstance(proof, dict) or proof.get('schema') != published_proof.SCHEMA:
+                continue
+            published_proof.check_local(self.types, db, proof)
+            for item in proof['dependencies']:
+                key = (item['release']['asset_id'], item['release']['version'])
+                if available.get(key) == item['content_sha256']:
+                    continue
+                row = db.execute('SELECT content_sha256,release_json FROM engineering_assets WHERE asset_id=? AND version=?', key).fetchone()
+                if (row is None or row['content_sha256'] != item['content_sha256']
+                        or content_hash(AssetRelease.model_validate_json(row['release_json'])) != item['content_sha256']):
+                    fail('EXCHANGE_DEPENDENCY', '发布来源的准确依赖须完整随包搬运或已存在于本库。', 409)
+        projects = []
+        for item in bundle['projects']:
+            result = {'origin_id': item['origin_id'],
+                      'name': (item['inputs'].get('domain') or item['inputs']['scenario'])['name'],
+                      'action': 'create_independent_input_copy'}
+            proof = (item['inputs'].get('study_cable_reference') or {}).get('source_snapshot', {})
+            if isinstance(proof, dict) and proof.get('schema') == published_proof.SCHEMA:
+                result['published_model'] = {
+                    'family': proof['origin']['family'], 'version': proof['origin']['version'],
+                    'asset_sha256': proof['asset_sha256'],
+                    'specification_sha256': proof['specification_sha256'],
+                    'proof_bytes': published_proof.size(proof),
+                    'dependency_count': len(proof['dependencies']),
+                    'source_run_count': len(proof['source_runs']),
+                    'run_evidence': published_proof.RUN_EVIDENCE, 'approval_inherited': False,
+                    'source_approval': {key: proof['approval'][key] for key in
+                                        ('reviewer', 'approved_at', 'authority')}}
+            projects.append(result)
+        return {'sha256': bundle['sha256'], 'assets': asset_items, 'projects': projects,
                 'requires_human_confirmation': True, 'approval_inherited': False,
                 'limitations': ['仅搬运已保存输入和资源定义；不复制运行、审核、原始资料或交付历史。',
                                 '资源原始来源记录原样保留，属于来源方的核对声明；本机审核状态为草稿。',
                                 '候选型号保留原始内容摘要、完整来源快照与原标识；工程绑定独立快照，不关联本机同名或同标识型号。',
-                                '已发布型号引用的完整发行证明链不在输入交换范围内，请使用数据库备份恢复。',
+                                '已发布型号保留完整发行、冻结规格书、原批准回执和依赖来源；目标绑定为草稿，来源运行仅为外部声明，不复制本机运行或批准。',
                                 '需要完整历史时使用数据库备份恢复。']}
 
     def preview(self, bundle):

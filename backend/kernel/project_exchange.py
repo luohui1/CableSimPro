@@ -93,7 +93,7 @@ def source_reference_order(text, sources, declared=None):
     fail('EXCHANGE_CABLE_SOURCE', '工程绑定的来源说明与原始型号的完整来源声明不一致。')
 
 
-def validate_reference(binding):
+def _binding_shape(binding):
     if (not isinstance(binding, dict) or not isinstance(binding.get('payload'), dict)
             or not all(isinstance(binding.get(key), str) and binding[key]
                        for key in ('id', 'version', 'name', 'source', 'content_sha256', 'bound_cable_type_id'))
@@ -103,10 +103,19 @@ def validate_reference(binding):
             or any(not isinstance(path, str) for path in binding['locks'])
             or not isinstance(binding.get('method_defaults'), dict)):
         fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照不完整。')
+
+
+def validate_reference(binding):
+    _binding_shape(binding)
+    proof = binding.get('source_snapshot')
+    from .published_project_proof import SCHEMA as PUBLISHED_SCHEMA, validate as validate_published
+    if isinstance(proof, dict) and proof.get('schema') == PUBLISHED_SCHEMA:
+        validate_published(binding)
+        return
     # A system-looking ID or a candidate proof cannot certify a published model.
     if binding['source'] == 'published_type' or binding['id'].startswith('type/'):
         fail('EXCHANGE_PUBLISHED_MODEL_PROOF',
-             '已发布型号引用需要完整发行与冻结规格书证明链；当前输入交换不覆盖，请使用数据库备份恢复。')
+             '已发布型号引用缺少完整发行与冻结规格书来源证明；请从来源库重新导出，完整历史使用数据库备份恢复。')
     proof = binding.get('source_snapshot')
     if proof is None:
         if binding['id'].startswith('system.'):
@@ -155,13 +164,19 @@ def validate_reference(binding):
     return order
 
 
-def prepare_reference(db, inputs):
+def prepare_reference(db, inputs, *, types=None):
     """Add proof to an export copy; never mutate the source workspace or model."""
     binding = inputs.get('study_cable_reference')
     if binding is None:
         return
     if not isinstance(binding, dict):
         fail('EXCHANGE_CABLE_REFERENCE', '工程引用的型号快照不完整。')
+    if binding.get('source_snapshot') is None and (
+            binding.get('source') == 'published_type' or str(binding.get('id', '')).startswith('type/')):
+        _binding_shape(binding)
+        from .published_project_proof import prepare
+        prepare(types, db, binding)
+        return
     if binding.get('source_snapshot') is not None or not str(binding.get('id', '')).startswith('candidate:'):
         order = validate_reference(binding)
         if order is not None:
