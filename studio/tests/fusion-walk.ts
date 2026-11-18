@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type Frame, type Locator, type Page } from 'playwright';
 import { createSidecar, type Sidecar } from '../fusion/server.ts';
-import type { Proposal } from '../shared/types.ts';
+import type { ChatView, Proposal } from '../shared/types.ts';
 import { gbRequest, installConditionWorkflow, installGbWorkflow, installMissingData, installRatingTableWorkflow,
   installStudyRead, installStudyWorkflow, installTypeWorkflow, prepareGbFixture, ratingConditions, type FlowState } from './fusion-scripts.ts';
 import { probe } from './layout-probe.ts';
@@ -811,6 +811,20 @@ try {
         } else if (phase === 2) {
           const preview = frame.locator('[data-card="structure-preview"]').last();
           await preview.waitFor();
+          // The model receives a bounded receipt; UI expectations come from the separately persisted, complete source card.
+          const savedPreview = await frame.evaluate(async previewId => {
+            const session = decodeURIComponent(location.hash.split('/')[2]);
+            const response = await fetch('/agent-sidecar/api/chat/sessions/' + encodeURIComponent(session), { cache: 'no-store' });
+            if (!response.ok) throw new Error('读取实际保存预览失败：' + response.status);
+            const view = await response.json() as ChatView;
+            return view.items.flatMap(message => message.parts).flatMap(part =>
+              part.type === 'step' && part.card?.kind === 'structure_preview' && part.card.view.preview_id === previewId
+                ? [part.card.view] : []).at(-1);
+          }, imported.preview!.preview_id);
+          assert.ok(savedPreview?.complete, '实际会话必须保存完整预览卡，不能把模型摘要当作原始字段');
+          assert.equal(savedPreview.preview_digest, imported.preview!.preview_digest, '预览卡绑定已接受回执的固定内容摘要');
+          assert.equal(savedPreview.sha256, imported.preview!.sha256, '预览卡保留同一原始附件摘要');
+          assert.equal(savedPreview.rows.length, imported.preview!.row_count, '全部保存行必须仍在卡片中');
           record(`${viewport.width}/saved-import-preview`, await preview.locator('[data-structure-row]').count() === 11
             && imported.preview!.valid_count === 11 && imported.preview!.error_count === 0,
           { rows: 11, valid: imported.preview!.valid_count, errors: imported.preview!.error_count, missing: imported.preview!.incomplete_count,
@@ -825,8 +839,8 @@ try {
             return Boolean(panel && panel.clientHeight >= panel.scrollHeight - 1 && !panel.hasAttribute('data-starting-style')
               && panel.getAnimations({ subtree: true }).every(animation => !animation.pending && animation.playState !== 'running'));
           }).catch(() => false), '原字段、单位与来源实际展开');
-          const firstFact = imported.preview!.preview.rows[0].values[0];
-          const savedFacts = imported.preview!.preview.rows[0].values as Record<string, any>[];
+          const firstFact = savedPreview.rows[0].values[0];
+          const savedFacts = savedPreview.rows[0].values as Record<string, any>[];
           assert.equal(await firstRow.locator('[data-structure-field]').count(), savedFacts.length, '已保存预览的字段不能被展示层删减');
           const sourceLabels: Record<string, string> = { table: '原表抄录', series: '显式声明 / 引用补入', standard: '标准查询' };
           for (const fact of savedFacts) {
@@ -880,7 +894,7 @@ try {
           '完整查询依据已按实际控件收起');
           const sourceText = await firstRow.innerText();
           record(`${viewport.width}/import-source-and-units-visible`, sourceText.includes(firstFact.label) && sourceText.includes(workbook.filename)
-            && sourceText.includes('保存值'), { row: imported.preview!.preview.rows[0].row_number, fullFields: savedFacts.length,
+            && sourceText.includes('保存值'), { row: savedPreview.rows[0].row_number, fullFields: savedFacts.length,
               sources: savedFacts.map(fact => ({ key: fact.key, origin: fact.source.origin, referencePreserved: fact.source.reference !== null && fact.source.reference !== undefined })),
               standardReferenceMatchesSaved: true });
           await firstRow.evaluate(element => element.scrollIntoView({ block: 'start' }));
