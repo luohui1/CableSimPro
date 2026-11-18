@@ -29,6 +29,10 @@ class DeclaredParameter(StrictModel):
         return self
 
 
+class DeclaredMaterialProperty(DeclaredParameter):
+    value: float = Field(strict=True, allow_inf_nan=False)
+
+
 class SeriesDeclaration(StrictModel):
     name: str = Field(min_length=1, max_length=120)
     manufacturer: str = Field(min_length=1, max_length=120)
@@ -51,7 +55,7 @@ class SeriesDeclaration(StrictModel):
     oversheath: Literal['PVC', 'PE'] | None = None
     armour_material: str | None = None
     outer_diameter_precision_mm: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-    material_properties: dict[str, dict[str, DeclaredParameter]] = Field(default_factory=dict)
+    material_properties: dict[str, dict[str, DeclaredMaterialProperty]] = Field(default_factory=dict)
 
     @field_validator('cores', mode='before')
     @classmethod
@@ -190,6 +194,104 @@ def _full_sources(payload, facts, series, derivation):
         if roles.get(layer['role']) in source_by_key:
             sources[f'/cable_type/common_layers/{index}/thickness'] = source_by_key[roles[layer['role']]]
     return sources
+
+
+MATERIAL_MAPPING_METHOD = {'name': '明示材料物性映射', 'version': '1.0.0'}
+
+
+def _material_properties(payload, declared):
+    """Map explicit role-scoped properties without changing other uses or results.
+
+    The constructor may share a material between a conductor and its screen.
+    A declaration for one role must not become a statement about the other.
+    Conflicting nonempty constructor values require a new construction, since
+    its derived quantities have already used those values. This adapter never
+    recomputes them, and validates the whole declaration before changing a row.
+    """
+    from backend.domain.guards import pointer
+    from backend.domain.models import Material
+    from .stated_single_core import PROPERTY_UNITS
+
+    if not declared:
+        return {}, [], []
+    slots = []
+    for core in payload['cable_type']['cores']:
+        path = pointer('cable_type', 'cores', core['id'])
+        slots.append(('conductor', core['conductor'], path + '/conductor/material'))
+        slots.extend((layer['role'], layer, path + pointer('layers', layer['role'], 'material'))
+                     for layer in core['layers'])
+    slots.extend((layer['role'], layer, pointer('cable_type', 'common_layers', layer['role'], 'material'))
+                 for layer in payload['cable_type']['common_layers'])
+    materials = {material['id']: material for material in payload['materials']}
+    reserved = set(materials)
+    issues, plans = [], []
+
+    def invalid(field, message):
+        issues.append({'column': '', 'field': 'material_properties.' + field,
+                       'code': 'TABLE_MATERIAL_INVALID', 'message': message})
+
+    for role, properties in declared.items():
+        targets = [(slot, path) for use, slot, path in slots if use == role]
+        identities = {slot['material'] for slot, _ in targets}
+        if len(identities) != 1 or not identities <= materials.keys():
+            invalid(role, '明示材料物性须对应当前结构中唯一的材料用途；此用途不存在或对应多个材料：' + role)
+            continue
+        if not properties:
+            continue
+        original_id = next(iter(identities))
+        original = materials[original_id]
+        material = deepcopy(original)
+        before = len(issues)
+        for key, prop in properties.items():
+            field = role + '.' + key
+            if key not in PROPERTY_UNITS:
+                invalid(field, '未覆盖的材料物性，未忽略此声明：' + field)
+            elif not prop.get('reference', '').strip() or prop.get('unit') not in PROPERTY_UNITS[key]:
+                invalid(field, '材料物性须有明确出处及匹配的 SI 单位：' + field)
+            elif type(prop.get('value')) not in (int, float) or not math.isfinite(prop['value']):
+                invalid(field, '材料物性须为有限数值，不接受字符串或布尔值：' + field)
+            elif original.get(key) is not None and original[key] != prop['value']:
+                invalid(field, '明示物性与已有构造值冲突；须按新物性重新构造，不能覆盖后沿用旧派生结果：' + field)
+            else:
+                material[key] = prop['value']
+        try:
+            Material.model_validate(material)
+        except ValidationError as error:
+            for problem in error.errors(include_input=False, include_url=False):
+                field = role + '.' + str(problem['loc'][-1])
+                invalid(field, '材料物性不符合领域约束：' + field + '；' + problem['msg'])
+        if len(issues) != before:
+            continue
+        if any(use != role and slot['material'] == original_id for use, slot, _ in slots):
+            identifier = 'material/import-' + role.replace('_', '-')
+            suffix = 2
+            while identifier in reserved:
+                identifier = 'material/import-' + role.replace('_', '-') + '-' + str(suffix)
+                suffix += 1
+            material['id'] = identifier
+            reserved.add(identifier)
+        plans.append((role, original_id, material, targets, properties))
+    if issues:
+        return {}, [], issues
+
+    sources, receipt = {}, []
+    for role, original_id, material, targets, properties in plans:
+        mapping = {'role': role, 'from_material': original_id, 'to_material': material['id'],
+                   'properties': sorted(properties)}
+        receipt.append(mapping)
+        if material['id'] == original_id:
+            materials[original_id].update(material)
+        else:
+            payload['materials'].append(material)
+            for slot, path in targets:
+                slot['material'] = material['id']
+                sources[path] = candidate_source({'kind': 'derived', 'method': MATERIAL_MAPPING_METHOD,
+                    'confidence': 'reference', 'reviewed': False, 'evidence': mapping})
+        for key, prop in properties.items():
+            sources[pointer('materials', material['id'], key)] = candidate_source({
+                'kind': 'user', 'method': MATERIAL_MAPPING_METHOD, 'confidence': 'reference',
+                'reviewed': False, 'role': role, 'property': key, 'evidence': deepcopy(prop)})
+    return sources, receipt, []
 
 
 def _validation_issues(item, error, mapping):
@@ -347,10 +449,18 @@ def build_rows(upload, sheet, rows, series, mapping):
             if any(f['key'] == 'r20' and f['source']['origin'] == 'standard' for f in item['values']):
                 for core in payload['cable_type']['cores']:
                     core['conductor']['r20_basis'] = 'design'
-            item.update(status='ready', missing=[], closure=row['closure'], derivation=row['derivation'])
+            sources, material_mapping, issues = _material_properties(payload, series.get('material_properties', {}))
+            if issues:
+                item['issues'].extend(issues)
+                item.update(status='error', payload=None)
+                continue
+            derivation = deepcopy(row['derivation'])
+            if material_mapping:
+                derivation['material_mapping'] = {'method': MATERIAL_MAPPING_METHOD, 'items': material_mapping}
+            item.update(status='ready', missing=[], closure=row['closure'], derivation=derivation)
             item['warnings'] = row['warnings']
             item['payload'] = {'name': item['name'], 'version': '1', 'confirmed': False, **payload,
-                               'sources': _full_sources(payload, item['values'], series, row['derivation'])}
+                               'sources': {**_full_sources(payload, item['values'], series, derivation), **sources}}
     for item in result:
         if item['payload']:
             try:
