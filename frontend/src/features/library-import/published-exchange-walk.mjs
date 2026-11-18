@@ -116,7 +116,7 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
   progress.checkpoint('cdp.session.before', { case: caseId });
   const session = await page.context().newCDPSession(page), tasks = new Set(), actualRequests = new WeakMap();
   progress.checkpoint('cdp.session.after', { case: caseId });
-  const ledger = { case: caseId, endpoint, stage: 'Response', resource_type: 'Fetch', actions: [], unexpected: [], errors: [] };
+  const ledger = { case: caseId, endpoint, stage: 'Response', interception_pattern_resource_type: 'Fetch', actions: [], unexpected: [], errors: [] };
   report.export_observations.push(ledger);
   let active = null, terminated = false, saving = Promise.resolve();
   const persist = () => (saving = saving.then(() => write(path.join(directory, 'export-observations.json'), ledger)));
@@ -180,7 +180,10 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
         assert.ok(action, '没有人工操作对应此暂停响应');
         assert.equal(record.url, endpoint, '暂停响应必须来自本次导出端点');
         assert.equal(record.method, 'POST', '暂停响应必须对应原始 POST');
-        assert.equal(record.resource_type, 'Fetch', '暂停响应必须具有 Fetch 资源类型');
+        // Chromium may label the same fetch() response XHR in Fetch.requestPaused
+        // while Network.requestWillBeSent reports Fetch. Keep both actual labels;
+        // finish still requires Network Fetch and the identical networkId/POST.
+        assert.ok(record.resource_type === 'Fetch' || record.resource_type === 'XHR', '暂停响应必须具有 Fetch 或 XHR 脚本资源类型');
         assert.equal(record.error_reason, null, '暂停响应不得包含传输错误');
         assert.equal(record.redirected_request_id, null, '暂停响应不得来自重定向');
         assert.ok(record.network_id, '暂停响应必须保留 Network 请求身份');
