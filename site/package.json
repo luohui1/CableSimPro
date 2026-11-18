@@ -8,7 +8,8 @@
   "scripts": {
     "content": "node scripts/prepare-content.mjs",
     "dev": "node scripts/prepare-content.mjs && astro dev",
-    "build": "node scripts/prepare-content.mjs && astro build",
+    "build": "node scripts/prepare-content.mjs && astro build && node scripts/check-internal.mjs",
+    "check:internal": "node scripts/check-internal.mjs",
     "preview": "astro preview"
   },
   "dependencies": {

@@ -1,0 +1,21 @@
+{
+  "$comment": "公开页面的内部信息检查规则，供 scripts/check-internal.mjs 使用。hostnames 为不得公开的内部主机名；allowedPaths 为面向用户的示例路径（正则，匹配整段路径）；allowedEmails 为可以出现的邮箱域名；processTerms 为内部过程记录的标志词（正则）。放宽任何一项都要写明原因。",
+  "hostnames": ["dghpc", "dg83"],
+  "allowedPaths": [
+    "^[A-Za-z]:[\\\\/]+CableSimPro[\\w.-]*(?:[\\\\/].*)?$",
+    "^D:[\\\\/]config[\\\\/]release\\.toml$"
+  ],
+  "allowedEmails": ["example.com", "example.org"],
+  "processTerms": [
+    "Codex",
+    "ChatGPT",
+    "Claude",
+    "Gemini",
+    "Copilot",
+    "会话交接",
+    "交接记录",
+    "修改稿",
+    "未推送",
+    "(?:研究|三维|仿真|几何|前端|正式前端|生产|数据|本)线程"
+  ]
+}
