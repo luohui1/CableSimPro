@@ -8,7 +8,7 @@
   "scripts": {
     "content": "node scripts/prepare-content.mjs",
     "dev": "node scripts/prepare-content.mjs && astro dev",
-    "build": "node scripts/prepare-content.mjs && node --max-old-space-size=1536 node_modules/astro/bin/astro.mjs build && node scripts/check-internal.mjs",
+    "build": "node scripts/build.mjs",
     "check:internal": "node scripts/check-internal.mjs",
     "check:links": "node scripts/check-links.mjs",
     "check:search": "node scripts/check-search.mjs",
@@ -30,5 +30,9 @@
   },
   "devDependencies": {
     "playwright": "1.63.0"
+  },
+  "overrides": {
+    "@pagefind/linux-arm64": "1.5.2",
+    "@pagefind/windows-arm64": "1.5.2"
   }
 }
