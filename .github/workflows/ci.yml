@@ -46,6 +46,7 @@ jobs:
           npm run check:styles
           npx tsc -b
           npm test
+          node --test src/features/library-import/resource-application-observer.test.mjs
       - name: Cable Studio types, build and real-flow tests
         working-directory: studio
         run: |
