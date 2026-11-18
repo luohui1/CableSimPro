@@ -29,7 +29,16 @@
     { "query": "镜像法", "expect": "methods/iec-60287/" },
     { "query": "温度校正系数", "expect": "methods/gb-50217/" },
     { "query": "收敛", "expect": "methods/fem/" },
-    { "query": "Nginx", "expect": "install/docs-site/" }
+    { "query": "Nginx", "expect": "install/docs-site/" },
+    { "query": "常见问题", "expect": "reference/faq/" },
+    { "query": "术语表", "expect": "reference/glossary/" },
+    { "query": "CadQuery", "expect": "reference/faq/" },
+    { "query": "Agent 对话服务", "expect": "install/agent/" },
+    { "query": "提取厂家 PDF", "expect": "guide/type-library/" },
+    { "query": "问询选型", "expect": "guide/ampacity-study/" },
+    { "query": "修约", "expect": "guide/deliverables/" },
+    { "query": "资源草稿", "expect": "guide/resources/" },
+    { "query": "超算作业", "expect": "guide/simulation/" }
   ],
   "ui": [
     { "query": "载流量", "title": "载流量研究" },
