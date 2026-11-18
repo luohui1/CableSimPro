@@ -1134,6 +1134,59 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       }
     };
   }
+  async function verifyFormalSpecification(id, label) {
+    const opener = page.getByRole('button', { name: '正式交付（PDF / Excel）', exact: true });
+    await expect(opener).toBeEnabled();
+    const before = await workspace(id);
+    await opener.click();
+    const dialog = page.getByRole('dialog', { name: '正式交付文件', exact: true });
+    await expect(dialog).toBeVisible();
+    for (const [name, value] of [
+      ['正式文件单位名称', 'T1 隔离工程验收单位'],
+      ['正式文件编号', 'T1-SPEC-' + size.width + '-' + tag],
+      ['正式文件版次', 'A'],
+    ]) await dialog.getByRole('textbox', { name, exact: true }).fill(value);
+    const endpoint = '/api/formal-deliveries';
+    const preview = await responseFor('POST', endpoint + '/preview',
+      () => dialog.getByRole('button', { name: '核对来源并预览', exact: true }).click(), 180000);
+    const pinned = preview.sources && Object.values(preview.sources).every(item => !Object.hasOwn(item || {}, 'payload'));
+    check(label + '正式预览绑定全部来源且不返回原始大对象', preview.kind === 'specification'
+      && /^[a-f0-9]{64}$/.test(preview.model_digest)
+      && /^[a-f0-9]{64}$/.test(preview.source_digest)
+      && pinned && preview.signatures?.every(signature => signature.name == null),
+      { kind: preview.kind, model_digest: preview.model_digest, source_digest: preview.source_digest,
+        sectionCount: preview.sections?.length, signatureStates: preview.signatures?.map(item => ({ role: item.role, name: item.name })) });
+    await expect(dialog.getByRole('checkbox', { name: '已核对正式交付来源和签栏', exact: true })).toBeVisible();
+    await dialog.getByRole('checkbox', { name: '已核对正式交付来源和签栏', exact: true }).check();
+    for (const format of ['pdf', 'xlsx']) {
+      const button = dialog.getByRole('button', { name: format === 'pdf' ? '下载正式 PDF' : '下载 Excel', exact: true });
+      const [reply, download] = await Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname === endpoint + '/export'
+          && response.request().method() === 'POST', { timeout: 180000 }),
+        page.waitForEvent('download', { timeout: 180000 }),
+        button.click(),
+      ]);
+      const file = path.join(out, `formal-specification-${size.width}-${tag}.${format}`);
+      await download.saveAs(file);
+      const bytes = await fs.readFile(file), headers = reply.headers(), body = reply.request().postDataJSON();
+      check(label + '正式' + format.toUpperCase() + '为同一预览模型的真实下载字节',
+        reply.status() === 200 && digest(bytes) === headers['x-artifact-sha256']
+        && headers['x-delivery-model-sha256'] === preview.model_digest
+        && headers['x-delivery-source-sha256'] === preview.source_digest
+        && body.expected_model_digest === preview.model_digest && body.format === format
+        && (format === 'pdf' ? bytes.subarray(0, 5).toString() === '%PDF-'
+          : bytes.subarray(0, 2).toString() === 'PK'),
+        { file: path.basename(file), size: bytes.length, sha256: digest(bytes), expected: headers['x-artifact-sha256'],
+          model_digest: headers['x-delivery-model-sha256'], source_digest: headers['x-delivery-source-sha256'] });
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    const after = await workspace(id);
+    check(label + '正式预览和导出不重新计算、不改动型号修订',
+      after.revision === before.revision && JSON.stringify(after.domain) === JSON.stringify(before.domain),
+      { before: before.revision, after: after.revision });
+    await capture(label + '-正式交付原件已核对');
+  }
   async function generateSpecification(id, label, suffix, expectedIncomplete = false) {
     await module('规格书');
     await choose('文档版本', '客户版');
@@ -1181,6 +1234,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         && spec.payload.sources.length === 5 && spec.payload.sources.every(source => source.freshness === 'current'), {
         file: path.basename(filename), bytes: bytes.length, sources: spec.payload.sources,
       });
+      if (suffix === 'teaching') await verifyFormalSpecification(id, label);
     } finally {
       page.off('download', listener);
       await finishPdfEvidence(downloaded);

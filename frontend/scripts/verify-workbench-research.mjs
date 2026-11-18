@@ -982,12 +982,17 @@ await walkthrough('research', async ({ page, expect, base, api, choose, step, ch
         await expect(table).toBeVisible();
         // A visible async table can still be rendering its empty/loading row.
         // Wait for one real bound input before checking all saved values.
-        await expect(table.locator('.number-field').first()).toBeVisible();
-        const fields = await table.locator('.number-field').evaluateAll(nodes => nodes.map(node => {
-          const input = node.querySelector('input');
-          return { path: node.dataset.fieldPath, value: input?.value, full: input?.title, readOnly: input?.readOnly };
-        }));
-        expect(fields.length).toBeGreaterThan(0);
+        let fields = [];
+        // A successful visibility assertion may race the table's query-driven
+        // remount. Retain the whole actual input snapshot from one DOM read;
+        // retry only while no real controls exist (never fabricate values).
+        await expect.poll(async () => {
+          fields = await table.locator('.number-field').evaluateAll(nodes => nodes.map(node => {
+            const input = node.querySelector('input');
+            return { path: node.dataset.fieldPath, value: input?.value, full: input?.title, readOnly: input?.readOnly };
+          }));
+          return fields.filter(field => field.path && field.value !== undefined).length;
+        }, { timeout: 60000, message: '等待保存敷设输入表真实数值控件稳定挂载' }).toBeGreaterThan(0);
         let fixedCaseEvidence;
         if (fixed) {
           const wrapper = page.locator('.study-saved-candidate-input');
