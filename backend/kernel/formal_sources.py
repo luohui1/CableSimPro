@@ -429,7 +429,7 @@ def _artifact_tables(model, section, run, *, material_basis=True):
                                 'source_ref': None, 'verbatim': False}, paragraph])
                 model.table(section, source + base, '保存的条目与原始结果', rows)
             elif artifact_name == 'x-cablesim.cad-model':
-                rows = []
+                rows, internals = [], []
                 for part, values in [('', [artifact]), ('/layers', artifact.get('layers', [])),
                                      ('/material_usage', artifact.get('material_usage', []))]:
                     for index, item in enumerate(values):
@@ -445,12 +445,17 @@ def _artifact_tables(model, section, run, *, material_basis=True):
                             if key not in selected:
                                 continue
                             unit_ref = {'contract': 'x-cablesim.cad-model', 'field': key}
-                            rows.append(model.row(source + path + '/' + key, label + ' · ' + quantity,
+                            # The body keeps dimensions and usage per kilometre;
+                            # modelled length, volumes and densities explain how
+                            # the usage was obtained and go to the trace.
+                            target = rows if key in ('outer_diameter_m', 'inner_diameter_m', 'mass_kg_per_km') else internals
+                            target.append(model.row(source + path + '/' + key, label + ' · ' + quantity,
                                 source, path + '/' + key, unit, unit_ref,
                                 item.get('quantity_basis') or '保存的结构与用料结果'))
                         if isinstance(item.get('density_source'), dict) and isinstance(item['density_source'].get('reference'), str):
                             model.citation(source, path + '/density_source/reference', label + '密度来源')
-                model.table(section, source + base, '结构尺寸、原始体积与用料', rows)
+                model.table(section, source + base, '结构尺寸与用料', rows)
+                model.table(section, source + base + ':model-internals', '三维模型的建模长度、体积与密度', internals)
                 input_index = next((i for i, item in enumerate(run['snapshot']['cases']) if item['case_id'] == case['case_id']), None)
                 if input_index is not None:
                     section.setdefault('figures', []).append({'kind': 'cable_section', 'title': '保存的结构截面',
