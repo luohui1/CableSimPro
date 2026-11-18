@@ -93,15 +93,27 @@ export async function typeRequirements(wid:string, runId:string, signal?:AbortSi
 export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
   const [drafts, published] = await Promise.all([typeIndex(signal), publishedTypes(signal)]);
   const ids = [...new Set([...drafts.map(item => text(item.id)), ...published.map(item => text(item.workspace_id))])];
-  const rows: TypeRow[] = [];
-  // Bounded reads of the design objects: multiple published versions share one design home.
-  for (let start = 0; start < ids.length; start += 4) rows.push(...await Promise.all(ids.slice(start, start + 4).map(async id => {
-    if (!id) throw new ApiError(502, '型号列表缺少身份');
-    const workspaceRead = loadWorkspace(id, signal);
-    const [workspace, standards] = await Promise.all([workspaceRead, executionStandards(id, workspaceRead, signal)]);
-    const raw = workspace.raw, origin = optionalRecord(raw.type_origin_reference);
-    return { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document, ...standards };
-  })));
+  const rows = new Array<TypeRow>(ids.length);
+  let next = 0, failed = false;
+  // Keep four design reads in flight. A completed pair can read the next id
+  // without waiting for the slowest sibling; the complete list retains its order.
+  async function readDesigns() {
+    while (!failed && next < ids.length) {
+      const index = next++, id = ids[index];
+      try {
+        signal?.throwIfAborted();
+        if (!id) throw new ApiError(502, '型号列表缺少身份');
+        const workspaceRead = loadWorkspace(id, signal);
+        const [workspace, standards] = await Promise.all([workspaceRead, executionStandards(id, workspaceRead, signal)]);
+        const raw = workspace.raw, origin = optionalRecord(raw.type_origin_reference);
+        rows[index] = { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document, ...standards };
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, ids.length) }, () => readDesigns()));
   return rows;
 }
 async function executionStandards(id: string, workspaceRead: Promise<Workspace>, signal?: AbortSignal) {
