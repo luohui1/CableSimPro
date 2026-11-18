@@ -34,12 +34,16 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [batch, setBatch] = useState<BatchReceipt | null>(null);
+  const [batchOpen, setBatchOpen] = useState(true);
   const [specDetail, setSpecDetail] = useState<LibrarySpec | null>(null);
   const [exportNotice, setExportNotice] = useState('');
   const requestId = useRef({ signature: '', id: '' });
+  const results = useRef<HTMLElement>(null);
   const list = useQuery({ queryKey: ['type-library', 'series'], queryFn: ({ signal }) => libraryRequest<{ items: SeriesSummary[] }>('/series', { signal }) });
   const details = useQuery({ queryKey: ['type-library', 'series', selected], queryFn: ({ signal }) => libraryRequest<SeriesDetail>(`/series/${encodeURIComponent(selected!)}`, { signal }), enabled: !!selected });
   useEffect(() => { setSelectedSpecs(new Set()); setBatch(null); setError(''); }, [selected]);
+  // The dialog closes onto the toolbar; bring the fresh outcome into view even when the page was scrolled.
+  useEffect(() => { if (batch) results.current?.scrollIntoView({ block: 'nearest' }); }, [batch]);
   const series = details.data?.series;
   const seriesOptions = (list.data?.items || []).map(item => ({ value: item.id, label: item.name }));
   if (series && !seriesOptions.some(item => item.value === series.id)) seriesOptions.unshift({ value: series.id, label: series.name });
@@ -71,7 +75,7 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
       const signature = JSON.stringify(payload);
       if (requestId.current.signature !== signature) requestId.current = { signature, id: crypto.randomUUID() };
       const result = await libraryPost<BatchReceipt>(`/series/${encodeURIComponent(selected)}/batch`, { ...payload, request_id: requestId.current.id });
-      setBatch(result); setOperation(null);
+      setBatch(result); setBatchOpen(true); setOperation(null);
       await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
@@ -97,6 +101,15 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
       <div className="library-import-series-actions"><Button disabled={busy} onClick={() => void exportCurrent('json')}>导出系列 JSON</Button><Button disabled={busy} onClick={() => void exportCurrent('xlsx')}>导出系列 Excel</Button><span className="muted">当前版本及其来源原件</span></div>
       {exportNotice && <p role="status">{exportNotice}</p>}
       {error && !operation && <p role="alert" className="field-error">{error}</p>}
+      {batch && <section ref={results} className="library-import-stack" aria-label="批量操作结果">
+        <div className="library-import-series-heading"><h2>本次批量操作结果</h2><Button aria-expanded={batchOpen} onClick={() => setBatchOpen(open => !open)}>{batchOpen ? '收起结果' : '展开结果'}</Button></div>
+        {batchOpen && <DataTable label="批量操作结果" showGroups={false} groups={[{ id: 'result', label: '结果', rows: (batch.items || batch.results || []).map((item, index) => ({ ...item, id: String(index) })) }]} rowLabel={row => row.name || '规格结果'} columns={[
+          { id: 'name', label: '规格', wrap: true, render: row => row.name || specs.find(spec => spec.id === row.spec_id)?.name || '规格' },
+          { id: 'status', label: '状态', wrap: true, render: row => ({ succeeded: '已完成', success: '已完成', passed: '通过', failed: '未通过', partial: '部分完成', refused: '拒算', reviewed: '已审核', incomplete: '缺项', error: '失败', completed: '已完成' } as Record<string, string>)[row.status || ''] || STATES[row.status || ''] || row.status || '查看说明' },
+          { id: 'message', label: '结果与限制', wrap: true, render: row => <BatchOutcome row={row} /> },
+          { id: 'method', label: '方法与可信分档', wrap: true, render: row => [row.method_name, row.method_version, row.confidence ? confidenceText(row.confidence) : ''].filter(Boolean).join(' · ') || '—' },
+        ]} />}
+      </section>}
       <PublishedGuidance value={details.data?.declaration?.reference?.published_guidance} />
       <div className="library-import-selection"><label className="library-import-confirm"><Checkbox aria-label="选择全部规格" checked={checked.length === specs.length && !!specs.length ? true : checked.length ? 'indeterminate' : false} onCheckedChange={value => setSelectedSpecs(value === true ? new Set(specs.map(spec => spec.id)) : new Set())} /><span>全选 {specs.length} 个规格</span></label><span className="muted">已选 {checked.length} 项{!checked.length && ' · 选择规格后可批量操作'}</span></div>
       <DataTable label="系列规格" showGroups={false} groups={[{ id: 'specs', label: '规格', rows: specs }]} rowLabel={row => row.name} columns={[
@@ -107,15 +120,6 @@ export function SeriesLibrary({ selected, onSelect, onImport }: { selected?: str
         { id: 'state', label: '状态', wrap: true, render: row => STATES[row.state] || row.state },
         { id: 'missing', label: '缺项与下一步', wrap: true, render: row => <div className="library-import-issues">{row.missing?.length ? row.missing.map((item, index) => <span key={index}>{issueText(item)}</span>) : <span>查看来源并进行标准核对</span>}{row.workspace_id && <a className="object-link" href={`/types/${encodeURIComponent(row.workspace_id)}/structure/section`}>打开型号设计</a>}</div> },
       ]} />
-      {batch && <section className="library-import-stack" aria-label="批量操作结果">
-        <h2>本次批量操作结果</h2>
-        <DataTable label="批量操作结果" showGroups={false} groups={[{ id: 'result', label: '结果', rows: (batch.items || batch.results || []).map((item, index) => ({ ...item, id: String(index) })) }]} rowLabel={row => row.name || '规格结果'} columns={[
-          { id: 'name', label: '规格', wrap: true, render: row => row.name || specs.find(spec => spec.id === row.spec_id)?.name || '规格' },
-          { id: 'status', label: '状态', wrap: true, render: row => ({ succeeded: '已完成', success: '已完成', passed: '通过', failed: '未通过', partial: '部分完成', refused: '拒算', reviewed: '已审核', incomplete: '缺项', error: '失败', completed: '已完成' } as Record<string, string>)[row.status || ''] || STATES[row.status || ''] || row.status || '查看说明' },
-          { id: 'message', label: '结果与限制', wrap: true, render: row => <BatchOutcome row={row} /> },
-          { id: 'method', label: '方法与可信分档', wrap: true, render: row => [row.method_name, row.method_version, row.confidence ? confidenceText(row.confidence) : ''].filter(Boolean).join(' · ') || '—' },
-        ]} />
-      </section>}
     </>}
     <LibraryDialog open={operation !== null} onOpenChange={closeBatch} busy={busy} title={operation ? OPERATIONS[operation] : '批量操作'} description={`将对已选 ${checked.length} 个规格的当前版本执行；原始资料与历史版本保留。`} initialFocus="form" actions={<Button variant="primary" loading={busy} disabled={!confirmed || !checked.length || (operation === 'review' && (!reviewer.trim() || !note.trim())) || (operation === 'calculate' && !ratingReady(rating))} onClick={() => void executeBatch()}>确认执行 {checked.length} 个规格</Button>}>
       <div className="library-import-stack">

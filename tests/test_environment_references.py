@@ -167,7 +167,7 @@ def test_real_reference_publication_preview_and_actual_rating_keep_fixed_evidenc
     assert (record['value'], record['printed_page'], record['pdf_page']) == (1, 7, 39)
     assert record['source_sha256'] == '618e8d8cd829a15cb0bdcf08af4d73afc0b8928a3ea0eeb42bdc75cc87b08f63'
     assert record['record_sha256'] == evidence['record_sha256'] == 'bcb4c7549feaaaa00890740eb50af37d3fa15ec84f1c3986cd1d2a5b31f6afaa'
-    assert evidence['receipt']['method']['method_version'] == '0.9.0'
+    assert evidence['receipt']['method']['method_version'] == '0.9.1'
     body = batch_request(spec, request, result)
     endpoint = '/api/type-library/series/' + series['series_id'] + '/batch'
     assert client.post(endpoint, json=body, headers={'X-CableSim-Actor': 'agent'}).status_code == 403

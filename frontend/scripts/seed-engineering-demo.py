@@ -21,6 +21,7 @@ from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+SEED_REVISION = 20
 
 def supplement_hv(api, result):
     """Keep manufacturer identities separate; an unsupported sheath is never smoothed."""
@@ -354,7 +355,7 @@ def release_identity():
     hv,hv_digest = bundled_hv()
     evidence = evidence_availability(verify=True)
     chengnan = evidence_availability(verify=True,scope='chengnan')
-    return {'seed_revision':19, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':SEED_REVISION, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'public_catalogues':{item['id']:{'workbook_sha256':item['sha256'], 'source_sha256':item['source']['sha256'],
                                            'declarations_sha256':fingerprint(item['declarations'])}
                                  for item in sample_manifest()},
@@ -589,6 +590,108 @@ def save_factory_analyses(api, factory):
         if source['channel'] not in ('standards', 'rating')]
 
 
+def release_study_document(original):
+    """Record the release's declared study inputs without adding physical values.
+
+    Model attachment leaves the v0 conversion scaffold beside the actual model
+    materials. Remove only those known scaffold IDs that no saved object uses;
+    preserve every referenced material, including environment and duct materials.
+    """
+    from backend.domain.guards import pointer
+    from backend.kernel.resource_applications import source_for
+    document = deepcopy(original)
+    used = set()
+
+    def references(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == 'material' and isinstance(child, str):
+                    used.add(child)
+                elif key not in ('materials', 'provenance', 'source'):
+                    references(child)
+        elif isinstance(value, list):
+            for child in value:
+                references(child)
+
+    references(document)
+    scaffold = {'material/conductor', 'material/semicon', 'material/insulation',
+                'material/screen', 'material/jacket'}
+    materials = document['materials']
+    removed = {item['id'] for item in materials if item['id'] in scaffold - used}
+    document['materials'] = [item for item in materials if item['id'] not in removed]
+    positions = {item['id']: index for index, item in enumerate(document['materials'])}
+    provenance = {}
+    for path, source in document['provenance'].items():
+        if path.startswith('/materials/'):
+            member, separator, suffix = path[len('/materials/'):].partition('/')
+            material_id = member.replace('~1', '/').replace('~0', '~')
+            if member.isdecimal() and int(member) < len(materials):
+                material_id = materials[int(member)]['id']
+                if material_id not in removed:
+                    path = '/materials/' + str(positions[material_id]) + (separator + suffix if separator else '')
+            if material_id in removed:
+                continue
+        provenance[path] = source
+    document['provenance'] = provenance
+
+    origin = f"{document['name']}；发布示例生成 seed_revision {SEED_REVISION}（frontend/scripts/seed-engineering-demo.py/build_release_seed）"
+
+    def declare(path, indexed, reference, *, kind='user'):
+        source, _ = source_for(provenance, path, indexed)
+        if source is None:
+            provenance[path] = {'kind': kind, 'reviewed': False, 'reference': origin + '；' + reference}
+
+    for ci, circuit in enumerate(document['circuits']):
+        base = pointer('circuits', circuit['id'])
+        indexed = '/circuits/' + str(ci)
+        declare(base + '/system/frequency', indexed + '/system/frequency',
+                f"电气系统设计声明，{circuit['label']}按已保存的 "
+                f"{circuit['system']['frequency']:g} Hz 工频输入研究；非厂家试验值或现场实测。")
+        for bi, cable in enumerate(circuit['cables']):
+            declare(base + pointer('cables', cable['id'], 'parallel_index'),
+                    indexed + '/cables/' + str(bi) + '/parallel_index',
+                    f"保存回路 {circuit['id']} 中电缆 {cable['id']} 的显式拓扑声明；"
+                    f"相别 {cable['phase']}、并联序号 {cable['parallel_index']}。序号是结构标识，不是载流量倍率或实测值。")
+    for si, section in enumerate(document['sections']):
+        layout = section['layout_template']
+        if layout.get('kind') != 'three_core_ducts_horizontal':
+            continue
+        method = (f"原教学布局 {layout['id']}@{layout['version']}，"
+                  'backend/kernel/scenarios.py/apply_three_core_layout；设计假设，非现场或厂家数据。')
+        base, indexed = pointer('sections', section['id']), '/sections/' + str(si)
+        declare(base + '/length', indexed + '/length',
+                f"原场景 circuit_length_m 经 backend/domain/migration.py/convert（cablesim.domain/1）"
+                f"保留的教学截面长度 {section['length']:g} m；并非现场勘测长度。", kind='demo')
+        for ei, enclosure in enumerate(section['enclosures']):
+            for field in ('x', 'z', 'inner_diameter', 'outer_diameter'):
+                declare(base + pointer('enclosures', enclosure['id'], field),
+                        indexed + '/enclosures/' + str(ei) + '/' + field,
+                        method + f" 保存管道 {enclosure['id']} 的 {field}={enclosure[field]:g} m；"
+                        '坐标由原深度/中心距及布置序号生成，管内外径为原模板明确设计尺寸。', kind='demo')
+        for field in ('depth', 'spacing'):
+            declare(base + '/layout_template/' + field, indexed + '/layout_template/' + field,
+                    method + f" 原布局设计输入 {field}={layout[field]:g} m。", kind='demo')
+        for ri, cell in enumerate(layout['occupied_cells']):
+            for ci, value in enumerate(cell):
+                tail = f'/layout_template/occupied_cells/{ri}/{ci}'
+                declare(base + tail, indexed + tail,
+                        method + f" 第 {ri + 1} 根缆所在网格的{'行' if ci == 0 else '列'}索引为 {value}；"
+                        '零基结构编号，不是物理量或实测尺寸。', kind='demo')
+        duct = next(item for item in document['materials'] if item['id'] == 'material/duct')
+        declare(pointer('materials', duct['id'], 'thermal_resistivity'),
+                f"/materials/{positions[duct['id']]}/thermal_resistivity",
+                method + f" 原模板 PVC 管材热阻率 {duct['thermal_resistivity']:g} K·m/W 是教学设计假设；"
+                '没有以标准材料定值、厂家配方或现场试验值认证。', kind='demo')
+        for li, load in enumerate(document['load_cases']):
+            for circuit_id in ('circuit/template2', 'circuit/template3'):
+                if circuit_id in load['currents']:
+                    declare(pointer('load_cases', load['id'], 'currents', circuit_id),
+                            '/load_cases/' + str(li) + pointer('currents', circuit_id),
+                            method + f" 原生成器将首回路的询价设计电流复制到 {circuit_id}；"
+                            f"本次已保存负荷为 {load['currents'][circuit_id]:g} A，不是运行测量值。", kind='demo')
+    return document
+
+
 def build_release_seed(staged, database, identity):
     """Create sourced engineering examples using current host APIs and real IEC runs."""
     from fastapi.testclient import TestClient
@@ -639,6 +742,8 @@ def build_release_seed(staged, database, identity):
                               'content_sha256':model['digest'],**extra})
                 document = deepcopy(created['domain'])
                 document['name'] = name
+                if not type_draft:
+                    document = release_study_document(document)
                 api('/api/workspaces/'+created['id']+'/domain','PUT',{
                     'expected_revision':created['revision'],'document':document})
                 return api('/api/workspaces/'+created['id'])
@@ -695,9 +800,10 @@ def build_release_seed(staged, database, identity):
             hv_workspace = (api('/api/workspaces/'+chengnan_evidence['workspace']) if chengnan_evidence else
                             create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600))
             hv_data,hv_digest = bundled_hv()
-            if not chengnan_evidence:
+            hv_document = release_study_document(hv_workspace['domain'] if chengnan_evidence else hv_study_document(hv_workspace))
+            if hv_document != hv_workspace['domain']:
                 api('/api/workspaces/'+hv_workspace['id']+'/domain','PUT',{
-                    'expected_revision':hv_workspace['revision'],'document':hv_study_document(hv_workspace)})
+                    'expected_revision':hv_workspace['revision'],'document':hv_document})
             hv_workspace=api('/api/workspaces/'+hv_workspace['id'])
             result['hv_series']={'id':hv_data['id'],'version':hv_data['version'],
                                  'sha256':hv_digest,'engineering_scope':hv_data['scope']}
