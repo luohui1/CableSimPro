@@ -1,0 +1,46 @@
+---
+// 全部插件及其计算能力一览，内容取自 plugins/*/plugin.json。
+import { manifestUrl, plugins, solverLabel, validationLevel } from './plugin-data';
+---
+
+{
+  plugins.map((item) => (
+    <section class="plugin">
+      <h2 id={item.id}>{item.name}</h2>
+      <p>
+        <code>{item.id}</code> · 版本 {item.version} · 清单 <a href={manifestUrl(item)}>{item.manifest}</a>
+      </p>
+      {item.description && <p>{item.description}</p>}
+      <table>
+        <thead>
+          <tr>
+            <th>能力</th>
+            <th>方法版本</th>
+            <th>验证等级</th>
+            <th>求解位置</th>
+          </tr>
+        </thead>
+        <tbody>
+          {item.capabilities.map((c) => (
+            <tr>
+              <td>
+                {c.title}
+                <br />
+                <code>{c.id}</code>
+              </td>
+              <td>{c.method_version ?? '—'}</td>
+              <td>{validationLevel(c)}</td>
+              <td>{solverLabel(c)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ))
+}
+
+<style>
+  .plugin {
+    margin-top: 2.5rem;
+  }
+</style>
