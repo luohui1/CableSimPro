@@ -96,7 +96,7 @@ await walkthrough('agent', async ({ page, expect, base, api, step, check, size, 
     await expect(input).toHaveValue('第一行\n第二行');
     if (!status.configured) { await input.press('Enter'); await expect(input).toHaveValue('第一行\n第二行'); }
     check('只选建议或编辑草稿不产生任何写请求', report.writes.length === writes, report.writes.slice(writes));
-    await page.getByRole('textbox', { name: '搜索任务', exact: true }).fill('不存在的任务检索词');
+    await page.getByRole('searchbox', { name: '搜索任务', exact: true }).fill('不存在的任务检索词');
     await expect(page.getByText('没有匹配的任务。', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: '清除筛选', exact: true }).click();
   });

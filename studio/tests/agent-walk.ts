@@ -217,7 +217,7 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       // 7. The solid the CAD plugin builds comes as a card with the workbench's own viewer, in both of its views.
       faux.setResponses([
         fauxAssistantMessage([fauxToolCall('build_geometry', { spec: spec.id, version: spec.version })], { stopReason: 'toolUse' }),
-        fauxAssistantMessage([fauxText('三维结构已生成：分层剖开和完整实体两种看法都在卡片里。')]),
+        fauxAssistantMessage([fauxText('三维结构请求已处理，生成结果或失败原因见上方步骤。')]),
       ]);
       await page.getByRole('button', { name: '新对话' }).first().click();
       await page.getByRole('button', { name: /^建一个电缆三维结构模型/ }).click();

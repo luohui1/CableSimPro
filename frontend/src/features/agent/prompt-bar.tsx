@@ -66,9 +66,9 @@ export function PromptBar({ value, onChange, busy, canSend, placeholder, referen
         {model && <div className="prompt-bar-model">{model}</div>}
       </div></PopoverAnchor>
       <PopoverContent className="prompt-command-menu" side="top" align="start" onCloseAutoFocus={event => { event.preventDefault(); input.current?.focus(); }}>
-        <Command label={mode === 'at' ? '引用研究或型号' : '常用任务'} loop>
+        <Command label={mode === 'at' ? '搜索引用对象' : '搜索常用任务'} loop>
           <Command.Input value={query} onValueChange={setQuery} placeholder={mode === 'at' ? '搜索研究或型号' : '搜索常用任务'} aria-label={mode === 'at' ? '搜索引用对象' : '搜索常用任务'} className="prompt-command-search" />
-          <Command.List className="prompt-command-list">
+          <Command.List className="prompt-command-list" label={mode === 'at' ? '可引用的研究或型号' : '可选择的常用任务'}>
             <Command.Empty className="prompt-bar-empty">{mode === 'at' ? '没有匹配的研究或型号' : '没有匹配的任务'}</Command.Empty>
             <Command.Group heading={mode === 'at' ? '引用工作对象' : '选择任务后可继续补充要求'}>
               {rows.map(row => <Command.Item key={row.key} value={row.key} keywords={[row.name, row.description || '']} onSelect={() => choose(row)} className="prompt-bar-row">

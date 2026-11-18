@@ -190,6 +190,8 @@ jobs:
         if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
         id: studio-checks
         working-directory: studio
+        env:
+          CABLE_STUDIO_PYTHON: ${{ github.workspace }}/.venv/bin/python
         run: |
           npm ci --ignore-scripts
           npm run build
@@ -197,6 +199,8 @@ jobs:
       - name: Walk Studio Agent interactions with the scripted model
         if: ${{ !cancelled() && steps.studio-checks.outcome == 'success' && steps.workbench-environment.outcome == 'success' }}
         working-directory: studio
+        env:
+          CABLE_STUDIO_PYTHON: ${{ github.workspace }}/.venv/bin/python
         run: npm run walk:agent -- ../.data/workbench-walk/after/studio-agent 2>&1 | tee ../.data/workbench-walk/logs/studio-agent.log
       - name: Upload Studio Agent interaction evidence
         if: ${{ always() && matrix.os == 'ubuntu-latest' }}
