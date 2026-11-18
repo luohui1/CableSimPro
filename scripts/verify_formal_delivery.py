@@ -235,6 +235,26 @@ def displayed_unit(cell):
     return cell.get("display", {}).get("unit", cell.get("display_unit", cell.get("unit")))
 
 
+# Independent copies of the declared display units (engineering-display/2).
+# Temperature-difference compounds keep K as in IEC 60287; tiny per-length SI
+# quantities use customary units so that no body number needs E notation.
+THERMAL_COMPOUNDS = {
+    "K·m/W": "K·m/W", "K*m/W": "K·m/W", "K.m/W": "K·m/W", "m·K/W": "K·m/W", "m*K/W": "K·m/W",
+    "K/W": "K/W",
+    "W/(m·K)": "W/(m·K)", "W/(m*K)": "W/(m·K)", "W/(m.K)": "W/(m·K)",
+    "W/(m²·K)": "W/(m²·K)", "W/(m2*K)": "W/(m²·K)", "W/(m^2*K)": "W/(m²·K)",
+    "J/(kg·K)": "J/(kg·K)", "J/(kg*K)": "J/(kg·K)", "J/(kg.K)": "J/(kg·K)",
+    "J/(m³·K)": "J/(m³·K)", "J/(m3*K)": "J/(m³·K)", "J/(m^3*K)": "J/(m³·K)",
+}
+PER_LENGTH_DISPLAY = {"F/m": ("μF/km", Decimal("1000000000")), "H/m": ("mH/km", Decimal("1000000")),
+                      "Ω·m": ("Ω·mm²/m", Decimal("1000000")), "ohm*m": ("Ω·mm²/m", Decimal("1000000"))}
+# A bare K in the body would be a raw kelvin value; K joined by a middle dot or
+# in K/W belongs to a declared thermal compound unit. An unrounded number has
+# 7+ decimals and 5+ significant digits; 0.0001235 is a rounded plain decimal.
+BODY_FORBIDDEN = (r"(?<![\d.])(?:[1-9]\d*\.\d{7,}|0\.(?=\d{7,})0*[1-9]\d{4,})"
+                  r"|(?<![A-Za-z·])K(?![A-Za-z·])(?!/W)|\bcase-\d+\b|\bthree_core_[a-z_]+|(?:ohm|Ω)/m\b")
+
+
 def check_engineering_number(cell: dict, payloads: dict) -> dict:
     """Independent Decimal oracle: do not import the producer or its rounding helper."""
     reference = cell["value_ref"]
@@ -278,7 +298,11 @@ def check_engineering_number(cell: dict, payloads: dict) -> dict:
     elif unit in ("m", "mm") and role in ("diameter", "thickness", "dimension"):
         target, scale = "mm", Decimal(1000) if unit == "m" else Decimal(1)
         quantum = Decimal("0.01") if role == "thickness" else Decimal("0.1")
-    if "K" in target and unit not in ("K", "\u00b0C", "\u2103"):
+    elif unit in THERMAL_COMPOUNDS:
+        target = THERMAL_COMPOUNDS[unit]
+    elif unit in PER_LENGTH_DISPLAY:
+        target, scale = PER_LENGTH_DISPLAY[unit]
+    if "K" in target and unit not in ("K", "\u00b0C", "\u2103") and unit not in THERMAL_COMPOUNDS:
         target = target.replace("K", "\u00b0C")
     raw = Decimal(original_text(value))
     with localcontext() as context:
@@ -291,12 +315,9 @@ def check_engineering_number(cell: dict, payloads: dict) -> dict:
         if not answer:
             answer = answer.copy_abs()
         text = format(answer, "f")
-        if not fixed:
-            if answer and answer.as_tuple().exponent < -6:
-                text = format(answer, "E")
-            elif "." in text and target not in ("\u03a9/km", "\u03a9", "\u03a9\u00b7m"):
-                text = text.rstrip("0").rstrip(".")
-    expected = {"policy": "cablesim.engineering-display/1", "text": text, "unit": target,
+        if not fixed and "." in text and target not in ("\u03a9/km", "\u03a9", "\u03a9\u00b7m", "\u03a9\u00b7mm\u00b2/m"):
+            text = text.rstrip("0").rstrip(".")
+    expected = {"policy": "cablesim.engineering-display/2", "text": text, "unit": target,
                 "scale": str(scale), "offset": str(offset), "quantum": str(quantum),
                 "rounding": "ROUND_HALF_EVEN", "precision": "fixed_interval" if fixed else "4_significant_digits",
                 "role": role}
@@ -309,7 +330,7 @@ def check_engineering_body(model, payloads, body_tables):
     if not model.get("presentation"):
         return
     policy = model["presentation"]
-    require(policy["id"] == "cablesim.engineering-display/1" and policy["round_once"] is True
+    require(policy["id"] == "cablesim.engineering-display/2" and policy["round_once"] is True
             and policy["source_values_unchanged"] is True and policy["rounding"] == "ROUND_HALF_EVEN",
             "Undeclared engineering rounding policy")
     body, expected_trace = [], Counter()
@@ -339,7 +360,7 @@ def check_engineering_body(model, payloads, body_tables):
                 if type(cell["value"]) in (int, float):
                     numerical(cell)
                 body += [rendered_text(cell), str(displayed_unit(cell) or "")]
-    forbidden = re.compile(r"\d+\.\d{7,}|(?<![A-Za-z])K(?![A-Za-z])|\bcase-\d+\b|\bthree_core_[a-z_]+|(?:ohm|\u03a9)/m\b", re.I)
+    forbidden = re.compile(BODY_FORBIDDEN, re.I)
     require(not any(forbidden.search(text) for text in body), "Engineering body contains raw decimals, K or internal identifiers")
     actual_trace = Counter()
     for row in model["tables"]["presentation:values"]["rows"]:
@@ -506,7 +527,7 @@ def validate_pdf(raw: bytes, preview: dict, payloads: dict) -> dict:
                     if cell.get("unit"):
                         expected_units.add(displayed_unit(cell))
         if preview.get("presentation"):
-            require(not re.search(r"\d+\.\d{7,}|(?<![A-Za-z])K(?![A-Za-z])|\bcase-\d+\b|\bthree_core_[a-z_]+|(?:ohm|Ω)/m\b", body),
+            require(not re.search(BODY_FORBIDDEN, body),
                     "Rendered PDF body contains unrounded decimals, K or internal identifiers")
         observed_numbers = Counter(re.findall(r"(?<![\w.])[-+]?(?:\d+\.\d*|\d+)(?:[eE][-+]?\d+)?(?![\w.])", body))
         require(all(observed_numbers[value] >= count for value, count in expected_numbers.items()),

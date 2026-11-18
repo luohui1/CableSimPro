@@ -61,4 +61,4 @@
 
 超算 CAD 使用 `.data/hpc/cad-config.json` 和 `~/cablesim/cad-env/bin/python`：锁定 CadQuery 2.8.0 / OCP 7.9.3.1.1 / VTK 9.6.2，隔离 Ubuntu 22.04 运行时提供 glibc 2.35；环境、镜像与原生库摘要记录在 `.data/hpc/environment-lock.json`。Slurm 控制程序使用宿主 Python，计算进程进入 CAD 运行时，避免在容器内嵌套调度。普通仿真环境保持独立。
 
-原生回归由 `scripts/run_plugin_tests_hpc.py --profile .data/hpc/cad-config.json` 提交 dg83，保存冻结源码、测试结果和实际核时。手算覆盖圆形 / 扇形尺寸、凸轮廓平行层面积与周长、填充体积、用料和场景区域守恒；浏览器检查入口见前端 `cad/README.md` 与 `type/README.md`。敷设坐标与区域契约见 [installation-scene.md](installation-scene.md)。
+原生回归由 `scripts/run_plugin_tests_hpc.py --profile .data/hpc/cad-config.json` 提交 Slurm 超算集群，保存冻结源码、测试结果和实际核时。手算覆盖圆形 / 扇形尺寸、凸轮廓平行层面积与周长、填充体积、用料和场景区域守恒；浏览器检查入口见前端 `cad/README.md` 与 `type/README.md`。敷设坐标与区域契约见 [installation-scene.md](installation-scene.md)。

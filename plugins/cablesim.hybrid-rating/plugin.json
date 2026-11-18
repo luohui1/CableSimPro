@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.hybrid-rating",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "name": "混合载流量研究",
   "description": "IEC物理基线与有限元热场修正，带适用域、预测区间及训练来源；默认仅参考。",
   "icon": "assets/icon.svg",
@@ -1249,9 +1249,9 @@
                 "description": "相邻迭代温度变化的停止阈值，不代表模型准确度。",
                 "x-unit": {
                   "si": "K",
-                  "display": "°C",
+                  "display": "K",
                   "scale": 1,
-                  "offset": -273.15
+                  "offset": 0
                 },
                 "x-group": "numerical",
                 "x-order": 1,
@@ -3849,9 +3849,9 @@
                 "description": "相邻迭代温度变化的停止阈值，不代表模型准确度。",
                 "x-unit": {
                   "si": "K",
-                  "display": "°C",
+                  "display": "K",
                   "scale": 1,
-                  "offset": -273.15
+                  "offset": 0
                 },
                 "x-group": "numerical",
                 "x-order": 1,

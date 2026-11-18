@@ -1,0 +1,10 @@
+# 依赖与构建输出
+node_modules/
+dist/
+.astro/
+
+# 构建前由 scripts/prepare-content.mjs 生成：docs/ 的同步副本、插件与接口数据、品牌图标
+.generated/
+src/content/docs/_synced/
+src/assets/generated/
+public/favicon.svg

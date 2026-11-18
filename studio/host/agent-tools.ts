@@ -3,7 +3,7 @@
 // the model could have made up.
 import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { obj, str, type Schema } from '@earendil-works/pi-schema';
+import { str, type Schema } from '@earendil-works/pi-schema';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { StudioError } from './core.ts';
 import type { Studio } from './operations.ts';
@@ -83,13 +83,21 @@ export function skillReader(skills: { name: string; filePath: string }[], read: 
   const normal = (path: string) => path.replace(/\\/g, '/').toLowerCase();
   return {
     name: 'read', label: '读取技能', executionMode: 'sequential',
-    description: '读取一份技能的全文。path 写技能目录里列出的 location，或直接写技能名。只能读技能文件，读不了别的文件。',
-    parameters: schema(obj({ path: str({ minLength: 1, description: '技能的 location，或技能名' }) })),
-    execute: async (_id: string, params: { path: string }) => {
+    description: '读取技能；长文件按返回的 offset 续读。path 写技能的 location 或技能名。只能读技能文件，读不了别的文件。',
+    parameters: schema({ type: 'object', properties: { path: str({ minLength: 1, description: '技能的 location，或技能名' }),
+      offset: { type: 'integer', minimum: 0, description: '只在前一页返回续读位置时填写。' } }, required: ['path'], additionalProperties: false }),
+    execute: async (_id: string, params: { path: string; offset?: number }) => {
       const wanted = normal(params.path.trim());
       const skill = skills.find(item => item.name === params.path.trim() || normal(item.filePath) === wanted);
       if (!skill) throw new Error(`只能读取技能文件：${skills.map(item => item.name).join('、')}。`);
-      return { content: [{ type: 'text' as const, text: read(skill.filePath) }], details: {} };
+      const text = read(skill.filePath);
+      const offset = params.offset ?? 0;
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > text.length) throw new Error('技能续读位置无效，请从 offset=0 重新读取。');
+      let end = Math.min(offset + 4000, text.length);
+      // Do not split a UTF-16 surrogate pair. The returned offset, not a model guess, identifies the next page.
+      if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end -= 1;
+      const more = end < text.length ? `\n\n【技能尚未读完；下一页 read(${JSON.stringify({ path: skill.name, offset: end })})。】` : '';
+      return { content: [{ type: 'text' as const, text: text.slice(offset, end) + more }], details: {} };
     },
   };
 }

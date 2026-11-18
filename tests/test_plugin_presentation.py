@@ -133,6 +133,26 @@ def test_si_temperature_conversion_is_explicit_and_rejects_dual_units():
     with pytest.raises(ValueError):translate(schema,{'max_conductor_temperature_c':90,'max_conductor_temperature_k':363.15})
 
 
+def test_temperature_tolerances_are_shown_as_differences_in_every_manifest():
+    # A tolerance in kelvin is a temperature difference: 0.1 K must be shown and
+    # entered as 0.1 K, never through the absolute °C offset as -273.05 °C.
+    tolerances,absolutes=[],[]
+    def walk(node,plugin):
+        if isinstance(node,dict):
+            for key,value in node.items():
+                unit=value.get('x-unit') if isinstance(value,dict) else None
+                if isinstance(unit,dict) and unit.get('si')=='K':
+                    (tolerances if key.endswith('tolerance_k') else absolutes).append((plugin,key,unit))
+                walk(value,plugin)
+        elif isinstance(node,list):
+            for value in node:walk(value,plugin)
+    for path in sorted((ROOT/'plugins').glob('*/plugin.json')):
+        walk(json.loads(path.read_text('utf-8')),path.parent.name)
+    assert len({plugin for plugin,_,_ in tolerances})>=4
+    assert [row for row in tolerances if (row[2]['display'],row[2]['offset'])!=('K',0)]==[]
+    assert ('cablesim.simulation','initial_temperature_k',{'si':'K','display':'°C','scale':1,'offset':-273.15}) in absolutes
+
+
 def test_extension_examples_are_declarations_and_cannot_drop_approval():
     for kind in ['report-template','agent-skill']:
         folder=ROOT/'docs/plugins/examples'/kind

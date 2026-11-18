@@ -1,4 +1,5 @@
 import type { AgentStatus, ChatAttachment, ChatSummary, ChatView, Issue, LibraryEntry, Proposal, ProjectMeta, ProjectView, RunRecord, StudioEvent } from '@shared/types';
+import type { StructureAttachmentInput } from '@shared/fusion-types';
 
 export class ApiError extends Error {
   issue: Issue;
@@ -11,10 +12,13 @@ export class ApiError extends Error {
   }
 }
 
+/** Where the host's API is: the same origin, or under a prefix when the page is shown inside another product (the Agent page of the fused one). */
+const BASE: string = import.meta.env.VITE_API_BASE ?? '';
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, init);
+    response = await fetch(BASE + path, init);
   } catch {
     throw new ApiError({ code: 'HOST_UNREACHABLE', message: '连不上本机服务，请确认 Cable Studio 仍在运行。' }, 0);
   }
@@ -37,10 +41,10 @@ export const api = {
   chats: () => request<ChatSummary[]>('/api/chat/sessions'),
   chat: (id: string) => request<ChatView>(`/api/chat/sessions/${id}`),
   /** Starts a conversation (no session yet), adds to one, or steers an agent that is busy. */
-  send: (text: string, session?: string, attachments?: ChatAttachment[]) =>
-    post<{ session: string; accepted: 'started' | 'steered' }>('/api/chat/messages', { session, text, attachments }),
+  send: (text: string, session?: string, attachments?: ChatAttachment[] | StructureAttachmentInput[], context?: { workspace_id: string; study_id?: string; label?: string }) =>
+    post<{ session: string; accepted: 'started' | 'steered' }>('/api/chat/messages', { session, text, attachments, context }),
   stop: (session: string) => post(`/api/chat/sessions/${session}/stop`),
-  decide: (proposal: string, accept: boolean, note?: string) => post<Proposal>(`/api/proposals/${proposal}/decision`, { accept, note }),
+  decide: (proposal: string, accept: boolean, note?: string, session?: string) => post<Proposal>(`/api/proposals/${proposal}/decision`, { accept, note, session }),
   /** A structure table, kept on the host; the agent reads it by the identifier it gets back. */
   upload: async (file: File) => {
     const reply = await request<{ upload: string; file: string; size: number }>(`/api/uploads?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
@@ -50,7 +54,7 @@ export const api = {
 
 /** onOpen runs when the connection is made again after it dropped, not on the first connection. */
 export function subscribe(listener: (event: StudioEvent) => void, onOpen?: () => void): () => void {
-  const source = new EventSource('/api/events');
+  const source = new EventSource(BASE + '/api/events');
   let opened = false;
   source.onopen = () => {
     if (opened) onOpen?.();

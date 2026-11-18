@@ -135,9 +135,10 @@ def test_tool_error_is_corrected_and_parameter_approval_uses_normal_save(client,
     assert client.get(root).json()['definition']['parameters']==s['definition']['parameters']
     assert client.get('/api/agent/sessions/'+tid).json()['state']=='reviewing'
     url='/api/agent/proposals/'+proposal['id']+'/approve'
-    assert client.post(url).json()=={'status':'approved'}
+    decision=client.post(url).json()
+    assert decision=={'status':'approved','receipt':{'study_id':s['id'],'study_revision':s['revision']+1}}
     saved=client.get(root).json();assert saved['revision']==s['revision']+1 and saved['definition']['parameters']['ks']==.8
-    assert client.post(url).json()=={'status':'approved'}
+    assert client.post(url).json()==decision
     assert client.get(root).json()['revision']==saved['revision']
     assert client.post(url.replace('approve','reject')).status_code==409
     audit=client.get('/api/agent/sessions/'+tid).json()
@@ -203,11 +204,11 @@ def test_domain_proposals_show_display_units_and_reject_without_writing(client,f
     assert change['unit']=='°C' and change['before']==25 and change['after']==30
     listed=client.get('/api/agent/sessions',params={'workspace_id':w['id']}).json()
     assert [(row['id'],row['title'],row['pending_proposals']) for row in listed]==[(tid,'把地表温度调整为30°C，先给方案。',1)]
-    assert client.post('/api/agent/proposals/'+proposal['id']+'/reject').json()=={'status':'rejected'}
+    assert client.post('/api/agent/proposals/'+proposal['id']+'/reject').json()=={'status':'rejected','receipt':{}}
     assert client.get('/api/agent/sessions').json()[0]['pending_proposals']==0
     assert client.get('/api/workspaces/'+w['id']).json()['revision']==w['revision']
     _,proposal=propose(30)
-    assert client.post('/api/agent/proposals/'+proposal['id']+'/approve').json()=={'status':'approved'}
+    assert client.post('/api/agent/proposals/'+proposal['id']+'/approve').json()=={'status':'approved','receipt':{'workspace_revision':w['revision']+1}}
     saved=client.get(f'/api/workspaces/{w["id"]}/domain').json()
     assert saved['document']['sections'][0]['medium']['surface_temperature']==303.15
     assert saved['revision']==converted['revision']+1
@@ -246,8 +247,9 @@ def test_manifest_tool_proposes_a_new_study_and_only_human_approval_saves_it(cli
     proposal=next(data for kind,data in events if kind=='proposal.created')
     root=f'/api/workspaces/{w["id"]}/studies'
     assert client.get(root).json()==[]
-    assert client.post('/api/agent/proposals/'+proposal['id']+'/approve').json()=={'status':'approved'}
+    decision=client.post('/api/agent/proposals/'+proposal['id']+'/approve').json()
     saved=client.get(root).json();assert len(saved)==1 and saved[0]['definition']['title']=='直埋稳态研究'
+    assert decision=={'status':'approved','receipt':{'study_id':saved[0]['id'],'study_revision':1}}
     assert client.get(root+'/'+saved[0]['id']+'/runs').json()['items']==[]
     record=client.get('/api/agent/sessions/'+tid).json()
     assert record['study_id']==saved[0]['id'] and record['study_revision']==1

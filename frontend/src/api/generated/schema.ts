@@ -2110,6 +2110,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/types/{wid}/release-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Declare Scope */
+        post: operations["declare_scope_api_types__wid__release_scope_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/types/{wid}/short-circuit-basis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Short Circuit Basis */
+        post: operations["short_circuit_basis_api_types__wid__short_circuit_basis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/types/creation-options": {
         parameters: {
             query?: never;
@@ -2221,6 +2255,23 @@ export interface paths {
         };
         /** Resources */
         get: operations["resources_api_types__wid__resources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/types/{wid}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Type Workspace */
+        get: operations["type_workspace_api_types__wid__workspace_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2535,6 +2586,517 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/type-library/vocabulary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Vocabulary */
+        get: operations["vocabulary_api_type_library_vocabulary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mappings */
+        get: operations["mappings_api_type_library_mappings_get"];
+        put?: never;
+        /** Mapping */
+        post: operations["mapping_api_type_library_mappings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/imports/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload */
+        post: operations["upload_api_type_library_imports_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/imports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_type_library_imports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/imports/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Commit */
+        post: operations["commit_api_type_library_imports_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Series */
+        get: operations["series_api_type_library_series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/series/{identifier}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Series Detail */
+        get: operations["series_detail_api_type_library_series__identifier__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/specs/{identifier}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spec */
+        get: operations["spec_api_type_library_specs__identifier__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/specs/{identifier}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revise */
+        post: operations["revise_api_type_library_specs__identifier__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/series/{identifier}/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch */
+        post: operations["batch_api_type_library_series__identifier__batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Samples */
+        get: operations["samples_api_type_library_samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/samples/{name}.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sample Xlsx */
+        get: operations["sample_xlsx_api_type_library_samples__name__xlsx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/samples/{name}.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sample Csv */
+        get: operations["sample_csv_api_type_library_samples__name__csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/catalogue-comparison/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Comparison */
+        post: operations["comparison_api_type_library_catalogue_comparison__name__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/exchange/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Route */
+        post: operations["export_route_api_type_library_exchange_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/exchange/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Route */
+        post: operations["preview_route_api_type_library_exchange_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/type-library/exchange/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Route */
+        post: operations["import_route_api_type_library_exchange_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/exchange/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export */
+        post: operations["export_api_library_exchange_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/exchange/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_library_exchange_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/exchange/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Data */
+        post: operations["import_data_api_library_exchange_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalogue */
+        get: operations["catalogue_api_library_resources_catalogue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/table": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Table */
+        get: operations["table_api_library_resources_table_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select */
+        post: operations["select_api_library_resources_select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/materials/draft-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft Preview */
+        post: operations["draft_preview_api_library_resources_materials_draft_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/materials/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft */
+        post: operations["draft_api_library_resources_materials_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/materials/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_library_resources_materials_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/materials/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adopt */
+        post: operations["adopt_api_library_resources_materials_adopt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/environment/draft-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Draft */
+        post: operations["preview_draft_api_library_resources_environment_draft_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/environment/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Asset */
+        post: operations["create_asset_api_library_resources_environment_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/environment/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Asset */
+        post: operations["preview_asset_api_library_resources_environment_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/design/cable-models": {
         parameters: {
             query?: never;
@@ -2734,6 +3296,74 @@ export interface paths {
         get: operations["results_api_design_workspaces__wid__rating_table_runs__rid__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formal-deliveries/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_formal_deliveries_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formal-deliveries/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export */
+        post: operations["export_api_formal_deliveries_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formal-deliveries/batch/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Preview */
+        post: operations["batch_preview_api_formal_deliveries_batch_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/formal-deliveries/batch/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Export */
+        post: operations["batch_export_api_formal_deliveries_batch_export_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3137,23 +3767,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/__e2e/close-previews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Close Previews */
-        post: operations["close_previews___e2e_close_previews_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3167,6 +3780,53 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+        };
+        /** AdoptMaterialReference */
+        AdoptMaterialReference: {
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Material Id */
+            material_id: string;
+            /**
+             * Property
+             * @enum {string}
+             */
+            property: "density" | "volumetric_heat_capacity" | "electrical_resistivity_20" | "relative_permittivity" | "thermal_resistivity";
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Operation
+             * @default adopt_resource_material_value
+             * @constant
+             */
+            operation?: "adopt_resource_material_value";
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /**
+             * Acknowledge Reference Limits
+             * @constant
+             */
+            acknowledge_reference_limits: true;
         };
         /** AdoptMaterialValue */
         AdoptMaterialValue: {
@@ -3241,6 +3901,20 @@ export interface components {
              */
             fixed_currents_a?: {
                 [key: string]: number;
+            };
+        };
+        /** AnalysisBasis */
+        AnalysisBasis: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
             };
         };
         /** ApiError */
@@ -3358,6 +4032,11 @@ export interface components {
             /** Sources */
             sources: components["schemas"]["SourceReference"][];
             geometry_recipe?: components["schemas"]["CircularRecipe"] | null;
+            /**
+             * Reference Evidence
+             * @default []
+             */
+            reference_evidence?: components["schemas"]["ReferenceEvidence"][];
         };
         /** AuditEvent */
         AuditEvent: {
@@ -3419,6 +4098,60 @@ export interface components {
             /** Height */
             height: number;
         };
+        /** Batch */
+        Batch: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "check" | "calculate" | "review";
+            /** Spec Ids */
+            spec_ids: string[];
+            /** Expected Versions */
+            expected_versions: {
+                [key: string]: number;
+            };
+            /** Expected Revisions */
+            expected_revisions: {
+                [key: string]: number;
+            };
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /**
+             * Scope Acknowledged
+             * @constant
+             */
+            scope_acknowledged: true;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /** Rows */
+            rows?: {
+                [key: string]: unknown;
+            }[];
+            /** Environment References */
+            environment_references?: components["schemas"]["EnvironmentAdoption"][];
+            /**
+             * Action
+             * @default submit
+             * @enum {string}
+             */
+            action?: "submit" | "approve" | "publish";
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+        };
         /** BatchCase */
         BatchCase: {
             /** Case Id */
@@ -3437,6 +4170,36 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        /** BatchExportRequest */
+        BatchExportRequest: {
+            /** Scope */
+            scope: components["schemas"]["ProjectScope"] | components["schemas"]["SeriesScope"];
+            /** Items */
+            items: components["schemas"]["BatchItem"][];
+            /** Expected Batch Digest */
+            expected_batch_digest: string;
+        };
+        /** BatchItem */
+        BatchItem: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "specification" | "calculation" | "rating_table" | "research_report";
+            source: components["schemas"]["SourceSelection"];
+            document: components["schemas"]["DocumentMetadata"];
+            /** Key */
+            key: string;
+            /** Formats */
+            formats: ("pdf" | "xlsx")[];
+        };
+        /** BatchPreviewRequest */
+        BatchPreviewRequest: {
+            /** Scope */
+            scope: components["schemas"]["ProjectScope"] | components["schemas"]["SeriesScope"];
+            /** Items */
+            items: components["schemas"]["BatchItem"][];
         };
         /** BatchProposalRequest */
         BatchProposalRequest: {
@@ -3540,12 +4303,70 @@ export interface components {
              */
             mode?: "set" | "add" | "multiply";
         };
+        /** Body_import_data_api_library_exchange_import_post */
+        Body_import_data_api_library_exchange_import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Reviewed Sha256 */
+            reviewed_sha256: string;
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** Body_import_route_api_type_library_exchange_import_post */
+        Body_import_route_api_type_library_exchange_import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Reviewed Sha256 */
+            reviewed_sha256: string;
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** Body_preview_api_library_exchange_preview_post */
+        Body_preview_api_library_exchange_preview_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_preview_route_api_type_library_exchange_preview_post */
+        Body_preview_route_api_type_library_exchange_preview_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_upload_api_documents_post */
         Body_upload_api_documents_post: {
             /**
              * File
              * Format: binary
              * @description Original manufacturer PDF; <=64 MiB and <=500 pages. No automatic cloud upload.
+             */
+            file: string;
+        };
+        /** Body_upload_api_type_library_imports_upload_post */
+        Body_upload_api_type_library_imports_upload_post: {
+            /**
+             * File
+             * Format: binary
              */
             file: string;
         };
@@ -4095,8 +4916,21 @@ export interface components {
         CaptureAsset: {
             /** Expected Revision */
             expected_revision: number;
+            /**
+             * Human Confirmed
+             * @default false
+             */
+            human_confirmed?: boolean;
             /** Name */
             name: string;
+        };
+        /** CatalogueComparison */
+        CatalogueComparison: {
+            /**
+             * Reference Scenario Confirmed
+             * @default false
+             */
+            reference_scenario_confirmed?: boolean;
         };
         /** Change */
         Change: {
@@ -4219,6 +5053,31 @@ export interface components {
             length_m: number;
             /** Layers */
             layers: components["schemas"]["CircularLayer"][];
+        };
+        /** Commit */
+        Commit: {
+            /**
+             * Preview Id
+             * Format: uuid
+             */
+            preview_id: string;
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /**
+             * Skip Errors
+             * @default false
+             */
+            skip_errors?: boolean;
         };
         /** ComparedField */
         ComparedField: {
@@ -4449,6 +5308,24 @@ export interface components {
         Create: {
             scenario?: components["schemas"]["Scenario"];
         };
+        /** CreateMaterialReferenceDraft */
+        CreateMaterialReferenceDraft: {
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /** Selections */
+            selections: components["schemas"]["MaterialSelection"][];
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+        };
         /** CreateSession */
         CreateSession: {
             /**
@@ -4615,6 +5492,15 @@ export interface components {
              * @description Human reason/context, especially when editing or resolving ambiguity.
              */
             reason: string;
+        };
+        /** DeclaredParameter */
+        DeclaredParameter: {
+            /** Value */
+            value: number | string;
+            /** Reference */
+            reference: string;
+            /** Unit */
+            unit?: string | null;
         };
         /** DeliveryJob */
         DeliveryJob: {
@@ -4824,6 +5710,11 @@ export interface components {
         DeriveAsset: {
             /** Expected Revision */
             expected_revision: number;
+            /**
+             * Human Confirmed
+             * @default false
+             */
+            human_confirmed?: boolean;
             /** Content Sha256 */
             content_sha256: string;
             /** New Version */
@@ -4841,7 +5732,7 @@ export interface components {
              * @description Exact original SHA256.
              */
             document_sha256: string;
-            scope: components["schemas"]["ExtractionScope"];
+            scope: components["schemas"]["ExtractionScope-Output"];
             /**
              * Service
              * @description Configured external service name.
@@ -4904,6 +5795,29 @@ export interface components {
         /** DocumentErrorResponse */
         DocumentErrorResponse: {
             detail: components["schemas"]["DocumentErrorDetail"];
+        };
+        /** DocumentMetadata */
+        DocumentMetadata: {
+            /** Organization */
+            organization: string;
+            /** Number */
+            number: string;
+            /** Revision */
+            revision: string;
+            /**
+             * Header
+             * @default
+             */
+            header?: string;
+            /**
+             * Footer
+             * @default
+             */
+            footer?: string;
+            /** Issued On */
+            issued_on?: string | null;
+            /** Logo Data Uri */
+            logo_data_uri?: string | null;
         };
         /** DocumentPage */
         DocumentPage: {
@@ -5161,6 +6075,11 @@ export interface components {
         EditAsset: {
             /** Expected Revision */
             expected_revision: number;
+            /**
+             * Human Confirmed
+             * @default false
+             */
+            human_confirmed?: boolean;
             release: components["schemas"]["AssetRelease"];
         };
         /** ElectricalHeatSource */
@@ -5279,6 +6198,91 @@ export interface components {
             /** Contains */
             contains?: string[];
         };
+        /** EnvironmentAdoption */
+        EnvironmentAdoption: {
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            row: components["schemas"]["RatingRow"];
+            /** Resources */
+            resources: components["schemas"]["EnvironmentPin"][];
+            /** Conditions */
+            conditions: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+        };
+        /** EnvironmentDraft */
+        EnvironmentDraft: {
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /** Selections */
+            selections: components["schemas"]["backend__kernel__resource_data__Selection"][];
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+        };
+        /** EnvironmentDraftPreview */
+        EnvironmentDraftPreview: {
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /** Selections */
+            selections: components["schemas"]["backend__kernel__resource_data__Selection"][];
+        };
+        /** EnvironmentPin */
+        EnvironmentPin: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Parameter
+             * @enum {string}
+             */
+            parameter: "depth_m" | "soil_rho_k_m_w" | "ambient_temperature_c";
+        };
+        /** EnvironmentPreview */
+        EnvironmentPreview: {
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            row: components["schemas"]["RatingRow"];
+            /** Resources */
+            resources: components["schemas"]["EnvironmentPin"][];
+            /** Conditions */
+            conditions: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
         /** Execution */
         Execution: {
             /**
@@ -5317,6 +6321,37 @@ export interface components {
              * @default 1
              */
             slurm_cpus_per_task?: number;
+        };
+        /** ExportRequest */
+        ExportRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "specification" | "calculation" | "rating_table" | "research_report";
+            source: components["schemas"]["SourceSelection"];
+            document: components["schemas"]["DocumentMetadata"];
+            /**
+             * Format
+             * @default pdf
+             * @enum {string}
+             */
+            format?: "pdf" | "xlsx";
+            /** Expected Model Digest */
+            expected_model_digest: string;
+        };
+        /** ExportSelection */
+        ExportSelection: {
+            /** Asset Ids */
+            asset_ids?: string[];
+            /** Workspace Ids */
+            workspace_ids?: string[];
+            /**
+             * Format
+             * @default json
+             * @enum {string}
+             */
+            format?: "json" | "xlsx";
         };
         /** ExtractionComparisonRequest */
         ExtractionComparisonRequest: {
@@ -5479,7 +6514,7 @@ export interface components {
             strategy?: "rules" | "offline_ocr" | "llm" | "ocr" | "hybrid";
         };
         /** ExtractionScope */
-        ExtractionScope: {
+        "ExtractionScope-Input": {
             /**
              * Method
              * @description Rules with automatic offline OCR for scans (default); offline_ocr forces local CPU OCR; llm/hybrid and optional Mistral ocr require explicit outbound confirmation.
@@ -5492,6 +6527,21 @@ export interface components {
              * @description Only these pages/regions are processed or disclosed.
              */
             selections: components["schemas"]["Selection"][];
+        };
+        /** ExtractionScope */
+        "ExtractionScope-Output": {
+            /**
+             * Method
+             * @description Rules with automatic offline OCR for scans (default); offline_ocr forces local CPU OCR; llm/hybrid and optional Mistral ocr require explicit outbound confirmation.
+             * @enum {string}
+             */
+            method: "rules" | "offline_ocr" | "llm" | "ocr" | "hybrid";
+            model: components["schemas"]["SelectedModel"];
+            /**
+             * Selections
+             * @description Only these pages/regions are processed or disclosed.
+             */
+            selections: components["schemas"]["Selection-Output"][];
         };
         /**
          * FactoryMeasurement
@@ -5786,6 +6836,11 @@ export interface components {
              */
             schema_version?: "csp-asset/0.1";
             release: components["schemas"]["AssetRelease"];
+            /**
+             * Human Confirmed
+             * @default false
+             */
+            human_confirmed?: boolean;
         };
         /** Inbox */
         Inbox: {
@@ -6168,6 +7223,19 @@ export interface components {
             /** Maximum Validation Absolute Error */
             maximum_validation_absolute_error: number;
         };
+        /** Mapping */
+        Mapping: {
+            /** Name */
+            name: string;
+            /** Mapping */
+            mapping: {
+                [key: string]: number;
+            };
+            /** Headers */
+            headers?: {
+                [key: string]: string;
+            };
+        };
         /** Material */
         Material: {
             /** Id */
@@ -6218,6 +7286,50 @@ export interface components {
              * Format: uuid
              */
             resource_id: string;
+        };
+        /** MaterialReferenceDraft */
+        MaterialReferenceDraft: {
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /** Selections */
+            selections: components["schemas"]["MaterialSelection"][];
+        };
+        /** MaterialReferencePreview */
+        MaterialReferencePreview: {
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Material Id */
+            material_id: string;
+            /**
+             * Property
+             * @enum {string}
+             */
+            property: "density" | "volumetric_heat_capacity" | "electrical_resistivity_20" | "relative_permittivity" | "thermal_resistivity";
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+        };
+        /** MaterialSelection */
+        MaterialSelection: {
+            /**
+             * Parameter
+             * @enum {string}
+             */
+            parameter: "density" | "volumetric_heat_capacity" | "electrical_resistivity_20" | "relative_permittivity" | "thermal_resistivity";
+            selection: components["schemas"]["backend__kernel__resource_data__Selection"];
         };
         /** MaterialTemperatureState */
         MaterialTemperatureState: {
@@ -6438,6 +7550,10 @@ export interface components {
             instructions?: string;
             /** Model Timeout S */
             model_timeout_s?: number | null;
+            /** Context Window */
+            context_window?: number | null;
+            /** Max Output Tokens */
+            max_output_tokens?: number | null;
         };
         /** NewModelIdentity */
         NewModelIdentity: {
@@ -6790,6 +7906,23 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Preview */
+        Preview: {
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+            /** Sheet */
+            sheet: string;
+            /** First Data Row */
+            first_data_row: number;
+            /** Mapping */
+            mapping: {
+                [key: string]: number;
+            };
+            series: components["schemas"]["SeriesDeclaration"];
+        };
         /** PreviewMaterialBindings */
         PreviewMaterialBindings: {
             /** Expected Revision */
@@ -6814,6 +7947,16 @@ export interface components {
              * @description Total server response time, ms; not a solver benchmark.
              */
             server_ms: number;
+        };
+        /** PreviewRequest */
+        PreviewRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "specification" | "calculation" | "rating_table" | "research_report";
+            source: components["schemas"]["SourceSelection"];
+            document: components["schemas"]["DocumentMetadata"];
         };
         /** PreviewStudy */
         PreviewStudy: {
@@ -6870,6 +8013,16 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** ProjectScope */
+        ProjectScope: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "project";
+            /** Workspace Id */
+            workspace_id: string;
+        };
         /** Proposal */
         Proposal: {
             /**
@@ -6884,13 +8037,20 @@ export interface components {
             /** Checks */
             checks: string[];
             /**
+             * Assumptions
+             * @description Declared method limits, separate from the operation effects.
+             */
+            assumptions?: string[];
+            /**
              * Status
              * @default pending
              * @enum {string}
              */
             status?: "pending" | "approved" | "rejected";
             /** Kind */
-            kind?: ("domain" | "parameters" | "study" | "type" | "draft_workflow") | null;
+            kind?: ("domain" | "parameters" | "study" | "type" | "draft_workflow" | "external_action") | null;
+            /** Action */
+            action?: string | null;
             /** Type Id */
             type_id?: string | null;
             /** Base Revision */
@@ -6914,6 +8074,10 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "rejected";
+            /** Receipt */
+            receipt?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
         };
         /** ProposalRequest */
         ProposalRequest: {
@@ -7060,6 +8224,8 @@ export interface components {
             voltage_v: number;
             /** U0 V */
             u0_v: number;
+            /** Um V */
+            um_v?: number | null;
             /** Cores */
             cores: number;
             /** Area M2 */
@@ -7103,7 +8269,7 @@ export interface components {
              * Dimension
              * @enum {string}
              */
-            dimension: "length" | "area" | "absolute_temperature" | "temperature_difference" | "linear_resistance" | "thermal_resistivity" | "thermal_conductivity" | "current" | "frequency";
+            dimension: "length" | "area" | "absolute_temperature" | "temperature_difference" | "linear_resistance" | "thermal_resistivity" | "thermal_conductivity" | "current" | "frequency" | "mass_density" | "resistivity" | "volumetric_heat_capacity" | "dimensionless";
         };
         /** QuantityResult */
         QuantityResult: {
@@ -7307,6 +8473,34 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             };
         };
+        /**
+         * ReferenceEvidence
+         * @description Frozen lookup receipt; an internally consistent receipt is not approval.
+         *
+         *     Adoption rechecks its exact identity against the installed sealed provider.
+         *     Keeping this separate from source prose preserves every condition and limit.
+         */
+        ReferenceEvidence: {
+            /**
+             * Schema Version
+             * @default cablesim.resource-reference/1
+             * @constant
+             */
+            schema_version?: "cablesim.resource-reference/1";
+            /** Parameter */
+            parameter: string;
+            quantity: components["schemas"]["Quantity"];
+            /** Selection */
+            selection: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Receipt */
+            receipt: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Record Sha256 */
+            record_sha256: string;
+        };
         /** RefineRequest */
         RefineRequest: {
             /**
@@ -7397,6 +8591,13 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** ReleaseExclusion */
+        ReleaseExclusion: {
+            /** Check Id */
+            check_id: string;
+            /** Reason */
+            reason: string;
+        };
         /** ReleasePin */
         ReleasePin: {
             /**
@@ -7414,6 +8615,25 @@ export interface components {
              * @description Used sealed manifest SHA256.
              */
             release_digest: string;
+        };
+        /** ReleaseScope */
+        ReleaseScope: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Specification Digest */
+            specification_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /** Exclusions */
+            exclusions: components["schemas"]["ReleaseExclusion"][];
         };
         /** RemoteExecution */
         RemoteExecution: {
@@ -7603,6 +8823,25 @@ export interface components {
             expected_requirements_revision: number;
             /** Reviewer */
             reviewer: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+        };
+        /** Revise */
+        Revise: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Note */
+            note: string;
             /**
              * Human Confirmed
              * @constant
@@ -7809,6 +9048,15 @@ export interface components {
             next_cursor: number | null;
         } & {
             [key: string]: unknown;
+        };
+        /** RunPin */
+        RunPin: {
+            /** Run Id */
+            run_id: string;
+            /** Input Digest */
+            input_digest: string;
+            /** Output Digest */
+            output_digest: string;
         };
         /** RunResponse */
         RunResponse: {
@@ -8261,6 +9509,19 @@ export interface components {
              */
             region?: number[] | null;
         };
+        /** Selection */
+        "Selection-Output": {
+            /**
+             * Page
+             * @description Selected 1-based original PDF page.
+             */
+            page: number;
+            /**
+             * Region
+             * @description Optional [left,top,right,bottom] in PDF points; top-left origin, y down.
+             */
+            region?: number[] | null;
+        };
         /** Series */
         Series: {
             /** Time */
@@ -8277,6 +9538,87 @@ export interface components {
              * @enum {string}
              */
             scale: "absolute" | "per_unit";
+        };
+        /** SeriesDeclaration */
+        SeriesDeclaration: {
+            /** Name */
+            name: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Designation */
+            designation: string;
+            /** Cores */
+            cores: number;
+            /** U0 V */
+            u0_v: number;
+            /** U V */
+            u_v: number;
+            /** Um V */
+            um_v?: number | null;
+            /**
+             * Origin
+             * @default factory
+             * @enum {string}
+             */
+            origin?: "factory" | "public" | "demo";
+            /** Standards */
+            standards?: string[];
+            /** Common */
+            common?: {
+                [key: string]: number;
+            };
+            /** Common Basis */
+            common_basis?: {
+                [key: string]: string;
+            };
+            /** Modelling */
+            modelling?: {
+                [key: string]: components["schemas"]["DeclaredParameter"];
+            };
+            /** Source */
+            source?: {
+                [key: string]: unknown;
+            };
+            /** Reference */
+            reference?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Resistance Basis
+             * @default stated
+             * @enum {string}
+             */
+            resistance_basis?: "stated" | "standard_limit";
+            /** Conductor */
+            conductor?: ("copper" | "aluminium") | null;
+            /** Insulation */
+            insulation?: ("XLPE" | "PVC") | null;
+            /** Metal Sheath */
+            metal_sheath?: ("lead" | "corrugated_aluminium" | "smooth_aluminium") | null;
+            /** Oversheath */
+            oversheath?: ("PVC" | "PE") | null;
+            /** Armour Material */
+            armour_material?: string | null;
+            /** Outer Diameter Precision Mm */
+            outer_diameter_precision_mm?: number | null;
+            /** Material Properties */
+            material_properties?: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["DeclaredParameter"];
+                };
+            };
+        };
+        /** SeriesScope */
+        SeriesScope: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "series";
+            /** Series Name */
+            series_name: string;
+            /** Workspace Ids */
+            workspace_ids: string[];
         };
         /** SessionContext */
         SessionContext: {
@@ -8490,11 +9832,22 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "manufacturer" | "standard" | "project_input" | "derived";
+            kind: "manufacturer" | "standard" | "literature" | "project_input" | "derived";
             /** Reference */
             reference: string;
             /** Reviewed */
             reviewed: boolean;
+        };
+        /** SourceSelection */
+        SourceSelection: {
+            /** Workspace Id */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Specification Digest */
+            specification_digest?: string | null;
+            /** Runs */
+            runs?: components["schemas"]["RunPin"][];
         };
         /** Status */
         Status: {
@@ -9201,6 +10554,11 @@ export interface components {
         TransitionAsset: {
             /** Expected Revision */
             expected_revision: number;
+            /**
+             * Human Confirmed
+             * @default false
+             */
+            human_confirmed?: boolean;
             /** Content Sha256 */
             content_sha256: string;
             /**
@@ -9463,11 +10821,44 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Selection */
+        backend__kernel__resource_data__Selection: {
+            /** Release Digest */
+            release_digest: string;
+            /** Data Sha256 */
+            data_sha256: string;
+            /** Standard */
+            standard: string;
+            /** Edition */
+            edition: string;
+            /** Locator */
+            locator: string;
+            /** Quantity */
+            quantity: string;
+            /** Record Id */
+            record_id: string;
+            /** Conditions */
+            conditions: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** Selection */
+        backend__kernel__type_library_exchange__Selection: {
+            /** Series Ids */
+            series_ids: string[];
+            /**
+             * Format
+             * @default json
+             * @enum {string}
+             */
+            format?: "json" | "xlsx";
+        };
         CableModelVersion: components["schemas"]["CableModelVersion-Input"];
         CableType: components["schemas"]["CableType-Input"];
         Circuit: components["schemas"]["Circuit-Input"];
         CoupledParameters: components["schemas"]["CoupledParameters-Input"];
         DomainDocument: components["schemas"]["DomainDocument-Input"];
+        ExtractionScope: components["schemas"]["ExtractionScope-Input"];
         Section: components["schemas"]["Section-Input"];
         SheathLossParameters: components["schemas"]["SheathLossParameters-Input"];
         StudyConfiguration: components["schemas"]["StudyConfiguration-Input"];
@@ -9827,7 +11218,9 @@ export interface operations {
     import_asset_api_foundation_assets_import_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9891,7 +11284,9 @@ export interface operations {
     edit_asset_api_foundation_assets__rid__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
             path: {
                 rid: string;
             };
@@ -9926,7 +11321,9 @@ export interface operations {
     transition_asset_api_foundation_assets__rid__transition_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
             path: {
                 rid: string;
             };
@@ -9961,7 +11358,9 @@ export interface operations {
     derive_asset_api_foundation_assets__rid__derive_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
             path: {
                 rid: string;
             };
@@ -14527,7 +15926,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ExtractionScope"];
+                "application/json": components["schemas"]["ExtractionScope-Input"];
             };
         };
         responses: {
@@ -15706,6 +17105,78 @@ export interface operations {
             };
         };
     };
+    declare_scope_api_types__wid__release_scope_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseScope"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    short_circuit_basis_api_types__wid__short_circuit_basis_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisBasis"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     creation_options_api_types_creation_options_get: {
         parameters: {
             query?: never;
@@ -15881,6 +17352,37 @@ export interface operations {
         };
     };
     resources_api_types__wid__resources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    type_workspace_api_types__wid__workspace_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16365,6 +17867,7 @@ export interface operations {
                 after?: number;
                 limit?: number;
                 recent?: boolean;
+                module?: ("structure" | "requirements" | "standard-check" | "electrical" | "short-circuit" | "rating-table" | "comparison" | "specification") | null;
             };
             header?: never;
             path: {
@@ -16512,6 +18015,994 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["Publish"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    vocabulary_api_type_library_vocabulary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    mappings_api_type_library_mappings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    mapping_api_type_library_mappings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Mapping"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_api_type_library_imports_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_api_type_library_imports_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_type_library_imports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Preview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_api_type_library_imports_commit_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Commit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    series_api_type_library_series_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    series_detail_api_type_library_series__identifier__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spec_api_type_library_specs__identifier__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revise_api_type_library_specs__identifier__revisions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Revise"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_api_type_library_series__identifier__batch_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Batch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    samples_api_type_library_samples_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    sample_xlsx_api_type_library_samples__name__xlsx_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sample_csv_api_type_library_samples__name__csv_get: {
+        parameters: {
+            query?: {
+                table?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    comparison_api_type_library_catalogue_comparison__name__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CatalogueComparison"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_route_api_type_library_exchange_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["backend__kernel__type_library_exchange__Selection"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_route_api_type_library_exchange_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_route_api_type_library_exchange_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_route_api_type_library_exchange_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_route_api_type_library_exchange_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_api_library_exchange_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportSelection"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_library_exchange_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_api_library_exchange_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_data_api_library_exchange_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_data_api_library_exchange_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalogue_api_library_resources_catalogue_get: {
+        parameters: {
+            query?: {
+                category?: "materials" | "environment" | "manufacturing";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    table_api_library_resources_table_get: {
+        parameters: {
+            query: {
+                category: "materials" | "environment" | "manufacturing";
+                table_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_api_library_resources_select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["backend__kernel__resource_data__Selection"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_preview_api_library_resources_materials_draft_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialReferenceDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_api_library_resources_materials_draft_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMaterialReferenceDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_library_resources_materials_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialReferencePreview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adopt_api_library_resources_materials_adopt_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptMaterialReference"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_draft_api_library_resources_environment_draft_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentDraftPreview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_asset_api_library_resources_environment_draft_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_asset_api_library_resources_environment_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentPreview"];
             };
         };
         responses: {
@@ -16902,6 +19393,138 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_formal_deliveries_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_api_formal_deliveries_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_preview_api_formal_deliveries_batch_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_export_api_formal_deliveries_batch_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchExportRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -17750,26 +20373,6 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
-                };
-            };
-        };
-    };
-    close_previews___e2e_close_previews_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };

@@ -1,4 +1,5 @@
 // Contracts shared by the host and the workbench. Physical values are SI unless the name says otherwise.
+import type { SavedRunView } from './fusion-types.ts';
 
 export interface Material {
   id: string;
@@ -295,6 +296,10 @@ export interface Proposal {
   operation: string;
   title: string;
   changes: Change[];
+  /** The platform's checks, scope and effects; accepting a change never certifies an engineering result. */
+  checks?: string[];
+  /** The selected method's declared limitations, kept verbatim and separate from execution effects. */
+  assumptions?: string[];
   preview?: Preview | null;
   issue?: Issue | null;
   status: 'pending' | 'accepted' | 'rejected';
@@ -316,7 +321,15 @@ export type CardRef =
   /** The initial structure a standard gave, kept as a proposal. */
   | { kind: 'standard'; proposal: string }
   /** A GB 50217 correction kept on a project. */
-  | { kind: 'correction'; project: string; correction: string; href: string };
+  | { kind: 'correction'; project: string; correction: string; href: string }
+  /** A saved run of the old platform's studies, as the agent read it (the fused product's Agent page). */
+  | { kind: 'saved_run'; href: string; view: SavedRunView }
+  | { kind: 'saved_type'; href: string; view: import('./fusion-types.ts').SavedTypeView }
+  | { kind: 'saved_rating_table'; href: string; view: import('./fusion-types.ts').SavedRatingTableView }
+  | { kind: 'structure_preview'; view: import('./fusion-types.ts').SavedStructurePreviewView }
+  | { kind: 'structure_import'; view: import('./fusion-types.ts').SavedStructureImportView }
+  | { kind: 'structure_check'; view: import('./fusion-types.ts').SavedStructureCheckView }
+  | { kind: 'saved_file'; title: string; document_kind: '计算书' | '规格书'; format: 'pdf' | 'html'; href: string; download_url: string; preview_url?: string };
 
 export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';
 export interface ChatStep {

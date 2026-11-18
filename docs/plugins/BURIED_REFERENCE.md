@@ -81,4 +81,4 @@ The generic method catalog exposes `fixed-power`, `electrothermal`, `line-source
 CAD/mesh/postprocessing and `line-source-crosscheck`. Upstream native references
 must bind a saved run/case, unchanged domain input and artifact SHA256; direct
 caller-supplied file bytes are refused. Native validation runs only under Slurm
-dg83 and records actual core time. Installing a plugin does not install dependencies.
+cluster and records actual core time. Installing a plugin does not install dependencies.

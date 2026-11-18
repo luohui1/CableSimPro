@@ -9,7 +9,7 @@ export function problems(spec: SpecRow): string[] {
     ...(spec.check?.failed ? [`${spec.check.failed} 项不通过`] : []), ...spec.warnings.map(item => item.message)];
 }
 export const pending = (spec: SpecRow) => RESULT_KINDS.filter(kind => !spec.computed[kind]);
-export function resultValue(row: ValueRow): { value: string; unit: string } {
+export function resultValue(row: Pick<ValueRow, 'value' | 'unit'>): { value: string; unit: string } {
   const units: Record<string, [number, string]> = { 'ohm/m': [1000, 'Ω/km'], 'Ω/m': [1000, 'Ω/km'], 'F/m': [1e9, 'μF/km'], 'H/m': [1e6, 'mH/km'], 'W/m': [1000, 'W/km'], 'A/m': [1000, 'A/km'] };
   const [scale, unit] = units[row.unit] ?? [1, row.unit];
   return { value: row.value == null ? '无结果' : compact(row.value * scale, 6), unit };

@@ -6,9 +6,9 @@
 
 |能力|用途|执行位置|
 |---|---|---|
-|`physics-comparison`|同一保存工况的 IEC、FEM 和分层解析参照；电流、温度、损耗及三网格证据|Slurm dg83|
-|`training-sample`|带输入、网格、能量及方法来源的 FEM 标签|Slurm dg83|
-|`train-model`|XGBoost、MLP、GP 比较、独立划分与区间校准|Slurm dg83 CPU|
+|`physics-comparison`|同一保存工况的 IEC、FEM 和分层解析参照；电流、温度、损耗及三网格证据|Slurm 超算集群|
+|`training-sample`|带输入、网格、能量及方法来源的 FEM 标签|Slurm 超算集群|
+|`train-model`|XGBoost、MLP、GP 比较、独立划分与区间校准|Slurm 超算集群 CPU|
 |`steady-rating`|已登记模型的 IEC 基线加修正，含适用域拒绝|宿主 CPU 常驻工作进程|
 
 原生求解、训练和数值性能测量均在超算执行。本机仅准备输入、开发、轻量测试及浏览器验证；缺少远端环境时不回退求解。

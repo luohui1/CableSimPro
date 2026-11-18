@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.comsol-bridge",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "name": "COMSOL 参考对照",
   "description": "独立运行用户已安装的 COMSOL 6.2，对同一 SI 问题作可选内部基准比较；平台开源计算不依赖它。",
   "icon": "assets/icon.svg",
@@ -488,9 +488,9 @@
               "description": "相邻迭代温度变化的停止阈值，不代表模型准确度。",
               "x-unit": {
                 "si": "K",
-                "display": "°C",
+                "display": "K",
                 "scale": 1,
-                "offset": -273.15
+                "offset": 0
               },
               "x-group": "numerical",
               "x-order": 6,

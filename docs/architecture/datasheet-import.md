@@ -66,13 +66,13 @@ OCR 已成功但字段模型失败时，提取状态仍为 failed；已收到的
 
 `validation/labels.json` 保持原 11 份 PDF、17 规格、76 字段真值不变。另增 `validation/scans.json`：大山公开盖章扫描型录和宏泰官方图像页型录，2份PDF、4规格、20字段；宏泰最小平均层厚另列不采纳项。合计13份PDF、21规格、96字段；不将人工栅格化文件冒充厂家扫描原件。原件只放资料目录、Zotero 和 `.data/`，标注保留源 SHA、URL、页／片段、原单位与 SI。
 
-`python scripts/evaluate_datasheets.py --sources <原件目录>` 核对源哈希并调用与插件同一原语，记录源码 SHA 和方法版本；结果默认 `.data/datasheet-import/evaluation.json`。`--strategies rules llm hybrid --public-corpus-outbound-confirmed` 仅用于用户已授权外发的公开评测集，不为用户上传文件绕过宿主确认。`--retry-failed` 是显式重试，成功结果缓存不重复收费；`--prepare-public-batch` 生成固定型号和来源的批请求，私有资料不使用这个入口。计时／准确率评测在 Slurm dg83 运行；节点没有外网时采用仅允许 Mistral 两个 API 地址的 SSH 文件转运，授权头不落盘，总耗时与外部服务耗时分别记录。
+`python scripts/evaluate_datasheets.py --sources <原件目录>` 核对源哈希并调用与插件同一原语，记录源码 SHA 和方法版本；结果默认 `.data/datasheet-import/evaluation.json`。`--strategies rules llm hybrid --public-corpus-outbound-confirmed` 仅用于用户已授权外发的公开评测集，不为用户上传文件绕过宿主确认。`--retry-failed` 是显式重试，成功结果缓存不重复收费；`--prepare-public-batch` 生成固定型号和来源的批请求，私有资料不使用这个入口。计时／准确率评测在 Slurm 超算集群运行；节点没有外网时采用仅允许 Mistral 两个 API 地址的 SSH 文件转运，授权头不落盘，总耗时与外部服务耗时分别记录。
 
 精确率/召回率按唯一无歧义字段计，歧义候选单列，不计成功；相邻已标注规格构成串行负例，单位倍率错误单列。没有配置并确认提供方时大模型记 not_evaluated，不用模拟响应填准确率。当前小评测集用于开发回归，不能代表所有厂家版式。
 
 当前规则实测61/61个明确字段正确，召回61/76=80.26%，单位错误0、型号串行0；原基线42/76=55.26%。34个漏提的逐字段归因见 `validation/recall-audit.json`：跨页型号关联10、型号粘连10、属性值行7、多结构列/缩写6、铜重/总重混淆1；恢复19，保留15个缺项。已保存工件中的粘连缺项来自人民110kV表；标题分词恢复后仍不猜测其他列缺失的单位。字段、单位、排除语义和结构分支均用数据表维护；多规格选择使用单元格坐标和规格表头。
 
-图像页的独立实测16/16个明确字段正确、召回16/20=80%，单位错误0、型号串行0；8个歧义候选不计成功。大山合并表头仍使导体/成品外径不明确，宏泰的最小平均层厚保持待人工核对。实际计时、CPU核时和原始输出保存于 `.data/datasheet-import/offline/`；性能评测全部在 dg83 执行。可复跑：`python scripts/evaluate_datasheets.py --labels plugins/cablesim.datasheet-extract/validation/scans.json --strategies offline_ocr --output <结果路径>`；离线策略不要求公开资料外发开关。
+图像页的独立实测16/16个明确字段正确、召回16/20=80%，单位错误0、型号串行0；8个歧义候选不计成功。大山合并表头仍使导体/成品外径不明确，宏泰的最小平均层厚保持待人工核对。实际计时、CPU核时和原始输出保存于 `.data/datasheet-import/offline/`；性能评测全部在 Slurm 超算集群执行。可复跑：`python scripts/evaluate_datasheets.py --labels plugins/cablesim.datasheet-extract/validation/scans.json --strategies offline_ocr --output <结果路径>`；离线策略不要求公开资料外发开关。
 
 已存的上一轮 Mistral 通用提取与 OCR 请求遇 HTTP429；低频最小请求复核仍为 `Rate limit exceeded`。官方批接口在缩小请求包后明确返回 HTTP402：需要在console启用billing。没有成功识别输出或usage，LLM／hybrid／云端OCR统计为not_evaluated，费用未知，不记零准确率或零费用。没有改用其他模型或伪造响应。每个失败、源哈希、Slurm作业及已完成规则工件保留于 `.data/datasheet-import/mistral/`；计费／额度恢复后再显式复跑。[限额说明](https://docs.mistral.ai/admin/billing-usage/usage-limits)、[标准单价](https://docs.mistral.ai/inference/pricing)是估算依据，不是账单。
 

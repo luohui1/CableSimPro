@@ -27,7 +27,9 @@ def load_context(db,task):
 def is_type(record):return (record.get('context') or {}).get('kind')=='type'
 
 
-def require_tool(task,name):
-    if is_type(task) and name not in TYPE_TOOLS:
+def require_tool(task,name,*,external=False):
+    from .external_actions import SCOPES
+    external_tools=set(SCOPES)|{'workspace_read','study_list','study_read','run_list','run_read','propose_method_parameters'}
+    if is_type(task) and name not in TYPE_TOOLS and not (external and name in external_tools):
         raise HTTPException(422,{'code':'TYPE_TOOL_NOT_APPLICABLE','path':'/tool',
             'message':'此会话绑定型号设计；请使用型号读取、型号字段方案或型号检查配方。研究操作须另建工程/研究会话。'})
