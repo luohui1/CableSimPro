@@ -139,7 +139,9 @@ export function TypeWorkspace() {
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   useEffect(() => {
     if (location.module !== 'structure' || !location.field) return;
-    if (sourceCable) { setCableId(sourceCable.id); setSelected(null); setInspectorView('input'); setCollapsed(false); }
+    if (location.layer && !sourceCable && row?.id !== location.layer) return;
+    setInspectorView('input');
+    if (sourceCable) { setCableId(sourceCable.id); setSelected(null); setCollapsed(false); }
     const frame = requestAnimationFrame(() => {
       const node = [...window.document.querySelectorAll<HTMLElement>('.type-property-fields [data-field-path]')].find(node => node.dataset.fieldPath === location.field);
       if (!node) return;
@@ -147,7 +149,7 @@ export function TypeWorkspace() {
       node.querySelector<HTMLElement>('input,textarea,[role=combobox]')?.focus(); node.scrollIntoView({ block: 'nearest' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [location.module, location.field, row?.id, sourceCable?.id, cable?.id]);
+  }, [location.module, location.field, location.layer, row?.id, sourceCable?.id, cable?.id, selected]);
   useEffect(()=>{
     if(!methodModule||!location.field)return;
     const focus=()=>{
