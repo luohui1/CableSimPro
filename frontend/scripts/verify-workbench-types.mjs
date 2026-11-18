@@ -12,6 +12,17 @@ const fixedTypeRoutes = {
 };
 let fixedTypeArchiveSources;
 let declaredTypeSeedIds, declaredTypeSeedId;
+// Both screen sizes share one isolated database. A type version this walk
+// publishes at 1366 is newer than the seeded library and has no structure
+// citation, so every fixture starts from a seeded library version instead.
+function seededLibrarySource(options) {
+  const seeded = options.library.filter(item => item.source !== 'published_type');
+  return seeded.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || seeded[0] || options.library[0];
+}
+// The teaching copy is a plan of one seeded type. Once one size published it,
+// the library holds a later version and the host rightly refuses to publish
+// another plan of the same base; the next size reviews up to human approval.
+const publishedTeachingSeeds = new Set();
 function archivedTypeModule(run) {
   const definition = run?.snapshot?.definition, method = definition?.method, driver = definition?.driver;
   if (run?.integrity !== 'verified' || !['succeeded', 'partial'].includes(run.status) || !method?.release_digest) return null;
@@ -1008,7 +1019,16 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
         await write('-iframe-aria.txt', await surface.locator('body').ariaSnapshot());
         await write('-iframe-text.txt', await surface.locator('body').textContent() || '');
       } else await write('-body-aria.txt', await page.locator('body').ariaSnapshot());
+      // Require a notation only where the saved results carry it: standard
+      // coverage changes between releases, and the walk must not demand text
+      // that no saved result contains. The detail view holds every channel.
+      const savedText = JSON.stringify(specBefore ?? await api(`/api/types/${id}/specification?audience=customer&view=detail`));
       for (const token of specification ? ['Case2/10', '附录 A/B'] : ['附录 A/B']) {
+        if (!savedText.includes(token)) {
+          entry.targets.push({ token, absentFromSavedResults: true });
+          check(label + '保留原文 ' + token, true, { token, evidence: prefix, note: '本次保存结果没有这段原文，界面不应出现' }, { fatal: false });
+          continue;
+        }
         const targets = surface.getByText(token, { exact: false });
         try { await expect(targets.first()).toBeAttached(); }
         catch (error) {
@@ -1251,7 +1271,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       if (suffix === 'teaching') await captureNotationEvidence(id, label + '-生成后原文', true);
     }
   }
-  async function reviewSpecification(id, label, expectedIncomplete = false) {
+  async function reviewSpecification(id, label, expectedIncomplete = false, { stopBeforePublish = false } = {}) {
     await module('规格书');
     await choose('文档版本', '客户版');
     await page.getByRole('tab', { name: '审核与发布', exact: true }).click();
@@ -1281,7 +1301,8 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       check(label + '校核未闭合时禁止发布并显示实际原因', await submit.isDisabled() && blockers.length > 0, await visibleText());
       return;
     }
-    for (const action of ['采纳为版本草稿', '提交评审', '人工批准', '发布型号版本']) {
+    const actions = ['采纳为版本草稿', '提交评审', '人工批准', ...(stopBeforePublish ? [] : ['发布型号版本'])];
+    for (const action of actions) {
       const button = page.locator('.type-result-summary').getByRole('button', { name: action, exact: true });
       await expect(button).toBeEnabled();
       await button.click();
@@ -1296,7 +1317,9 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
       await expect(dialog).toBeHidden({ timeout: 90000 });
     }
     spec = await api(`/api/types/${id}/specification?audience=customer&view=detail`);
-    check(label + '人工审核发布闭环', spec.lifecycle.status === 'published', spec.lifecycle);
+    if (stopBeforePublish) {
+      check(label + '同一教学型号已在前一尺寸发布，本尺寸核到人工批准为止', spec.lifecycle.status === 'approved', spec.lifecycle);
+    } else check(label + '人工审核发布闭环', spec.lifecycle.status === 'published', spec.lifecycle);
     await page.getByRole('tab', { name: '修订记录', exact: true }).click();
     await expect(page.getByRole('table', { name: '文档修订记录', exact: true })).toBeVisible();
   }
@@ -1512,7 +1535,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
 
   const library = await attempt('02-从真实型号库引用建立草稿', async () => {
     const dialog = await openNew('从型号库复制', name('库引用'));
-    const source = options.library.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || options.library[0];
+    const source = seededLibrarySource(options);
     if (!check('库引用起点可开始', Boolean(source), await dialog.innerText())) return null;
     await choose('型号版本', source.name + ' · ' + versionLabel(source.version), dialog);
     await capture('库引用-固定型号版本与来源');
@@ -1572,7 +1595,7 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     // Keep this editable fixture independent of the calculation model, whose
     // original missing provenance must remain available to the rating check.
     const dialog = await openNew('从型号库复制', name('名称与来源编辑'));
-    const source = options.library.find(item => /YJV22/.test(item.name) && /300/.test(item.name)) || options.library[0];
+    const source = seededLibrarySource(options);
     if (!check('名称与来源编辑有真实独立起点', Boolean(source), await dialog.innerText())) return;
     await choose('型号版本', source.name + ' · ' + versionLabel(source.version), dialog);
     editFixture = await create(dialog, 'library');
@@ -2051,9 +2074,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
     await readableResultColumns('标准核对');
     await capture('标准核对-真实结果');
     if (await issues.count()) {
-      await issues.first().click();
-      const locate = page.getByRole('button', { name: '定位结构层', exact: true });
-      const repair = issues.first().getByRole('button').first();
+      // Each unmet row carries its own locate action; act on the row just opened.
+      const firstIssue = issues.first();
+      await firstIssue.click();
+      const locate = firstIssue.getByRole('button', { name: '定位结构层', exact: true });
+      const repair = firstIssue.getByRole('button').first();
       if (await locate.isVisible()) {
         await locate.click();
         await expect(page).toHaveURL(/\/structure\/table.*layer=/);
@@ -2466,7 +2491,11 @@ await walkthrough('types', async ({ page, expect, base, api, choose, capture, st
   });
   await attempt('17b-教学交付逐项限定范围并保留未闭合门禁', () => declareTeachingScope(delivery.id));
   await attempt('18-教学交付副本生成客户规格书并下载真实PDF', () => generateSpecification(delivery.id, '教学交付规格书', 'teaching'));
-  await attempt('19-教学交付副本逐项审核并执行版本流程', () => reviewSpecification(delivery.id, '教学交付规格书'));
+  await attempt('19-教学交付副本逐项审核并执行版本流程', async () => {
+    const publishedEarlier = publishedTeachingSeeds.has(delivery.source);
+    await reviewSpecification(delivery.id, '教学交付规格书', false, { stopBeforePublish: publishedEarlier });
+    if (!publishedEarlier) publishedTeachingSeeds.add(delivery.source);
+  });
   const sourceAfterDelivery = await workspace(delivery.source);
   check('交付计算和文档流程没有改动原教学型号', sourceAfterDelivery.revision === delivery.original.revision
     && JSON.stringify(sourceAfterDelivery.domain) === JSON.stringify(delivery.original.domain));
