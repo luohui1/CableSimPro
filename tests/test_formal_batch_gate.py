@@ -136,6 +136,8 @@ def test_single_export_gate_passes_exact_successful_selections_to_real_batches(f
     verify_formal_batches(gate, requests)
     assert requests == before
     assert gate.result["formal_batches"]["status"] == "passed"
+    assert all(list((tmp_path / prefix / "sources").glob("*.json"))
+               for prefix in ("formal", "batch/project", "batch/series"))
     batch_exports = [body for path, body in posted if path == "/api/formal-deliveries/batch/export"]
     assert {body["scope"]["kind"] for body in batch_exports} == {"project", "series"}
     for batch in batch_exports:

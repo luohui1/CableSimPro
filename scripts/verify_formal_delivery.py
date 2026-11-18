@@ -143,15 +143,16 @@ def validate_contract_unit(cell: dict, payloads: dict, sources: dict) -> None:
 
 class SourceReader:
     """Fetch each declared source independently and retain its whole API reply."""
-    def __init__(self, gate):
+    def __init__(self, gate, *, artifact_prefix="formal/sources"):
         self.gate = gate
+        self.artifact_prefix = artifact_prefix
         self.responses = {}
 
     def get(self, url: str):
         if url not in self.responses:
             response = self.gate.api("GET", url)
             self.responses[url] = response
-            self.gate.artifact("formal/sources/" + sha256(url.encode()).hexdigest() + ".json",
+            self.gate.artifact(self.artifact_prefix + "/" + sha256(url.encode()).hexdigest() + ".json",
                                {"api_url": url, "response": response})
         return self.responses[url]
 
