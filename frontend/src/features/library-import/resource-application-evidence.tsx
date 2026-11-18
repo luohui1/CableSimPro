@@ -5,15 +5,20 @@ import { displayLibraryText, sourceText } from './api';
 import { referenceUnit, referenceValue } from './reference-evidence';
 import { applicationDownload, type ApplicationEvidence, type ApplicationField, type ApplicationChange } from './resource-application-api';
 
+function applicationText(value: string): string {
+  return displayLibraryText(value.split(/(https?:\/\/[^\s<>]+)/g).map((part, index) => index % 2 ? part : part
+    .replace(/\b(TB\s*880\s+)Case(?=\d+(?:\/\d+)*\b)/g, '$1算例')
+    .replace(/\bDOI(?=10\.\d{4,9}\/)/g, 'DOI ')).join(''));
+}
 function fieldSource(value: unknown): string {
   const source = optionalRecord(value), reference = text(source.reference);
   if (reference.trim().startsWith('{') || reference.trim().startsWith('[')) {
     try {
       const saved = optionalRecord(JSON.parse(reference));
-      return displayLibraryText(text(saved.reference) || text(saved.title) || text(saved.name) || '结构化固定来源，完整原文可逐项下载');
-    } catch { return displayLibraryText(reference); }
+      return applicationText(text(saved.reference) || text(saved.title) || text(saved.name) || '结构化固定来源，完整原文可逐项下载');
+    } catch { return applicationText(reference); }
   }
-  return displayLibraryText(sourceText(value));
+  return applicationText(sourceText(value));
 }
 const componentValues: Record<string, string> = {
   design: '设计输入', measurement: '实测输入', manufacturer_limit: '厂家电阻上限（非实测）',
@@ -25,17 +30,27 @@ const componentValues: Record<string, string> = {
   helical_overlap: '螺旋搭盖绕包', two_tape_gap: '双带间隙绕包', longitudinal: '纵包',
   dc: '直流', power_frequency_ac: '工频交流', separator: '隔离层', binder: '扎带',
 };
-export function applicationValue(value: ApplicationField['value'], unit: string | null = '') {
+const fieldValues: Record<string, Record<string, string>> = {
+  role: {
+    conductor_screen: '导体屏蔽', insulation: '绝缘', insulation_screen: '绝缘屏蔽',
+    metallic_screen: '金属屏蔽', metallic_sheath: '金属套', bedding: '内衬层',
+    separator: '隔离层', filler: '填充层', binder: '扎带', armour: '铠装', oversheath: '外护套',
+  },
+  form: { unspecified: '未明确构造' },
+  operation: { both: '额定载流量与保存负荷温度', temperature: '保存负荷温度' },
+  rating_mode: { individual: '逐回路额定', simultaneous: '同时增载', both: '逐回路额定与同时增载' },
+};
+export function applicationValue(value: ApplicationField['value'], unit: string | null = '', path = '') {
   if (typeof value === 'string' && /^(material|cable_type|core|circuit|cable)\/[A-Za-z0-9_-]+$/.test(value))
     return '固定对象引用（完整身份见原始记录）';
-  const label = typeof value === 'string' ? componentValues[value] ?? referenceValue(value) : referenceValue(value);
-  return `${displayLibraryText(label)}${value !== null && unit ? ` ${referenceUnit(unit)}` : ''}`;
+  const label = typeof value === 'string' ? fieldValues[path.split('/').at(-1) ?? '']?.[value] ?? componentValues[value] ?? referenceValue(value) : referenceValue(value);
+  return `${applicationText(label)}${value !== null && unit ? ` ${referenceUnit(unit)}` : ''}`;
 }
 export function ApplicationFields({ fields, label = '部件与模板逐项来源' }: { fields: ApplicationField[]; label?: string }) {
   return <DataTable label={label} showGroups={false} groups={[{ id: 'fields', label, rows: fields.map((field, index) => ({ ...field, id: String(index) })) }]}
-    rowLabel={row => `${row.label}，${applicationValue(row.value, row.unit)}`} columns={[
+    rowLabel={row => `${row.label}，${applicationValue(row.value, row.unit, row.path)}`} columns={[
       { id: 'label', label: '保存参数', wrap: true, render: row => row.label },
-      { id: 'value', label: '保存值与单位', wrap: true, render: row => applicationValue(row.value, row.unit) },
+      { id: 'value', label: '保存值与单位', wrap: true, render: row => applicationValue(row.value, row.unit, row.path) },
       { id: 'source', label: '原始出处', wrap: true, render: row => fieldSource(row.source) },
       { id: 'inspect', label: '完整来源', render: row => <Button size="compact" onClick={() => applicationDownload('fixed-field-source.json', row)}>下载此项原始记录</Button> },
     ]} />;
@@ -69,8 +84,8 @@ export function ApplicationChanges({ changes }: { changes: ApplicationChange[] }
   return <DataTable label="部件采用逐字段变化" showGroups={false} groups={[{ id: 'changes', label: '变化', rows: changes.map((item, index) => ({ ...item, id: String(index) })) }]}
     rowLabel={row => row.label} columns={[
       { id: 'name', label: '参数', wrap: true, render: row => row.label },
-      { id: 'before', label: '当前值', wrap: true, render: row => applicationValue(row.before, row.unit) },
-      { id: 'after', label: '采用后', wrap: true, render: row => row.after === null ? '清空为未给出；不保留旧值' : `${applicationValue(row.after, row.unit)}${typeof row.after === 'string' && /^(material|cable_type|core|circuit|cable)\//.test(row.after) && row.before !== row.after ? ' · 引用已变化' : ''}` },
+      { id: 'before', label: '当前值', wrap: true, render: row => applicationValue(row.before, row.unit, row.path) },
+      { id: 'after', label: '采用后', wrap: true, render: row => row.after === null ? '清空为未给出；不保留旧值' : `${applicationValue(row.after, row.unit, row.path)}${typeof row.after === 'string' && /^(material|cable_type|core|circuit|cable)\//.test(row.after) && row.before !== row.after ? ' · 引用已变化' : ''}` },
       { id: 'source', label: '来源处理', wrap: true, render: row => <span>{row.source_action === 'unchanged' ? '保留目标原出处；下列为来源参考记录：' : '将保存下列固定来源：'}{fieldSource(row.source)}</span> },
       { id: 'download', label: '核对原文', render: row => <Button size="compact" onClick={() => applicationDownload('component-change.json', row)}>下载前后值与出处</Button> },
     ]} />;
