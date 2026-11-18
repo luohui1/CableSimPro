@@ -1,7 +1,6 @@
 import { DataTable } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { optionalRecord, text } from '@/api/client';
-import { engineeringQuantity, type EngineeringPresentation } from '@/lib/format';
 import { displayLibraryText, sourceText } from './api';
 import { referenceUnit, referenceValue } from './reference-evidence';
 import { applicationDownload, type ApplicationEvidence, type ApplicationField, type ApplicationChange } from './resource-application-api';
@@ -41,21 +40,34 @@ const fieldValues: Record<string, Record<string, string>> = {
   operation: { both: '额定载流量与保存负荷温度', temperature: '保存负荷温度' },
   rating_mode: { individual: '逐回路额定', simultaneous: '同时增载', both: '逐回路额定与同时增载' },
 };
-const withUnit = (shown: EngineeringPresentation) => shown.unit === '—' ? shown.text : `${shown.text} ${shown.unit}`;
-/** Saved SI values shown in the units engineers read (mm, mm², Ω/km); the download keeps the exact saved value. */
-function numberText(value: number, unit: string, key: string) {
-  if (unit === '1' && Number.isInteger(value)) return String(value);
-  if (unit === 'm²' && /area/.test(key)) return withUnit(engineeringQuantity(key, value * 1e6, 'mm²'));
-  if (unit === 'm' && /(?:diameter|thickness|radius|width|depth|pitch|gap|lay_length)/.test(key)) return withUnit(engineeringQuantity(key, value * 1000, 'mm'));
-  return withUnit(engineeringQuantity(key, value, referenceUnit(unit)));
+const SUPERSCRIPT: Record<string, string> = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+/** Every saved digit (12 significant figures drop only floating-point noise), with powers of ten instead of e-notation. */
+function exactNumber(value: number) {
+  const rounded = Number(value.toPrecision(12));
+  if (rounded === 0) return '0';
+  const exponent = Math.floor(Math.log10(Math.abs(rounded)));
+  if (exponent >= -4 && exponent < 9) return String(rounded);
+  const [mantissa, power] = rounded.toExponential().split('e');
+  return `${mantissa.replace('-', '−')} × 10${[...power.replace('+', '')].map(char => SUPERSCRIPT[char] ?? char).join('')}`;
+}
+/** Structure parts read in mm, mm² and Ω/km; every other saved value keeps its SI unit. Downloads keep the saved value. */
+function numberText(value: number, unit: string, key: string, path: string) {
+  if (/^\/(cable_types|materials)\//.test(path)) {
+    if (unit === 'm²' && /area/.test(key)) return `${exactNumber(value * 1e6)} mm²`;
+    if (unit === 'm' && /(?:diameter|thickness|width|depth|pitch|gap|lay_length)/.test(key)) return `${exactNumber(value * 1000)} mm`;
+    if (unit === 'Ω/m') return `${exactNumber(value * 1000)} Ω/km`;
+  }
+  if (unit === '1') return exactNumber(value);
+  if (unit === '°') return `${exactNumber(value)}°`;
+  return `${exactNumber(value)} ${referenceUnit(unit)}`;
 }
 export function applicationValue(value: ApplicationField['value'], unit: string | null = '', path = '') {
   if (typeof value === 'string' && /^(material|cable_type|core|circuit|cable)\/[A-Za-z0-9_-]+$/.test(value))
     return '固定对象引用（完整身份见原始记录）';
   const key = path.split('/').at(-1) ?? '';
-  if (typeof value === 'number' && unit) return numberText(value, unit, key);
+  if (typeof value === 'number' && Number.isFinite(value) && unit) return numberText(value, unit, key, path);
   const label = typeof value === 'string' ? fieldValues[key]?.[value] ?? componentValues[value] ?? referenceValue(value) : referenceValue(value);
-  return `${applicationText(label)}${value !== null && unit ? ` ${referenceUnit(unit)}` : ''}`;
+  return `${applicationText(label)}${value !== null && unit && unit !== '1' ? ` ${referenceUnit(unit)}` : ''}`;
 }
 /** One text when every row repeats it, so the table does not print the same source on each line. */
 function sharedText(texts: string[]) {

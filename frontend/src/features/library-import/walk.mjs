@@ -762,7 +762,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
       await expect(calculatedRow).toContainText('研究参考值，非厂家核验');
       await expect(page.getByLabel('研究参考情景说明', { exact: true })).toContainText('厂家缺项与拒算原因不变');
       await calculatedRow.evaluate(element => element.scrollIntoView({ block: 'center' }));
-      await capture(`${sample.id}-研究参考数值差异与厂家拒绝并列`);
+      await capture(`${sample.id}-研究参考数值差异与共同说明`);
       await page.getByRole('button', { name: '厂家数据与缺项', exact: true }).click();
       const manufacturerTable = page.getByRole('table', { name: '载流量逐规格对照', exact: true });
       await expect(manufacturerTable.getByRole('row').nth(1)).toContainText('未给出结果');

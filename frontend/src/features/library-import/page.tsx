@@ -81,10 +81,14 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
   // reviewing a full preview only to be refused at the final confirmation.
   const existingSeries = useQuery({ queryKey: ['type-library', 'series'], enabled: step >= 3, queryFn: ({ signal }) => libraryRequest<{ items: SeriesSummary[] }>('/series', { signal }) });
   const seriesName = series.name.trim();
-  const nameTaken = !!seriesName && !!existingSeries.data?.items.some(item => item.name.trim() === seriesName);
-  // From the declaration on, the failing action sits at the bottom of a long page, so its error is shown beside it.
-  const errorNearActions = !receipt && step >= 3;
+  // Same rule as the commit: the stripped new name against stored names as saved.
+  const nameTaken = !!seriesName && !!existingSeries.data?.items.some(item => item.name === seriesName);
+  // Confirmation sits below the whole preview table, so its refusal is shown beside the button. Earlier steps keep
+  // errors with the progress and heading (a stale preview is reported where the declaration is being edited).
+  const errorNearActions = !receipt && step === 4;
   const actionError = error && errorNearActions ? <p role="alert" className="field-error library-import-error">{error}</p> : null;
+  const topError = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (error && !errorNearActions) topError.current?.scrollIntoView({ block: 'nearest' }); }, [error, errorNearActions]);
 
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
@@ -223,7 +227,6 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
       <DeclarationForm value={series} onChange={updateSeries} vocabulary={{ ...vocabulary, fields }} mapped={new Set(Object.keys(mapping))} />
       {(missingBasis.length > 0 || missingModelBasis.length > 0) && <p className="field-error" role="status">请补充依据：{[...missingBasis, ...missingModelBasis].map(key => fields.find(field => field.key === key)?.label || vocabulary.modelling.find(field => field.key === key)?.label || '参数').join('、')}。</p>}
       {nameTaken && <p className="field-error" role="status">系列名称“{seriesName}”已被现有系列使用，请在上方修改系列名称后再预览。</p>}
-      {actionError}
       <div className="library-import-actions"><Button type="button" onClick={() => changeStep(2)}>上一步</Button><Button type="submit" variant="primary" loading={!!busy} disabled={!seriesName || nameTaken || !series.designation.trim() || !series.u0_v || !series.u_v || missingBasis.length > 0 || missingModelBasis.length > 0}>逐行校验并预览</Button></div>
     </form>;
   } else if (preview) {
@@ -264,7 +267,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
           setReceipt(result);
         } finally {
           // A refusal may come from a series saved meanwhile; refresh the names the declaration step checks.
-          await client.invalidateQueries({ queryKey: ['type-library', 'series'] });
+          void client.invalidateQueries({ queryKey: ['type-library', 'series'] });
         }
       })}>确认入库 {importable} 个规格</Button></div>
     </div>;
@@ -277,7 +280,7 @@ function ImportWizard({ onOpenSeries }: { onOpenSeries: (id: string) => void }) 
     </div>
     {upload && !receipt && <p className="library-import-file">{upload.file}{sheetName && ` · ${sheetName}`}</p>}
     {vocabularyQuery.isPending ? <LoadingState title="正在读取导入字段" /> : vocabularyQuery.isError ? <ErrorState description={message(vocabularyQuery.error)} action={<Button onClick={() => void vocabularyQuery.refetch()}>重新读取字段</Button>} /> : null}
-    {error && !errorNearActions && <p role="alert" className="field-error library-import-error">{error}</p>}
+    {error && !errorNearActions && <p ref={topError} role="alert" className="field-error library-import-error">{error}</p>}
     {busy && <p role="status" className="muted">{busy}…</p>}
     {body}
     <LibraryDialog open={!!previewRow} onOpenChange={open => { if (!open) setPreviewRow(null); }} title={previewRow ? `原表第 ${previewRow.row_number} 行 · ${previewRow.name || '数值预览'}` : '数值预览'} description="确认入库前逐项核对数值、原表位置、方法版本与可信分档。" initialFocus="form">
