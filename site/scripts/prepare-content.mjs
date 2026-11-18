@@ -120,6 +120,8 @@ function rewriteLinks(markdown, page) {
 
 const yaml = (value) => JSON.stringify(value);
 await rm(synced, { recursive: true, force: true });
+// Astro 不清空输出目录；先删掉上次的产物，避免改名或删除的页面残留在 dist/ 里
+await rm(path.join(site, 'dist'), { recursive: true, force: true });
 for (const page of pages) {
   const text = (await readFile(path.join(repo, page.source), 'utf8')).replace(/\r\n/g, '\n');
   const heading = text.match(/^# (.+)\n/m);
