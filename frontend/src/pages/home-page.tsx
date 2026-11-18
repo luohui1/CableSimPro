@@ -20,6 +20,7 @@ import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
 import { groupInbox } from '@/lib/inbox-groups';
 import { InboxGroup } from '@/components/inbox-group';
+import { displayLibraryText } from '@/features/library-import/api';
 
 const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
 const short = formatDateTime;
@@ -38,7 +39,7 @@ function NeedsAttention({ items, studies }: { items: InboxItem[]; studies: Study
       const item = group.items[0];
       const study = item.object.kind === "study" ? studies.find((row) => row.id === item.object.id) : undefined;
       return <li key={item.category + item.object.kind + item.object.id}>
-        <span className="home-todo-text"><ObjectLink card={item.object}>{item.title}</ObjectLink><small>{item.reason}</small></span>
+        <span className="home-todo-text"><ObjectLink card={item.object}>{item.title}</ObjectLink><small>{displayLibraryText(item.reason)}</small></span>
         {study && isVersionStale(study.raw)
           ? <VersionNotice value={study.raw} target={{ wid: study.workspace, sid: study.id, revision: study.workspaceRevision, studyRevision: study.revision, title: study.title }} />
           : <StatusMark kind={statusMark(item.object.status.code)} label={statusLabel(item.object.status.code, item.object.status.label)} />}

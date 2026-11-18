@@ -78,6 +78,7 @@ export const displayNames: Readonly<Record<string, string>> = {
   max_iterations: "最大迭代次数",
   target_circuit_id: "目标回路",
   reference_basis: "参考依据",
+  basis_references: "标准依据",
   operation: "运行输出",
   rating_mode: "额定模式",
   corrugated_gap: "波纹护套空隙",

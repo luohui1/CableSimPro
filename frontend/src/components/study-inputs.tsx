@@ -667,7 +667,7 @@ export function SectionInputs({
     })),
     ...(section.enclosures || []).map((item) => ({
       id: item.id,
-      label: "围护 " + item.type,
+      label: "围护 · " + displayName(item.type),
       material: item.material || undefined,
       fields: [
         {
