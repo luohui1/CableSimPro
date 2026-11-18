@@ -3097,6 +3097,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/resources/applications/{resource_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence */
+        get: operations["evidence_api_library_resources_applications__resource_id__evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/study-templates/capture-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Study Capture Preview */
+        post: operations["study_capture_preview_api_library_resources_study_templates_capture_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/study-templates/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Study Capture */
+        post: operations["study_capture_api_library_resources_study_templates_capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/study-templates/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Study Preview */
+        post: operations["study_preview_api_library_resources_study_templates_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/study-templates/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Study Adopt */
+        post: operations["study_adopt_api_library_resources_study_templates_adopt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/components/capture-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Capture */
+        post: operations["preview_capture_api_library_resources_components_capture_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/components/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture */
+        post: operations["capture_api_library_resources_components_capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/components/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_library_resources_components_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/library/resources/components/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adopt */
+        post: operations["adopt_api_library_resources_components_adopt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/design/cable-models": {
         parameters: {
             query?: never;
@@ -3767,6 +3920,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/__e2e/close-previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close Previews */
+        post: operations["close_previews___e2e_close_previews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3780,6 +3950,49 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+        };
+        /** AdoptComponent */
+        AdoptComponent: {
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Acknowledge Reference Limits
+             * @constant
+             */
+            acknowledge_reference_limits: true;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            target: components["schemas"]["ComponentSelection"];
+            /** Target Material Id */
+            target_material_id: string;
+            /**
+             * Operation
+             * @default adopt_resource_component
+             * @constant
+             */
+            operation?: "adopt_resource_component";
         };
         /** AdoptMaterialReference */
         AdoptMaterialReference: {
@@ -3854,6 +4067,49 @@ export interface components {
             resource_id: string;
             /** Content Sha256 */
             content_sha256: string;
+        };
+        /** AdoptStudyTemplate */
+        AdoptStudyTemplate: {
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Acknowledge Reference Limits
+             * @constant
+             */
+            acknowledge_reference_limits: true;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Title */
+            title: string;
+            bindings: components["schemas"]["StudyBindings"];
+            /**
+             * Operation
+             * @default adopt_resource_study_template
+             * @constant
+             */
+            operation?: "adopt_resource_study_template";
         };
         /** AgentStatus */
         AgentStatus: {
@@ -4037,6 +4293,7 @@ export interface components {
              * @default []
              */
             reference_evidence?: components["schemas"]["ReferenceEvidence"][];
+            application?: components["schemas"]["ResourceApplication"] | null;
         };
         /** AuditEvent */
         AuditEvent: {
@@ -4924,6 +5181,51 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** CaptureComponent */
+        CaptureComponent: {
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            selection: components["schemas"]["ComponentSelection"];
+        };
+        /** CaptureStudy */
+        CaptureStudy: {
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Study Id
+             * Format: uuid
+             */
+            study_id: string;
+            /** Expected Study Revision */
+            expected_study_revision: number;
+            /**
+             * Source Run Id
+             * Format: uuid
+             */
+            source_run_id: string;
+        };
         /** CatalogueComparison */
         CatalogueComparison: {
             /**
@@ -5097,6 +5399,20 @@ export interface components {
         Comparison: {
             /** Run Ids */
             run_ids: string[];
+        };
+        /** ComponentSelection */
+        ComponentSelection: {
+            /** Cable Type Id */
+            cable_type_id: string;
+            /** Core Id */
+            core_id?: string | null;
+            /**
+             * Part
+             * @enum {string}
+             */
+            part: "conductor" | "core_layer" | "common_layer";
+            /** Layer Index */
+            layer_index?: number | null;
         };
         /** Condition */
         Condition: {
@@ -5308,6 +5624,30 @@ export interface components {
         Create: {
             scenario?: components["schemas"]["Scenario"];
         };
+        /** CreateComponent */
+        CreateComponent: {
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            selection: components["schemas"]["ComponentSelection"];
+        };
         /** CreateMaterialReferenceDraft */
         CreateMaterialReferenceDraft: {
             /** Asset Id */
@@ -5387,6 +5727,41 @@ export interface components {
             };
             /** Expected Revision */
             expected_revision: number;
+        };
+        /** CreateStudyTemplate */
+        CreateStudyTemplate: {
+            /** Preview Digest */
+            preview_digest: string;
+            /**
+             * Human Confirmed
+             * @constant
+             */
+            human_confirmed: true;
+            /** Asset Id */
+            asset_id: string;
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Study Id
+             * Format: uuid
+             */
+            study_id: string;
+            /** Expected Study Revision */
+            expected_study_revision: number;
+            /**
+             * Source Run Id
+             * Format: uuid
+             */
+            source_run_id: string;
         };
         /** CreateStudyWorkspace */
         CreateStudyWorkspace: {
@@ -6387,7 +6762,7 @@ export interface components {
              * Selections
              * @description Only these pages/regions are processed or disclosed.
              */
-            selections: components["schemas"]["Selection"][];
+            selections: components["schemas"]["backend__kernel__datasheet_contracts__Selection"][];
             /**
              * Request Id
              * Format: uuid
@@ -6526,7 +6901,7 @@ export interface components {
              * Selections
              * @description Only these pages/regions are processed or disclosed.
              */
-            selections: components["schemas"]["Selection"][];
+            selections: components["schemas"]["backend__kernel__datasheet_contracts__Selection"][];
         };
         /** ExtractionScope */
         "ExtractionScope-Output": {
@@ -7923,6 +8298,26 @@ export interface components {
             };
             series: components["schemas"]["SeriesDeclaration"];
         };
+        /** PreviewComponent */
+        PreviewComponent: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            target: components["schemas"]["ComponentSelection"];
+            /** Target Material Id */
+            target_material_id: string;
+        };
         /** PreviewMaterialBindings */
         PreviewMaterialBindings: {
             /** Expected Revision */
@@ -7981,6 +8376,26 @@ export interface components {
             method_input?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** PreviewStudyTemplate */
+        PreviewStudyTemplate: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Title */
+            title: string;
+            bindings: components["schemas"]["StudyBindings"];
         };
         /** ProblemContract */
         ProblemContract: {
@@ -8682,6 +9097,47 @@ export interface components {
             request_id: string;
             /** Expected Revision */
             expected_revision: number;
+        };
+        /**
+         * ResourceApplication
+         * @description Frozen input reference, never an executable or an approval certificate.
+         *
+         *     The application services additionally validate the typed payload against the
+         *     frozen input and the installed method before it can be adopted. Transport
+         *     keeps the complete source rather than a display-only source sentence.
+         */
+        ResourceApplication: {
+            /**
+             * Schema Version
+             * @default cablesim.resource-application/1
+             * @constant
+             */
+            schema_version?: "cablesim.resource-application/1";
+            /**
+             * Capture Version
+             * @default 1.0.0
+             * @constant
+             */
+            capture_version?: "1.0.0";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "component" | "study_template";
+            /** Method */
+            method: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Source */
+            source: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Payload */
+            payload: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Payload Sha256 */
+            payload_sha256: string;
         };
         /** RestoreInfo */
         RestoreInfo: {
@@ -9498,16 +9954,14 @@ export interface components {
         };
         /** Selection */
         Selection: {
+            /** Series Ids */
+            series_ids: string[];
             /**
-             * Page
-             * @description Selected 1-based original PDF page.
+             * Format
+             * @default json
+             * @enum {string}
              */
-            page: number;
-            /**
-             * Region
-             * @description Optional [left,top,right,bottom] in PDF points; top-left origin, y down.
-             */
-            region?: number[] | null;
+            format?: "json" | "xlsx";
         };
         /** Selection */
         "Selection-Output": {
@@ -9894,6 +10348,15 @@ export interface components {
             history?: {
                 [key: string]: unknown;
             }[] | null;
+        };
+        /** StudyBindings */
+        StudyBindings: {
+            /** Cable Type Ids */
+            cable_type_ids: string[];
+            /** Circuit Ids */
+            circuit_ids: string[];
+            /** Cable Ids */
+            cable_ids: string[];
         };
         /** StudyCardResponse */
         StudyCardResponse: {
@@ -10822,6 +11285,19 @@ export interface components {
             [key: string]: unknown;
         };
         /** Selection */
+        backend__kernel__datasheet_contracts__Selection: {
+            /**
+             * Page
+             * @description Selected 1-based original PDF page.
+             */
+            page: number;
+            /**
+             * Region
+             * @description Optional [left,top,right,bottom] in PDF points; top-left origin, y down.
+             */
+            region?: number[] | null;
+        };
+        /** Selection */
         backend__kernel__resource_data__Selection: {
             /** Release Digest */
             release_digest: string;
@@ -10841,17 +11317,6 @@ export interface components {
             conditions: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
-        };
-        /** Selection */
-        backend__kernel__type_library_exchange__Selection: {
-            /** Series Ids */
-            series_ids: string[];
-            /**
-             * Format
-             * @default json
-             * @enum {string}
-             */
-            format?: "json" | "xlsx";
         };
         CableModelVersion: components["schemas"]["CableModelVersion-Input"];
         CableType: components["schemas"]["CableType-Input"];
@@ -18500,7 +18965,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["backend__kernel__type_library_exchange__Selection"];
+                "application/json": components["schemas"]["Selection"];
             };
         };
         responses: {
@@ -19003,6 +19468,309 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["EnvironmentPreview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evidence_api_library_resources_applications__resource_id__evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    study_capture_preview_api_library_resources_study_templates_capture_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureStudy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    study_capture_api_library_resources_study_templates_capture_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStudyTemplate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    study_preview_api_library_resources_study_templates_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewStudyTemplate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    study_adopt_api_library_resources_study_templates_adopt_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptStudyTemplate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_capture_api_library_resources_components_capture_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureComponent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_api_library_resources_components_capture_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateComponent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_library_resources_components_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewComponent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adopt_api_library_resources_components_adopt_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-cablesim-actor"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptComponent"];
             };
         };
         responses: {
@@ -20373,6 +21141,26 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
+                };
+            };
+        };
+    };
+    close_previews___e2e_close_previews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

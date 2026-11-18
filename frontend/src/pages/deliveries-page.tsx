@@ -1,14 +1,14 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { deliveries, delivery, deliveryFile, deliveryPdf, deliveryPreview, type DeliverySummary, type ReportAudience } from "@/api/delivery";
-import { workspaces } from "@/api/research";
+import { workspaces, typeIndex } from "@/api/research";
 import { message, text, ApiError, optionalRecord } from "@/api/client";
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { DataTable } from "@/components/data-table";
 import { Toolbar } from "@/components/toolbar";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { LoadingState, ErrorState, InlineEmpty } from "@/components/states";
+import { LoadingState, ErrorState, EmptyState } from "@/components/states";
 import { VersionNotice } from '@/components/version-notice';
 import { PropertyPanel } from "@/components/property-panel";
 import { RelationPanel } from "@/components/relation-panel";
@@ -25,7 +25,7 @@ export function DeliveriesPage() {
   const [audience, setAudience] = useState<ReportAudience>("customer");
   const [previewId, setPreviewId] = useState('');
   const filter = text(search.workspace), did = text(search.delivery);
-  const spaces = useQuery({ queryKey: ["delivery-workspaces"], queryFn: ({ signal }) => workspaces(signal) });
+  const spaces = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const owners = (spaces.data || []).map(item => ({ wid: text(item.id), name: text(item.name) || text(item.title) || "未命名工程" }));
   const lists = useQueries({ queries: owners.filter(owner => !filter || owner.wid === filter).map(owner => ({
     queryKey: ["deliveries", owner.wid],
@@ -35,6 +35,11 @@ export function DeliveriesPage() {
   const pending = spaces.isPending || lists.some(list => list.isPending);
   const failure = spaces.error || lists.find(list => list.error)?.error;
   const rows = lists.flatMap(list => list.data || []).sort((a, b) => b.created.localeCompare(a.created));
+  const filteredOwner = owners.find(owner => owner.wid === filter);
+  // An empty filtered list needs the real owner kind before offering a next
+  // step. A pending or failed type index must not turn a model into a project.
+  const ownerTypes = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal),
+    enabled: !!filteredOwner && !pending && !failure && !rows.length });
   const selected = rows.find(item => item.id === did);
   function verify(book: Record<string, unknown>, row: Row, full = false) {
     if (book.id !== row.id || book.workspace !== row.wid || book.digest !== row.digest ||
@@ -59,6 +64,23 @@ export function DeliveriesPage() {
   } });
   const label = (row: Row) => `${row.owner} · ${row.kind === "specification" ? "规格书" : "计算书"} · 第 ${row.version} 版`;
   const go = (workspace: string, next: string) => { download.reset(); setPreviewId(''); void navigate({ to: "/deliveries", search: { theme, workspace, delivery: next } }); };
+  function emptyList() {
+    if (!filter) return <EmptyState title="还没有交付" description="这里展示已有的交付档案。选择研究或型号，核对保存来源并生成所需文件。"
+      action={<div className="report-toolbar"><Button variant="primary" onClick={() => void navigate({ to: "/studies", search: { theme } })}>选择研究</Button>
+        <Button variant="outline" onClick={() => void navigate({ to: "/types", search: { theme } })}>选择型号</Button></div>} />;
+    if (!filteredOwner) return <EmptyState title="筛选对象已不可用" description="当前目录中没有这个工程或型号。清除筛选后可重新选择。"
+      action={<Button variant="primary" onClick={() => go('', '')}>清除筛选</Button>} />;
+    if (ownerTypes.isPending || ownerTypes.isFetching) return <LoadingState title="正在确认交付所属对象" />;
+    if (ownerTypes.error) return <ErrorState title="无法确认交付所属对象" description={message(ownerTypes.error)}
+      action={<div className="report-toolbar"><Button variant="primary" onClick={() => void ownerTypes.refetch()}>重新确认</Button>
+        <Button variant="outline" onClick={() => go('', '')}>清除筛选</Button></div>} />;
+    const model = ownerTypes.data?.some(item => text(item.id) === filter);
+    return <EmptyState title={model ? "这个型号还没有交付" : "这个工程还没有交付"}
+      description={model ? `打开“${filteredOwner.name}”的规格书，核对并保存文档后会出现在这里。` : `打开“${filteredOwner.name}”中的研究，查看保存运行并生成计算书。已有的交付档案会显示在这里。`}
+      action={<Button variant="primary" onClick={() => void navigate(model
+        ? { to: `/types/${filter}/specification/content`, search: { theme } }
+        : { to: "/studies", search: { theme, workspace: filter } })}>{model ? '打开型号规格书' : '打开工程研究'}</Button>} />;
+  }
   return <CatalogShell title="交付" status={<span className="muted">{pending ? "读取中" : `${rows.length} 份`} · 下载存档，不重新计算</span>}
     property={selected ? <PropertyPanel collapsed={false} title={label(selected)} onToggle={() => go(filter, "")}
       groups={[{ label: "名片", items: [
@@ -77,7 +99,7 @@ export function DeliveriesPage() {
     </Toolbar>
     {pending ? <LoadingState title="正在读取交付" />
       : failure ? <ErrorState description={message(failure)} action={<Button onClick={() => { void spaces.refetch(); lists.forEach(list => void list.refetch()); }}>重新读取</Button>} />
-      : !rows.length ? <InlineEmpty title={filter ? "这个工程或型号还没有交付。生成计算书或规格书后会出现在这里。" : "还没有交付。在研究里生成计算书，或在型号里生成规格书。"} />
+      : !rows.length ? emptyList()
       : <DataTable<Row> label="计算书与规格书" showGroups={false} selectedId={did}
         groups={[{id:"deliveries",label:"交付版本",rows}]} rowLabel={label}
         onSelect={row => go(filter, row.id)}

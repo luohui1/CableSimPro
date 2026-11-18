@@ -11,7 +11,7 @@ import { formatNumber } from '@/lib/format';
 import { displayText } from '@/lib/display-names';
 import { useTypeWorkspace } from './provider';
 import { useTypeNavigation, typePath } from './navigation';
-import { artifactRows, chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
+import { artifactRows, chooseEvidence, currentEvidence, methodLabel, useTypeResultEvidence } from './evidence';
 import { useTypeInspector } from './inspector';
 import { TypeRunControl, methodForArtifact } from './run-control';
 import { SavedRunPicker } from './saved-run-picker';
@@ -50,7 +50,7 @@ export async function standardDefinition(wid: string, name: string, cableId: str
   }
 }
 export function TypeStandardCheck() {
-  const state = useTypeWorkspace(), evidence = useTypeEvidence(), inspector = useTypeInspector(), navigation = useTypeNavigation();
+  const state = useTypeWorkspace(), evidence = useTypeResultEvidence(), inspector = useTypeInspector(), navigation = useTypeNavigation();
   const [filter, setFilter] = useState('all'), [selected, setSelected] = useState(''), [running, setRunning] = useState(false);
   let saved: ReturnType<typeof chooseEvidence> = null, rows: StandardRow[] = [], error = '';
   try {

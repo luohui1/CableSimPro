@@ -1,6 +1,7 @@
 // Real saved pages, no network throttling, synthetic input or solver execution.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { openHeadlessBrowser, repositoryRoot } from './browser.mjs';
 import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
@@ -10,18 +11,78 @@ import assert from 'node:assert/strict';
 if (process.env.E2E_ISOLATED !== '1') throw Error('加载归因只运行于隔离宿主');
 const out = path.resolve(process.env.LOADING_TRACE_OUTPUT || path.join(repositoryRoot, '.data/fix-round/shared-shell/loading-path/trace'));
 await fs.mkdir(out, { recursive: true });
-const routes = JSON.parse(process.env.LOADING_TRACE_ROUTES || '[{"name":"home","path":"/?theme=light"}]');
-for (const route of routes) if (!/^[a-z][a-z0-9-]*$/.test(route.name) || !route.path.startsWith('/') || route.path.startsWith('//'))
-  throw Error('追踪目标须是本地路由，名称只能使用小写字母、数字和连字符');
+const dist = path.resolve(process.env.E2E_FRONTEND_DIST || path.join(repositoryRoot, 'frontend/dist'));
+const auditFile = !process.env.LOADING_TRACE_ROUTES && process.env.LOADING_TRACE_AUDIT
+  ? path.resolve(process.env.LOADING_TRACE_AUDIT) : null;
+const localRoute = value => {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || /[\\\r\n\t]/.test(value)) return false;
+  try { return new URL(value, 'http://trace.invalid').origin === 'http://trace.invalid'; } catch { return false; }
+};
+let selection;
+async function auditRoutes(file) {
+  const bytes = await fs.readFile(file), audit = JSON.parse(bytes);
+  assert.equal(audit.complete, true, '加载归因要求已完成的原始性能报告');
+  assert.equal(audit.scope, 'complete', '加载归因不能使用部分巡检替代完整报告');
+  assert.ok(Array.isArray(audit.pages), '性能报告缺少真实测量');
+  const source = await fs.realpath(path.resolve(process.env.E2E_DATABASE_SOURCE || path.join(repositoryRoot, '.data/release/engineering.sqlite')));
+  assert.equal(await fs.realpath(audit.sourceDatabase), source, '加载归因必须使用原性能巡检的同一发布库只读副本');
+  const representatives = [
+    { name:'type-structure-table', phase:'cold', pathname:/^\/types\/[^/]+\/structure\/table$/ },
+    { name:'type-requirements-pending', phase:'hot', pathname:/^\/types\/[^/]+\/requirements\/pending$/ },
+    { name:'type-specification-content', phase:'hot', pathname:/^\/types\/[^/]+\/specification\/content$/ },
+    { name:'research-sweep-points', phase:'hot', pathname:/^\/studies\/[^/]+\/sweep\/points$/ },
+  ];
+  const selected = representatives.map(({name, phase, pathname}) => {
+    const candidates = audit.pages.filter(row => row.kind === phase && Number.isFinite(row.mainMs)
+      && !row.failure && localRoute(row.actualUrl) && pathname.test(new URL(row.actualUrl, 'http://trace.invalid').pathname));
+    candidates.sort((a,b) => b.mainMs - a.mainMs || a.actualUrl.localeCompare(b.actualUrl));
+    assert.ok(candidates.length, `原性能报告缺少可追踪的真实保存页面：${name} · ${phase}`);
+    const row = candidates[0];
+    return { name, path:row.actualUrl, measurement:{ label:row.label, page:row.page, actualUrl:row.actualUrl,
+      phase:row.kind, mainMs:row.mainMs, budgetMs:row.budgetMs, mainPassed:row.mainPassed, measuredAt:row.measuredAt, screenshot:row.screenshot } };
+  });
+  selection = { mode:'performance-audit-diagnostic', audit:file, auditSha256:createHash('sha256').update(bytes).digest('hex'),
+    sourceDatabase:source, originalCounts:audit.counts, originalBudgets:audit.budgets, routes:selected,
+    note:'真实保存页面的 CPU/Chrome/ASGI 归因；每页先冷后热，原测量 phase 标明诊断重点。诊断时序不替代原性能预算结果。' };
+  await fs.writeFile(path.join(out, 'selected-routes.json'), JSON.stringify(selection,null,2));
+  return selected;
+}
+let routes;
+try {
+  routes = auditFile ? await auditRoutes(auditFile) : JSON.parse(process.env.LOADING_TRACE_ROUTES || '[{"name":"home","path":"/?theme=light"}]');
+  assert.ok(Array.isArray(routes) && routes.length, '加载归因没有指定页面');
+  for (const route of routes) if (!/^[a-z][a-z0-9-]*$/.test(route.name) || !localRoute(route.path))
+    throw Error('追踪目标须是相对本地路由，名称只能使用小写字母、数字和连字符');
+  assert.equal(new Set(routes.map(route => route.name)).size, routes.length, '追踪目标名称不能重复覆盖产物');
+  assert.ok(process.env.LOADING_SERVER_TRACE, '加载归因缺少真实 ASGI trace 路径；请通过 isolated-e2e 执行');
+} catch (error) {
+  await fs.writeFile(path.join(out, 'selection-error.json'), JSON.stringify({ audit:auditFile, message:error.message },null,2));
+  throw error;
+}
+const responseHeaderNames = new Set(['content-type','content-encoding','content-length','server-timing','x-cablesim-read-cache','cache-control','etag','last-modified','age','vary','expires']);
+const omittedHeaders = new Set();
+function diagnosticHeaders(headers = {}) {
+  return Object.fromEntries(Object.entries(headers).flatMap(([name,value]) => {
+    const key = name.toLowerCase();
+    if (responseHeaderNames.has(key)) return [[key,value]];
+    omittedHeaders.add(key); return [];
+  }));
+}
+const sourceMapping = { dist, availableMaps:[], unmappedFiles:[] };
+try { sourceMapping.availableMaps = (await fs.readdir(dist,{recursive:true})).filter(name => name.endsWith('.map')); }
+catch (error) { sourceMapping.unavailableReason = error.code || error.message; }
 const resources = new Map();
 async function source(frame) {
   if (!frame.url || !frame.url.startsWith(process.env.FRONTEND_URL)) return frame;
   try {
     const relative = new URL(frame.url).pathname.slice(1) + '.map';
-    if (!resources.has(relative)) resources.set(relative, new TraceMap(JSON.parse(await fs.readFile(path.join(process.env.E2E_FRONTEND_DIST, relative), 'utf8'))));
+    if (!resources.has(relative)) resources.set(relative, new TraceMap(JSON.parse(await fs.readFile(path.join(dist, relative), 'utf8'))));
     const original = originalPositionFor(resources.get(relative), { line:frame.lineNumber+1, column:frame.columnNumber });
     return { ...frame, original };
-  } catch { return frame; }
+  } catch {
+    if (!sourceMapping.unmappedFiles.includes(frame.url)) sourceMapping.unmappedFiles.push(frame.url);
+    return frame;
+  }
 }
 const results = [];
 async function useSharedControls(page) {
@@ -112,7 +173,7 @@ async function useSharedControls(page) {
   return checks;
 }
 for (const route of routes) {
-  const owned = await openHeadlessBrowser({ executable:'C:/Program Files/Google/Chrome/Application/chrome.exe', routeGuard:false });
+  const owned = await openHeadlessBrowser({ routeGuard:false });
   try {
     const {page,context} = owned;
     await page.setViewportSize({width:1366,height:768});
@@ -141,15 +202,18 @@ for (const route of routes) {
     });
     await installReadinessObserver(page);
     const cdp = await context.newCDPSession(page);
-    const browserIdentity = {executable:'C:/Program Files/Google/Chrome/Application/chrome.exe', ...await cdp.send('Browser.getVersion')};
+    const browserIdentity = { executableOverride:process.env.BROWSER_EXECUTABLE || null,
+      selection:'openHeadlessBrowser 环境/系统/Playwright 选择，实际 executable 见同次启动日志', ...await cdp.send('Browser.getVersion') };
     await cdp.send('Network.enable');
     await cdp.send('Profiler.enable');
     await cdp.send('Profiler.setSamplingInterval',{interval:1000});
     for (const phase of ['cold','hot']) {
+      await page.setViewportSize({width:1366,height:768});
+      if (phase === 'cold') await cdp.send('Network.clearBrowserCache');
       const requests = new Map(), trace = [];
       const handlers = {
         'Network.requestWillBeSent': e => requests.set(e.requestId,{id:e.requestId,type:e.type,url:e.request.url,start:e.timestamp,wall:e.wallTime,initiator:e.initiator.type}),
-        'Network.responseReceived': e => Object.assign(requests.get(e.requestId)||{}, {response:e.timestamp,status:e.response.status,cache:e.response.fromDiskCache,headers:e.response.headers,timing:e.response.timing}),
+        'Network.responseReceived': e => Object.assign(requests.get(e.requestId)||{}, {response:e.timestamp,status:e.response.status,cache:e.response.fromDiskCache,headers:diagnosticHeaders(e.response.headers),timing:e.response.timing}),
         'Network.dataReceived': e => { const r=requests.get(e.requestId); if(r){r.firstData??=e.timestamp;r.lastData=e.timestamp;r.chunks=(r.chunks||0)+1;r.encoded=(r.encoded||0)+e.encodedDataLength;} },
         'Network.loadingFinished': e => Object.assign(requests.get(e.requestId)||{}, {end:e.timestamp,bytes:e.encodedDataLength}),
         'Tracing.dataCollected': e => trace.push(...e.value),
@@ -177,12 +241,13 @@ for (const route of routes) {
       }
       const cpu = await Promise.all([...totals.values()].sort((a,b)=>b.selfMs-a.selfMs).slice(0,40).map(async v=>({...v,frame:await source(v.frame),stack:await Promise.all(v.stack.slice(0,12).map(source))})));
       const styleReads = process.env.LOADING_TRACE_STYLE === '1' ? await page.evaluate(() => window.__styleReads) : undefined;
-      const item={route,phase,browserIdentity,state,observed,cpu,styleReads,requests:[...requests.values()],longTasks:trace.filter(e=>e.name==='RunTask'&&e.dur>=50000),traceEvents:trace.length};
+      const item={route,phase,actualUrl:page.url().replace(process.env.FRONTEND_URL,''),browserIdentity,state,observed,cpu,styleReads,
+        diagnosticOnly:true,sourceMapping,requests:[...requests.values()],longTasks:trace.filter(e=>e.name==='RunTask'&&e.dur>=50000),traceEvents:trace.length};
       const name=route.name+'-'+phase;
       await fs.writeFile(path.join(out,name+'.json'),JSON.stringify(item,null,2));
       await fs.writeFile(path.join(out,name+'-cpu.json'),JSON.stringify(profile));
       await fs.writeFile(path.join(out,name+'-timeline.json'),JSON.stringify({traceEvents:trace}));
-      if(phase==='hot') {
+      if(phase==='hot' && !auditFile) {
         await fs.writeFile(path.join(out,route.name+'-controls.json'),JSON.stringify(await useSharedControls(page),null,2));
         // Keep network observation through the real deferred catalogue reads.
         // They are labelled after-body and never added to the first-screen budget.
@@ -191,6 +256,23 @@ for (const route of routes) {
         await fs.writeFile(path.join(out,name+'.json'),JSON.stringify(item,null,2));
         await page.screenshot({path:path.join(out,route.name+'.png')});
       }
+      if (auditFile) {
+        // These resized screenshots happen after Profiler/Tracing.stop. They are
+        // diagnostic evidence, never another performance-budget measurement.
+        if (phase === route.measurement.phase) {
+          item.screenshots = [];
+          for (const size of [{width:1366,height:768},{width:1920,height:1080}]) {
+            await page.setViewportSize(size);
+            await waitForPageReady(page);
+            const screenshot = `${name}-${size.width}.png`;
+            await page.screenshot({path:path.join(out,screenshot)});
+            item.screenshots.push({ size, file:screenshot });
+          }
+        }
+        item.observed.resources=await page.evaluate(()=>performance.getEntriesByType('resource').map(e=>e.toJSON()));
+        item.requests=[...requests.values()];
+        await fs.writeFile(path.join(out,name+'.json'),JSON.stringify(item,null,2));
+      }
       for (const [event,handle] of Object.entries(handlers)) cdp.off(event,handle);
       results.push({name,mainMs:observed.mainMs,frameMs:observed.frameMs,longTasks:observed.longTasks,errors:state.errors});
       console.log(JSON.stringify(results.at(-1)));
@@ -198,4 +280,19 @@ for (const route of routes) {
   } finally { await owned.close(); }
 }
 await fs.writeFile(path.join(out,'summary.json'),JSON.stringify(results,null,2));
-await loadingTraceReport(out,process.env.LOADING_SERVER_TRACE,process.env.E2E_FRONTEND_DIST || path.join(repositoryRoot,'frontend/dist'));
+const serverFile = path.resolve(process.env.LOADING_SERVER_TRACE), serverBytes = await fs.readFile(serverFile);
+const serverCopy = path.join(out, 'server.jsonl');
+assert.notEqual(serverFile, serverCopy, '原始 ASGI trace 须留在产物之外，不能覆盖为诊断副本');
+const serverRows = serverBytes.toString('utf8').trim().split('\n').filter(Boolean).map(line => {
+  const row = JSON.parse(line);
+  if (row.response_headers) row.response_headers = diagnosticHeaders(row.response_headers);
+  return row;
+});
+await fs.writeFile(serverCopy,serverRows.map(row=>JSON.stringify(row)).join('\n')+'\n');
+await fs.writeFile(path.join(out,'diagnostic-metadata.json'),JSON.stringify({ diagnosticOnly:true, sourceMapping,
+  selection:selection || { mode:'explicit-routes-or-home', routes }, serverTrace:{ source:serverFile,
+    sourceSha256:createHash('sha256').update(serverBytes).digest('hex'), copy:serverCopy, rows:serverRows.length,
+    copyKind:'header 白名单副本；时序、状态、body 数及字节数保持原值' },
+  retainedResponseHeaders:[...responseHeaderNames], omittedResponseHeaderNames:[...omittedHeaders].sort(),
+  note:'CPU/Chrome 采样与截图仅用于归因，不能替代原 performance 审计；缺少 sourcemap 时保留 raw frame/stack。' },null,2));
+await loadingTraceReport(out,serverCopy,dist);

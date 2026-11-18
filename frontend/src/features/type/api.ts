@@ -2,10 +2,10 @@ import { api, ApiError, array, message, numeric, optionalRecord, record, respons
 import { typeIndex } from '@/api/research';
 import type { components } from '@/api/generated/schema';
 import type { DomainDocument } from '@/lib/domain-fields';
-import { publicationStatus, type DesignStatus } from './design-summary';
+import { executionStandardsSummary, publicationStatus, type DesignStatus, type ExecutionStandardsSummary } from './design-summary';
 
 export type Workspace = { id: string; revision: number; document: DomainDocument; raw: Record<string, unknown> };
-export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument; standards: string[]; standardsReason: string };
+export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument } & ExecutionStandardsSummary;
 export type ModelChoice = { id: string; name: string; version: string; digest: string; workspace?: string; raw: Record<string, unknown> };
 const documentAttempts = new Map<string, { input: string; request: string }>();
 
@@ -18,9 +18,40 @@ export function projectWorkspace(value: unknown): Workspace {
   for (const key of ['cable_types', 'materials', 'circuits', 'sections', 'load_cases']) array(domain[key], key);
   return { id, revision, document: domain as unknown as DomainDocument, raw };
 }
-export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?: number, runId?: string) {
+export function typeRunReceipt(wid: string, runId: string, value: unknown) {
+  const run = record(value, '固定运行身份');
+  if (run.id !== runId || run.workspace !== wid || !text(run.study) || run.integrity !== 'verified'
+    || !/^[0-9a-f]{64}$/.test(text(run.input_digest))
+    || run.output_digest !== null && !/^[0-9a-f]{64}$/.test(text(run.output_digest)))
+    throw new ApiError(409, '固定运行身份、完整性或保存摘要不一致，停止显示');
+  return run;
+}
+export function matchingTypeRun(wid: string, runId: string, reference: unknown, value: unknown) {
+  const expected = typeRunReceipt(wid, runId, reference), run = typeRunReceipt(wid, runId, value);
+  if (run.study !== expected.study || run.input_digest !== expected.input_digest || run.output_digest !== expected.output_digest)
+    throw new ApiError(409, '固定运行与保存身份或摘要不一致，停止显示');
+  return run;
+}
+export async function fullTypeRun(wid: string, runId: string, reference: unknown, signal?: AbortSignal, allowWorkspaceAlias = false) {
+  const expected = typeRunReceipt(wid, runId, reference), sid = text(expected.study);
+  const run = matchingTypeRun(wid, runId, expected, await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {
+    params: { path: { wid, sid, rid: runId }, query: { view: 'full' } }, signal,
+  })));
+  const snapshot = record(run.snapshot, '固定运行完整输入'), revision = numeric(snapshot.study_revision), workspaceRevision = numeric(snapshot.workspace_revision);
+  const workspaceMatches = snapshot.workspace_id === wid
+    || allowWorkspaceAlias && !Object.hasOwn(snapshot, 'workspace_id') && snapshot.workspace === wid;
+  if (!workspaceMatches || snapshot.study_id !== sid || revision === null || revision < 1
+    || workspaceRevision === null || workspaceRevision < 1
+    || snapshot.workspace !== undefined && snapshot.workspace !== wid
+    || snapshot.study !== undefined && snapshot.study !== sid)
+    throw new ApiError(409, '固定运行完整输入与工程、研究身份不一致，停止显示');
+  return { study: { id: sid, revision, definition: record(snapshot.definition, '固定运行方法') }, run };
+}
+export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?: number, runId?: string, savedEvidence?: ReturnType<typeof typeEvidence>) {
   if (runId) {
-    const found = (await typeEvidence(wid, signal)).find(item => item.run.id === runId);
+    const evidence = await (savedEvidence ?? typeEvidence(wid, signal));
+    signal?.throwIfAborted();
+    const found = evidence.find(item => item.run.id === runId);
     if (!found || found.run.integrity !== 'verified') throw new ApiError(409, '固定运行不存在或完整性未通过');
     let snapshot = record(found.run.snapshot, '固定运行输入');
     if (!snapshot.workspace_state && snapshot.workspace_state_ref) {
@@ -62,27 +93,42 @@ export async function typeRequirements(wid:string, runId:string, signal?:AbortSi
 export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
   const [drafts, published] = await Promise.all([typeIndex(signal), publishedTypes(signal)]);
   const ids = [...new Set([...drafts.map(item => text(item.id)), ...published.map(item => text(item.workspace_id))])];
-  const rows: TypeRow[] = [];
-  // Bounded reads of the design objects: multiple published versions share one design home.
-  for (let start = 0; start < ids.length; start += 4) rows.push(...await Promise.all(ids.slice(start, start + 4).map(async id => {
-    if (!id) throw new ApiError(502, '型号列表缺少身份');
-    const workspaceRead = loadWorkspace(id, signal);
-    const [workspace, standards] = await Promise.all([workspaceRead, executionStandards(id, workspaceRead, signal)]);
-    const raw = workspace.raw, origin = optionalRecord(raw.type_origin_reference);
-    return { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document, ...standards };
-  })));
+  const rows = new Array<TypeRow>(ids.length);
+  let next = 0, failed = false;
+  // Keep four design reads in flight. A completed pair can read the next id
+  // without waiting for the slowest sibling; the complete list retains its order.
+  async function readDesigns() {
+    while (!failed && next < ids.length) {
+      const index = next++, id = ids[index];
+      try {
+        signal?.throwIfAborted();
+        if (!id) throw new ApiError(502, '型号列表缺少身份');
+        const workspaceRead = loadWorkspace(id, signal);
+        const [workspace, standards] = await Promise.all([workspaceRead, executionStandards(id, workspaceRead, signal)]);
+        const raw = workspace.raw, origin = optionalRecord(raw.type_origin_reference);
+        rows[index] = { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document, ...standards };
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, ids.length) }, () => readDesigns()));
   return rows;
 }
 async function executionStandards(id: string, workspaceRead: Promise<Workspace>, signal?: AbortSignal) {
   try {
     const response=await fetch(`/api/types/${encodeURIComponent(id)}/standards-summary`,{signal:AbortSignal.any([AbortSignal.timeout(10000),...(signal?[signal]:[])])});
-    const data=await response.json();if(!response.ok)throw new ApiError(response.status,'执行标准目录暂不可用，请重新读取');
+    const data=await response.json();if(!response.ok)throw new ApiError(response.status,text(optionalRecord(data.detail).message)||text(data.detail)||'已批准要求标准暂不可用，请重新读取');
     const summary=record(data,'执行标准目录'), workspace=await workspaceRead;if(summary.revision!==workspace.revision)throw new ApiError(409,'型号修订已变化，请刷新目录');
-    const standards=array(summary.standards,'执行标准').map(value=>text(value));
-    return {standards,standardsReason:text(summary.reason)};
+    const standards=array(summary.standards,'已批准要求标准').map(value=>{
+      const name=text(value).trim();if(!name)throw new ApiError(502,'已批准要求标准目录缺少标准名称');return name;
+    });
+    return executionStandardsSummary(workspace.document,{standards});
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { standards: [], standardsReason: '在要求与标准里添加；要求目录未能读取：' + message(error) };
+    const workspace=await workspaceRead;
+    return executionStandardsSummary(workspace.document,{error:message(error)});
   }
 }
 export async function modelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {

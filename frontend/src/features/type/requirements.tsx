@@ -15,7 +15,7 @@ import { formatNumber } from '@/lib/format';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
 import { typePath, useTypeNavigation } from './navigation';
-import { chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
+import { chooseEvidence, currentEvidence, useTypeResultEvidence } from './evidence';
 import { standardDefinition } from './standard-check';
 import { basisConditions, basisValue } from './basis-display';
 import { TypeRunControl } from './run-control';
@@ -28,7 +28,7 @@ import { EngineeringInputEntry } from './engineering-inputs';
 const states: Record<string, { label: string; kind: StatusKind }> = { proposed: { label: '待批准', kind: 'draft' }, approved: { label: '已批准', kind: 'success' }, conflict: { label: '版本冲突', kind: 'error' }, unbound: { label: '未定义 / 未覆盖', kind: 'unknown' } };
 type Row = Record<string, unknown> & { id: string };
 export function TypeRequirements({ tab }: { tab: string }) {
-  const state = useTypeWorkspace(), evidence = useTypeEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector(), queries = useQueryClient();
+  const state = useTypeWorkspace(), evidence = useTypeResultEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector(), queries = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set()), [filter, setFilter] = useState('all'), [picked, setPicked] = useState('');
   const [open, setOpen] = useState(false), [reviewer, setReviewer] = useState(''), [ack, setAck] = useState(false), [running, setRunning] = useState(false);
   const [currentBasis,setCurrentBasis]=useState<Record<string,unknown>|null>(null);
@@ -77,7 +77,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
       {saved && tab === 'list' && <Select label="批准状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(states).map(([value, item]) => ({ value, label: item.label }))]} />}
     </div>
     {tab === 'standards' && <><ResourceBindings role="standard" /><DeclaredStandardReferences /></>}
-    {bodyState === 'loading' ? <LoadingState title={loadingTitle} /> : bodyState === 'error' ? <ErrorState title="要求目录不可用" description={parseError || message(evidence.error || ledger.error)} action={<Button onClick={() => void Promise.all([evidence.refetch(), runId ? ledger.refetch() : Promise.resolve()])}>重新读取</Button>} /> : !saved ? <InlineEmpty title={tab==='standards'?'尚无标准核对记录；使用命令栏核对已声明标准。':'尚无要求目录；使用命令栏生成要求，再核对来源。'} /> : <>
+    {bodyState === 'loading' ? <LoadingState title={loadingTitle} /> : bodyState === 'error' ? <ErrorState title="要求目录不可用" description={parseError || message(evidence.error || ledger.error)} action={<Button onClick={() => void Promise.all([evidence.refetch(), runId ? ledger.refetch() : Promise.resolve()])}>重新读取</Button>} /> : !saved ? <InlineEmpty title={tab==='standards'?'尚无标准核对记录；请先核对已声明标准。':'尚无要求目录；使用命令栏生成要求，再核对来源。'} action={tab==='standards' && <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'standard-check', 'results', navigation.location.theme))}>去标准核对</Button>} /> : <>
       {!current && <StaleBanner description="当前显示历史要求；重新核对后才能批准。" />}
       {currentBasis?.workspace_revision===state.workspace?.revision&&!current&&<p role="status">当前输入依据已重新查询 · 使用“更新要求目录”保存新判定，审批仍需人工确认。</p>}
       <div className="type-result-summary"><strong>{rows.length} 项要求</strong><span>{numeric(ledger.data?.approved_count) || 0} 项已批准</span><span>{selected.size} 项已选</span></div>

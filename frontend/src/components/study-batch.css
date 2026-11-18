@@ -1,0 +1,50 @@
+.study-batch,
+.study-batch .input-section,
+.study-batch .input-form-grid > * {
+  min-width: 0;
+}
+
+.study-batch .input-form-grid {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(var(--space-12) * 5)), 1fr)
+  );
+}
+
+.study-batch .input-form-grid .number-field {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.study-batch [data-field-path="batch-source-module"] {
+  grid-column: 1 / -1;
+}
+
+.study-batch .select-trigger {
+  width: 100%;
+  text-align: left;
+}
+
+.study-batch .toolbar {
+  flex-wrap: wrap;
+}
+
+.study-batch .toolbar .select-field {
+  flex: 1 1 calc(var(--space-12) * 5);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.study-batch .toolbar .select-trigger {
+  flex: 1;
+  min-width: 0;
+}
+
+.study-batch .text-field,
+.study-batch .text-field input {
+  min-width: 0;
+}
+
+.study-batch .text-field input {
+  width: 100%;
+}

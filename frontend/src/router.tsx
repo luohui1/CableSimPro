@@ -16,25 +16,27 @@ import { ShellLayout, RouteSkeleton } from "./components/shell-layout";
 import { queryClient } from "./lib/query-client";
 import { prefetchStudy } from "./lib/study-queries";
 import { prefetchStandardsBasis } from './lib/standards-queries';
+import { prefetchHomePage, prefetchPluginsPage, prefetchRunsPage } from './lib/catalog-queries';
 import { EmptyState } from "./components/states";
 import { Redirect } from "./components/redirect";
+import { lazyWorkbenchRoute } from './lib/lazy-workbench-route';
 const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
 const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/gallery-page'), 'GalleryPage') : undefined;
-const AssetsPage = lazyRouteComponent(() => import('./pages/library-page'), 'AssetsPage');
-const CableVersionsPage = lazyRouteComponent(() => import('./pages/cable-versions-page'), 'CableVersionsPage');
-const RunsPage = lazyRouteComponent(() => import('./pages/runs-page'), 'RunsPage');
-const HomePage = lazyRouteComponent(() => import('./pages/home-page'), 'HomePage');
-const InboxPage = lazyRouteComponent(() => import('./pages/inbox-page'), 'InboxPage');
-const DocumentsPage = lazyRouteComponent(() => import('./pages/documents-page'), 'DocumentsPage');
-const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'), 'DeliveriesPage');
-const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
-const SettingsPage = lazyRouteComponent(() => import('./pages/settings-page'), 'SettingsPage');
+const AssetsPage = lazyWorkbenchRoute(() => import('./pages/library-page'), 'AssetsPage');
+const CableVersionsPage = lazyWorkbenchRoute(() => import('./pages/cable-versions-page'), 'CableVersionsPage');
+const RunsPage = lazyWorkbenchRoute(() => import('./pages/runs-page'), 'RunsPage');
+const HomePage = lazyWorkbenchRoute(() => import('./pages/home-page'), 'HomePage');
+const InboxPage = lazyWorkbenchRoute(() => import('./pages/inbox-page'), 'InboxPage');
+const DocumentsPage = lazyWorkbenchRoute(() => import('./pages/documents-page'), 'DocumentsPage');
+const DeliveriesPage = lazyWorkbenchRoute(() => import('./pages/deliveries-page'), 'DeliveriesPage');
+const PluginsPage = lazyWorkbenchRoute(() => import('./pages/plugins-page'), 'PluginsPage');
+const SettingsPage = lazyWorkbenchRoute(() => import('./pages/settings-page'), 'SettingsPage');
 const AgentPage = lazyRouteComponent(() => import('./pages/agent-page'), 'AgentPage');
-const ProjectHome = lazyRouteComponent(() => import('./pages/project-home'), 'ProjectHome');
-const ReproductionPage = lazyRouteComponent(() => import('./pages/reproduction-page'), 'ReproductionPage');
-const StudyProvider = lazyRouteComponent(() => import('./components/study-provider'), 'StudyProvider');
-const StudyWorkspace = lazyRouteComponent(() => import('./pages/study-workspace'), 'StudyWorkspace');
-const StudyEntry = lazyRouteComponent(() => import('./pages/study-workspace'), 'StudyEntry');
+const ProjectHome = lazyWorkbenchRoute(() => import('./pages/project-home'), 'ProjectHome');
+const ReproductionPage = lazyWorkbenchRoute(() => import('./pages/reproduction-page'), 'ReproductionPage');
+const StudyProvider = lazyWorkbenchRoute(() => import('./components/study-provider'), 'StudyProvider');
+const StudyWorkspace = lazyWorkbenchRoute(() => import('./pages/study-workspace'), 'StudyWorkspace');
+const StudyEntry = lazyWorkbenchRoute(() => import('./pages/study-workspace'), 'StudyEntry');
 
 export type PageState =
   "empty" | "loading" | "error" | "success" | "historical";
@@ -70,7 +72,8 @@ const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/r
   if (params.group === 'standards') prefetchStandardsBasis(context.queryClient);
 }, component: AssetsPage });
 // 记录：运行与作业、交付；都是跨对象的筛选视图，各自的家在所属研究或型号里
-const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/runs", validateSearch: themeSearch, component: RunsPage });
+const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/runs", validateSearch: themeSearch,
+  beforeLoad: ({ context }) => { prefetchRunsPage(context.queryClient); }, component: RunsPage });
 // 待办：四类审核、过期待重算、资料缺项、进行中，来自统一索引（§2.3）
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: "/inbox", validateSearch: themeSearch, component: InboxPage });
 const deliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/deliveries", validateSearch: deliverySearch, component: DeliveriesPage });
@@ -78,8 +81,10 @@ const deliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/d
 const legacyLibraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library", validateSearch: themeSearch, beforeLoad: ({ search }) => { throw redirect({ to: "/resources/cables", search, replace: true }); } });
 const legacyDeliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/deliveries", validateSearch: deliverySearch, beforeLoad: ({ search }) => { throw redirect({ to: "/deliveries", search, replace: true }); } });
 const legacyDocumentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/documents", validateSearch: documentSearch, beforeLoad: ({ search }) => { throw redirect({ to: "/resources/cables/imports", search, replace: true }); } });
-const pluginsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins", validateSearch: themeSearch, component: PluginsPage });
-const pluginDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins/$pid", validateSearch: themeSearch, component: PluginsPage });
+const pluginsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins", validateSearch: themeSearch,
+  beforeLoad: ({ context }) => { prefetchPluginsPage(context.queryClient); }, component: PluginsPage });
+const pluginDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins/$pid", validateSearch: themeSearch,
+  beforeLoad: ({ context }) => { prefetchPluginsPage(context.queryClient); }, component: PluginsPage });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; section?: string } => ({ ...themeSearch(search), section: typeof search.section === "string" ? search.section : undefined }), component: SettingsPage });
 const computeSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/compute", validateSearch: themeSearch, component: SettingsPage });
 const agentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/agent", validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; workspace?: string; task?: string; ask?: "inbox" } => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : undefined, task: typeof search.task === "string" ? search.task : undefined, ask: search.ask === "inbox" ? "inbox" as const : undefined }), component: AgentPage });
@@ -93,6 +98,7 @@ export const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   validateSearch: themeSearch,
+  beforeLoad: ({ context }) => { prefetchHomePage(context.queryClient); },
   component: HomePage,
 });
 export const studiesRoute = createRoute({
@@ -144,6 +150,7 @@ export const studyRootRoute = createRoute({
     generate?: boolean;
     dataset?: string;
     compare?: string;
+    case?: string;
     view?: "section" | "cable" | "three" | "field";
     inspector?: "input" | "method" | "agent";
   } => ({
@@ -155,14 +162,20 @@ export const studyRootRoute = createRoute({
     generate: search.generate === true || search.generate === "true",
     dataset: typeof search.dataset === "string" ? search.dataset : "",
     compare: typeof search.compare === "string" ? search.compare : "",
+    case: typeof search.case === "string" && search.case ? search.case : undefined,
     // 工作窗口中间画布显示的模型视图；不写时由计算类型决定
     view: search.view === "cable" || search.view === "three" || search.view === "section" || search.view === "field" ? search.view : undefined,
     // 右侧属性区显示“输入”还是“方法”（方法参数、问询条件、扫描设置）
     inspector: search.inspector === "method" || search.inspector === "input" || search.inspector === "agent" ? search.inspector : undefined,
   }),
-  loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run }),
+  loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run, inspector: search.inspector }),
   // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。
-  loader: ({ context, params, deps }) => prefetchStudy(context.queryClient, deps.workspace, params.sid, deps.run),
+  loader: ({ context, params, deps, location }) => {
+    const module = location.pathname.split('/')[3] || '';
+    const tab = location.pathname.split('/')[4] || '';
+    // Prefetch and provider resolve the same existing input/method aliases.
+    prefetchStudy(context.queryClient, deps.workspace, params.sid, deps.run, module, tab, deps.inspector);
+  },
   component: StudyProvider,
 });
 const studyEntryRoute = createRoute({

@@ -25,6 +25,48 @@ export function approvedStandardNames(ledger: Record<string, unknown>, runId: st
       && text(optionalRecord(approval.definition).standard) === name && name ? [name] : [];
   }))];
 }
+export type ExecutionStandardsSummary = {
+  standards: string[]; approvedStandards: string[]; standardsLabel: string; standardsReason: string;
+  declarationState: 'declared' | 'undeclared' | 'unconfirmed' | 'invalid'; approvalState: 'ready' | 'error';
+};
+/** Project the saved explicit declaration for display; this neither validates engineering use nor approves requirements. */
+export function executionStandardsSummary(document: DomainDocument, approval: { standards: string[] } | { error: string }): ExecutionStandardsSummary {
+  const source = document.provenance?.['/execution_standards'];
+  let standards: string[] = [], declarationState: ExecutionStandardsSummary['declarationState'] = 'undeclared';
+  let label = '未声明', reason = '当前输入未声明执行版本；在要求与标准中核对并声明。';
+  if (source != null) {
+    if (source.kind !== 'standard' || source.reviewed !== true) {
+      declarationState = 'unconfirmed'; label = '声明待确认'; reason = '执行版本声明尚未确认；在要求与标准中核对来源与版本。';
+    } else {
+      try {
+        const declaration = optionalRecord(JSON.parse(source.reference || ''));
+        if (declaration.schema !== 'cablesim.execution-standards/1' || !Array.isArray(declaration.items) || declaration.items.length > 64) throw new Error('声明格式不完整');
+        standards = [...new Set(declaration.items.map(value => {
+          const item = optionalRecord(value), name = text(item.standard).trim();
+          if (!name || name.length > 128 || !/^[a-f0-9]{64}$/.test(text(item.source_digest))) throw new Error('声明项目缺少标准名称或来源摘要');
+          return name;
+        }))];
+        if (standards.length) {
+          declarationState = 'declared'; label = standards.join('、'); reason = '当前输入已明确声明执行版本；声明不等于批准要求或计算结果。';
+        }
+      } catch {
+        standards = []; declarationState = 'invalid'; label = '声明待核对'; reason = '已保存的执行版本声明无法完整读取；在要求与标准中重新核对，不能按未声明处理。';
+      }
+    }
+  }
+  const approvalState = 'error' in approval ? 'error' : 'ready';
+  const approvedStandards = 'error' in approval ? [] : [...new Set(approval.standards)];
+  if ('error' in approval) {
+    label = declarationState === 'undeclared' ? '标准读取失败' : label + '；批准状态读取失败';
+    reason += ' 已批准要求标准未能读取：' + approval.error;
+  } else if (approvedStandards.length) {
+    if (!standards.length) label += '；已有批准要求';
+    reason += ' 当前已有批准要求涉及：' + approvedStandards.join('、') + '；不据此推断执行版本声明。';
+  } else {
+    reason += ' 尚无当前已批准要求；批准仍需在要求清单中由工程师确认。';
+  }
+  return { standards, approvedStandards, standardsLabel: label, standardsReason: reason, declarationState, approvalState };
+}
 /** Read declared SI values only; a reference standard is not an execution declaration. */
 export function designSummary(document: DomainDocument, raw: Record<string, unknown>) {
   const origin = optionalRecord(raw.type_origin_reference), cable = document.cable_types[0];

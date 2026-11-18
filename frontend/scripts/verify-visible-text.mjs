@@ -6,18 +6,28 @@ import { openHeadlessBrowser, repositoryRoot } from './browser.mjs';
 import { moduleDefinitions, moduleBehavior } from '../src/pages/study-modules.ts';
 import { typeModules } from '../src/features/type/module-definitions.ts';
 import { categories, identifyText, exceptionFor, whitelist, findingOwner, readOnlyPost } from './visible-text-policy.mjs';
+import { cableSeriesLabelSelector, resourceSourceReferenceSelector, resourceSourceReferenceException } from './visible-names.mjs';
 import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
+import { createCompactTextKeySet, writeAuditJson } from './audit-json.mjs';
 import { performance as monotonicClock } from 'node:perf_hooks';
 
 assert.equal(process.env.E2E_ISOLATED, '1', '文字巡检只能在隔离副本运行');
 const base = process.env.FRONTEND_URL;
 const performanceMode = process.env.PERFORMANCE_AUDIT === '1';
+const auditViewports = [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
+const requestedViewport = process.env.REGULARITY_VIEWPORT || '';
+if (requestedViewport && (performanceMode || process.env.REGULARITY_AUDIT !== '1'))
+  throw Error('REGULARITY_VIEWPORT 只用于规整巡检，不改变独立性能审计');
+if (requestedViewport && !auditViewports.some(size => `${size.width}x${size.height}` === requestedViewport))
+  throw Error('REGULARITY_VIEWPORT 只能是 1366x768 或 1920x1080');
+const sizes = performanceMode ? [auditViewports[0]] : requestedViewport
+  ? auditViewports.filter(size => `${size.width}x${size.height}` === requestedViewport) : auditViewports;
 const requestedPhase = process.env.VISIBLE_TEXT_PASS;
 if (requestedPhase && !/^[a-z-]+$/.test(requestedPhase)) throw Error('文字巡检输出名只能使用小写字母和连字符');
 const phase = requestedPhase || (performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after');
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/visible-text', phase);
 await fs.mkdir(out, { recursive: true });
-const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe', routeGuard: !performanceMode });
+const session = await openHeadlessBrowser({ routeGuard: !performanceMode });
 const { page, context } = session;
 const performanceAudit = performanceMode ? await (await import('./performance-audit.mjs')).createPerformanceAudit({ page, context, root: repositoryRoot, base }) : null;
 if (!performanceMode) await installReadinessObserver(page);
@@ -26,8 +36,9 @@ const withVisibleText = process.env.REGULARITY_WITH_VISIBLE === '1';
 const report = { phase, generated: new Date().toISOString(), source: '发布库只读备份；独立随机端口；不运行求解或批准提案', pages: [], findings: [], secondary: [], allowed: [], uncovered: [], errors: [], blockedWrites: [], readOnlyPosts: [], runChecks: [], whitelist, complete: false };
 report.sourceDatabase = process.env.E2E_DATABASE_SOURCE || path.join(repositoryRoot, '.data/release/engineering.sqlite');
 report.frontendSnapshot = process.env.E2E_FRONTEND_DIST || '当前前端构建';
-const sizes = performanceMode ? [{ width: 1366, height: 768 }] : [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
-const targets = [], queued = new Set(), issueKeys = new Set(), secondaryKeys = new Set(), shellHoverSizes = new Set(), sourceModules = new Map();
+report.viewports = sizes.map(size => ({ ...size }));
+report.viewportSelection = requestedViewport || (performanceMode ? '1366x768' : 'both');
+const targets = [], queued = new Set(), issueKeys = createCompactTextKeySet(), secondaryKeys = createCompactTextKeySet(), shellHoverSizes = new Set(), sourceModules = new Map();
 const requestedPaths = new Set((process.env.VISIBLE_TEXT_PATHS || '').split('|').filter(Boolean));
 const modulesOnly = process.env.VISIBLE_TEXT_MODULES === '1';
 report.scope = requestedPaths.size || modulesOnly ? 'targeted' : 'complete';
@@ -63,7 +74,7 @@ async function settled() {
 
 /** Read only painted viewport text; clipped scroll text is scanned at its later scroll position. */
 async function entries(layer = 'ordinary') {
-  return page.evaluate(layer => {
+  return page.evaluate(({ layer, cableSeriesLabelSelector, resourceSourceReferenceSelector }) => {
     const result = [];
     const selector = element => {
       const parts = []; let e = element;
@@ -75,7 +86,7 @@ async function entries(layer = 'ordinary') {
       }
       return parts.join(' > ');
     };
-    const metadata = element => ({ selector: selector(element), agentAnswer: !!element.closest('.agent-answer,.agent-user-message,.agent-step-list'), field: !!element.closest('[data-field-page],.field-results,.hpc-job-list'), standard: !!element.closest('.basis-page,.standards-browser'), cad: !!element.closest('.type-page,.drawing-panel') });
+    const metadata = element => ({ selector: selector(element), cableSeriesLabel: element.matches(cableSeriesLabelSelector), resourceSourceReference: element.matches(resourceSourceReferenceSelector), sourceReferenceSummary: element.matches(resourceSourceReferenceSelector) ? element.parentElement.querySelector(':scope > summary')?.textContent.trim() : undefined, agentAnswer: !!element.closest('.agent-answer,.agent-user-message,.agent-step-list'), field: !!element.closest('[data-field-page],.field-results,.hpc-job-list'), standard: !!element.closest('.basis-page,.standards-browser'), cad: !!element.closest('.type-page,.drawing-panel') });
     function visibleBox(element, original) {
       if (!element.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return null;
       let left = Math.max(0, original.left), top = Math.max(0, original.top), right = Math.min(innerWidth, original.right), bottom = Math.min(innerHeight, original.bottom);
@@ -115,21 +126,22 @@ async function entries(layer = 'ordinary') {
       if (rect) result.push({ text: e.alt, layer, rect, ...metadata(e) }); // Browser-painted fallback when an image fails.
     }
     return result;
-  }, layer);
+  }, { layer, cableSeriesLabelSelector, resourceSourceReferenceSelector });
 }
 async function record(surface, size, layer = 'ordinary') {
   if (regularity) { await regularity.record(surface, size, layer); if (!withVisibleText) return; }
   for (const node of await entries(layer)) for (const match of identifyText(node.text)) {
-    const hit = { page: surface.route, label: surface.label, ...size, text: node.text.slice(0, 1000), ...match, categoryLabel: categories[match.category], layer: node.layer, summary: node.summary, selector: node.selector, rect: node.rect, owner: findingOwner(surface, node) };
+    const sourceLayer = resourceSourceReferenceException({ ...node, page: surface.route }) ? 'technical' : node.layer;
+    const hit = { page: surface.route, label: surface.label, ...size, text: node.text.slice(0, 1000), ...match, categoryLabel: categories[match.category], layer: sourceLayer, summary: node.summary, selector: node.selector, cableSeriesLabel: node.cableSeriesLabel, resourceSourceReference: node.resourceSourceReference, sourceReferenceSummary: node.sourceReferenceSummary, rect: node.rect, owner: findingOwner(surface, node) };
     const exception = exceptionFor(hit);
-    const key = [surface.route, layer, node.layer, node.selector, node.text, match.category, match.token, size.width].join('|');
+    const key = [surface.route, layer, hit.layer, node.selector, node.text, match.category, match.token, size.width];
     if (exception) {
-      if (secondaryKeys.has(key)) continue; secondaryKeys.add(key);
-      (node.layer === 'ordinary' ? report.allowed : report.secondary).push({ ...hit, exception: exception.id, reason: exception.reason });
+      if (!secondaryKeys.add(key, 4)) continue;
+      (hit.layer === 'ordinary' ? report.allowed : report.secondary).push({ ...hit, exception: exception.id, reason: exception.reason });
     } else {
-      if (issueKeys.has(key)) continue; issueKeys.add(key);
+      if (!issueKeys.add(key, 4)) continue;
       if (node.rect) {
-        const name = createHash('sha256').update(key).digest('hex').slice(0, 12) + '.png';
+        const name = createHash('sha256').update(key.join('|')).digest('hex').slice(0, 12) + '.png';
         const margin = 16, x = Math.max(0, node.rect.x - margin), y = Math.max(0, node.rect.y - margin);
         await page.screenshot({ path: path.join(out, name), clip: { x, y, width: Math.min(size.width - x, node.rect.width + margin * 2), height: Math.min(size.height - y, node.rect.height + margin * 2) } });
         hit.screenshot = name;
@@ -178,27 +190,32 @@ async function scan(surface, size, layer = 'ordinary') {
     await page.locator('[role="tooltip"]').first().waitFor({ state:'visible', timeout:1000 }).catch(() => {});
     const tooltipText = await page.locator('[role="tooltip"]').allTextContents();
     for (const text of tooltipText) for (const match of identifyText(text)) {
-      const key = [surface.route, size.width, text, match.token, 'radix-hover'].join('|');
-      if (!secondaryKeys.has(key)) { secondaryKeys.add(key); report.secondary.push({ page: surface.route, label: surface.label, ...size, text, ...match, categoryLabel: categories[match.category], layer: 'hover', owner: surface.owner, exception: 'hover', reason: whitelist[0].reason }); }
+      const key = [surface.route, size.width, text, match.token, 'radix-hover'];
+      if (secondaryKeys.add(key, 2)) { report.secondary.push({ page: surface.route, label: surface.label, ...size, text, ...match, categoryLabel: categories[match.category], layer: 'hover', owner: surface.owner, exception: 'hover', reason: whitelist[0].reason }); }
     }
     await page.mouse.move(1, 1);
   }
   shellHoverSizes.add(size.width);
 }
-async function save() {
-  if (performanceAudit) { await performanceAudit.save(report); return; }
+let surfacesSinceCheckpoint = 0;
+async function save({ force = false } = {}) {
+  if (performanceAudit) { await performanceAudit.save(report, { force }); return; }
+  // A cancelled process leaves its last complete checkpoint explicitly incomplete.
+  if (!force && ++surfacesSinceCheckpoint < 32) return;
+  surfacesSinceCheckpoint = 0;
   if (regularity) { await regularity.save(report); if (!withVisibleText) return; }
   const ordinary = report.findings.length, counts = {};
   for (const hit of report.findings) counts[hit.owner] = (counts[hit.owner] || 0) + 1;
   const secondaryByLayer = {};
   for (const hit of report.secondary) secondaryByLayer[hit.layer] = (secondaryByLayer[hit.layer] || 0) + 1;
   report.counts = { ordinary, secondary: report.secondary.length, secondaryByLayer, whitelistedVisible: report.allowed.length, byOwner: counts };
-  await fs.writeFile(path.join(out, 'audit.json'), JSON.stringify(report, null, 2));
   const cell = value => String(value ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
   const rows = report.findings.map(h => `| ${cell(h.label)} (${h.width}) | ${cell(h.text)} | ${h.categoryLabel} | ${h.owner} | ${cell(h.selector)} | [定位](${h.screenshot}) |`);
   await fs.writeFile(path.join(out, 'findings.md'), `# 可见文字巡检\n\n完成：${report.complete}；普通界面 ${ordinary} 项；悬停/折叠/技术层 ${report.secondary.length} 项（允许但单独计数）；可见白名单 ${report.allowed.length} 项。\n\n扫描 ${report.pages.length} 个页面/视口；未覆盖 ${report.uncovered.length} 项。标识仅在巡检证据中保留，不改业务数据。\n\n| 页面 | 文字 | 类别 | 负责线程 | 位置 | 截图 |\n| --- | --- | --- | --- | --- | --- |\n${rows.join('\n')}\n\n## 白名单\n\n${whitelist.map(w => `- ${w.id}：${w.reason}`).join('\n')}\n\n## 未覆盖\n\n${report.uncovered.map(u => '- ' + cell(u.page || u.label) + (u.width ? ` (${u.width})` : '') + (u.owner ? ' · ' + u.owner : '') + '：' + cell(u.reason) + (u.screenshot ? ` [定位](${u.screenshot})` : '')).join('\n') || '无'}\n`);
+  await writeAuditJson(path.join(out, 'audit.json'), report);
 }
 try {
+  await save({ force: true });
   const [spaces, types, studies, plugins, assets, cables, runs, deliveries, documents, validations, tasks] = await Promise.all([
     get('/api/workspaces'), get('/api/design/type-workspaces'), all('study'), all('plugin'), all('asset'), all('cable_version'), all('run'), all('delivery'), all('document'), all('validation'), all('agent_task'),
   ]);
@@ -317,10 +334,11 @@ try {
             await page.getByText('正在读取方法与结论', { exact: true }).waitFor({ state: 'hidden', timeout: 30000 });
           }
         }
-        if (size.width === 1366) await page.screenshot({ path: path.join(out, 'runs-light.png') });
+        if (size.width === sizes[0].width) await page.screenshot({ path: path.join(out, 'runs-light.png') });
       }
+      const surfaceUrl = page.url().replace(base, '');
       if (!performanceMode) await scan(surface, size);
-      if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === 1366) {
+      if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === sizes[0].width) {
         const links = await page.locator(`a[href^="/studies/${surface.study}/"]`).evaluateAll(links => links.map(l => l.getAttribute('href')));
         links.push(page.url()); // The active analysis may be selected by a combobox, not an anchor.
         const analysis = page.getByRole('combobox', { name: '分析', exact: true });
@@ -355,13 +373,16 @@ try {
           } else {
             await click(); await settled(); await scan(tab, size, /技术|追溯/.test(label) ? 'technical' : 'ordinary');
           }
-          report.pages.push({ ...tab, ...size });
+          report.pages.push({ ...tab, actualUrl: page.url().replace(base, ''), ...size });
         }
       }
-      report.pages.push({ ...surface, actualUrl: page.url().replace(base, ''), readiness, ...size });
+      report.pages.push({ ...surface, actualUrl: surfaceUrl, readiness, ...size });
     } catch (error) {
+      if (error.auditPersistence) throw error;
       const screenshot = 'uncovered-' + createHash('sha256').update(surface.route + size.width).digest('hex').slice(0, 12) + '.png';
-      await page.screenshot({ path: path.join(out, screenshot) }).catch(() => {});
+      // Keep the performance report's uncovered images in its early artifact,
+      // instead of leaving them only in the separate text-traversal directory.
+      await page.screenshot({ path: path.join(performanceAudit?.out || out, screenshot) }).catch(() => {});
       report.uncovered.push({ page: surface.route, label: surface.label, owner: surface.owner, ...size, reason: error.message, screenshot });
       if (page.isClosed() || !session.browser.isConnected()) throw Error('浏览器会话退出，停止该批巡检；未访问的页面不能计为通过。' + error.message);
       if (performanceMode && surface.route === '/') throw error; // Stop if the changed real creation flow fails.
@@ -416,7 +437,7 @@ try {
         assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
         if (route === materialRoute) {
           await scan({ route, label: '材料详情 · ' + material.name, owner: '前端公共' }, size);
-          if (size.width === 1366 && theme === 'light') await page.screenshot({ path: path.join(regularity.out, 'material-conclusion-light.png') });
+          if (size.width === sizes[0].width && theme === 'light') await page.screenshot({ path: path.join(regularity.out, 'material-conclusion-light.png') });
         }
         await assertLayout(page, `${route} ${size.width} ${theme}`);
         check.passed = true;
@@ -430,15 +451,23 @@ try {
       console.log('公共页面外观：' + JSON.stringify(check));
     }
   }
-  report.complete = true; await save();
-  if (performanceAudit) {
-    console.log(JSON.stringify(performanceAudit.report.counts));
-    if (performanceAudit.report.pages.some(p => !p.mainPassed || p.framePassed === false || p.blockedWrites.length)) process.exitCode = 1;
+  if (regularity) {
+    await save({ force: true }); // Include the final partial batch in the overview while complete remains false.
+    await regularity.overview();
   }
-  if (regularity) { await regularity.overview(); console.log(JSON.stringify({ pages: report.pages.length, ...regularity.report.counts, uncovered: report.uncovered.length, errors: report.errors.length })); }
-  console.log(JSON.stringify({ pages: report.pages.length, ...report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
-  const strict = process.env.VISIBLE_TEXT_STRICT || 'all';
-  if (report.errors.length || report.blockedWrites.length || report.uncovered.some(u => u.page) || report.findings.some(h => strict === 'all' || h.owner === '前端公共')) process.exitCode = 1;
-  if (regularity?.report.findings.length) process.exitCode = 1;
-} catch (error) { report.failure = error.stack; process.exitCode = 1; await save(); console.error(error); }
-finally { await session.close(); }
+  report.complete = true;
+} catch (error) {
+  report.complete = false; report.failure = error.stack; process.exitCode = 1; console.error(error);
+} finally {
+  try { await save({ force: true }); }
+  finally { await session.close(); }
+}
+if (performanceAudit) {
+  console.log(JSON.stringify(performanceAudit.report.counts));
+  if (performanceAudit.report.pages.some(p => !p.mainPassed || p.framePassed === false || p.blockedWrites.length)) process.exitCode = 1;
+}
+if (regularity) console.log(JSON.stringify({ pages: report.pages.length, ...regularity.report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
+console.log(JSON.stringify({ pages: report.pages.length, ...report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
+const strict = process.env.VISIBLE_TEXT_STRICT || 'all';
+if (report.errors.length || report.blockedWrites.length || report.uncovered.some(u => u.page) || report.findings.some(h => strict === 'all' || h.owner === '前端公共')) process.exitCode = 1;
+if (regularity?.report.findings.length) process.exitCode = 1;

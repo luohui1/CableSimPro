@@ -29,6 +29,7 @@ import { WorkbenchSplitter } from '@/components/workbench-splitter';
 import { CommandBar, type CommandAction } from '@/components/command-bar';
 import { formatDateTime } from '@/lib/format';
 import { STATUS_WORDS } from '@/lib/status-vocabulary';
+import { SolverLocation } from '@/components/solver-location';
 
 type Theme = "light" | "dark";
 
@@ -58,7 +59,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const catalog = useQuery(methodCardsQuery());
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId).sort((a, b) => b.updated.localeCompare(a.updated));
   // latest_run 已由宿主在同一只读快照核验；首页不为结论逐项下载运行历史。
-  const latest = new Map(rows.map(row => [row.id, optionalRecord(row.raw.latest_run)]));
+  const latest = new Map(rows.map(row => [row.id, row.raw.latest_run == null ? undefined : optionalRecord(row.raw.latest_run)]));
   const name = text((projects.data || []).find((row) => text(row.id) === workspaceId)?.name) || "工程";
   const document = workspace.data?.domain as DomainDocument | undefined;
   const reference = optionalRecord(workspace.data?.study_cable_reference);
@@ -81,7 +82,11 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
       </Link>;
     } },
     { id: "kind", label: "任务", wrap: true, render: (row) => calculationKind(row, catalog.data || []).label },
-    { id: "method", label: "插件", wrap: true, render: (row) => `${calculationKind(row, catalog.data || []).methodName} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
+    { id: "method", label: "插件", wrap: true, render: (row) => {
+      const kind = calculationKind(row, catalog.data || []);
+      return <span>{kind.methodName} {text(row.definition.method?.version)} · <SolverLocation
+        pluginId={text(row.definition.method?.plugin_id)} capability={kind.capability} prefix={false} /></span>;
+    } },
     { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return <span>{headlineText(run?.headlines, 1) || '—'}{states.get(row.id)?.historical && <small> · {STATUS_WORDS.historical}</small>}</span>; } },
     { id: "state", label: "状态", wrap: true, render: (row) => { const state=states.get(row.id)!; return <span title={state.reason}><StatusMark kind={state.mark} label={state.label} /></span>; } },
   ];

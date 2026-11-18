@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { identifyText, exceptionFor, readOnlyPost } from './visible-text-policy.mjs';
+import { inspectVisibleNames, resourceSourceReferenceException } from './visible-names.mjs';
 
 test('文字巡检按类别捕获内部标识，长摘要不吞 UUID、路径不重复报键名', () => {
   const text = '11111111-1111-4111-8111-111111111111 · aabbccddeeff00112233 · /parameters/values/conductor_form · input_schema · not_covered · verified · slurm · steady-rating · 2024.0.0';
@@ -25,4 +26,97 @@ test('白名单有明确层级理由，首层 UUID 不因原件文件名被豁�
   assert.equal(exceptionFor({ layer: 'ordinary', category: 'internal', token: 'modules/values' }), null);
   assert.equal(exceptionFor({ layer: 'ordinary', category: 'enum', token: 'current', text: 'R1=R2=1mm,d=2.5mm,sigma=55MS/m,f=40kHz. Unit RMS current normalization.' }).id, 'source-terminology');
   assert.equal(exceptionFor({ layer: 'ordinary', category: 'enum', token: 'current', text: 'current' }), null);
+});
+
+test('布局与文字巡检保留真实附录和算例引用且记录豁免理由', async () => {
+  const citations = [
+    ['GB/T 12706.2—2020 · 14.3：依据已核验；此公式尚未绑定完整附录 A/B 计算链，本项保留未覆盖。', 'standard-annex'],
+    ['未覆盖\n依据已核验；此公式尚未绑定完整附录 A/B 计算链，本项保留未覆盖。', 'standard-annex'],
+    ['成缆节距2.152m与钢带相对磁导率300分别参考TB880 Case2/10，非本型号实测。', 'tb880-examples'],
+    ['TB 880 Case2/10；TB880 Case2/10。', 'tb880-examples'],
+  ];
+  for (const [text, id] of citations) {
+    const matches = identifyText(text);
+    assert.equal(matches.length, 1, '保留匹配以写入文字巡检允许项');
+    assert.equal(exceptionFor({ ...matches[0], text, layer: 'ordinary' })?.id, id);
+  }
+  const frame = { evaluate: async () => citations.map(([text]) => text) };
+  assert.deepEqual(await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame }), []);
+});
+
+test('文献引用豁免不放行裸编号、混合露出或扩展路径', async () => {
+  const texts = ['A/B', 'Case2/10', '附录 A/B；内部 A/B', 'TB880 Case2/10；内部 Case2/10',
+    '附录 A/B/parameters', 'TB880 Case2/10/parameters', 'TB881 Case2/10',
+    '附录 A/B\\parameters', 'TB880 Case2/10\\parameters',
+    '附录 A/B；/parameters/duration_s', 'TB880 Case2/10；cablesim.type-electrical'];
+  for (const text of texts) {
+    assert.ok(identifyText(text).some(match => !exceptionFor({ ...match, text, layer: 'ordinary' })), text);
+  }
+  const frame = { evaluate: async () => texts };
+  const violations = await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame });
+  for (const text of texts) assert.ok(violations.some(item => item.text === text), text);
+});
+
+test('厂家系列只在真实型号目录分组标题豁免，普通节点与内部标识仍报告', async () => {
+  const text = 'CU/XLPE/LC/PVC';
+  const matches = identifyText(text);
+  assert.deepEqual(matches.map(item => item.token), [text], '全局识别仍保留此路径形记号');
+  const context = { page: '/resources/cables?item=fixed-version', text, layer: 'ordinary', cableSeriesLabel: true };
+  assert.equal(exceptionFor({ ...context, ...matches[0] })?.id, 'cable-series-label');
+  for (const changes of [
+    { cableSeriesLabel: false }, { cableSeriesLabel: undefined },
+    { page: '/resources/cables/structure-import' }, { page: '/resources/materials' },
+    { page: '/types' }, { text: text + '；内部值' },
+  ]) assert.equal(exceptionFor({ ...context, ...matches[0], ...changes }), null);
+  for (const token of ['CU/XLPE/LC/PVC/parameters', 'cablesim.type-electrical', 'input_schema', 'steady-rating']) {
+    assert.ok(identifyText(token).some(match => !exceptionFor({ ...context, text: token, ...match })), token);
+  }
+  const frame = { evaluate: async () => [
+    context,
+    { ...context, cableSeriesLabel: false },
+    { ...context, page: '/resources/cables/structure-import' },
+    { ...context, text: 'cablesim.type-electrical' },
+    { ...context, text: 'CU/XLPE/LC/PVC/parameters' },
+  ] };
+  const violations = await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame });
+  assert.deepEqual(violations.map(item => item.token), [text, text, 'cablesim.type-electrical', 'CU/XLPE/LC/PVC/parameters']);
+});
+
+test('资源原始出处只在主动展开的精确节点保留技术原文，仍逐项记录匹配', async () => {
+  const text = JSON.stringify({ record_id: 'materials-table/r1/density', source_sha256: 'a'.repeat(64), conditions: { material_role: 'conductor' } });
+  const context = { page: '/resources/materials?item=fixed-version', text, layer: 'ordinary',
+    resourceSourceReference: true, sourceReferenceSummary: '查看结构化出处原文' };
+  const matches = identifyText(text);
+  assert.ok(matches.some(item => item.category === 'hash'));
+  assert.ok(matches.some(item => item.category === 'snake'));
+  assert.ok(matches.some(item => item.category === 'internal'));
+  for (const match of matches) assert.equal(exceptionFor({ ...context, ...match })?.id, 'resource-source-reference');
+  for (const page of ['/resources/materials', '/resources/templates', '/resources/standards']) {
+    assert.equal(resourceSourceReferenceException({ ...context, page }), 'resource-source-reference');
+  }
+  assert.equal(resourceSourceReferenceException({ ...context, text: '[' + text + ']' }), 'resource-source-reference');
+  const frame = { evaluate: async () => [context] };
+  assert.deepEqual(await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame }), []);
+});
+
+test('资源出处例外不允许关闭或普通节点、摘要、其他页面和非结构化原文', async () => {
+  const text = JSON.stringify({ record_id: 'materials-table/r1/density', source_sha256: 'a'.repeat(64) });
+  const context = { page: '/resources/materials', text, layer: 'ordinary',
+    resourceSourceReference: true, sourceReferenceSummary: '查看结构化出处原文' };
+  const rejected = [
+    { ...context, resourceSourceReference: false }, // Closed disclosure or surrounding ordinary prose.
+    { ...context, resourceSourceReference: undefined },
+    { ...context, sourceReferenceSummary: undefined },
+    { ...context, sourceReferenceSummary: '其他正文' },
+    ...['/types', '/resources/cables', '/resources/materials/extra', '/resources/materials-other'].map(page => ({ ...context, page })),
+    ...['source_sha256: ' + 'a'.repeat(64), 'null', '42', '"source_sha256"', '{invalid_json}'].map(text => ({ ...context, text })),
+  ];
+  for (const item of rejected) {
+    assert.equal(resourceSourceReferenceException(item), null);
+    for (const match of identifyText(item.text)) assert.equal(exceptionFor({ ...item, ...match }), null);
+  }
+  const withInternalNames = rejected.filter(item => identifyText(item.text).some(match => match.category !== 'hash'));
+  const frame = { evaluate: async () => withInternalNames };
+  const violations = await inspectVisibleNames({ frames: () => [frame], mainFrame: () => frame });
+  for (const item of withInternalNames) assert.ok(violations.some(hit => hit.text === item.text.slice(0, 200)), JSON.stringify(item));
 });

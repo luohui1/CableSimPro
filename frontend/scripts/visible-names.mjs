@@ -25,11 +25,46 @@ export function internalTokens(text) {
     ),
   ].filter((value) => !allowed.test(value));
 }
+
+/** Preserve cited annex/example labels without exempting unrelated paths. */
+export function engineeringReferenceException(text, token) {
+  if (typeof text !== 'string' || !text.includes(token)) return null;
+  const citation = token === 'A/B'
+    ? { id: 'standard-annex', pattern: /附录\s+A\/B(?![A-Za-z0-9_./\\-])/g }
+    : token === 'Case2/10'
+      ? { id: 'tb880-examples', pattern: /\bTB\s*880\s+Case2\/10(?![A-Za-z0-9_./\\-])/g }
+      : null;
+  if (!citation) return null;
+  // A second, uncited occurrence in the same node must still be reported.
+  const remaining = text.replace(citation.pattern, match => match.replace(token, ''));
+  return remaining.includes(token) ? null : citation.id;
+}
+
+/** Only the catalogue's manufacturer series group label is an engineering name. */
+export const cableSeriesLabelSelector = '[data-page="cable-versions"] table[aria-label="电缆型号版本"] tr.group-row > th[scope="rowgroup"] > button > strong';
+export function cableSeriesException({ page, text, token, cableSeriesLabel } = {}) {
+  return /^\/resources\/cables(?:[?#]|$)/.test(page || '')
+    && cableSeriesLabel === true && text === token && token === 'CU/XLPE/LC/PVC'
+    ? 'cable-series-label' : null;
+}
+
+/** Exact, explicitly opened resource provenance; surrounding prose remains audited. */
+export const resourceSourceReferenceSelector = 'aside.property-panel[aria-label="所选对象属性"] .resource-source-reference[open] > pre[data-source-reference="raw"][tabindex="0"]';
+export function resourceSourceReferenceException({ page, text, resourceSourceReference, sourceReferenceSummary } = {}) {
+  if (!/^\/resources\/(?:materials|templates|standards)(?:[?#]|$)/.test(page || '')
+    || resourceSourceReference !== true || sourceReferenceSummary !== '查看结构化出处原文'
+    || typeof text !== 'string') return null;
+  try {
+    const value = JSON.parse(text);
+    return value !== null && typeof value === 'object' ? 'resource-source-reference' : null;
+  } catch { return null; }
+}
+
 export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
   const violations = [];
   for (const frame of includeFrames ? page.frames() : [page.mainFrame()]) {
     const texts = await frame
-      .evaluate(() => {
+      .evaluate(({ cableSeriesSelector, resourceSourceSelector }) => {
         const result = [],
           walker = document.createTreeWalker(
             document.body,
@@ -61,18 +96,24 @@ export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
           if (style.visibility === "hidden" || style.display === "none")
             continue;
           const text = node.textContent.trim();
-          if (text) result.push(text);
+          if (text) result.push({ text, page: location.pathname, cableSeriesLabel: parent.matches(cableSeriesSelector),
+            resourceSourceReference: parent.matches(resourceSourceSelector),
+            sourceReferenceSummary: parent.matches(resourceSourceSelector) ? parent.parentElement.querySelector(':scope > summary')?.textContent.trim() : undefined });
         }
         return result;
-      })
+      }, { cableSeriesSelector: cableSeriesLabelSelector, resourceSourceSelector: resourceSourceReferenceSelector })
       .catch(() => []);
-    for (const text of texts)
+    for (const entry of texts) {
+      // String entries preserve callers that provide text-only audit fixtures.
+      const context = typeof entry === 'string' ? { text: entry } : entry;
+      const { text } = context;
       for (const token of internalTokens(text))
-        violations.push({
+        if (!engineeringReferenceException(text, token) && !cableSeriesException({ ...context, token }) && !resourceSourceReferenceException(context)) violations.push({
           frame: frame === page.mainFrame() ? "页面" : "文档",
           token,
           text: text.slice(0, 200),
         });
+    }
   }
   return violations;
 }

@@ -555,6 +555,33 @@ export const endpoints = {
   "/api/library/resources/environment/preview": [
     "post"
   ],
+  "/api/library/resources/applications/{resource_id}/evidence": [
+    "get"
+  ],
+  "/api/library/resources/study-templates/capture-preview": [
+    "post"
+  ],
+  "/api/library/resources/study-templates/capture": [
+    "post"
+  ],
+  "/api/library/resources/study-templates/preview": [
+    "post"
+  ],
+  "/api/library/resources/study-templates/adopt": [
+    "post"
+  ],
+  "/api/library/resources/components/capture-preview": [
+    "post"
+  ],
+  "/api/library/resources/components/capture": [
+    "post"
+  ],
+  "/api/library/resources/components/preview": [
+    "post"
+  ],
+  "/api/library/resources/components/adopt": [
+    "post"
+  ],
   "/api/design/cable-models": [
     "get"
   ],
@@ -678,5 +705,8 @@ export const endpoints = {
   ],
   "/": [
     "get"
+  ],
+  "/__e2e/close-previews": [
+    "post"
   ]
 } as const;

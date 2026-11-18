@@ -27,6 +27,7 @@ import {
 import type { PropertyGroup } from "./property-panel";
 import { StudyDrawing } from "./study-drawing";
 import { StudyCrossingInputs } from './study-crossing-inputs';
+import { displayName } from '@/lib/display-names';
 
 export type InputSelection = {
   id: string;
@@ -666,7 +667,7 @@ export function SectionInputs({
     })),
     ...(section.enclosures || []).map((item) => ({
       id: item.id,
-      label: "围护 " + item.type,
+      label: "围护 · " + displayName(item.type),
       material: item.material || undefined,
       fields: [
         {
@@ -730,7 +731,7 @@ export function SectionInputs({
     )
     .map((material) => ({
       id: material.id,
-      label: material.label,
+      label: displayName(material.label),
       material: material.id,
       fields: [
         {

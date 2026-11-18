@@ -1,9 +1,9 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { studyCardIndex, type StudyCardRow } from "@/lib/study-cards";
-import { workspaces } from '@/api/research';
-import { indexInbox, indexObjects, type InboxItem, type ObjectCard } from "@/api/object-index";
+import type { StudyCardRow } from "@/lib/study-cards";
+import { homeInboxQuery, homeRecentStudiesQuery, homeRecentTypesQuery, homeStudyCardsQuery } from '@/lib/catalog-queries';
+import { indexObjects, type InboxItem, type ObjectCard } from "@/api/object-index";
 import { message } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { usePageTheme } from "@/components/catalog-shell";
@@ -20,6 +20,7 @@ import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
 import { groupInbox } from '@/lib/inbox-groups';
 import { InboxGroup } from '@/components/inbox-group';
+import { displayLibraryText } from '@/features/library-import/api';
 
 const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
 const short = formatDateTime;
@@ -38,7 +39,7 @@ function NeedsAttention({ items, studies }: { items: InboxItem[]; studies: Study
       const item = group.items[0];
       const study = item.object.kind === "study" ? studies.find((row) => row.id === item.object.id) : undefined;
       return <li key={item.category + item.object.kind + item.object.id}>
-        <span className="home-todo-text"><ObjectLink card={item.object}>{item.title}</ObjectLink><small>{item.reason}</small></span>
+        <span className="home-todo-text"><ObjectLink card={item.object}>{item.title}</ObjectLink><small>{displayLibraryText(item.reason)}</small></span>
         {study && isVersionStale(study.raw)
           ? <VersionNotice value={study.raw} target={{ wid: study.workspace, sid: study.id, revision: study.workspaceRevision, studyRevision: study.revision, title: study.title }} />
           : <StatusMark kind={statusMark(item.object.status.code)} label={statusLabel(item.object.status.code, item.object.status.label)} />}
@@ -67,15 +68,14 @@ export function HomePage() {
     window.addEventListener("keydown", focus);
     return () => window.removeEventListener("keydown", focus);
   }, []);
-  const studyCards = useQuery({ queryKey: ["index-objects", "study"], queryFn: ({ signal }) => indexObjects({ kind: "study", limit: 100 }, signal) });
-  const typeCards = useQuery({ queryKey: ["index-objects", "type"], queryFn: ({ signal }) => indexObjects({ kind: "type", limit: 100 }, signal) });
-  const inbox = useQuery({ queryKey: ["index-inbox"], queryFn: ({ signal }) => indexInbox(signal) });
+  const studyCards = useQuery(homeRecentStudiesQuery());
+  const typeCards = useQuery(homeRecentTypesQuery());
+  const inbox = useQuery(homeInboxQuery());
   // 输入稳定后再查；新结果回来前保留上一批，不每敲一个字就闪成骨架
   const query = useDeferredValue(needle);
   const found = useQuery({ queryKey: ["index-search", query], queryFn: ({ signal }) => indexObjects({ q: query, limit: 60 }, signal), enabled: !!query, placeholderData: keepPreviousData });
   // 过期研究的“重算”沿用工作台的确认流程，需要研究的修订号
-  const studies = useQuery({ queryKey: ["study-index", "home-cards"], queryFn: ({ signal }) => studyCardIndex(signal,
-    queries.fetchQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) })) });
+  const studies = useQuery(homeStudyCardsQuery(queries));
 
   const recent = [...(studyCards.data?.items || []), ...(typeCards.data?.items || [])]
     .sort((a, b) => (b.updated || "").localeCompare(a.updated || "")).slice(0, 6) as (ObjectCard & { id: string })[];

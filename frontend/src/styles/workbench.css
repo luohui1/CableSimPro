@@ -162,7 +162,7 @@
 .tree-project-row { font-weight: var(--weight-strong); }
 .tree-project-row .tree-label { color: var(--text); }
 .tree-twist { display: inline-flex; align-items: center; justify-content: center; width: var(--space-4); flex: none; border: 0; padding: 0; background: transparent; color: var(--text-secondary); font-size: var(--text-note); }
-.tree-label { min-width: 0; flex: 1; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
+.tree-label { min-width: 0; flex: 1; display: block; white-space: normal; overflow-wrap: anywhere; }
 .tree-children { padding-left: var(--space-4); display: flex; flex-direction: column; }
 .tree-empty { padding: var(--space-1) var(--space-2) var(--space-1) var(--space-6); color: var(--text-secondary); font-size: var(--text-note); }
 .sidebar-scroll .sidebar-modules { margin-left: var(--space-6); }
@@ -387,6 +387,11 @@
 .workbench-no-canvas > .workbench-dock, .workbench[data-dock="max"] > .workbench-dock { flex: 1 1 0; }
 .workbench[data-dock="max"] .workbench-canvas { display: none; }
 .workbench-no-canvas > .workbench-splitter, .workbench[data-dock="max"] > .workbench-splitter { display: none; }
+/* 三维工具栏不能把模型压成窄条；放大时保留同一画布和结果实例，只切换可见布局。 */
+.study-workbench[data-canvas="max"] > .workbench-canvas { flex: 1 1 0; }
+.study-workbench[data-canvas="max"] > .workbench-dock,
+.study-workbench[data-canvas="max"] > .workbench-splitter { display: none; }
+.study-canvas-toolbar > .study-model-size { flex-shrink: 0; }
 /* 画布与结果区之间的分隔条：拖动、↑↓ 调整，双击复原（components/workbench-splitter.tsx） */
 .workbench-splitter { position: relative; height: var(--space-2); cursor: row-resize; touch-action: none; background: var(--panel); border-bottom: 1px solid var(--line); }
 .workbench-splitter::after { content: ""; position: absolute; top: 50%; left: 50%; width: var(--space-8); height: 2px; border-radius: var(--radius-pill); background: var(--control-border); transform: translate(-50%, -50%); }
@@ -499,7 +504,8 @@
 .workbench-canvas .drawing-toolbar .button-icon { width: var(--control-compact); height: var(--control-compact); border-color: transparent; }
 .workbench-canvas .drawing-toolbar .select-field > span { display: none; }
 .workbench-canvas .drawing-stage { min-height: 0; }
-.workbench-canvas .drawing-frame > .stale-banner, .workbench-canvas .drawing-frame > [role="status"] { position: absolute; z-index: 3; left: var(--space-3); bottom: var(--space-3); }
+.workbench-canvas .drawing-frame > .stale-banner { position: static; flex-shrink: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.workbench-canvas .drawing-frame > [role="status"]:not(.stale-banner) { position: absolute; z-index: 3; left: var(--space-3); bottom: var(--space-3); }
 .type-canvas > .type-result-toolbar { position: absolute; z-index: 4; left: var(--space-3); bottom: var(--space-3); gap: var(--space-2); padding: 0; border: 0; background: transparent; }
 .workbench-canvas .laying-section > .drawing-toolbar > .select-field, .workbench-canvas .laying-section > .drawing-toolbar > .select-field + .button { display: none; }
 .workbench-canvas .laying-section > .drawing-toolbar > .spacer { display: none; }
@@ -531,7 +537,8 @@
 .command-bar .button-compact .icon { width: var(--space-4); height: var(--space-4); }
 .command-state { margin-left: auto; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-note); white-space: nowrap; }
 .adaptive-command-bar { position: relative; overflow: hidden; flex-wrap: wrap; }
-.adaptive-command-bar > .command-state { flex: 1; min-width: 0; padding-left: var(--space-2); overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.adaptive-command-bar > .command-state { flex: none; min-width: max-content; padding-left: var(--space-2); text-align: right; }
+.command-state-measure { padding-left: var(--space-2); font-size: var(--text-note); white-space: nowrap; }
 .command-leading, .command-measure { display: flex; align-items: center; gap: var(--space-2); }
 .command-measure { position: fixed; top: 0; left: 0; width: max-content; visibility: hidden; pointer-events: none; }
 .command-measure > * { flex: none; }
@@ -595,6 +602,18 @@
 /* 窄属性栏里的下拉：文字左对齐、单行省略，完整内容在展开列表里看 */
 .workbench-inspector .select-trigger { justify-content: space-between; text-align: left; min-width: 0; }
 .workbench-inspector .select-trigger > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 方法版本控件保留标准高度，完整名称另以关联正文显示。 */
+:is(.study-method-workspace, .study-inspector) .study-method-config > .select-field > .select-trigger > span:first-child {
+  white-space: nowrap;
+}
+.study-method-config > .study-method-current-name {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
 .parameter-advanced { border-top: 1px solid var(--line); padding-top: var(--space-3); }
 .parameter-advanced > summary { cursor: pointer; color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-strong); }
 .parameter-advanced > summary span { margin-left: var(--space-1); font-weight: var(--weight-normal); }
@@ -637,6 +656,24 @@
 .plugin-figure figcaption b { color: var(--text); }
 /* 插件示意图是透明底深色线条：深色主题下当作一张印刷插图放在浅色底上，不反相（反相会把底也反成灰色） */
 [data-theme="dark"] .plugin-figure img { background: var(--text); border-color: var(--text); }
+.plugin-figure-open { align-self: flex-start; }
+.dialog-content.plugin-figure-dialog { width: min(calc(var(--space-12) * 28), calc(100vw - var(--space-8))); height: min(calc(var(--space-12) * 18), calc(100dvh - var(--space-8))); overflow: hidden; }
+.plugin-figure-header { display: flex; align-items: flex-start; gap: var(--space-4); flex: none; }
+.plugin-figure-header > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.plugin-figure-header .dialog-title { overflow-wrap: anywhere; }
+.plugin-figure-help, .plugin-figure-status { color: var(--text-secondary); font-size: var(--text-note); }
+.plugin-figure-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); flex: none; }
+.plugin-figure-toolbar .select-field { flex-direction: row; align-items: center; gap: var(--space-2); }
+.plugin-figure-toolbar .select-trigger { width: calc(var(--space-12) * 4); }
+.plugin-figure-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-surface); }
+/* 统一阅读宽度，避免无 width 属性的 SVG 被浏览器的 300px 自然宽度再次缩小。 */
+.plugin-figure-reading-image { display: block; width: calc(var(--space-12) * 24); max-width: none; height: auto; max-height: none; background: var(--panel); }
+.plugin-figure-scroll[data-zoom="1.5"] .plugin-figure-reading-image { width: calc(var(--space-12) * 36); }
+.plugin-figure-scroll[data-zoom="2"] .plugin-figure-reading-image { width: calc(var(--space-12) * 48); }
+.plugin-figure-scroll[data-zoom="3"] .plugin-figure-reading-image { width: calc(var(--space-12) * 72); }
+.plugin-figure-reading-image[data-state="loading"], .plugin-figure-reading-image[data-state="error"] { display: none; }
+.plugin-figure-error { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+[data-theme="dark"] .plugin-figure-reading-image { background: var(--text); }
 .capability-description { color: var(--text-secondary); line-height: 1.6; }
 .capability-headlines { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-note); }
 .capability-headlines > span:not(.muted) { padding: 0 var(--space-2); border-radius: var(--radius-item); background: var(--fill); }

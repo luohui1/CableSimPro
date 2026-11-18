@@ -39,6 +39,7 @@ interface NumberUi {
   className?: string;
   width?: string | number;
   asterisk?: boolean;
+  rangeHint?: string;
 }
 
 export function NumberField() {
@@ -51,16 +52,23 @@ export function NumberField() {
     label,
     placeholder,
     description,
-    errors,
-    isInvalid,
+    errors: ownErrors,
+    isInvalid: ownInvalid,
     descriptionId,
     errorId,
-    ariaDescribedBy,
+    ariaDescribedBy: ownDescription,
     handleBlur,
   } = useDataField<NumberFieldDef>();
 
+  const hostError = typeof field.meta?.error === 'string' ? field.meta.error : '';
+  const isInvalid = ownInvalid || !!hostError;
+  const errors = hostError ? [{ message: hostError }] : ownErrors;
+  const rangeHint = (field.ui as NumberUi | undefined)?.rangeHint;
+  const ariaDescribedBy = [hostError ? errorId : ownDescription,rangeHint ? fieldApi.name+'-range' : ''].filter(Boolean).join(' ') || undefined;
+
   const value = fieldApi.state.value as number | undefined;
   const ui = field.ui as NumberUi | undefined;
+  const precisionHint=typeof value==='number' && String(value).length>11 ? String(value) : '';
 
   // UI options
   const step = field.step ?? 1;
@@ -171,12 +179,12 @@ export function NumberField() {
           )
         }
         onBlur={handleBlur}
+        onFocus={event=>event.currentTarget.select()}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={cn(
-          hideSteppers
-            ? ""
-            : "text-center [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]",
+          "tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]",
+          hideSteppers ? "" : "text-center",
           className,
         )}
         disabled={isDisabled}
@@ -187,6 +195,7 @@ export function NumberField() {
         aria-invalid={isInvalid}
         aria-describedby={ariaDescribedBy}
         autoFocus={ui?.autoFocus}
+        title={value===undefined ? undefined : String(value)+(suffix?' '+suffix:'')}
       />
     );
   };
@@ -416,19 +425,23 @@ export function NumberField() {
     <FieldGroup
       data-field={fieldApi.name}
       data-field-path={String(field.meta?.path || '')}
+      data-number-wide={(suffix?.length || 0) > 6 || !!precisionHint}
       className={ui?.className}
     >
       <Field data-invalid={isInvalid} data-disabled={isDisabled}>
         {label && (
           <FieldLabel title={typeof description === "string" && description ? description : undefined} htmlFor={fieldApi.name}>
             {isRequired && ui?.asterisk !== false && (
-              <span className="text-destructive mr-0.5">*</span>
+              <span className="text-destructive mr-1">*</span>
             )}
             {label}
           </FieldLabel>
         )}
 
         <FieldContent>{renderInputContent()}</FieldContent>
+
+        {rangeHint && <p id={fieldApi.name+'-range'} className="parameter-range-hint">{rangeHint}</p>}
+        {precisionHint && <p className="parameter-range-hint">完整值：{precisionHint}{suffix ? ' '+suffix : ''}</p>}
 
         {description && !isInvalid && (
           <FieldDescription id={descriptionId}>{description}</FieldDescription>

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   type SelectionRow,
   selectionView,
   sourceKind,
 } from "@/lib/selection-view";
-import { optionalRecord, text, numeric } from "@/api/client";
+import { optionalRecord, text, numeric, message } from "@/api/client";
 import { formatNumber } from "@/lib/format";
 import { displayName } from '@/lib/display-names';
 import { DataTable, type Column } from "./data-table";
@@ -13,10 +14,13 @@ import { Toolbar } from "./toolbar";
 import { Select } from "./ui/select";
 import { StatusMark } from "./status-mark";
 import { SourceBadge } from "./source-badge";
-import { EmptyState, StaleBanner } from "./states";
+import { EmptyState, StaleBanner, LoadingState } from "./states";
+import { StudyErrorState } from "./study-error-state";
+import { Button } from "./ui/button";
 import type { PropertyGroup } from "./property-panel";
 import { Tooltip } from "./ui/tooltip";
-import { savedDomain } from "@/lib/domain-fields";
+import type { DomainDocument } from "@/lib/domain-fields";
+import { caseRun, hydrateCaseInputs } from "@/features/cad/saved-field-controls";
 import { Link } from "@tanstack/react-router";
 import { readableCableVersion } from './study-workbench-config';
 
@@ -223,7 +227,7 @@ export function StudySelection({
         <StaleBanner description="有未保存修改；以下结果对应已保存研究。" />
       )}
       {part === "all" && conclusion}
-      {part === 'all' && <SelectionConditions run={run} theme={theme} />}
+      {part === 'all' && <SelectionConditions run={run} theme={theme} caseId={selectedId || recommended?.id} />}
       <Toolbar>
         <h2>候选结果</h2>
         <SourceBadge
@@ -256,18 +260,57 @@ export function StudySelection({
       /></div>
       {part === "details" && <div className="selection-conditions">
         <p className="muted">{recommendationBasis}</p>
-        <SelectionConditions run={run} theme={theme} />
+        <SelectionConditions run={run} theme={theme} caseId={selectedId || recommended?.id} />
       </div>}
     </>
   );
 }
 
-function SelectionConditions({ run, theme }: { run: Record<string, unknown>; theme: "light" | "dark" }) {
-  const domain = savedDomain(run);
-  if (!domain?.sections.length) return <p className="muted">运行快照未提供敷设条件</p>;
+function SelectionConditions({ run, theme, caseId }: {
+  run: Record<string, unknown>;
+  theme: "light" | "dark";
+  caseId?: string;
+}) {
+  const input = useQuery({
+    queryKey: ['drawing-saved-input', run.id, caseId],
+    enabled: !!caseId,
+    retry: false,
+    queryFn: ({ signal }) => {
+      if (run.integrity !== 'verified' || !text(run.id) || !text(run.workspace) || !text(run.study))
+        throw Error('所选保存运行身份或完整性未通过，无法读取候选工况。');
+      return hydrateCaseInputs(caseRun(run, caseId), signal);
+    },
+  });
+  if (!caseId) return <p className="muted" role="status">请在候选表选择要查看的型号工况。</p>;
+  const failed = (error: unknown) => <StudyErrorState title="候选工况读取失败" description={message(error)}
+    action={<Button size="compact" onClick={() => void input.refetch()}>重新读取</Button>} />;
+  if (input.isPending) return <LoadingState title="正在读取所选候选的保存工况" />;
+  if (input.error) return failed(input.error);
+  let domain: DomainDocument;
+  try {
+    const saved: Record<string, unknown> | undefined = input.data;
+    if (run.integrity !== 'verified' || !saved || saved.integrity !== 'verified'
+      || saved.id !== run.id || saved.workspace !== run.workspace || saved.study !== run.study
+      || saved.input_digest !== run.input_digest)
+      throw Error('保存工况输入身份或运行摘要不匹配，拒绝显示。');
+    const outputCases = optionalRecord(saved.output).cases;
+    if (!Array.isArray(outputCases) || outputCases.filter(value => optionalRecord(value).case_id === caseId).length !== 1)
+      throw Error('所选工况不存在于此保存运行的输出中。');
+    const cases = optionalRecord(saved.snapshot).cases;
+    const matching = (Array.isArray(cases) ? cases : []).map(optionalRecord).filter(value => value.case_id === caseId);
+    if (matching.length !== 1)
+      throw Error('所选工况不存在于此保存运行的固定输入中。');
+    const document = optionalRecord(matching[0].input);
+    if (document.schema_version !== 'cablesim.domain/1' || !Array.isArray(document.sections) || !Array.isArray(document.materials))
+      throw Error('所选候选的保存输入未提供有效敷设条件。');
+    domain = document as unknown as DomainDocument;
+  } catch (error) {
+    return failed(error);
+  }
+  if (!domain.sections.length) return <p className="muted">该候选的保存输入未提供敷设条件</p>;
   function link(module: string, tab: string, label: string) {
     return <Link to="/studies/$sid/$module/$tab" params={{ sid: text(run.study), module, tab }}
-      search={{ workspace: text(run.workspace), run: text(run.id), theme, delivery: "" }}>{label}</Link>;
+      search={{ workspace: text(run.workspace), run: text(run.id), case: caseId, theme, delivery: "" }}>{label}</Link>;
   }
   return <div className="selection-conditions" aria-label="本次计算工况">
     {domain.sections.map(section => {

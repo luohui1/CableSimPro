@@ -19,7 +19,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 import { message, numeric, text, optionalRecord } from "@/api/client";
-import { studyContextQuery, studyRunsQuery, workspaceQuery } from "@/lib/study-queries";
+import { studyContextQuery, studyRunDestination, studyRunsQuery, workspaceQuery, invalidateSavedStudyResults } from "@/lib/study-queries";
 import {
   saveStudy,
   restoreStudy,
@@ -113,10 +113,11 @@ export function StudyProvider() {
   const index = useQuery(studyContextQuery(queries, search.workspace, sid, search.run,
     location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || ''));
   const study = index.data?.find((item) => item.id === sid);
+  const destination = studyRunDestination(location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || '', study?.definition);
   const wid = study?.workspace || search.workspace;
   const workspace = useQuery({ ...workspaceQuery(wid), enabled: !!study });
   const runs = useQuery({
-    ...studyRunsQuery(queries, wid, sid, search.run, location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || ''),
+    ...studyRunsQuery(queries, wid, sid, search.run, destination.module, destination.tab),
     enabled: !!study,
     refetchInterval: (query) =>
       query.state.data?.some((run) =>
@@ -155,6 +156,7 @@ export function StudyProvider() {
     setRestoring(true);
     try {
       await restoreStudy(wid, sid, direction, { expected_revision: revision, expected_study_revision: study.revision, request_id: historyRequest.current.id });
+      await invalidateSavedStudyResults(queries, wid);
       await Promise.all([
         queries.invalidateQueries({ queryKey: ["study-index"] }),
         queries.invalidateQueries({ queryKey: ["study-context"] }),
@@ -181,6 +183,7 @@ export function StudyProvider() {
       );
     },
     onSuccess: async () => {
+      await invalidateSavedStudyResults(queries, wid);
       await Promise.all([
         queries.invalidateQueries({ queryKey: ["study-index"] }),
         queries.invalidateQueries({ queryKey: ["study-context"] }),
@@ -216,6 +219,7 @@ export function StudyProvider() {
       return saveDomain(wid, domainDraft.revision, commitFields(domainDraft));
     },
     onSuccess: async (value) => {
+      await invalidateSavedStudyResults(queries, wid);
       const revision = numeric(value?.revision);
       if (revision !== null)
         setDraft((previous) =>
@@ -279,6 +283,7 @@ export function StudyProvider() {
     try{
       const value = await undoDomain(wid, workspace.data!, direction);
       queries.setQueryData(['workspace', wid], value);
+      await invalidateSavedStudyResults(queries, wid);
       await Promise.all(['study-index','study-context','runs'].map(key => queries.invalidateQueries({queryKey:[key]})));
     }finally{writing.current=false;setRestoring(false);}
   };
@@ -476,9 +481,10 @@ export function StudyProvider() {
     refresh: () => {
       // The context also caches the immutable-looking study response. A new
       // run changes its latest_run: invalidate both layers before rereading.
-      void queries.invalidateQueries({ queryKey: ['study-context', wid, sid] });
-      workspace.refetch();
-      runs.refetch();
+      void invalidateSavedStudyResults(queries, wid).then(async () => {
+        await queries.invalidateQueries({ queryKey: ['study-context', wid, sid] });
+        await Promise.all([workspace.refetch(), runs.refetch()]);
+      });
     },
     notice: setNotice,
     domain:

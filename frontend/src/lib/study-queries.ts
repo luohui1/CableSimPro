@@ -2,8 +2,40 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, array, optionalRecord, record, responseData } from "@/api/client";
 import { projectStudy, type StudyDefinition } from "@/api/research";
 import type { CatalogRow } from '@/api/catalogs';
-import { rootModule } from '@/lib/study-config';
+import { moduleConfiguration, rootModule, studyEntryTab } from '@/lib/study-config';
+import { moduleBehavior, moduleDefinitions } from '@/pages/study-modules';
 import { femConclusionQuery } from '@/components/study-fem-conclusion';
+import { inputContractQuery } from '@/api/input-contracts';
+import { contractFields, seriesChart, studySweep } from '@/lib/heavy-components';
+
+/** These existing input tables stay inside the workbench instead of a canvas alias. */
+export function isSectionInputTable(module: string, tab: string) {
+  return module === 'section' && ['coordinates', 'media'].includes(tab);
+}
+
+/** Match the workbench's existing redirects before choosing a saved-run view. */
+export function studyRunDestination(module: string, tab: string, definition?: StudyDefinition) {
+  const inputAlias = moduleBehavior.input.has(module)
+    && !isSectionInputTable(module, tab)
+    && (!tab || moduleDefinitions[module]?.tabs.some(item => item.id === tab));
+  if (definition && (!module || inputAlias)) {
+    module = rootModule(definition);
+    tab = studyEntryTab(module);
+  }
+  const tabs = moduleDefinitions[module]?.tabs;
+  tab ||= tabs?.[0]?.id || '';
+  const methodTab = tabs?.find(item => item.id === 'parameters' || item.id === 'settings');
+  if (methodTab?.id === tab) tab = tabs?.find(item => item.id !== methodTab.id)?.id || tab;
+  return { module, tab };
+}
+
+/** Prepare only the requested scan surface while its saved data is loading. */
+function prefetchStudyView(module: string, tab: string, hasSavedRun: boolean) {
+  if (module !== 'sweep' || !['curve', 'points'].includes(tab)) return;
+  void studySweep.preload().catch(() => { /* The visible module retains its loading/error boundary. */ });
+  if (tab === 'curve' && hasSavedRun)
+    void seriesChart.preload().catch(() => { /* The chart keeps its own loading/error boundary. */ });
+}
 
 /** Selection cards share one cache; the selected capability owns its full schema. */
 export function methodCardsQuery() {
@@ -61,8 +93,9 @@ export function studyContextQuery(client: QueryClient, workspace: string | undef
         if ((run || study.latest_run) && ['ampacity','thermal-field','selection'].includes(analysis))
           void import('@/features/field/field-view').catch(()=>{});
         // 归属已核验即可读选中运行，不等工程模型的大响应完成。
-        void client.prefetchQuery(studyRunsQuery(client, wid, sid, run,
-          module || rootModule(optionalRecord(study.definition) as StudyDefinition), tab));
+        const destination = studyRunDestination(module, tab, optionalRecord(study.definition) as StudyDefinition);
+        prefetchStudyView(destination.module, destination.tab, !!run || !!study.latest_run);
+        void client.prefetchQuery(studyRunsQuery(client, wid, sid, run, destination.module, destination.tab));
         const state = await client.fetchQuery(workspaceQuery(wid));
         const projected=[projectStudy(study,state,optionalRecord(study.model_reference))];
         client.setQueryData(['study-context',wid,sid],projected);
@@ -104,8 +137,19 @@ export function projectStudiesQuery(wid: string) {
   });
 }
 
+/** Saved bytes are immutable; their currentness against edited inputs is not. */
+export async function invalidateSavedStudyResults(client: QueryClient, wid: string | undefined) {
+  if (!wid) return;
+  await Promise.all(['saved-run', 'saved-field-view', 'fem-conclusion', 'study-compare-runs'].map(key =>
+    client.invalidateQueries({queryKey:[key,wid],refetchType:'none'})));
+}
+
 export function studyRunsQuery(client: QueryClient, wid: string | undefined, sid: string, run: string, module = '', tab = '') {
-  const evidence = ['detail', 'validation', 'sources', 'inputs', 'parameters'].includes(tab) || module === 'method-compare';
+  // Report tabs share one selected-run projection. Switching only the document
+  // surface must not remount its editor or discard a verified PDF; the formal
+  // report independently reads and validates the full saved run.
+  const evidence = module !== 'report'
+    && (['detail', 'validation', 'sources', 'inputs', 'parameters'].includes(tab) || module === 'method-compare');
   return queryOptions({
     queryKey: ["runs", wid, sid, run || 'latest', run ? '' : module, evidence ? 'evidence' : 'detail'],
     queryFn: async () => {
@@ -163,20 +207,57 @@ export function prefetchCatalogs(client: QueryClient) {
   void client.prefetchQuery(methodCardsQuery());
 }
 
+/** Current inputs use the saved configuration's full pin, never an installed replacement. */
+function prefetchCurrentInputs(client: QueryClient, definition: StudyDefinition, module: string, methodVisible: boolean, inspector?: string) {
+  if (module === 'report') return;
+  if (methodVisible && moduleDefinitions[module]?.tabs.some(item => item.id === 'parameters' || item.id === 'settings')) {
+    const configuration = moduleConfiguration(definition, module);
+    if (configuration) void client.prefetchQuery(inputContractQuery(configuration.method));
+    return;
+  }
+  if (inspector === 'agent' || !definition.method) return;
+  // Match StudyCrossingInputs: the ordinary input inspector exposes the root
+  // method's crossings, not a guessed configuration for the selected module.
+  const method = definition.method;
+  const crossings = optionalRecord(definition.parameters).crossing_heat_sources;
+  if (Array.isArray(crossings) && crossings.length) {
+    void client.prefetchQuery(inputContractQuery(method));
+    return;
+  }
+  void client.fetchQuery(methodCardsQuery()).then(catalog => {
+    const plugin = catalog.find(row => optionalRecord(row.method).plugin_id === method.plugin_id);
+    const capability = (Array.isArray(plugin?.capabilities) ? plugin.capabilities : []).map(optionalRecord).find(row => row.id === method.capability);
+    if (Array.isArray(capability?.parameter_fields) && capability.parameter_fields.includes('crossing_heat_sources'))
+      void client.prefetchQuery(inputContractQuery(method));
+  }).catch(() => { /* The visible input inspector retains its normal read state. */ });
+}
+
 /** 进入研究前并行预取研究、工程与运行；失败留给页面自己的错误状态处理，不在 loader 抛出。 */
-export function prefetchStudy(client: QueryClient, workspace: string, sid: string, run: string) {
+export function prefetchStudy(client: QueryClient, workspace: string, sid: string, run: string, module = '', tab = '', inspector?: string) {
+  const methodTab = moduleDefinitions[module]?.tabs.find(item => item.id === 'parameters' || item.id === 'settings');
+  const methodVisible = inspector === 'method' || !!methodTab && methodTab.id === tab;
+  // The requested form should download alongside data, rather than introducing
+  // a new Suspense wait after the saved evidence and exact contract arrive.
+  if (methodVisible) void contractFields.preload().catch(() => {});
+  ({module, tab} = studyRunDestination(module, tab));
+  prefetchStudyView(module, tab, !!run);
   // The ordinary entry first discovers ownership and then redirects to a tab.
   // Download its existing workbench in parallel, rather than start that second
   // chunk chain only after the provider has committed the verified context.
   // The route keeps its own component loading/error handling.
   void import('@/pages/study-workspace').catch(() => {});
   prefetchCatalogs(client);
-  // On a full navigation the explicit destination is already in the address.
-  // Its conclusion may start before even the study-card read; the endpoint
-  // verifies ownership and capability. Hover prefetch on other pages keeps the
-  // metadata-gated path below and never guesses a method from a run ID.
-  if (workspace && run && typeof window!=='undefined'
-      && window.location.pathname===`/studies/${sid}/thermal-field/results`) {
+  // Explicit saved runs retain their snapshot-selected contract in the form;
+  // prefetching the current study's pin here could read a different release.
+  if (!run) void client.fetchQuery(savedStudyQuery(workspace || undefined, sid)).then(study => {
+    const definition = optionalRecord(study.definition) as StudyDefinition;
+    const destination = studyRunDestination(module, tab, definition);
+    prefetchStudyView(destination.module, destination.tab, !!study.latest_run);
+    prefetchCurrentInputs(client, definition, destination.module, methodVisible, inspector);
+  }).catch(() => { /* The provider owns failed saved-study reads. */ });
+  // The explicit route selects this saved field. Both entry and hover prefetch
+  // use that destination, while the host verifies ownership and capability.
+  if (workspace && run && module === 'thermal-field' && tab === 'results') {
     void client.prefetchQuery(femConclusionQuery(workspace,run));
     // This route explicitly selects a saved field. Its host endpoint verifies
     // ownership and source bytes; do not serialize it behind study metadata.
@@ -186,16 +267,21 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
     // The provider already owns the complete loading/error state. Blocking the
     // route on ownership discovery also invokes its minimum pending duration,
     // delaying the same cached workspace after its verified data has arrived.
-    void client.prefetchQuery(studyContextQuery(client, workspace, sid, run));
+    void client.prefetchQuery(studyContextQuery(client, workspace, sid, run, module, tab));
     return;
   }
   // The mounted provider owns loading/error states on both entry paths. Do not
   // make an explicit-workspace navigation wait for the router's minimum pending
   // duration after these same verified query results have already arrived.
   void Promise.all([
-    client.prefetchQuery(studyContextQuery(client, workspace, sid)),
-    client.prefetchQuery(studyRunsQuery(client, workspace, sid, run)),
+    client.prefetchQuery(studyContextQuery(client, workspace, sid, run, module, tab)),
     client.fetchQuery(savedStudyQuery(workspace, sid)).then(study => {
+      // Input aliases need the actual study kind before their result destination
+      // is known. The run query already waited for this same metadata; resolve
+      // it here so the alias and mounted destination share one projection/key.
+      const destination = studyRunDestination(module, tab, optionalRecord(study.definition) as StudyDefinition);
+      prefetchStudyView(destination.module, destination.tab, !!run || !!study.latest_run);
+      void client.prefetchQuery(studyRunsQuery(client, workspace, sid, run, destination.module, destination.tab));
       // Start the saved FEM conclusion once study ownership/type is known,
       // so it does not become a second request chain after the display finishes.
       // The mounted conclusion uses this exact key; the host still verifies it.

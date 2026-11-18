@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { writeAuditJson } from './audit-json.mjs';
 import { waitForPageReady } from './page-readiness.mjs';
 
 export async function createRegularityAudit({ page, context, root }) {
@@ -13,13 +14,15 @@ export async function createRegularityAudit({ page, context, root }) {
   report.sourceDatabase = process.env.E2E_DATABASE_SOURCE || path.join(root, '.data/release/engineering.sqlite');
   report.frontendSnapshot = process.env.E2E_FRONTEND_DIST || '当前前端构建';
   const keys = new Set(), shots = new Map();
+  const screenshotKey = (route, size) => `${route}|${size.width}x${size.height}`;
   async function capture(surface, size) {
-    if (size.width !== 1366 || shots.has(surface.route)) return;
+    const key = screenshotKey(surface.route, size);
+    if (shots.has(key)) return;
     await waitForPageReady(page);
     await page.evaluate(() => document.fonts.ready);
-    const filename = 'page-' + createHash('sha256').update(surface.route).digest('hex').slice(0, 12) + '.png';
+    const filename = 'page-' + createHash('sha256').update(key).digest('hex').slice(0, 12) + '.png';
     await page.screenshot({ path: path.join(out, filename) });
-    shots.set(surface.route, filename);
+    shots.set(key, filename);
   }
   async function record(surface, size, layer) {
     if (layer === 'technical') { report.exclusions.technicalSurfaces = (report.exclusions.technicalSurfaces || 0) + 1; return; }
@@ -192,10 +195,13 @@ export async function createRegularityAudit({ page, context, root }) {
   }
   async function save(traversal) {
     report.complete = traversal.complete;
+    report.viewports = traversal.viewports;
+    report.viewportSelection = traversal.viewportSelection;
+    report.failure = traversal.failure;
     report.uncovered = traversal.uncovered;
     report.errors = traversal.errors;
     report.blockedWrites = traversal.blockedWrites;
-    report.pages = traversal.pages.map(p => ({ ...p, screenshot: shots.get(p.route) }));
+    report.pages = traversal.pages.map(p => ({ ...p, screenshot: shots.get(screenshotKey(p.route, p)) }));
     const byOwner = {}, byCategory = {}, patterns = new Map();
     for (const h of report.findings) { byOwner[h.owner] = (byOwner[h.owner] || 0) + 1; byCategory[h.category] = (byCategory[h.category] || 0) + 1; }
     for (const h of report.findings) {
@@ -206,7 +212,6 @@ export async function createRegularityAudit({ page, context, root }) {
     }
     report.counts = { findings: report.findings.length, byOwner, byCategory };
     report.patterns = [...patterns.values()].sort((a,b) => b.count - a.count);
-    await fs.writeFile(path.join(out, 'audit.json'), JSON.stringify(report, null, 2));
     const cell = value => String(value ?? '').replaceAll('|','\\|').replaceAll('\n',' ');
     await fs.writeFile(path.join(out, 'patterns.md'), '# 按组件归并的问题\n\n完整实例与视口位置见 findings.md；同一组件跨页面重复出现只在此归为一项，不改变原始计数。\n\n| 线程 | 问题 | 组件 | 实际 | 应为 | 实例数 | 示例 |\n|---|---|---|---|---|---|---|\n' + report.patterns.map(p => `| ${p.owner} | ${p.category} | ${cell(p.component)} | ${cell(p.actual)} | ${cell(p.expected)} | ${p.count} | ${cell(p.example.label)} · [定位](${p.example.screenshot}) |`).join('\n') + '\n');
     const rows = report.findings.map(h => `| ${cell(h.label)} (${h.width}) | ${h.owner} | ${h.category} | ${cell(h.text)} | ${cell(h.actual)} | ${cell(h.expected)} | ${cell(h.selector)} · x${Math.round(h.rect.x)} y${Math.round(h.rect.y)} | [页面](${h.screenshot}) |`);
@@ -226,11 +231,13 @@ ${rows.join('\n')}
 
 ${traversal.uncovered.map(u => '- ' + cell(u.label || u.page) + '：' + cell(u.reason)).join('\n') || '无'}
 `);
+    await writeAuditJson(path.join(out, 'audit.json'), report);
   }
   async function overview() {
     const gallery = await context.newPage();
     try {
-      const surfaces = report.pages.filter(p => p.width === 1366 && p.screenshot);
+      const overviewWidth = report.viewports?.[0]?.width ?? 1366;
+      const surfaces = report.pages.filter(p => p.width === overviewWidth && p.screenshot);
       const groups = new Map();
       for (const p of surfaces) { const key = p.owner || '前端公共'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(p); }
       const index = [];
@@ -238,13 +245,13 @@ ${traversal.uncovered.map(u => '- ' + cell(u.label || u.page) + '：' + cell(u.r
         const part = surfaces.slice(offset, offset + 24), tiles = [];
         for (const p of part) { const bytes = await fs.readFile(path.join(out, p.screenshot)); tiles.push(`<figure><img src="data:image/png;base64,${bytes.toString('base64')}"><figcaption>${p.label.replaceAll('&','&amp;').replaceAll('<','&lt;')}</figcaption></figure>`); }
         await gallery.setViewportSize({ width: 1440, height: 1080 });
-        await gallery.setContent(`<html lang="zh"><style>body{margin:24px;font:14px sans-serif;background:#f4f4f4;color:#0d0d0d}h1{font-size:20px}main{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}figure{margin:0;background:white}img{width:100%;display:block}figcaption{padding:8px;overflow-wrap:anywhere}</style><h1>${owner} · 1366 浅色 · ${offset + 1}–${offset + part.length}</h1><main>${tiles.join('')}</main></html>`);
+        await gallery.setContent(`<html lang="zh"><style>body{margin:24px;font:14px sans-serif;background:#f4f4f4;color:#0d0d0d}h1{font-size:20px}main{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}figure{margin:0;background:white}img{width:100%;display:block}figcaption{padding:8px;overflow-wrap:anywhere}</style><h1>${owner} · ${overviewWidth} 浅色 · ${offset + 1}–${offset + part.length}</h1><main>${tiles.join('')}</main></html>`);
         await gallery.locator('img').evaluateAll(images => Promise.all(images.map(img => img.decode())));
         const name = `overview-${createHash('sha256').update(owner).digest('hex').slice(0,6)}-${Math.floor(offset / 24) + 1}.png`;
         await gallery.screenshot({ path: path.join(out, name), fullPage: true });
         index.push(`- ${owner} ${offset + 1}–${offset + part.length}：[总览](${name})`);
       }
-      await fs.writeFile(path.join(out, 'overview.md'), '# 逐页截图总览\n\n每个页面 / 页签一张 1366 浅色缩略图，按线程分组；截图为实际页面首屏。滚动后发现的问题另记录实际视口位置，不能用首屏图当作该位置截图。\n\n' + index.join('\n') + '\n');
+      await fs.writeFile(path.join(out, 'overview.md'), '# 逐页截图总览\n\n每个页面 / 页签一张 ' + overviewWidth + ' 浅色缩略图，按线程分组；截图为实际页面首屏。滚动后发现的问题另记录实际视口位置，不能用首屏图当作该位置截图。\n\n' + index.join('\n') + '\n');
     } finally { await gallery.close(); }
   }
   return { capture, record, save, overview, report, out };
