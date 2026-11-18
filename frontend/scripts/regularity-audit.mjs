@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { writeAuditJson } from './audit-json.mjs';
 import { waitForPageReady } from './page-readiness.mjs';
 
 export async function createRegularityAudit({ page, context, root }) {
@@ -230,8 +231,7 @@ ${rows.join('\n')}
 
 ${traversal.uncovered.map(u => '- ' + cell(u.label || u.page) + '：' + cell(u.reason)).join('\n') || '无'}
 `);
-    await fs.writeFile(path.join(out, 'audit.json.pending'), JSON.stringify(report, null, 2));
-    await fs.rename(path.join(out, 'audit.json.pending'), path.join(out, 'audit.json'));
+    await writeAuditJson(path.join(out, 'audit.json'), report);
   }
   async function overview() {
     const gallery = await context.newPage();

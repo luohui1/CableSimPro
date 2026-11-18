@@ -8,6 +8,7 @@ import { typeModules } from '../src/features/type/module-definitions.ts';
 import { categories, identifyText, exceptionFor, whitelist, findingOwner, readOnlyPost } from './visible-text-policy.mjs';
 import { cableSeriesLabelSelector, resourceSourceReferenceSelector, resourceSourceReferenceException } from './visible-names.mjs';
 import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
+import { createCompactTextKeySet, writeAuditJson } from './audit-json.mjs';
 import { performance as monotonicClock } from 'node:perf_hooks';
 
 assert.equal(process.env.E2E_ISOLATED, '1', '文字巡检只能在隔离副本运行');
@@ -37,7 +38,7 @@ report.sourceDatabase = process.env.E2E_DATABASE_SOURCE || path.join(repositoryR
 report.frontendSnapshot = process.env.E2E_FRONTEND_DIST || '当前前端构建';
 report.viewports = sizes.map(size => ({ ...size }));
 report.viewportSelection = requestedViewport || (performanceMode ? '1366x768' : 'both');
-const targets = [], queued = new Set(), issueKeys = new Set(), secondaryKeys = new Set(), shellHoverSizes = new Set(), sourceModules = new Map();
+const targets = [], queued = new Set(), issueKeys = createCompactTextKeySet(), secondaryKeys = createCompactTextKeySet(), shellHoverSizes = new Set(), sourceModules = new Map();
 const requestedPaths = new Set((process.env.VISIBLE_TEXT_PATHS || '').split('|').filter(Boolean));
 const modulesOnly = process.env.VISIBLE_TEXT_MODULES === '1';
 report.scope = requestedPaths.size || modulesOnly ? 'targeted' : 'complete';
@@ -133,14 +134,14 @@ async function record(surface, size, layer = 'ordinary') {
     const sourceLayer = resourceSourceReferenceException({ ...node, page: surface.route }) ? 'technical' : node.layer;
     const hit = { page: surface.route, label: surface.label, ...size, text: node.text.slice(0, 1000), ...match, categoryLabel: categories[match.category], layer: sourceLayer, summary: node.summary, selector: node.selector, cableSeriesLabel: node.cableSeriesLabel, resourceSourceReference: node.resourceSourceReference, sourceReferenceSummary: node.sourceReferenceSummary, rect: node.rect, owner: findingOwner(surface, node) };
     const exception = exceptionFor(hit);
-    const key = [surface.route, layer, hit.layer, node.selector, node.text, match.category, match.token, size.width].join('|');
+    const key = [surface.route, layer, hit.layer, node.selector, node.text, match.category, match.token, size.width];
     if (exception) {
-      if (secondaryKeys.has(key)) continue; secondaryKeys.add(key);
+      if (!secondaryKeys.add(key, 4)) continue;
       (hit.layer === 'ordinary' ? report.allowed : report.secondary).push({ ...hit, exception: exception.id, reason: exception.reason });
     } else {
-      if (issueKeys.has(key)) continue; issueKeys.add(key);
+      if (!issueKeys.add(key, 4)) continue;
       if (node.rect) {
-        const name = createHash('sha256').update(key).digest('hex').slice(0, 12) + '.png';
+        const name = createHash('sha256').update(key.join('|')).digest('hex').slice(0, 12) + '.png';
         const margin = 16, x = Math.max(0, node.rect.x - margin), y = Math.max(0, node.rect.y - margin);
         await page.screenshot({ path: path.join(out, name), clip: { x, y, width: Math.min(size.width - x, node.rect.width + margin * 2), height: Math.min(size.height - y, node.rect.height + margin * 2) } });
         hit.screenshot = name;
@@ -189,8 +190,8 @@ async function scan(surface, size, layer = 'ordinary') {
     await page.locator('[role="tooltip"]').first().waitFor({ state:'visible', timeout:1000 }).catch(() => {});
     const tooltipText = await page.locator('[role="tooltip"]').allTextContents();
     for (const text of tooltipText) for (const match of identifyText(text)) {
-      const key = [surface.route, size.width, text, match.token, 'radix-hover'].join('|');
-      if (!secondaryKeys.has(key)) { secondaryKeys.add(key); report.secondary.push({ page: surface.route, label: surface.label, ...size, text, ...match, categoryLabel: categories[match.category], layer: 'hover', owner: surface.owner, exception: 'hover', reason: whitelist[0].reason }); }
+      const key = [surface.route, size.width, text, match.token, 'radix-hover'];
+      if (secondaryKeys.add(key, 2)) { report.secondary.push({ page: surface.route, label: surface.label, ...size, text, ...match, categoryLabel: categories[match.category], layer: 'hover', owner: surface.owner, exception: 'hover', reason: whitelist[0].reason }); }
     }
     await page.mouse.move(1, 1);
   }
@@ -211,8 +212,7 @@ async function save({ force = false } = {}) {
   const cell = value => String(value ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
   const rows = report.findings.map(h => `| ${cell(h.label)} (${h.width}) | ${cell(h.text)} | ${h.categoryLabel} | ${h.owner} | ${cell(h.selector)} | [定位](${h.screenshot}) |`);
   await fs.writeFile(path.join(out, 'findings.md'), `# 可见文字巡检\n\n完成：${report.complete}；普通界面 ${ordinary} 项；悬停/折叠/技术层 ${report.secondary.length} 项（允许但单独计数）；可见白名单 ${report.allowed.length} 项。\n\n扫描 ${report.pages.length} 个页面/视口；未覆盖 ${report.uncovered.length} 项。标识仅在巡检证据中保留，不改业务数据。\n\n| 页面 | 文字 | 类别 | 负责线程 | 位置 | 截图 |\n| --- | --- | --- | --- | --- | --- |\n${rows.join('\n')}\n\n## 白名单\n\n${whitelist.map(w => `- ${w.id}：${w.reason}`).join('\n')}\n\n## 未覆盖\n\n${report.uncovered.map(u => '- ' + cell(u.page || u.label) + (u.width ? ` (${u.width})` : '') + (u.owner ? ' · ' + u.owner : '') + '：' + cell(u.reason) + (u.screenshot ? ` [定位](${u.screenshot})` : '')).join('\n') || '无'}\n`);
-  await fs.writeFile(path.join(out, 'audit.json.pending'), JSON.stringify(report, null, 2));
-  await fs.rename(path.join(out, 'audit.json.pending'), path.join(out, 'audit.json'));
+  await writeAuditJson(path.join(out, 'audit.json'), report);
 }
 try {
   await save({ force: true });

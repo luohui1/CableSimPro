@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { writeAuditJson } from './audit-json.mjs';
 import { installReadinessObserver, waitForPageReady, readinessSnapshot } from './page-readiness.mjs';
 
 async function writeReport(file, content) {
@@ -183,7 +184,7 @@ export async function createPerformanceAudit({ page, context, root, base }) {
       await writeReport(path.join(out,'findings.md'), performanceFindings(report));
       await writeReport(path.join(out,'problems.md'), performanceProblems(report));
       // Publish complete only after the auxiliary reports have also been written.
-      await writeReport(path.join(out,'audit.json'),JSON.stringify(report,null,2));
+      await writeAuditJson(path.join(out,'audit.json'), report);
       checkpointMeasurements = report.pages.length; checkpointSurfaces = traversedSurfaces;
     } catch (error) {
       report.complete = false;
