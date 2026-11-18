@@ -122,7 +122,7 @@ export function referencePost<T>(path: string, body: unknown): Promise<T> {
 
 export const parameterNames: Record<string, string> = {
   density: '密度', volumetric_heat_capacity: '体积热容', electrical_resistivity_20: '20 °C 电阻率',
-  relative_permittivity: '相对介电常数', thermal_resistivity: '热阻率', depth_m: '原文电缆埋深（基准待核）',
+  relative_permittivity: '相对介电常数', loss_tangent: '损耗角正切', thermal_resistivity: '热阻率', depth_m: '原文电缆埋深（基准待核）',
   soil_rho_k_m_w: '土壤热阻率', ambient_temperature_c: '环境温度',
 };
 export const assetStatusNames: Record<string, string> = { draft: '草稿', reviewed: '已核对来源', published: '已发布参考版本', deprecated: '已停用' };
@@ -130,6 +130,7 @@ export function referenceTarget(category: ReferenceCategory, row: ReferenceRecor
   if (category === 'materials') return ({
     mass_density: 'density', volumetric_heat_capacity: 'volumetric_heat_capacity',
     resistivity_20_ohm_m: 'electrical_resistivity_20', relative_permittivity: 'relative_permittivity',
+    tan_delta: 'loss_tangent',
     thermal_resistivity: 'thermal_resistivity', thermal_resistivity_k_m_w: 'thermal_resistivity',
   } as Record<string, string>)[row.quantity.key] ?? null;
   if (!['iec60287-3-1-table1/', 'iec60287-3-1-table2/', 'iec60287-3-1-annex-a4/'].some(prefix => row.id.startsWith(prefix))) return null;
