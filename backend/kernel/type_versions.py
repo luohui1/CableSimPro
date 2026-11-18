@@ -1507,31 +1507,39 @@ class Types:
                 'study_revision': run['snapshot']['study_revision'], 'method': run['snapshot']['definition']['method'],
                 'freshness': run['freshness'], 'status': run['status'], 'version_status': run.get('version_status')}
 
-    def specification(self, wid, audience='customer'):
-        # A published document is immutable. Rebuilding today's requirements,
-        # bindings and assessments before overwriting them with this frozen
-        # payload adds work and can accidentally apply a later design's scope.
-        # Verify the frozen document and every original source on each uncached
-        # read; method freshness still comes from the actual saved runs.
-        with self.store.db() as db:
+    def published_specification(self, wid, *, connection=None):
+        """Read the original frozen document and verify its actual saved runs.
+
+        Shared by document rendering and portable input evidence. This does not
+        rebuild requirements, replace historical methods, or execute a study.
+        """
+        with (self.store.db() if connection is None else nullcontext(connection)) as db:
             self._type(db,wid)
             published=db.execute('SELECT * FROM engineering_type_releases WHERE workspace=?',(wid,)).fetchone()
+        if published is None:
+            return None
+        payload=json.loads(published['payload'])
+        digest=published['digest']
+        if fingerprint(payload)!=digest or payload.get('workspace_id')!=wid:
+            raise HTTPException(409,'已发布规格书完整性异常。')
+        runs=[]
+        for source in payload['sources']:
+            run=self.research.get_run(wid,source['run_id'])
+            if run.get('integrity')!='verified' or any(run.get(key)!=source.get(key) for key in ('input_digest','output_digest')):
+                raise HTTPException(409,'已发布规格书来源完整性异常，请核对保存运行。')
+            runs.append(run)
+        from .version_status import cover_status
+        lifecycle={'status':'published','submission_id':published['submission'],
+                   'approval':self._receipt(published['receipt']),'asset_id':published['asset'],
+                   'stale':False,'operator':{'username':getpass.getuser(),'authority':'local_manual_confirmation'},
+                   'version_status':cover_status(runs)}
+        return {'record': dict(published), 'payload': payload, 'digest': digest,
+                'lifecycle': lifecycle, 'runs': runs}
+
+    def specification(self, wid, audience='customer'):
+        published = self.published_specification(wid)
         if published:
-            payload=json.loads(published['payload'])
-            digest=published['digest']
-            if fingerprint(payload)!=digest or payload.get('workspace_id')!=wid:
-                raise HTTPException(409,'已发布规格书完整性异常。')
-            runs=[]
-            for source in payload['sources']:
-                run=self.research.get_run(wid,source['run_id'])
-                if run.get('integrity')!='verified' or any(run.get(key)!=source.get(key) for key in ('input_digest','output_digest')):
-                    raise HTTPException(409,'已发布规格书来源完整性异常，请核对保存运行。')
-                runs.append(run)
-            from .version_status import cover_status
-            lifecycle={'status':'published','submission_id':published['submission'],
-                       'approval':self._receipt(published['receipt']),'asset_id':published['asset'],
-                       'stale':False,'operator':{'username':getpass.getuser(),'authority':'local_manual_confirmation'},
-                       'version_status':cover_status(runs)}
+            payload, digest, lifecycle = (published[key] for key in ('payload', 'digest', 'lifecycle'))
             return {'payload':payload,'digest':digest,'lifecycle':lifecycle,
                     'ready':not any(c['blocking'] for c in payload['checks']),
                     'html':render_specification(payload,digest,lifecycle,audience),'audience':audience,

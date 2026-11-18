@@ -209,6 +209,37 @@ def test_current_system_snapshots_roundtrip_without_rewriting_fixed_versions(cli
 
 
 @pytest.mark.parametrize('format', ['json', 'xlsx'])
+@pytest.mark.parametrize('kind', ['system', 'candidate'])
+def test_empty_or_malformed_source_snapshot_preserves_original_contract(clients, kind, format):
+    source, target = clients
+    project = study(source) if kind == 'system' else candidate_study(source)[1]
+    _, original = export(source, project=project, format=format)
+    for value in ('missing', None, [], False, {}):
+        bundle = deepcopy(original)
+        item = bundle['projects'][0]
+        binding = item['inputs']['study_cable_reference']
+        if value == 'missing':
+            binding.pop('source_snapshot', None)
+        else:
+            binding['source_snapshot'] = value
+        item['input_sha256'] = fingerprint(item['inputs'])
+        bundle['sha256'] = fingerprint({key: part for key, part in bundle.items() if key != 'sha256'})
+        wire = workbook_bytes(bundle) if format == 'xlsx' else encoded(bundle)
+        if kind == 'system' and (value == 'missing' or value is None):
+            preview, imported = upload(target, 'data.' + format, wire)
+            assert imported.status_code == 201, imported.text
+            assert 'published_model' not in preview['projects'][0]
+            copied = target.get('/api/workspaces/' + imported.json()['projects'][0]['id']).json()
+            assert copied['study_cable_reference'] == binding
+            # Export the saved explicit null too: a default only handles an
+            # absent key, and must not produce a server error here.
+            _, exported_again = export(target, project=copied, format=format)
+            assert exported_again['projects'][0]['inputs'] == item['inputs']
+        else:
+            refuse_project(target, wire, bundle, format, 'EXCHANGE_CABLE_SOURCE')
+
+
+@pytest.mark.parametrize('format', ['json', 'xlsx'])
 def test_release_projects_keep_complete_provenance_across_databases(tmp_path, release_seed_copy, format):
     path = Path(__file__).resolve().parents[1] / 'frontend/scripts/seed-engineering-demo.py'
     spec = importlib.util.spec_from_file_location('exchange_release_seed', path)
