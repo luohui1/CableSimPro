@@ -267,7 +267,18 @@ def _column_widths(table: dict, width: float) -> list[float]:
     return [result[index] for index in range(len(columns))]
 
 
-def _model_table(table: dict, width: float) -> list[Flowable]:
+class _ModelTable(LongTable):
+    def split(self, availWidth, availHeight):
+        # ReportLab can otherwise fall back to splitting inside the first row
+        # of a NOSPLIT group. Once only our bounded tail remains, move it whole.
+        # Continuation tables preserve this subclass and the NOSPLIT command.
+        if any(start[1] == self.repeatRows and end[1] in (-1, self._nrows - 1)
+               for _command, start, end in self._nosplitCmds):
+            self.splitInRow = 0
+        return super().split(availWidth, availHeight)
+
+
+def _model_table(table: dict, width: float, *, frame_height: float, prefix=None) -> list[Flowable]:
     columns = table['columns']
     rows = [[_Literal(column['label'], size=_CELL_SIZE) for column in columns]]
     for row in table['rows']:
@@ -280,24 +291,46 @@ def _model_table(table: dict, width: float) -> list[Flowable]:
                                   align='right' if numeric else 'left'))
         rows.append(cells)
     widths = _column_widths(table, width)
-    table_flow = LongTable(rows, colWidths=widths, repeatRows=1,
-                           splitByRow=1, splitInRow=1, hAlign='LEFT', spaceAfter=13)
+    table_flow = _ModelTable(rows, colWidths=widths, repeatRows=1,
+                            splitByRow=1, splitInRow=1, hAlign='LEFT', spaceAfter=13)
     table_flow.setStyle(_table_style())
-    result = []
-    if table.get('title'):
-        # Keep the caption with the beginning of a table, not its entire
-        # splittable body. keepWithNext on a long table wastes a whole page.
-        caption = _Literal(('T' + str(table['display_number']) + '  ' if table.get('display_number') else '') + table['title'], size=10.5, before=8, after=6)
-        opening = caption.wrap(width, 1000)[1] + caption.getSpaceBefore() + caption.getSpaceAfter()
-        for index, row in enumerate(rows[:2]):
-            heights = [cell.wrap(column_width - 2 * _PADDING, 1000)[1]
-                       for cell, column_width in zip(row, widths)]
+
+    def row_height(row, *, opening=False):
+        heights = [cell.wrap(column_width - 2 * _PADDING, 1000)[1]
+                   for cell, column_width in zip(row, widths)]
+        if opening:
             # Three lines keep a short row whole; longer cells can split into
             # at least two lines without stranding a one-line remainder.
-            if index:
-                heights = [min(height, 3 * cell.leading) for height, cell in zip(heights, row)]
-            opening += max(heights) + 12  # Actual top and bottom cell padding.
-        result.extend([CondPageBreak(opening), caption])
+            heights = [min(height, 3 * cell.leading) for height, cell in zip(heights, row)]
+        return max(heights) + 12  # Actual top and bottom cell padding.
+
+    header_height = row_height(rows[0])
+    tail_start, tail_height = len(rows), header_height
+    # Keep a small final group together, never a long table or large cell.
+    # NOSPLIT follows ReportLab's continuation tables, unlike a first-page
+    # split range. The header and up to four tail rows must fit in 1/3 page.
+    for index in range(len(rows) - 1, max(0, len(rows) - 5), -1):
+        height = row_height(rows[index])
+        if tail_height + height > frame_height / 3:
+            break
+        tail_start, tail_height = index, tail_height + height
+    if len(rows) - tail_start >= 2:
+        table_flow.setStyle(TableStyle([('NOSPLIT', (0, tail_start), (-1, -1))]))
+
+    leading = [prefix] if prefix is not None else []
+    if table.get('title'):
+        # Measure the section heading and caption with the same table opening;
+        # two independent page-break decisions can strand the section heading.
+        caption = _Literal(('T' + str(table['display_number']) + '  ' if table.get('display_number') else '') + table['title'], size=10.5, before=8, after=6)
+        leading.append(caption)
+    result = []
+    if leading:
+        opening = sum(flow.wrap(width, 1000)[1] + flow.getSpaceBefore() + flow.getSpaceAfter()
+                      for flow in leading)
+        # A short protected table needs its whole height. A long table remains
+        # splittable, with only its header and first few lines beside the title.
+        opening += tail_height if tail_start == 1 else header_height + (row_height(rows[1], opening=True) if len(rows) > 1 else 0)
+        result.extend([CondPageBreak(opening), *leading])
     result.append(table_flow)
     return result
 
@@ -487,9 +520,11 @@ def _render_pdf(model: dict) -> bytes:
         heading = section.get('heading') or ''
         paragraphs = section.get('paragraphs', [])
         figures = section.get('figures', [])
+        table_ids = section['table_ids']
         heading_flow = _Literal(heading, size=14, before=10, after=8) if heading and heading != '追溯记录' else None
         figure_heading = heading_flow if figures and not paragraphs else None
-        if heading_flow is not None and figure_heading is None:
+        table_heading = heading_flow if table_ids and not figures and not paragraphs else None
+        if heading_flow is not None and figure_heading is None and table_heading is None:
             story.extend([CondPageBreak(92), heading_flow])
         for index, paragraph in enumerate(paragraphs):
             flow = _Literal(paragraph['text'], size=10, after=8)
@@ -507,8 +542,9 @@ def _render_pdf(model: dict) -> bytes:
             story.append(flow)
         for index, figure in enumerate(figures):
             story.extend(_figure(figure, model, width, prefix=figure_heading if index == 0 else None))
-        for table_id in section['table_ids']:
-            story.extend(_model_table(model['tables'][table_id], width))
+        for index, table_id in enumerate(table_ids):
+            story.extend(_model_table(model['tables'][table_id], width, frame_height=A4[1] - top - bottom,
+                                      prefix=table_heading if index == 0 else None))
     document.build(story, canvasmaker=NumberedCanvas)
     import fitz
     with fitz.open(stream=output.getvalue(), filetype='pdf') as result:
