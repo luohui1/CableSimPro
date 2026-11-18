@@ -37,9 +37,10 @@ VERSION_NAME = re.compile(
 )
 MAX_BYTES = 1_000_000
 BINARY_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.glb', '.step', '.stp', '.brep', '.pdf', '.zip', '.woff', '.woff2'}
-# site/src/assets/screenshots/ holds the documentation site's product screenshots; they are
-# regenerated from the real product with `npm run screenshots` in site/ (WebP, < 1 MB each).
-BINARY_DIRS = ['design/*', 'docs/*', 'site/src/assets/screenshots/*']
+BINARY_DIRS = ['design/*', 'docs/*']
+# The documentation site's product screenshots, regenerated from the real product with
+# `npm run screenshots` in site/; only WebP is allowed there.
+SITE_SCREENSHOTS = 'site/src/assets/screenshots/'
 
 
 def tracked() -> list[str]:
@@ -68,9 +69,13 @@ def large_or_misplaced_binaries(files: list[str]) -> list[str]:
         size = (ROOT / f).stat().st_size
         if size > MAX_BYTES:
             issues.append(f'too large ({size // 1024} KB > {MAX_BYTES // 1024} KB): {f}')
-        if PurePosixPath(f).suffix.lower() in BINARY_EXT and not match(f, BINARY_DIRS) and not sealed_plugin_cover(f,files):
+        if PurePosixPath(f).suffix.lower() in BINARY_EXT and not match(f, BINARY_DIRS) and not site_screenshot(f) and not sealed_plugin_cover(f,files):
             issues.append(f'binary outside design or docs: {f}')
     return issues
+
+
+def site_screenshot(path: str) -> bool:
+    return path.startswith(SITE_SCREENSHOTS) and PurePosixPath(path).suffix.lower() == '.webp'
 
 
 def sealed_plugin_cover(path: str, files: list[str]) -> bool:

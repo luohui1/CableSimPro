@@ -39,9 +39,9 @@ sha256sum CableSimPro-Linux.zip
 
 1. 把 ZIP 解压到任意目录，例如 `D:\CableSimPro`。
 
-2. 用文本编辑器打开解压目录里的 `release.toml`，至少确认数据目录 `storage.data_dir`。默认是用户主目录下的 `~/CableSimPro-data`；**数据目录必须在解压目录之外**，以后升级继续用同一份配置。其他配置项见 [release.toml 配置](configuration/)。
+2. 把解压目录里的 `release.toml` 复制到解压目录之外长期保存，例如 `D:\CableSimPro-config\release.toml`（Linux 如 `/etc/cablesimpro/release.toml`），以后启动、升级和回退都用这一份。用文本编辑器打开这份副本，至少确认数据目录 `storage.data_dir`：默认是用户主目录下的 `~/CableSimPro-data`，**数据目录也必须在解压目录之外**。其他配置项见 [release.toml 配置](configuration/)。
 
-3. 启动：Windows 双击 `start.cmd`（或在 PowerShell 中运行 `.\start.cmd`）；Linux 运行 `sh start.sh`。没有桌面的服务器加 `--no-browser`；只想完成安装和校验、不启动服务时加 `--no-start`。
+3. 启动时用 `--config` 指向这份配置：Windows 在 PowerShell 中运行 `.\start.cmd --config D:\CableSimPro-config\release.toml`；Linux 运行 `sh start.sh --config /etc/cablesimpro/release.toml`。没有桌面的服务器加 `--no-browser`；只想完成安装和校验、不启动服务时加 `--no-start`。
 
 4. 首次启动会把运行时复制到 `数据目录/programs/<构建编号前 16 位>/`，在那里建立独立的 Python 环境，只从包内的 wheel 按哈希离线安装依赖，再做依赖完整性和导入检查。依赖缺失会明确失败，不会临时联网补装。
 
@@ -49,14 +49,14 @@ sha256sum CableSimPro-Linux.zip
 
 </Steps>
 
-安装完成后可以删除解压目录：解释器和程序都已装进数据目录。以后运行程序目录里的同名入口，并用 `--config` 指向你保留的配置文件：
+安装完成后可以删除解压目录：解释器和程序都已装进数据目录，配置文件也已经放在外面。以后运行程序目录里的同名入口，并用 `--config` 指向这份配置文件：
 
 ```powershell
-<数据目录>\programs\<构建编号前16位>\start.cmd --config D:\CableSimPro\release.toml
+<数据目录>\programs\<构建编号前16位>\start.cmd --config D:\CableSimPro-config\release.toml
 ```
 
 ```sh
-sh <数据目录>/programs/<构建编号前16位>/start.sh --config /opt/cablesimpro/release.toml
+sh <数据目录>/programs/<构建编号前16位>/start.sh --config /etc/cablesimpro/release.toml
 ```
 
 <Aside type="caution" title="Windows 路径长度">

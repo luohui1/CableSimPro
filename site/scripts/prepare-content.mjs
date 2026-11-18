@@ -5,10 +5,16 @@
 //   4. 由 design/brand/mark.svg 与 design/tokens.css 生成明暗两种品牌标记和网站图标。
 // 用法：node scripts/prepare-content.mjs [--skip-openapi]（跳过时沿用上次导出的接口描述）
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { mathFromMarkdown } from 'mdast-util-math';
+import { gfm } from 'micromark-extension-gfm';
+import { math } from 'micromark-extension-math';
+import { SKIP, visit } from 'unist-util-visit';
 
 const site = fileURLToPath(new URL('..', import.meta.url));
 const repo = path.resolve(site, '..');
@@ -40,6 +46,19 @@ async function listFiles(dir) {
 const toRepoPath = (full) => path.relative(repo, full).split(path.sep).join('/');
 
 // ---- 1. 校验清单 ----
+// 链接与发布来源只认已入库的文件：未入库的本地文件在公开仓库里不存在，链过去就是死链
+const lsFiles = spawnSync('git', ['ls-files', '-z'], { cwd: repo, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+if (lsFiles.status !== 0) throw Error('读取 git ls-files 失败：站点需要在 Git 检出中构建');
+const tracked = new Set(lsFiles.stdout.split('\0').filter(Boolean));
+const trackedDirs = new Set(
+  [...tracked].flatMap((file) => {
+    const parts = file.split('/');
+    return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
+  }),
+);
+const isUnpublished = (repoPath) =>
+  publish.unpublished.some((item) => repoPath === item.source || (item.source.endsWith('/') && repoPath.startsWith(item.source)));
+
 const pages = publish.pages;
 const bySource = new Map();
 const slugs = new Set();
@@ -47,75 +66,139 @@ for (const page of pages) {
   if (!/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/.test(page.slug)) throw Error(`publish.json：网址不合规 ${page.slug}`);
   if (slugs.has(page.slug)) throw Error(`publish.json：网址重复 ${page.slug}`);
   if (bySource.has(page.source)) throw Error(`publish.json：重复发布 ${page.source}`);
-  // 来源只能是 docs/ 下的文档或插件自带的 README
+  if (path.posix.normalize(page.source) !== page.source || page.source.split('/').includes('..'))
+    throw Error(`publish.json：来源路径不规范 ${page.source}`);
+  // 来源只能是 docs/ 下的文档或插件自带的 README，且已入库
   const allowed = page.source.startsWith('docs/') || /^plugins\/[^/]+\/README\.md$/.test(page.source);
-  if (!allowed || !existsSync(path.join(repo, page.source)))
-    throw Error(`publish.json：来源不在 docs/ 或插件 README，或文件不存在：${page.source}`);
-  const excluded = publish.unpublished.find((item) => page.source.startsWith(item.source));
-  if (excluded) throw Error(`publish.json：${page.source} 同时列在 unpublished（${excluded.source}）`);
+  if (!allowed || !tracked.has(page.source))
+    throw Error(`publish.json：来源不在 docs/ 或插件 README，或不是已入库文件：${page.source}`);
+  if (isUnpublished(page.source)) throw Error(`publish.json：${page.source} 同时列在 unpublished`);
   slugs.add(page.slug);
   bySource.set(page.source, page);
 }
-const docFiles = (await listFiles(path.join(repo, 'docs'))).map(toRepoPath).filter((f) => f.endsWith('.md'));
-const unclassified = docFiles.filter(
-  (f) => !bySource.has(f) && !publish.unpublished.some((item) => f.startsWith(item.source)),
-);
+// 同步页面的网址不能占用手写页面的网址
+const contentRoot = path.join(site, 'src/content/docs');
+for (const file of await listFiles(contentRoot)) {
+  if (!/\.(md|mdx)$/.test(file) || file.startsWith(synced + path.sep)) continue;
+  const slug = path
+    .relative(contentRoot, file)
+    .split(path.sep)
+    .join('/')
+    .replace(/\.(md|mdx)$/, '')
+    .replace(/(^|\/)index$/, '');
+  if (slugs.has(slug)) throw Error(`publish.json：网址 ${slug} 与手写页面 ${toRepoPath(file)} 重名`);
+}
+const unclassified = [...tracked]
+  .filter((f) => f.startsWith('docs/') && f.endsWith('.md') && !bySource.has(f) && !isUnpublished(f))
+  .sort();
 if (unclassified.length)
   console.warn(`提示：以下 docs/ 文件未在 publish.json 中分类，默认不发布：\n  ${unclassified.join('\n  ')}`);
 
 // ---- 2. 同步页面 ----
+// 用 Markdown 语法树找链接：代码块、行内代码、脚注和公式里的方括号都不会被误认成链接；
+// 只替换链接地址本身，其余原文逐字保留。
 const brokenLinks = [];
+const imageAssets = new Map();
 const relativeUrl = (fromSlug, toSlug) => '../'.repeat(fromSlug.split('/').length) + toSlug + '/';
+const syncedPath = (source) => source.replace(/^docs\//, '');
 
-function rewriteUrl(raw, page) {
-  const bracketed = raw.startsWith('<') && raw.endsWith('>');
-  const url = bracketed ? raw.slice(1, -1) : raw;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('#') || url.startsWith('//')) return raw;
-  const [target, hash] = url.split('#');
-  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page.source), decodeURI(target)));
-  const anchor = hash ? '#' + hash : '';
-  let result;
-  if (bySource.has(resolved)) result = relativeUrl(page.slug, bySource.get(resolved).slug) + anchor;
-  else if (!resolved.startsWith('..') && existsSync(path.join(repo, resolved))) {
-    const kind = statSync(path.join(repo, resolved)).isDirectory() ? 'tree' : 'blob';
-    result = `${repoUrl}/${kind}/${ref}/${encodeURI(resolved)}${anchor}`;
-  } else {
-    brokenLinks.push(`${page.source}: ${url}`);
-    return raw;
+function resolveTarget(url, page, image) {
+  if (!url || /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('#') || url.startsWith('//')) return { keep: true };
+  const [target, ...hash] = url.split('#');
+  const anchor = hash.length ? '#' + hash.join('#') : '';
+  let decoded = target;
+  try {
+    decoded = decodeURI(target);
+  } catch {}
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page.source), decoded)).replace(/\/$/, '');
+  if (resolved.startsWith('..')) return { broken: true };
+  if (image) {
+    // 图片随页面一起复制进站点，内网离线时也能显示
+    if (!tracked.has(resolved) || isUnpublished(resolved)) return { broken: true };
+    const asset = path.posix.join('_assets', resolved);
+    imageAssets.set(resolved, asset);
+    return { url: path.posix.relative(path.posix.dirname(syncedPath(page.source)), asset) };
   }
-  return bracketed ? `<${result}>` : result;
+  if (bySource.has(resolved)) return { url: relativeUrl(page.slug, bySource.get(resolved).slug) + anchor };
+  // 明确不发布的文档不给链接（也不链到代码仓库），只保留链接文字
+  if (isUnpublished(resolved)) return { unlink: true };
+  if (tracked.has(resolved)) return { url: `${repoUrl}/blob/${ref}/${encodeURI(resolved)}${anchor}` };
+  if (trackedDirs.has(resolved)) return { url: `${repoUrl}/tree/${ref}/${encodeURI(resolved)}${anchor}` };
+  return { broken: true };
+}
+
+// 行内链接的地址在最后一个 "](" 之后（链接文字里也可能出现 "]("），从后往前找第一个能完整匹配的位置
+const destinationTail =
+  /^\]\(\s*(<[^>\n]*>|[^\s<>]*)(?:\s+(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?\s*\)$/s;
+function locateDestination(text) {
+  for (let i = text.lastIndexOf(']('); i > 0; i = text.lastIndexOf('](', i - 1)) {
+    const match = text.slice(i).match(destinationTail);
+    if (match) return { offset: i + text.slice(i).indexOf(match[1], 2), raw: match[1] };
+  }
+  return null;
 }
 
 function rewriteLinks(markdown, page) {
-  let fence = null;
-  return markdown
-    .split('\n')
-    .map((line) => {
-      const marker = line.match(/^\s*(`{3,}|~{3,})/);
-      if (fence) {
-        if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
-        return line;
-      }
-      if (marker) {
-        fence = marker[1];
-        return line;
-      }
-      const definition = line.match(/^(\s{0,3}\[[^\]]+\]:\s*)(<[^>]*>|\S+)(.*)$/);
-      if (definition) return definition[1] + rewriteUrl(definition[2], page) + definition[3];
-      // 行内代码中的内容不是链接，原样保留
-      return line
-        .split(/(`+[^`]*`+)/)
-        .map((part, index) =>
-          index % 2
-            ? part
-            : part.replace(
-                /(!?\[(?:[^[\]]|\[[^\]]*\])*\]\()(<[^>]*>|[^\s)]+)((?:\s+"[^"]*")?\))/g,
-                (_, before, url, after) => before + rewriteUrl(url, page) + after,
-              ),
-        )
-        .join('');
-    })
-    .join('\n');
+  const tree = fromMarkdown(markdown, {
+    extensions: [gfm(), math()],
+    mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
+  });
+  const edits = [];
+  const span = (node) => [node.position.start.offset, node.position.end.offset];
+  const innerText = (node) =>
+    node.children.length
+      ? markdown.slice(node.children[0].position.start.offset, node.children.at(-1).position.end.offset)
+      : '';
+  const replaceDestination = (start, raw, url) =>
+    edits.push({ start, end: start + raw.length, text: raw.startsWith('<') ? `<${url}>` : url });
+
+  const unlinked = new Set();
+  visit(tree, 'definition', (node) => {
+    const [start, end] = span(node);
+    const decision = resolveTarget(node.url, page, false);
+    if (decision.broken) brokenLinks.push(`${page.source}: ${node.url}`);
+    else if (decision.unlink) {
+      unlinked.add(node.identifier);
+      edits.push({ start, end, text: '' });
+    } else if (decision.url) {
+      const match = markdown.slice(start, end).match(/^(\s*\[(?:[^\]\\]|\\.)*\]:\s*)(<[^>\n]*>|\S+)/);
+      if (!match) throw Error(`${page.source}：无法定位链接定义 ${node.url}`);
+      replaceDestination(start + match[1].length, match[2], decision.url);
+    }
+  });
+  visit(tree, (node) => {
+    if (node.type === 'linkReference' && unlinked.has(node.identifier)) {
+      const [start, end] = span(node);
+      edits.push({ start, end, text: innerText(node) });
+      return SKIP;
+    }
+    if (node.type !== 'link' && node.type !== 'image') return;
+    const [start, end] = span(node);
+    const text = markdown.slice(start, end);
+    if (!text.startsWith('[') && !text.startsWith('![')) return; // 自动链接与裸网址
+    const decision = resolveTarget(node.url, page, node.type === 'image');
+    if (decision.keep) return;
+    if (decision.broken) {
+      brokenLinks.push(`${page.source}: ${node.url}`);
+      return SKIP;
+    }
+    if (decision.unlink) {
+      edits.push({ start, end, text: innerText(node) });
+      return SKIP;
+    }
+    const destination = locateDestination(text);
+    if (!destination) throw Error(`${page.source}：无法定位链接地址 ${node.url}`);
+    replaceDestination(start + destination.offset, destination.raw, decision.url);
+  });
+
+  let output = markdown;
+  let limit = Infinity;
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
+    if (edit.end > limit) throw Error(`${page.source}：链接改写位置重叠`);
+    output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+    limit = edit.start;
+  }
+  return output;
 }
 
 const yaml = (value) => JSON.stringify(value);
@@ -138,11 +221,15 @@ for (const page of pages) {
     '---',
   ].join('\n');
   const origin = `\n\n---\n\n本页由仓库文件 [${page.source}](${repoUrl}/blob/${ref}/${encodeURI(page.source)}) 生成，修改请编辑该文件。\n`;
-  const output = path.join(synced, page.source.replace(/^docs\//, ''));
+  const output = path.join(synced, syncedPath(page.source));
   await mkdir(path.dirname(output), { recursive: true });
   await writeFile(output, frontmatter + '\n' + rewriteLinks(body.trim(), page) + origin);
 }
-if (brokenLinks.length) throw Error(`docs/ 中有指向不存在文件的链接：\n  ${brokenLinks.join('\n  ')}`);
+if (brokenLinks.length) throw Error(`docs/ 中有指向不存在、未入库或不发布文件的链接：\n  ${brokenLinks.join('\n  ')}`);
+for (const [source, asset] of imageAssets) {
+  await mkdir(path.dirname(path.join(synced, asset)), { recursive: true });
+  await copyFile(path.join(repo, source), path.join(synced, asset));
+}
 
 // ---- 3. 插件清单与示例 ----
 await mkdir(generated, { recursive: true });

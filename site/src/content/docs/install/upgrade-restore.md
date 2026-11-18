@@ -9,14 +9,14 @@ sidebar:
 
 1. 停止正在运行的服务（在启动窗口按 Ctrl+C）。
 2. 把新版安装包解压到**另一个**目录。
-3. 用原来的配置文件运行新包里的入口：
+3. 用安装时保存在解压目录之外的那份配置文件，运行新包里的入口：
 
    ```powershell
-   .\start.cmd --config D:\CableSimPro\release.toml
+   .\start.cmd --config D:\CableSimPro-config\release.toml
    ```
 
    ```sh
-   sh start.sh --config /opt/cablesimpro/release.toml
+   sh start.sh --config /etc/cablesimpro/release.toml
    ```
 
 升级时会发生这些事：
@@ -31,7 +31,7 @@ sidebar:
 只在升级后确实需要回到旧版时使用。停止服务后，用**当前版本**程序目录里的解释器执行：
 
 ```sh
-<数据目录>/programs/<当前构建编号前16位>/.venv/bin/python <数据目录>/programs/<当前构建编号前16位>/scripts/run_release.py --config /opt/cablesimpro/release.toml --rollback --no-browser
+<数据目录>/programs/<当前构建编号前16位>/.venv/bin/python <数据目录>/programs/<当前构建编号前16位>/scripts/run_release.py --config /etc/cablesimpro/release.toml --rollback --no-browser
 ```
 
 Windows 使用 `.venv\Scripts\python.exe`。回退会恢复上一版程序和它的升级前工程库；回退前仍会保留当前工程库的安全副本。

@@ -9,7 +9,7 @@ sidebar:
 
 ## 获取构建产物
 
-**直接下载**：代码仓库每次提交的 CI 都会构建站点，在 GitHub Actions 的 “Docs site” 任务里下载产物 `docs-site`，解压后就是可以直接部署的站点目录。
+**直接下载**：向 main 的推送和每个拉取请求的 CI 都会构建站点，在 GitHub Actions 对应运行的 “Docs site” 任务里下载产物 `docs-site`（保留 14 天），解压后就是可以直接部署的站点目录。
 
 **自己构建**（需要 Node.js 22.12+ 和 Python 3.11+，Python 用于从后端导出接口说明）：
 

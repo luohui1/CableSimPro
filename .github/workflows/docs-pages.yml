@@ -42,8 +42,9 @@ jobs:
         working-directory: site
         env:
           PYTHON: python
-          DOCS_SITE: ${{ steps.pages.outputs.origin || format('https://{0}.github.io', github.repository_owner) }}
-          DOCS_BASE: ${{ steps.pages.outputs.base_path || format('/{0}/', github.event.repository.name) }}
+          DOCS_SITE: ${{ steps.pages.outcome == 'success' && steps.pages.outputs.origin || format('https://{0}.github.io', github.repository_owner) }}
+          # A custom domain reports an empty base_path, which means the site root.
+          DOCS_BASE: ${{ steps.pages.outcome == 'success' && format('{0}/', steps.pages.outputs.base_path) || format('/{0}/', github.event.repository.name) }}
         run: |
           npm ci
           npm run build
@@ -54,7 +55,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    if: ${{ vars.DOCS_PAGES_ENABLED == 'true' }}
+    if: ${{ vars.DOCS_PAGES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
