@@ -164,7 +164,7 @@ export function AssetEditor({ open, onClose, onSaved, kinds, asset, resume }: {
             <Button size="compact" disabled={locked} onClick={() => setParameters(rows => rows.filter(item => item.key !== row.key))}>移除参数 {index + 1}</Button></div></fieldset>;
         })}
         <Button size="compact" disabled={locked || parameters.length >= 256} onClick={addParameter}>新增参数</Button>
-        <p className="muted">切换同量纲单位会换算数值并保持物理量。当前版本可录入长度、面积、温度、温差、线电阻、热阻率、热导率、电流和频率；密度、电阻率及无量纲参数暂不能录入。</p>
+        <p className="muted">切换同量纲单位会换算数值并保持物理量。可录入长度、面积、温度、温差、线电阻、热阻率、热导率、电流、频率、密度、电阻率、体积热容和无量纲参数。</p>
       </section>
       <section aria-label="资源来源" className="resource-form-section"><h3>来源</h3>{sources.map((source, index) => {
         const references = referenceData([source]);

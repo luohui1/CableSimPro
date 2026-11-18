@@ -32,12 +32,44 @@ def test_changes_compare_sealed_content_not_patch_versions(change, expected):
         next(row for row in new['capabilities'] if row['id']=='steady-rating')['method_version'] = '9.0.0'
     proof = classify(pin(old), pin(new), old, new)
     assert proof['classification'] == expected
-    assert proof['rule'] == 'sealed-computation-and-contract/2'
+    assert proof['rule'] == 'sealed-computation-and-contract/3'
     assert (proof['from_computation_digest']==proof['to_computation_digest']) == (expected=='presentation_only')
     assert classify(pin(old),pin(new),None,new)['classification']=='unproven'
     tampered=deepcopy(old);tampered['description']+='tampered'
     assert classify(pin(old),pin(new),tampered,new)['classification']=='unproven'
     assert classify({**pin(old),'version':'0.0.0'},pin(new),old,new)['classification']=='unproven'
+
+
+def test_display_unit_corrections_keep_saved_runs_but_si_unit_changes_do_not():
+    # Simulation 1.7.2 corrected temperature tolerances from °C with the absolute
+    # offset to K. Only the form's display changed (the SI unit and x-runtime did
+    # not), so runs saved with 1.7.1 must stay valid; an SI unit change must not.
+    import json
+    from pathlib import Path
+    current = json.loads((Path(__file__).resolve().parents[1]/'plugins/cablesim.simulation/plugin.json').read_text('utf-8'))
+    def with_tolerance_unit(manifest, version, unit):
+        copy = deepcopy(manifest); copy['version'] = version; count = 0
+        def walk(node):
+            nonlocal count
+            if isinstance(node, dict):
+                for key, item in node.items():
+                    if key == 'temperature_tolerance_k' and isinstance(item, dict) and isinstance(item.get('x-unit'), dict):
+                        item['x-unit'] = deepcopy(unit); count += 1
+                    walk(item)
+            elif isinstance(node, list):
+                for item in node: walk(item)
+        walk(copy)
+        assert count >= 5
+        return copy
+    def pin_for(manifest):
+        return {'plugin_id': manifest['id'], 'version': manifest['version'],
+                'release_digest': fingerprint(manifest), 'capability': 'electrothermal'}
+    old = with_tolerance_unit(current, '1.7.1', {'si': 'K', 'display': '°C', 'scale': 1, 'offset': -273.15})
+    proof = classify(pin_for(old), pin_for(current), old, current)
+    assert proof['classification'] == 'presentation_only'
+    assert proof['from_computation_digest'] == proof['to_computation_digest']
+    other_si = with_tolerance_unit(current, '1.7.9', {'si': 'mK', 'display': 'mK', 'scale': 1, 'offset': 0})
+    assert classify(pin_for(current), pin_for(other_si), current, other_si)['classification'] == 'calculation_changed'
 
 
 def test_read_presentation_update_keeps_saved_output_and_summary_task(client, monkeypatch):

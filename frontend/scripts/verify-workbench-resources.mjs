@@ -168,13 +168,12 @@ await walkthrough('resources', async ({ page, expect, base, api, choose, capture
     await dialog.getByRole('textbox', { name: '来源说明 1', exact: true }).fill('隔离浏览器验收手工输入，用于验证表单、单位和版本操作；不是厂家、标准或工程推荐数据。');
     await capture(`${group}-typed-definition`);
     if (kind === 'material') {
-      const limitation = dialog.getByText(/密度、电阻率及无量纲参数暂不能录入/);
-      await limitation.scrollIntoViewIfNeeded();
-      const shot = await capture('material-host-quantity-limit');
-      report.handoffs ||= [];
-      report.handoffs.push({ label: '材料密度、电阻率及无量纲参数的 typed 录入', status: '未通过', owner: 'T3 资源参数契约', screenshot: shot.screenshot,
-        detail: '宿主 Quantity 契约没有这些量纲，T1 表单不改名伪装；已有来源摘录保留。' });
-      check('完整材料物性可通过 typed 参数录入', false, { owner: 'T3', screenshot: shot.screenshot, actual: await limitation.innerText() }, { fatal: false });
+      // The host Quantity contract now declares density, resistivity, volumetric heat
+      // capacity and dimensionless values; the form lists them instead of a gap.
+      const supported = dialog.getByText(/密度、电阻率、体积热容和无量纲参数/);
+      await supported.scrollIntoViewIfNeeded();
+      const shot = await capture('material-host-quantities');
+      check('材料密度、电阻率、体积热容与无量纲参数可按宿主量纲录入', await supported.isVisible(), { screenshot: shot.screenshot, actual: await supported.innerText() }, { fatal: false });
     }
     await dialog.getByRole('button', { name: '保存资源草稿', exact: true }).click();
     await expect(dialog).toBeHidden();

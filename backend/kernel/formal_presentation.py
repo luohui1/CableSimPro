@@ -166,6 +166,11 @@ def number_display(value, unit, role='quantity'):
         if interval is None:
             interval = Decimal(1).scaleb(converted.adjusted() - 3) if converted else Decimal(1)
         rounded = converted.quantize(interval, rounding=ROUND_HALF_EVEN)
+        if not fixed and rounded and rounded.adjusted() > converted.adjusted():
+            # Rounding carried into the next magnitude (9.99995 -> 10.000). Round the
+            # saved value once at that magnitude so it keeps four significant digits.
+            interval = interval.scaleb(1)
+            rounded = converted.quantize(interval, rounding=ROUND_HALF_EVEN)
         if not rounded:
             rounded = rounded.copy_abs()  # Do not print -0; the original sign is in trace.
         # Plain decimal only: a customer document never shows E notation.
