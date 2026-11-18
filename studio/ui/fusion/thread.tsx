@@ -1,0 +1,159 @@
+// The conversation, put together from assistant-ui's primitives, which hold the behaviour (scrolling, the composer, suggestions, copy and
+// retry), and the kit's parts, which hold the look. Nothing here is styled: what the agent did arrives as steps and cards (steps.tsx), what
+// it wrote as Markdown (the Cable Studio page's own renderer). Attachments are staged by the platform when the user sends the message.
+import {
+  ActionBarPrimitive, AttachmentPrimitive, AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, SuggestionPrimitive, ThreadPrimitive,
+  groupPartByType, useAui, useAuiState, type AssistantState,
+} from '@assistant-ui/react';
+import { useEffect, type ReactNode } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { AgentEmpty, ChatNotice, TaskStarter } from '@/kit/chat/empty';
+import { ComposerAttach, ComposerBar, ComposerFrame, ComposerSend, ComposerStop, FileChip, composerInputClass } from '@/kit/chat/composer';
+import { AssistantMessage, ThreadColumn, Typing, UserMessage, threadViewportClass } from '@/kit/chat/messages';
+import { Icon } from '@/kit/icon';
+import { MarkdownText } from '../agent/markdown';
+import { ALL_STARTERS, STARTERS } from './starters';
+import { StepGroup } from './steps';
+
+// A thread with nothing in it yet shows the welcome and the starting tasks; a thread that is still fetching its history shows neither.
+const isNewChatView = (state: AssistantState) => state.thread.messages.length === 0 && (!state.thread.isLoading || state.threads.isLoading);
+const isHistoryLoadingView = (state: AssistantState) => state.thread.messages.length === 0 && state.thread.isLoading && !state.threads.isLoading;
+
+export function Thread({ notice, compact = false }: { notice?: ReactNode; compact?: boolean }) {
+  const empty = useAuiState(isNewChatView);
+  return <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
+    {empty
+      ? <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
+        <AgentEmpty title={compact ? '当前对象交给 Agent' : '今天要完成哪项工作？'} lead="读取研究与型号，提出改动、运行并交付。每一步写操作先由你接受，结果来自工作台同一份记录。" notice={notice}
+          composer={<Composer />}
+          groups={compact ? [] : STARTERS.map(group => ({ label: group.label, icon: group.icon,
+            tasks: <Starters first={ALL_STARTERS.indexOf(group.tasks[0])} count={group.tasks.length} /> }))} />
+      </div>
+      : <>
+        {/* A new turn starts at the top of the page, and a conversation that is opened shows its latest turn from the person's words on,
+            nothing cut off above. */}
+        <ThreadPrimitive.Viewport turnAnchor="top" scrollToBottomOnInitialize={false} scrollToBottomOnThreadSwitch={false} className={threadViewportClass}>
+          <OpenAtLatestTurn />
+          <ThreadColumn className="pb-6">
+            <AuiIf condition={isHistoryLoadingView}><p role="status" className="m-0 py-10 text-center text-sm text-ink-2">正在打开对话…</p></AuiIf>
+            <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
+          </ThreadColumn>
+        </ThreadPrimitive.Viewport>
+        <div className="shrink-0 pb-4">
+          <ThreadColumn className="relative gap-3">
+            {notice}
+            <ThreadPrimitive.ScrollToBottom render={<Button variant="outline" size="icon" aria-label="回到最新"
+              className="absolute -top-12 left-1/2 z-10 -translate-x-1/2 rounded-full shadow-menu disabled:invisible xl:top-auto xl:bottom-1 xl:left-full xl:ml-3 xl:translate-x-0" />}>
+              <Icon name="action/arrow-down" />
+            </ThreadPrimitive.ScrollToBottom>
+            <Composer placeholder="接着问，或交办下一步" />
+          </ThreadColumn>
+        </div>
+      </>}
+  </ThreadPrimitive.Root>;
+}
+
+/** A conversation that is opened shows its latest turn from the person's words on. The history arrives after the page is mounted, so
+ *  this waits for it. */
+function OpenAtLatestTurn() {
+  const loaded = useAuiState(state => state.thread.messages.length > 0 && !state.thread.isLoading);
+  useEffect(() => {
+    if (!loaded) return;
+    const turns = document.querySelectorAll('[data-turn-start]');
+    turns[turns.length - 1]?.scrollIntoView({ block: 'start' });
+  }, [loaded]);
+  return null;
+}
+
+/** The starting tasks of one group, each a task starter that sends its prompt when clicked. */
+function Starters({ first, count }: { first: number; count: number }) {
+  return <>{Array.from({ length: count }, (_, offset) => <ThreadPrimitive.SuggestionByIndex key={first + offset} index={first + offset} components={{ Suggestion: Starter }} />)}</>;
+}
+
+function Starter() {
+  const title = useAuiState(state => state.suggestion.title);
+  const task = ALL_STARTERS.find(item => item.title === title);
+  if (!task) return null;
+  return <SuggestionPrimitive.Trigger send render={<TaskStarter icon={task.icon} title={task.title} result={task.result} />} />;
+}
+
+function Composer({ placeholder = '问研究结论，或描述要完成的任务' }: { placeholder?: string }) {
+  return <ComposerPrimitive.Root>
+    <ComposerPrimitive.AttachmentDropzone render={<ComposerFrame />}>
+      <div className="flex w-full flex-row flex-wrap items-center gap-2 px-1 empty:hidden">
+        <ComposerPrimitive.Attachments>{() => <ComposerChip />}</ComposerPrimitive.Attachments>
+      </div>
+      <ComposerPrimitive.Input className={composerInputClass} placeholder={placeholder} rows={1} autoFocus enterKeyHint="send" aria-label="给 Agent 的消息" />
+      <ComposerBar
+        start={<><ComposerPrimitive.AddAttachment render={<ComposerAttach title="附上 CSV/XLSX 结构表；每条消息合计不超过 1 MiB" />} />
+          <span className="text-xs text-ink-3">CSV / XLSX · 合计 1 MiB</span></>}
+        end={<>
+          <AuiIf condition={state => state.thread.isRunning && state.thread.capabilities.cancel}><ComposerPrimitive.Cancel render={<ComposerStop />} /></AuiIf>
+          <ComposerPrimitive.Send render={<ComposerSend title="发送；任务进行中发送会在当前一步做完后插话" />} />
+        </>} />
+    </ComposerPrimitive.AttachmentDropzone>
+  </ComposerPrimitive.Root>;
+}
+
+function ComposerChip() {
+  const aui = useAui();
+  const name = useAuiState(state => state.attachment.name);
+  const status = useAuiState(state => state.attachment.status.type);
+  return <AttachmentPrimitive.Root render={<span className="inline-flex" />}>
+    <FileChip name={name} detail={status === 'running' ? '读取文件中' : status === 'incomplete' ? '请重新选择文件' : '随消息发送，写入另行接受'}
+      state={status === 'running' ? 'uploading' : status === 'incomplete' ? 'error' : 'done'} onRemove={() => aui.attachment().remove()} />
+  </AttachmentPrimitive.Root>;
+}
+
+function ThreadMessage() {
+  const role = useAuiState(state => state.message.role);
+  return role === 'user' ? <PersonMessage /> : <AgentMessage />;
+}
+
+function PersonMessage() {
+  // A message sent while the agent was busy waits for the current step; say so, so it is not mistaken for ignored.
+  const queued = useAuiState(state => Boolean(state.message.metadata.custom?.queued));
+  const hasFiles = useAuiState(state => (state.message.attachments?.length ?? 0) > 0);
+  return <MessagePrimitive.Root data-turn-start className="pt-8">
+    <UserMessage attachments={hasFiles ? <MessagePrimitive.Attachments>{() => <SentChip />}</MessagePrimitive.Attachments> : undefined}>
+      <MessagePrimitive.Parts />
+      {queued && <Badge variant="outline">排队中，当前一步做完后处理</Badge>}
+    </UserMessage>
+  </MessagePrimitive.Root>;
+}
+
+function SentChip() {
+  const name = useAuiState(state => state.attachment.name);
+  return <AttachmentPrimitive.Root render={<span className="inline-flex" />}><FileChip name={name} detail="本对话附件" /></AttachmentPrimitive.Root>;
+}
+
+function AgentMessage() {
+  return <MessagePrimitive.Root className="pt-8">
+    <AssistantMessage>
+      {/* Adjacent tool calls are one stretch of work: one line for them, then their cards. */}
+      <MessagePrimitive.GroupedParts groupBy={groupPartByType({ 'tool-call': ['group-steps'] })}>
+        {({ part }) => {
+          switch (part.type) {
+            case 'group-steps': return <StepGroup indices={part.indices} />;
+            case 'text': return <MarkdownText />;
+            case 'tool-call': return <></>;
+            case 'indicator': return <Typing />;
+            default: return null;
+          }
+        }}
+      </MessagePrimitive.GroupedParts>
+      <MessagePrimitive.Error><ChatNotice tone="error"><ErrorPrimitive.Message /></ChatNotice></MessagePrimitive.Error>
+      <ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="-ml-2 flex gap-1">
+        <ActionBarPrimitive.Copy render={<Button variant="ghost" size="icon-sm" aria-label="复制" title="复制" />}>
+          <AuiIf condition={state => state.message.isCopied}><Icon name="action/check" /></AuiIf>
+          <AuiIf condition={state => !state.message.isCopied}><Icon name="action/copy" /></AuiIf>
+        </ActionBarPrimitive.Copy>
+        {/* Only an answer that broke off (an error, a stop) can be asked again; a good one is not offered a second draw. */}
+        <AuiIf condition={state => state.message.status?.type === 'incomplete'}>
+          <ActionBarPrimitive.Reload render={<Button variant="ghost" size="icon-sm" aria-label="重试" title="重试：再发一遍上一个请求" />}><Icon name="agent/retry" /></ActionBarPrimitive.Reload>
+        </AuiIf>
+      </ActionBarPrimitive.Root>
+    </AssistantMessage>
+  </MessagePrimitive.Root>;
+}

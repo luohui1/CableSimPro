@@ -273,6 +273,45 @@ def test_section_heading_moves_with_saved_figure_instead_of_becoming_an_orphan()
         _check_bounds(pdf)
 
 
+def test_section_heading_moves_with_first_table_opening():
+    model = _model(19)
+    for row in model['tables']['values']['rows']:
+        row['cells']['context'].update(value='排版夹具', raw_text='排版夹具')
+    following = deepcopy(model['tables']['values'])
+    following.update(title='后续数据表', rows=following['rows'][:3])
+    following['rows'][0]['cells']['item'].update(value='后续首项', raw_text='后续首项')
+    model['tables']['following'] = following
+    model['sections'].insert(1, {'id': 'following', 'role': 'body', 'heading': '电气参数所属章节',
+                                 'paragraphs': [], 'table_ids': ['following']})
+    _reset_digest(model)
+    original = canonical_bytes(model)
+    with fitz.open(stream=render_pdf(model), filetype='pdf') as pdf:
+        assert pdf.embfile_get('formal-model.json') == original == canonical_bytes(model)
+        heading_page = next(page.number for page in pdf if '电气参数所属章节' in page.get_text())
+        first_row_page = next(page.number for page in pdf if '后续首项' in page.get_text())
+        assert heading_page == first_row_page
+        _check_bounds(pdf)
+
+
+def test_short_table_tail_does_not_leave_one_row_on_another_page():
+    model = _model(25)
+    rows = model['tables']['values']['rows']
+    for row in rows:
+        row['cells']['context'].update(value='排版夹具', raw_text='排版夹具')
+    labels = ['短尾项' + str(index + 1) for index in range(4)]
+    for row, label in zip(rows[-4:], labels):
+        row['cells']['item'].update(value=label, raw_text=label)
+    _reset_digest(model)
+    original = canonical_bytes(model)
+    with fitz.open(stream=render_pdf(model), filetype='pdf') as pdf:
+        assert pdf.embfile_get('formal-model.json') == original == canonical_bytes(model)
+        pages = [next(page.number for page in pdf if label in page.get_text()) for label in labels]
+        assert len(set(pages)) == 1
+        for value in model['sources']['fixture']['payload']['values']:
+            assert _text(pdf).splitlines().count(raw_text(value)) == 1
+        _check_bounds(pdf)
+
+
 def test_presentation_labels_stay_with_the_first_lines_of_literal_formulas():
     model = _model()
     pairs = [(f'保存公式 · 排版标记{index:02d}', f'冻结公式原文{index:02d}') for index in range(37)]

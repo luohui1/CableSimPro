@@ -5,7 +5,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const tokensPath = fileURLToPath(new URL('../design/tokens.css', import.meta.url));
-const proxy = { '/api': { target: process.env.BACKEND_URL || 'http://127.0.0.1:8040', changeOrigin: true } };
+const backend = { target: process.env.BACKEND_URL || 'http://127.0.0.1:8040', changeOrigin: true };
+// The Agent page is built apart (studio/) and served by the backend; the dev server passes its two paths through.
+const proxy = { '/api': backend, '/agent-app': backend, '/agent-sidecar': backend };
 
 export default defineConfig({
   plugins: [

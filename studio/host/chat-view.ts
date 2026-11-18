@@ -13,7 +13,8 @@ export interface PiMessage {
   toolCallId?: string;
   isError?: boolean;
   durationMs?: number;
-  details?: { card?: CardRef; notes?: string[] };
+  /** target: what the step acted on, in the engineer's words, kept with the result so a conversation opened later still names it. */
+  details?: { card?: CardRef; notes?: string[]; target?: string };
 }
 
 export interface ViewInput {
@@ -31,7 +32,7 @@ export interface ViewInput {
   error?: string;
 }
 
-const ATTACHMENT = /\n*\[附件：([^\]\n（）]+)（upload (u-[0-9a-f]{8})）\]/g;
+const ATTACHMENT = /\n*\[附件：([^\]\n（）]+)（upload (u-[0-9a-f]{8}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})）\]/g;
 
 /** The note the page appends to a message that carries uploaded files; the model reads it, the person sees chips instead. */
 export function attachmentNote(attachments: ChatAttachment[]): string {
@@ -97,6 +98,7 @@ export function chatMessages(input: ViewInput): ChatMessage[] {
       step.status = message.isError ? (proposal?.status === 'rejected' ? 'rejected' : 'failed') : 'done';
       if (message.isError) step.reason = proposal?.status === 'rejected' ? (proposal.note ? `工程师拒绝：${proposal.note}` : '工程师拒绝了这项改动') : plainText(message);
       if (message.durationMs !== undefined) step.duration_ms = message.durationMs;
+      if (message.details?.target && !step.target) step.target = message.details.target;
       if (message.details?.card) step.card = message.details.card;
       if (message.details?.notes?.length) step.notes = message.details.notes;
     }

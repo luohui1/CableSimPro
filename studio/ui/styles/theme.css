@@ -325,9 +325,11 @@
 @utility grid-cols-label-wide {
   grid-template-columns: 12rem minmax(0, 1fr);
 }
-/* Item, before, arrow, after: the values sit next to their name, not at the far edge. */
+/* Item, before, arrow, after: the values sit next to their name, not at the far edge.
+   Both value columns may shrink, so a long saved value (a whole declaration) wraps
+   inside the card instead of widening it past the window. */
 @utility grid-cols-change {
-  grid-template-columns: 8rem max-content 1rem max-content;
+  grid-template-columns: 8rem fit-content(40%) 1rem minmax(0, 1fr);
 }
 @utility grid-cols-gallery {
   grid-template-columns: 13rem minmax(0, 1fr);

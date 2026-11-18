@@ -380,6 +380,12 @@ export const endpoints = {
     "get",
     "post"
   ],
+  "/api/types/{wid}/release-scope": [
+    "post"
+  ],
+  "/api/types/{wid}/short-circuit-basis": [
+    "post"
+  ],
   "/api/types/creation-options": [
     "get"
   ],
@@ -399,6 +405,9 @@ export const endpoints = {
     "get"
   ],
   "/api/types/{wid}/resources": [
+    "get"
+  ],
+  "/api/types/{wid}/workspace": [
     "get"
   ],
   "/api/types/{wid}/resources/bind": [
@@ -455,6 +464,97 @@ export const endpoints = {
   "/api/types/{wid}/publish": [
     "post"
   ],
+  "/api/type-library/vocabulary": [
+    "get"
+  ],
+  "/api/type-library/mappings": [
+    "get",
+    "post"
+  ],
+  "/api/type-library/imports/upload": [
+    "post"
+  ],
+  "/api/type-library/imports/preview": [
+    "post"
+  ],
+  "/api/type-library/imports/commit": [
+    "post"
+  ],
+  "/api/type-library/series": [
+    "get"
+  ],
+  "/api/type-library/series/{identifier}": [
+    "get"
+  ],
+  "/api/type-library/specs/{identifier}": [
+    "get"
+  ],
+  "/api/type-library/specs/{identifier}/revisions": [
+    "post"
+  ],
+  "/api/type-library/series/{identifier}/batch": [
+    "post"
+  ],
+  "/api/type-library/samples": [
+    "get"
+  ],
+  "/api/type-library/samples/{name}.xlsx": [
+    "get"
+  ],
+  "/api/type-library/samples/{name}.csv": [
+    "get"
+  ],
+  "/api/type-library/catalogue-comparison/{name}": [
+    "post"
+  ],
+  "/api/type-library/exchange/export": [
+    "post"
+  ],
+  "/api/type-library/exchange/preview": [
+    "post"
+  ],
+  "/api/type-library/exchange/import": [
+    "post"
+  ],
+  "/api/library/exchange/export": [
+    "post"
+  ],
+  "/api/library/exchange/preview": [
+    "post"
+  ],
+  "/api/library/exchange/import": [
+    "post"
+  ],
+  "/api/library/resources/catalogue": [
+    "get"
+  ],
+  "/api/library/resources/table": [
+    "get"
+  ],
+  "/api/library/resources/select": [
+    "post"
+  ],
+  "/api/library/resources/materials/draft-preview": [
+    "post"
+  ],
+  "/api/library/resources/materials/draft": [
+    "post"
+  ],
+  "/api/library/resources/materials/preview": [
+    "post"
+  ],
+  "/api/library/resources/materials/adopt": [
+    "post"
+  ],
+  "/api/library/resources/environment/draft-preview": [
+    "post"
+  ],
+  "/api/library/resources/environment/draft": [
+    "post"
+  ],
+  "/api/library/resources/environment/preview": [
+    "post"
+  ],
   "/api/design/cable-models": [
     "get"
   ],
@@ -491,6 +591,18 @@ export const endpoints = {
   ],
   "/api/design/workspaces/{wid}/rating-table-runs/{rid}": [
     "get"
+  ],
+  "/api/formal-deliveries/preview": [
+    "post"
+  ],
+  "/api/formal-deliveries/export": [
+    "post"
+  ],
+  "/api/formal-deliveries/batch/preview": [
+    "post"
+  ],
+  "/api/formal-deliveries/batch/export": [
+    "post"
   ],
   "/api/agent/capabilities": [
     "get"
@@ -566,8 +678,5 @@ export const endpoints = {
   ],
   "/": [
     "get"
-  ],
-  "/__e2e/close-previews": [
-    "post"
   ]
 } as const;

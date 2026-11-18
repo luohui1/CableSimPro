@@ -33,19 +33,44 @@ def entry_view(group,row):
     return row
 
 
+EXACT_LIMIT=5
+
+
+def exact_matches(index,kind,q):
+    """Cards named (or identified) exactly as asked, from one snapshot, newest first.
+
+    Time order can put a same-named object behind newer related cards. Only short
+    identities are returned, at most EXACT_LIMIT of them plus the total count.
+    """
+    term=q.casefold().strip()
+    if not term:return [],0
+    found=[card for card in index.snapshot(copy=False).cards.values() if (kind is None or card['kind']==kind)
+           and term in (str(card.get('name') or '').casefold().strip(),str(card.get('id') or '').casefold())]
+    found.sort(key=lambda card:(card.get('updated') or '',card['kind'],card['id']),reverse=True)
+    return [{'kind':card['kind'],'id':card['id'],'name':card['name']} for card in found[:EXACT_LIMIT]],len(found)
+
+
 def read(research,name,args):
     index=get_index(research);offset=args.get('offset',0);limit=args.get('limit',10)
     if name=='object_find':
         page=index.objects(kind=args.get('kind'),q=args.get('q',''),limit=limit,offset=offset)
         entries=[('items',row) for row in page['items']];total=page['total']
         data={'items':[],'total':total,'offset':offset,'next_offset':None}
+        # Results are newest first; a same-named object can sit behind newer
+        # related cards or a similarly named draft. Name the exact ones once.
+        if offset==0 and args.get('q'):
+            data['exact_matches'],data['exact_total']=exact_matches(index,args.get('kind'),args['q'])
     else:
         page=index.relations(args['kind'],args['id'])
         entries=[(group,row) for group in ('uses','used_by','unresolved') for row in page[group]]
         total=len(entries);entries=entries[offset:offset+limit]
         data={group:[] for group in ('uses','used_by','unresolved')}
         data.update(total=total,offset=offset,next_offset=None)
-    result=ToolResult(status='ok',summary='已读取统一索引名片与保存关联；未批准或修改对象。',data=data)
+    summary='已读取统一索引名片与保存关联；未批准或修改对象。'
+    if data.get('exact_matches'):
+        summary+=('名称或标识完全一致 '+str(data['exact_total'])+' 个：'+'、'.join(item['name']+'（'+item['kind']+'）' for item in data['exact_matches'])
+                  +('等' if data['exact_total']>len(data['exact_matches']) else '')+'；优先采用，多个时先向用户确认。')
+    result=ToolResult(status='ok',summary=summary,data=data)
     result.data['source_errors']=page.get('source_errors',[])
     count=0
     for group,row in entries:
