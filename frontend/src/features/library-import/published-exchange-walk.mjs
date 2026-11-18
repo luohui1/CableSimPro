@@ -26,6 +26,13 @@ function pythonJSON(script, args = []) {
   return JSON.parse(execFileSync(python, ['-c', script, ...args], { cwd: root, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, timeout: 120000 }));
 }
 const errorCode = error => error?.code || error?.name || 'UNKNOWN';
+function progressFailure(error) {
+  // Protocol diagnostics only: never inspect browser objects, headers or bodies.
+  const scalar = value => value === null || typeof value === 'boolean' || typeof value === 'number'
+    ? value : typeof value === 'string' ? value.slice(0, 512) : undefined;
+  return { error_code: errorCode(error), message: typeof error?.message === 'string' ? error.message.slice(0, 1024) : undefined,
+    operator: scalar(error?.operator), actual: scalar(error?.actual), expected: scalar(error?.expected) };
+}
 async function progressResources() {
   const memory = process.memoryUsage();
   const result = { node: { rss_bytes: memory.rss, heap_used_bytes: memory.heapUsed, external_bytes: memory.external } };
@@ -159,19 +166,25 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
   }
   function paused(event) {
     const action = active;
-    progress.checkpoint('export.response.paused', { case: caseId, action_id: action?.record.id ?? null,
-      fetch_request_id: event.requestId, network_id: event.networkId ?? null, status: event.responseStatusCode });
     const record = { fetch_request_id: event.requestId, network_id: event.networkId ?? null, at: new Date().toISOString(),
       method: event.request.method, url: event.request.url, post_data: event.request.postData, resource_type: event.resourceType,
       status: event.responseStatusCode, headers: event.responseHeaders ?? [], error_reason: event.responseErrorReason ?? null,
       redirected_request_id: event.redirectedRequestId ?? null };
+    progress.checkpoint('export.response.paused', { case: caseId, action_id: action?.record.id ?? null,
+      fetch_request_id: record.fetch_request_id, network_id: record.network_id, status: record.status,
+      method: record.method, url: record.url, resource_type: record.resource_type,
+      error_reason: record.error_reason, redirected_request_id: record.redirected_request_id });
     if (action) action.record.pauses.push(record); else ledger.unexpected.push({ channel: 'Fetch', ...record });
     const work = (async () => {
       try {
         assert.ok(action, '没有人工操作对应此暂停响应');
-        assert.equal(record.url, endpoint); assert.equal(record.method, 'POST'); assert.equal(record.resource_type, 'Fetch');
-        assert.equal(record.error_reason, null); assert.equal(record.redirected_request_id, null);
-        assert.ok(record.network_id); assert.ok(record.status >= 200 && record.status < 300, '导出响应必须成功且不能重定向');
+        assert.equal(record.url, endpoint, '暂停响应必须来自本次导出端点');
+        assert.equal(record.method, 'POST', '暂停响应必须对应原始 POST');
+        assert.equal(record.resource_type, 'Fetch', '暂停响应必须具有 Fetch 资源类型');
+        assert.equal(record.error_reason, null, '暂停响应不得包含传输错误');
+        assert.equal(record.redirected_request_id, null, '暂停响应不得来自重定向');
+        assert.ok(record.network_id, '暂停响应必须保留 Network 请求身份');
+        assert.ok(record.status >= 200 && record.status < 300, '导出响应必须成功且不能重定向');
         record.body_read_started_at = new Date().toISOString();
         let body;
         try { body = await command('Fetch.getResponseBody', { requestId: event.requestId }); }
@@ -183,7 +196,11 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
         progress.checkpoint('export.response.saved', { case: caseId, action_id: action.record.id, ...record.raw_response });
         assert.ok(bytes.length > 0, '原始导出响应正文不得为空');
         await persist();
-      } catch (error) { record.failure = String(error); failure('读取原始导出响应', error, { fetch_request_id: event.requestId }); }
+      } catch (error) {
+        progress.checkpoint('export.response.failed', { case: caseId, action_id: action?.record.id ?? null,
+          fetch_request_id: event.requestId, ...progressFailure(error) });
+        record.failure = String(error); failure('读取原始导出响应', error, { fetch_request_id: event.requestId });
+      }
       finally {
         // Rejection also settles the body command. Only context termination skips
         // continuation; that remains a recorded failure, never a successful case.
@@ -203,12 +220,12 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
   await command('Fetch.enable', { patterns: [{ urlPattern: endpoint, resourceType: 'Fetch', requestStage: 'Response' }] }, 30000);
   return {
     async begin(label, selection) {
-      assert.equal(active, null); assert.equal(terminated, false);
+      assert.ok(active === null, '开始导出前必须没有尚未完成的操作'); assert.equal(terminated, false);
       const record = { id: ledger.actions.length + 1, label, armed_at: new Date().toISOString(), selection,
         playwright_requests: [], network_requests: [], pauses: [], completed: false };
       active = { record, requests: [], tasks: [] }; ledger.actions.push(record); await persist(); return active;
     },
-    click(action) { assert.equal(action, active); action.record.click_started_at = new Date().toISOString(); },
+    click(action) { assert.ok(action === active, '点击必须对应当前同一个导出操作'); action.record.click_started_at = new Date().toISOString(); },
     async finish(action, response, download) {
       const record = action.record;
       try {
@@ -219,12 +236,14 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
         record.playwright_body.empty_copy = record.playwright_body.size === 0;
         const finished = await bounded('等待原始导出正文完成', () => response.finished(), 30000);
         record.playwright_finished = { at: new Date().toISOString(), error: finished ? String(finished) : null };
-        assert.equal(finished, null); assert.equal(action, active); assert.ok(record.click_started_at);
+        assert.ok(finished === null, '原始导出响应必须完整结束且没有浏览器错误');
+        assert.ok(action === active, '收尾必须对应当前同一个导出操作'); assert.ok(record.click_started_at);
         assert.equal(action.requests.length, 1); assert.equal(record.network_requests.length, 1); assert.equal(record.pauses.length, 1);
-        assert.equal(action.requests[0], response.request(), '必须是实际点击产生的同一个 Playwright Request 对象');
-        assert.equal(actualRequests.get(response.request()), action);
+        assert.ok(action.requests[0] === response.request(), '必须是实际点击产生的同一个 Playwright Request 对象');
+        assert.ok(actualRequests.get(response.request()) === action, 'Playwright Request 必须归属当前同一个导出操作');
         const request = record.playwright_requests[0], network = record.network_requests[0], pause = record.pauses[0];
-        assert.equal(networkRequests.get(pause.network_id)?.action, action); assert.equal(pause.network_id, network.network_id);
+        assert.ok(networkRequests.get(pause.network_id)?.action === action, 'CDP Network 请求必须归属当前同一个导出操作');
+        assert.equal(pause.network_id, network.network_id);
         assert.equal(request.method, 'POST'); assert.equal(network.method, 'POST'); assert.equal(network.type, 'Fetch'); assert.equal(network.redirect, null);
         assert.equal(request.post_data, network.post_data); assert.equal(request.post_data, pause.post_data);
         assert.equal(request.post_data_sha256, network.post_data_sha256); assert.deepEqual(JSON.parse(request.post_data), record.selection);
@@ -253,13 +272,19 @@ async function observeExportResponses(page, base, directory, caseId, identity, r
       try {
         if (!terminated) {
           await command('Fetch.disable', {}, 10000); await command('Network.disable', {}, 10000);
-          await bounded('断开独立 CDP 会话', () => session.detach(), 10000);
+          progress.checkpoint('cdp.detach.before', { case: caseId });
+          try {
+            await bounded('断开独立 CDP 会话', () => session.detach(), 10000);
+            progress.checkpoint('cdp.detach.after', { case: caseId });
+          } catch (error) {
+            progress.checkpoint('cdp.detach.failed', { case: caseId, ...progressFailure(error) }); throw error;
+          }
         }
       } finally {
         page.off('request', recordRequest); session.off('Network.requestWillBeSent', recordNetwork); session.off('Fetch.requestPaused', paused);
         await persist();
       }
-      assert.equal(active, null, '导出观测必须全部完成'); assert.deepEqual(ledger.unexpected, []); assert.deepEqual(ledger.errors, []);
+      assert.ok(active === null, '导出观测必须全部完成'); assert.deepEqual(ledger.unexpected, []); assert.deepEqual(ledger.errors, []);
       assert.ok(ledger.actions.every(action => action.completed));
     },
   };
