@@ -32,12 +32,27 @@ export function safeRequestHeaders(request) {
 }
 
 /** Retain the reviewed form fields, not the binary body or unrelated headers. */
-export async function multipartEvidence(response, filename) {
+export async function multipartEvidence(response, filename, page) {
   const request = response.request(), headers = safeRequestHeaders(request);
   const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(headers['content-type'] ?? '');
   assert.ok(boundary, '真实上传请求须是 multipart/form-data');
   const raw = request.postDataBuffer();
-  assert.ok(raw, '须保留真实上传请求的表单字段');
+  if (!raw) {
+    // The browser's real fetch invocation is captured before sending; do not
+    // fabricate request fields from the expected preview or response.
+    assert.ok(page, 'Chromium未提供上传正文时必须读取真实页面表单');
+    const observed = await page.evaluate(pathname =>
+      window.__cablesimFormRequests?.filter(item => item.pathname === pathname).at(-1) ?? null,
+      new URL(request.url()).pathname);
+    assert.ok(observed, '须保留真实上传请求的表单字段');
+    const bytes = await fs.readFile(filename);
+    assert.equal(observed.file?.name, path.basename(filename));
+    assert.equal(observed.file?.size, bytes.length);
+    return { method: request.method(), url: request.url(), request_headers: headers,
+      form: Object.fromEntries(Object.entries(observed.fields).filter(([key]) => ['reviewed_sha256', 'confirmed', 'request_id'].includes(key))),
+      file: { name: observed.file.name, size: bytes.length, sha256: hash(bytes), full_file_body_observed: false },
+      form_observed_in_browser_fetch: true, status: response.status() };
+  }
   const separator = Buffer.from('--' + (boundary[1] ?? boundary[2]));
   const fields = {};
   let uploadedName, fileBody;
@@ -284,7 +299,7 @@ export async function importResourceExchange({ page, base, task, out, root, expe
     ]);
     assert.equal(response.status(), status, await response.text());
     const raw = await saveRawResponse(response, path.join(out, prefix + '-' + name + '-raw.json'));
-    const body = await response.json(), evidence = { ...await multipartEvidence(response, file), response: body, raw_response: raw };
+    const body = await response.json(), evidence = { ...await multipartEvidence(response, file, page), response: body, raw_response: raw };
     await write(out, prefix + '-' + name, evidence);
     return { response, body, evidence };
   }
@@ -298,7 +313,7 @@ export async function importResourceExchange({ page, base, task, out, root, expe
       Promise.resolve().then(() => button.click()),
     ]);
     assert.equal(response.status(), 201, await response.text());
-    const receipt = await response.json(), evidence = await multipartEvidence(response, file);
+    const receipt = await response.json(), evidence = await multipartEvidence(response, file, page);
     assert.equal(evidence.request_headers['x-cablesim-actor'], 'human');
     assert.equal(evidence.form.confirmed, 'true'); assert.equal(evidence.form.reviewed_sha256, preview.sha256);
     assert.equal(receipt.request_id, evidence.form.request_id); assert.equal(receipt.sha256, preview.sha256);

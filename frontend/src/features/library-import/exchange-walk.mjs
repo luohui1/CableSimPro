@@ -29,6 +29,24 @@ try { browser = await chromium.launch({ executablePath, headless: true, args: ['
 catch (error) { report.failures.push({ phase: '浏览器启动', message: String(error) }); await saveReport(); throw error; }
 for (const task of tasks) {
   const context = await browser.newContext({ viewport: task.viewport, acceptDownloads: true, locale: 'zh-CN' });
+  // Capture the actual FormData passed to fetch before Chromium hands it to the
+  // network stack. CDP can omit multipart postDataBuffer for file uploads.
+  await context.addInitScript(() => {
+    const original = window.fetch;
+    window.__cablesimFormRequests = [];
+    window.fetch = function (input, init) {
+      if (init?.body instanceof FormData) {
+        const fields = {}; let file;
+        for (const [key, value] of init.body.entries()) {
+          if (value instanceof File) file = { name: value.name, size: value.size };
+          else fields[key] = String(value);
+        }
+        const url = typeof input === 'string' ? input : input.url;
+        window.__cablesimFormRequests.push({ pathname: new URL(url, location.href).pathname, fields, file });
+      }
+      return original.apply(this, arguments);
+    };
+  });
   const page = await context.newPage();
   const width = task.viewport.width;
   page.on('pageerror', error => report.errors.push({ viewport: width, kind: 'page', message: error.message }));
@@ -65,7 +83,7 @@ for (const task of tasks) {
     ]);
     assert.equal(previewResponse.status(), 200, await previewResponse.text());
     const preview = await previewResponse.json();
-    const previewEvidence = await multipartEvidence(previewResponse, task.file);
+    const previewEvidence = await multipartEvidence(previewResponse, task.file, page);
     assert.equal(previewEvidence.file.sha256, preview.file_sha256);
     const previewRaw = await saveRawResponse(previewResponse, path.join(out, `exchange-${width}-series-preview-raw.json`));
     await fs.writeFile(path.join(out, `exchange-${width}-series-preview.json`), JSON.stringify({ ...previewEvidence, response: preview, raw_response: previewRaw }, null, 2));
@@ -80,7 +98,7 @@ for (const task of tasks) {
     ]);
     assert.equal(response.ok(), true, await response.text());
     const receipt = await response.json();
-    const importEvidence = await multipartEvidence(response, task.file);
+    const importEvidence = await multipartEvidence(response, task.file, page);
     assert.equal(importEvidence.request_headers['x-cablesim-actor'], 'human');
     assert.equal(importEvidence.form.confirmed, 'true');
     assert.equal(importEvidence.form.reviewed_sha256, preview.file_sha256);
