@@ -312,6 +312,9 @@ def check_engineering_number(cell: dict, payloads: dict) -> dict:
         if quantum is None:
             quantum = Decimal(1).scaleb(converted.adjusted() - 3) if converted else Decimal(1)
         answer = converted.quantize(quantum, rounding=ROUND_HALF_EVEN)
+        if not fixed and answer and answer.adjusted() > converted.adjusted():
+            quantum = quantum.scaleb(1)
+            answer = converted.quantize(quantum, rounding=ROUND_HALF_EVEN)
         if not answer:
             answer = answer.copy_abs()
         text = format(answer, "f")

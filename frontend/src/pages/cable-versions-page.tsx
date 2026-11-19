@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import type { SourceKind } from "@/components/source-badge";
 import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
+import { VersionStart } from '@/features/resources/version-start';
 
 /** 来源类别：电缆型号版本的每个值都带出处（§2.3 关联），这里按出处归类显示。 */
 const SOURCE: Record<string, { label: string; badge: SourceKind }> = {
@@ -77,6 +78,7 @@ export function CableVersionsPage() {
   const selected = item || "";
   const setSelected = (id: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, item: id || undefined }), replace: true });
   const [origin, setOrigin] = useState("all");
+  const [query, setQuery] = useState(''), [starting, setStarting] = useState(false);
   const models = useQuery({ queryKey: ["domain-cable-models"], queryFn: ({ signal }) => cableModels(signal) });
   const all = rows(models.data || []);
   // 系统自带的教学型号：不在厂家 / 设计版本表里，但研究会引用、搜索能找到，在这里单列，链接才有落脚处
@@ -84,22 +86,27 @@ export function CableVersionsPage() {
   const teaching = ((system.data?.items || []) as (ObjectCard & { id: string })[]).filter((card) => card.id.startsWith("system."));
   const teachingCard = teaching.find((card) => card.id === selected);
   const kindsOf = (row: Version) => new Set(row.sources.map((source) => source.kind));
-  const visible = all.filter((row) => origin === "all" || kindsOf(row).has(origin));
+  const term = query.trim().toLocaleLowerCase();
+  const visible = all.filter((row) => (origin === "all" || kindsOf(row).has(origin)) && `${row.name} ${row.maker} ${row.spec} ${row.version}`.toLocaleLowerCase().includes(term));
+  const visibleTeaching = teaching.filter(row => (origin === 'all' || origin === 'demo') && `${row.name} ${row.version}`.toLocaleLowerCase().includes(term));
   const series = [...new Set(visible.map((row) => row.series))].sort();
   const current = all.find((row) => row.id === selected);
-  const openImport = () => void navigate({ to: "/resources/cables/imports", search: { theme } });
-  const origins = [...new Set(all.flatMap((row) => [...kindsOf(row)]))].filter((kind) => SOURCE[kind]);
+  const openImport = () => void navigate({ to: "/resources/cables/structure-import", search: { theme } });
+  const openPdfImport = () => void navigate({ to: "/resources/cables/imports", search: { theme } });
+  const origins = [...new Set([...all.flatMap((row) => [...kindsOf(row)]), ...(teaching.length ? ['demo'] : [])])].filter((kind) => SOURCE[kind]);
+  const filtered = !!query || origin !== 'all';
+  const clearFilters = () => { setQuery(''); setOrigin('all'); };
   return (
     <CatalogShell
       title="电缆型号版本"
       status={<span className="muted">{all.length} 项 · 研究按版本引用</span>}
-      actions={<Button variant="primary" size="compact" onClick={openImport}>从厂家资料导入</Button>}
+      actions={<><Button variant="outline" size="compact" onClick={openPdfImport}>提取厂家 PDF</Button><Button variant={starting ? 'outline' : 'primary'} size="compact" onClick={openImport}>导入厂家结构表</Button></>}
       property={teachingCard ? (
         <PropertyPanel
           collapsed={false}
           title={teachingCard.name}
           onToggle={() => setSelected("")}
-          extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="cable_version" id={teachingCard.id} /></section>}
+          extra={<><VersionStart key={teachingCard.id} id={teachingCard.id} theme={theme} onDialogChange={setStarting} /><section aria-label="关联"><h3>关联</h3><RelationPanel kind="cable_version" id={teachingCard.id} /></section></>}
           groups={[{ label: "名片", items: [
             { label: "版本", value: versionLabel(teachingCard.version || "—") },
             { label: "状态", value: teachingCard.status.label },
@@ -111,7 +118,7 @@ export function CableVersionsPage() {
           collapsed={false}
           title={current.name}
           onToggle={() => setSelected("")}
-          extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="cable_version" id={current.id} /></section>}
+          extra={<><VersionStart key={current.id} id={current.id} theme={theme} onDialogChange={setStarting} /><section aria-label="关联"><h3>关联</h3><RelationPanel kind="cable_version" id={current.id} /></section></>}
           groups={[
             {
               label: "名片",
@@ -142,13 +149,13 @@ export function CableVersionsPage() {
     >
       {models.isPending ? <LoadingState title="正在读取电缆型号版本" />
         : models.error ? <ErrorState description={message(models.error)} action={<Button onClick={() => models.refetch()}>重新读取</Button>} />
-        : !all.length ? <InlineEmpty title="还没有可引用的型号版本。从厂家资料导入，或在型号设计里发布。" action={<Button size="compact" onClick={openImport}>从厂家资料导入</Button>} />
         : <>
-          {origins.length > 1 && <Toolbar label="型号版本筛选">
-            <Select label="来源" value={origin} onChange={setOrigin} options={[{ value: "all", label: "全部" }, ...origins.map((kind) => ({ value: kind, label: SOURCE[kind].label }))]} />
-          </Toolbar>}
+          <Toolbar label="型号版本筛选"><label className="search-field">检索型号版本<input aria-label="检索型号版本" value={query} onChange={event => setQuery(event.target.value)} placeholder="型号、厂家或规格" /></label>
+            {!!origins.length && <Select label="来源" value={origin} onChange={setOrigin} options={[{ value: "all", label: "全部" }, ...origins.map((kind) => ({ value: kind, label: SOURCE[kind].label }))]} />}
+            {filtered && <Button size="compact" onClick={clearFilters}>清除型号筛选</Button>}
+          </Toolbar>
           <div data-page="cable-versions" data-state={visible.length ? "success" : "empty"}>
-            {!visible.length ? <InlineEmpty title="没有这个来源的型号版本" /> : (
+            {!visible.length ? <InlineEmpty title={filtered ? '没有匹配的型号版本' : '还没有厂家或设计型号版本，可导入 Excel / CSV 厂家结构表或提取 PDF 资料。'} action={filtered ? <Button size="compact" onClick={clearFilters}>清除型号筛选</Button> : <Button size="compact" onClick={openImport}>导入厂家结构表</Button>} /> : (
               <DataTable<Version>
                 label="电缆型号版本"
                 selectedId={selected}
@@ -166,15 +173,15 @@ export function CableVersionsPage() {
               />
             )}
           </div>
-          {!!teaching.length && <section className="object-section" aria-label="系统教学示例">
-            <header><h2>系统教学示例</h2><span className="muted">{teaching.length} 项 · 演示结构与规格书用，不是厂家实测，不能作为工程型号引用</span></header>
+          {!!visibleTeaching.length && <section className="object-section" aria-label="系统教学示例">
+            <header><h2>系统教学示例</h2><span className="muted">{visibleTeaching.length} 项 · 演示结构与规格书用，不是厂家实测，不能作为工程型号引用</span></header>
             <DataTable<ObjectCard & { id: string }>
               label="系统教学示例"
               showGroups={false}
               selectedId={selected}
               onSelect={(row) => setSelected(row.id)}
               rowLabel={(row) => row.name}
-              groups={[{ id: "teaching", label: "教学示例", rows: teaching }]}
+              groups={[{ id: "teaching", label: "教学示例", rows: visibleTeaching }]}
               columns={[
                 { id: "name", label: "型号", wrap: true, render: (row) => row.name },
                 { id: "version", label: "版本", render: (row) => versionLabel(row.version || "—") },

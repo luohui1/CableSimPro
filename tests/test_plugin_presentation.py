@@ -142,7 +142,8 @@ def test_temperature_tolerances_are_shown_as_differences_in_every_manifest():
             for key,value in node.items():
                 unit=value.get('x-unit') if isinstance(value,dict) else None
                 if isinstance(unit,dict) and unit.get('si')=='K':
-                    (tolerances if key.endswith('tolerance_k') else absolutes).append((plugin,key,unit))
+                    difference=key.endswith(('tolerance_k','rise_k','margin_k','difference_k','delta_k'))
+                    (tolerances if difference else absolutes).append((plugin,key,unit))
                 walk(value,plugin)
         elif isinstance(node,list):
             for value in node:walk(value,plugin)

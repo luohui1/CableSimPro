@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 from .workspace import fingerprint
 
-RULE = 'sealed-computation-and-contract/2'
+RULE = 'sealed-computation-and-contract/3'
 _identities = OrderedDict()
 _identity_lock = RLock()
 
@@ -54,6 +54,18 @@ def schema_identity(value):
     result = {}
     for key, item in value.items():
         if key in ('title', 'description', 'x-group', 'x-enum-labels'):
+            continue
+        # x-unit only tells a form how to show and enter an SI value; any runtime
+        # conversion is declared separately in x-runtime and stays in the identity.
+        # A corrected display unit (0.1 K shown as °C) must not retire saved runs.
+        if key == 'x-unit' and isinstance(item, dict):
+            result[key] = {'si': item.get('si')}
+            continue
+        if key == 'x-unit-by' and isinstance(item, dict):
+            cases = item.get('cases')
+            result[key] = {**{name: deepcopy(child) for name, child in item.items() if name != 'cases'},
+                           'cases': {case: {'si': unit.get('si')} if isinstance(unit, dict) else deepcopy(unit)
+                                     for case, unit in cases.items()} if isinstance(cases, dict) else deepcopy(cases)}
             continue
         # Traverse schema nodes only. Annotation-looking keys inside default,
         # const, enum and unknown extension DATA remain calculation inputs.

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { displayNames } from "../src/lib/display-names.ts";
 // Engineering notation and document references are deliberately narrow exceptions.
+// A cable construction code names the conductor (CU or AL) and then each layer's
+// material code, e.g. CU/XLPE/LC/PVC, with or without the rated voltage.
 const allowed =
-  /^(?:GB\/T|GBZ\/T|K(?:·m)?\/W|W\/m|W\/km|W\/K|m\/s|A\/m|A\/km|V\/m|Ω\/m|Ω\/km|S\/m|J\/kg|kg\/m|F\/m|H\/m|μF\/km|mH\/km|CU\/XLPE\/LC\/PVC-3\.6\/6|[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d+(?:\.\d+)?\/\d+(?:\.\d+)?)$/;
+  /^(?:GB\/T|GBZ\/T|K(?:·m)?\/W|W\/m|W\/km|W\/K|m\/s|A\/m|A\/km|V\/m|Ω\/m|Ω\/km|S\/m|J\/kg|kg\/m|F\/m|H\/m|μF\/km|mH\/km|(?:CU|AL)(?:\/[A-Z]{2,5}){2,5}(?:-\d+(?:\.\d+)?\/\d+(?:\.\d+)?)?|[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d+(?:\.\d+)?\/\d+(?:\.\d+)?)$/;
 export function internalTokens(text) {
   if (
     displayNames[text.trim()] &&
@@ -25,6 +27,21 @@ export function internalTokens(text) {
     ),
   ].filter((value) => !allowed.test(value));
 }
+
+/** Preserve cited annex/example labels without exempting unrelated paths. */
+export function engineeringReferenceException(text, token) {
+  if (typeof text !== 'string' || !text.includes(token)) return null;
+  const citation = token === 'A/B'
+    ? { id: 'standard-annex', pattern: /附录\s+A\/B(?![A-Za-z0-9_./\\-])/g }
+    : token === 'Case2/10'
+      ? { id: 'tb880-examples', pattern: /\bTB\s*880\s+Case2\/10(?![A-Za-z0-9_./\\-])/g }
+      : null;
+  if (!citation) return null;
+  // A second, uncited occurrence in the same node must still be reported.
+  const remaining = text.replace(citation.pattern, match => match.replace(token, ''));
+  return remaining.includes(token) ? null : citation.id;
+}
+
 export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
   const violations = [];
   for (const frame of includeFrames ? page.frames() : [page.mainFrame()]) {
@@ -68,7 +85,7 @@ export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
       .catch(() => []);
     for (const text of texts)
       for (const token of internalTokens(text))
-        violations.push({
+        if (!engineeringReferenceException(text, token)) violations.push({
           frame: frame === page.mainFrame() ? "页面" : "文档",
           token,
           text: text.slice(0, 200),

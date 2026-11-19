@@ -1,7 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
+import { isSectionInputTable, methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
+import { studySweep } from '@/lib/heavy-components';
 import { displayName } from '@/lib/display-names';
+import { countInputChanges } from '@/lib/input-changes';
 import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
 import { useStudy } from "@/components/study-provider";
@@ -41,6 +43,7 @@ import { Select } from '@/components/ui/select';
 import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { StudyValidation } from "@/components/study-validation";
 import { rootModule, studyEntryTab, moduleConfiguration } from "@/lib/study-config";
+import { savedTypeRunDestination } from '@/lib/saved-run-destination';
 import { modelViews } from '@/components/study-workbench-config';
 import { SavedRunConclusion } from '@/components/study-saved-conclusion';
 import { FemConclusionBar, FemSavedComparison } from '@/components/study-fem-conclusion';
@@ -71,14 +74,43 @@ const AgentPanel = lazy(() => import('@/features/agent/agent-panel').then(m => (
 const StudyHybrid = lazy(() => import('@/components/study-hybrid').then(m => ({ default: m.StudyHybrid })));
 const StudyTemperature = lazy(() => import('@/components/study-temperature').then(m => ({ default: m.StudyTemperature })));
 const StudyNativeArtifact = lazy(() => import('@/components/study-native-artifact').then(m => ({ default: m.StudyNativeArtifact })));
-const StudySweep = lazy(() => import('@/components/study-sweep').then(m => ({ default: m.StudySweep })));
+const StudySweep = studySweep.Component;
 const StudyBatch = lazy(() => import('@/components/study-batch').then(m => ({ default: m.StudyBatch })));
 const StudyCompare = lazy(() => import('@/components/study-compare').then(m => ({ default: m.StudyCompare })));
 const StudySimulation = lazy(() => import('@/components/study-simulation').then(m => ({ default: m.StudySimulation })));
 export { moduleDefinitions } from "./study-modules";
-export function StudyEntry() {
-  const { study } = useStudy();
+function hasSavedViewIntent(search: { view?: string; delivery?: string; generate?: boolean; inspector?: string }) {
+  return !!search.view || !!search.delivery || !!search.generate || ['method', 'agent'].includes(search.inspector || '');
+}
+/** Resolve only an exact saved archive; pending/invalid evidence never guesses a result page. */
+function savedRunEntry(context: ReturnType<typeof useStudy>, search: { run: string; theme: 'light' | 'dark' }, onTheme: () => void): ReactElement | null {
+  if (!search.run) return null;
+  const { study, runs } = context;
+  const state = (children: ReactNode) => <AppShell title={study.title} theme={search.theme} status={null} actions={null}
+    onUnavailable={context.notice} onTheme={onTheme}>{children}</AppShell>;
+  if (context.loadingRuns) return state(<LoadingState title="正在读取指定运行" />);
+  if (context.runError) return state(<ErrorState description={message(context.runError)} action={<Button onClick={context.refresh}>重新读取</Button>} />);
+  const run = runs.find(item => item.id === search.run);
+  if (!run) return state(<ErrorState description="指定运行不存在或不属于此研究。" action={<Button onClick={context.refresh}>重新读取</Button>} />);
+  if (['accepted', 'queued', 'running', 'validating'].includes(text(run.status)))
+    return state(<LoadingState title="指定运行尚未完成" />);
+  try {
+    const destination = savedTypeRunDestination(run, { workspaceId: study.workspace, studyId: study.id, runId: search.run });
+    if (destination) return <Redirect to="/types/$wid/$module/$tab" params={{ wid: study.workspace, ...destination }}
+      search={{ run: search.run, theme: search.theme }} replace />;
+  } catch (error) {
+    return state(<ErrorState title="保存运行入口无法核对" description={message(error)} action={<Button onClick={context.refresh}>重新读取</Button>} />);
+  }
+  return null;
+}
+export function StudyEntry(): ReactElement {
+  const context = useStudy();
+  const { study } = context;
   const search = studyRootRoute.useSearch();
+  const navigate = studyRootRoute.useNavigate();
+  const savedEntry = hasSavedViewIntent(search) ? null : savedRunEntry(context, search,
+    () => void navigate({search:{...search,theme:search.theme === 'light' ? 'dark' : 'light'},replace:true}));
+  if (savedEntry) return savedEntry;
   return (
     <Redirect
       to="/studies/$sid/$module/$tab"
@@ -102,21 +134,26 @@ function fieldLoadLabel(savedCase: Record<string, unknown>) {
     .map(state => numeric(optionalRecord(state).current_a)).filter((value): value is number => value !== null))];
   return currents.length === 1 ? `保存负荷 ${Number(currents[0].toFixed(1))} A` : currents.length ? `保存负荷 ${currents.map(value => Number(value.toFixed(1)) + ' A').join(' / ')}` : '保存负荷（详见本次运行输入）';
 }
-export function StudyWorkspace() {
+export function StudyWorkspace(): ReactElement {
   const { sid, module, tab } = studyModuleRoute.useParams();
   const search = studyModuleRoute.useSearch();
   const navigate = studyModuleRoute.useNavigate();
   const context = useStudy();
   const { study, workspace, runs, draft } = context;
   const theme = search.theme;
-  const [selected, setSelected] = useState<SelectionRow | undefined>();
   const [fullFieldDomain,setFullFieldDomain]=useState(false);
   useEffect(()=>setFullFieldDomain(false),[sid,search.run]);
-  // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
+  // 曲线研究默认放大数据区；直接打开三维时给模型完整高度，其余模型保留分栏。
   const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
-  const [dockMax, setDockMax] = useState(plotFirst(module));
-  const [canvasExpanded,setCanvasExpanded]=useState(module!=='selection');
-  useEffect(()=>setCanvasExpanded(module!=='selection'),[sid,module]);
+  const [dockMax, setDockMax] = useState(!search.view && plotFirst(module));
+  const [canvasMax, setCanvasMax] = useState(search.view === 'three');
+  const [canvasMounted, setCanvasMounted] = useState(!!search.view || !plotFirst(module));
+  const [canvasExpanded,setCanvasExpanded]=useState(!!search.view || module!=='selection');
+  useEffect(()=>{
+    setCanvasExpanded(!!search.view || module!=='selection');
+    setDockMax(!search.view && plotFirst(module));
+    setCanvasMax(search.view === 'three');
+  },[sid,module,search.view]);
   const [creating, setCreating] = useState(false);
   const catalog = useQuery(methodCardsQuery());
   const [edit, setEdit] = useState(false);
@@ -129,11 +166,7 @@ export function StudyWorkspace() {
     InputSelection | undefined
   >();
   useEffect(() => {
-    setDockMax(plotFirst(module));
-  }, [module]);
-  useEffect(() => {
     setInputSelection(undefined);
-    setSelected(undefined);
   }, [module, search.run]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -176,14 +209,20 @@ export function StudyWorkspace() {
     (moduleBehavior.input.has(module) || module === 'report' ||
       (text(optionalRecord(run.snapshot).module) === configuredModule && (!!configuredModule || module === calculatedModule))) &&
     ["accepted", "queued", "running", "validating"].includes(text(run.status));
-  if (run && !pendingRun && module === "selection")
+  const selectionContext = module === "selection" || isSectionInputTable(module, tab)
+    && text(optionalRecord(optionalRecord(optionalRecord(run?.snapshot).definition).driver).kind) === 'selection';
+  let selectedRow: SelectionRow | undefined;
+  if (run && !pendingRun && selectionContext)
     try {
       view = selectionView(run);
+      selectedRow = search.case ? view.rows.find(row => row.id === search.case) : view.recommendation;
+      if (search.case && !selectedRow) throw Error('所选候选不存在于这次保存运行，请返回候选结果重新选择。');
+      if (selectedRow && ![optionalRecord(run.output).cases, optionalRecord(run.snapshot).cases].every(cases =>
+        Array.isArray(cases) && cases.filter(value => optionalRecord(value).case_id === selectedRow!.id).length === 1))
+        throw Error('所选候选缺少对应的保存工况或输入，不能显示其他候选。');
     } catch (problem) {
       selectionError = problem;
     }
-  const selectedRow =
-    selected && view?.rows.find((row) => row.id === selected.id);
   const trialPin=optionalRecord(moduleConfiguration(draft?.definition || study.definition,module)?.method || study.definition.method);
   const trialPlugin=(catalog.data || []).find(row=>optionalRecord(row.method).plugin_id===trialPin.plugin_id);
   const trialCapability=(Array.isArray(trialPlugin?.capabilities)?trialPlugin.capabilities:[]).map(optionalRecord).find(cap=>cap.id===trialPin.capability);
@@ -191,7 +230,8 @@ export function StudyWorkspace() {
     !(search.run && (run?.freshness==='historical' || isVersionStale(run))) && singleAnswer(study) && module!=='report'});
   const shownRun=preview.result?.view || run;
   // 运行若带温度场工件（有限元，或插件输出的 IEC 土壤温度场），画布默认显示真实温度场；选型显示所选或推荐候选的工况
-  const fieldCase = module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined;
+  const fieldCase = selectionContext && !selectionError ? selectedRow?.id : undefined;
+  const savedCandidateDrawing = selectionContext && !!fieldCase;
   const savedFieldCases = (Array.isArray(optionalRecord(run?.output).cases) ? optionalRecord(run?.output).cases as unknown[] : []).map(optionalRecord);
   const hasFemField = savedFieldCases.some(item => {
     const field = optionalRecord(optionalRecord(item.artifacts)['x-cablesim.temperature-field']);
@@ -203,10 +243,10 @@ export function StudyWorkspace() {
   // mesh. Reuse that exact artifact; only absent/unsupported views need /view.
   // temperatureView also checks its artifact receipt and source binding.
   const savedFieldView = useMemo(() => {
-    if (!shownRun || pendingRun || !shownRun.output) return undefined;
+    if (!shownRun || pendingRun || !shownRun.output || selectionContext && !fieldCase) return undefined;
     try { return temperatureView(shownRun, fieldCase); } catch { return undefined; }
-  }, [shownRun, pendingRun, fieldCase]);
-  const needsFieldProjection = !!run && !pendingRun && (hasFemField && !savedFieldView || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
+  }, [shownRun, pendingRun, fieldCase, selectionContext]);
+  const needsFieldProjection = !selectionError && (!selectionContext || !!fieldCase) && !!run && !pendingRun && (hasFemField && !savedFieldView || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
   const fieldProjection = useQuery({...savedFieldViewQuery(text(run?.workspace),text(run?.id)), enabled:needsFieldProjection});
   const fieldRun = needsFieldProjection ? fieldProjection.data : run;
   const fieldView = useMemo(() => {
@@ -222,9 +262,31 @@ export function StudyWorkspace() {
     return fieldView.kind==='fem' && !fullFieldDomain ? focusField(fieldView.points,fieldView.triangles,fieldValues,objects) : {points:fieldView.points,triangles:fieldView.triangles,values:fieldValues};
   },[fieldView,fieldValues,fullFieldDomain]);
   const inputModule = moduleBehavior.input.has(module);
+  const sectionTable = isSectionInputTable(module, tab);
   const snapshotInput = inputModule && !!search.run;
+  const savedInputReady = !!run && !context.loadingRuns && !context.runError && !pendingRun && run.integrity === 'verified';
+  const candidateInput = snapshotInput && sectionTable && selectionContext;
+  const sectionCaseInput = useQuery({
+    queryKey: ['drawing-saved-input', run?.id, fieldCase],
+    enabled: candidateInput && savedInputReady && !!fieldCase && !selectionError,
+    retry: false,
+    queryFn: ({ signal }) => hydrateCaseInputs(caseRun(run!, fieldCase), signal),
+  });
+  const sectionInputRun: Record<string, unknown> | undefined = sectionCaseInput.data;
+  const sectionCase = (Array.isArray(optionalRecord(sectionInputRun?.snapshot).cases)
+    ? optionalRecord(sectionInputRun?.snapshot).cases as unknown[] : []).map(optionalRecord)
+    .find(item => item.case_id === fieldCase);
+  const sectionDocument = optionalRecord(sectionCase?.input);
+  const sectionInputError = sectionCaseInput.error || (candidateInput && sectionInputRun && (
+    sectionInputRun.integrity !== 'verified' || sectionInputRun.id !== run?.id
+    || sectionInputRun.workspace !== run?.workspace || sectionInputRun.study !== run?.study
+    || sectionInputRun.input_digest !== run?.input_digest
+    || sectionDocument.schema_version !== 'cablesim.domain/1'
+  ) ? Error('所选候选的保存输入身份、摘要或敷设数据无法核对。') : undefined);
   const inputDocument = (
-    snapshotInput ? (run ? savedDomain(run) : undefined) : context.domain
+    snapshotInput ? (savedInputReady ? candidateInput
+      ? !sectionInputError && sectionDocument.schema_version === 'cablesim.domain/1' ? sectionDocument : undefined
+      : savedDomain(run!) : undefined) : context.domain
   ) as DomainDocument | undefined;
   const inputProps = {
     tab,
@@ -246,16 +308,21 @@ export function StudyWorkspace() {
   );
   // 工作窗口：模型画布（历史运行显示当时保存的模型）、右侧检查器的方法信息
   // 只有查看已过期的运行时才显示当时保存的模型并只读；刚运行完的当前结果仍可直接继续编辑
-  const viewingOldInput = !!search.run && (run?.freshness === "historical" || isVersionStale(run));
+  const viewingOldInput = !!search.run && (inputModule || run?.freshness === "historical" || isVersionStale(run));
   const studyInput = optionalRecord((draft?.definition || study.definition).method_input);
-  const canvasDocument = (viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
+  const canvasDocument = (snapshotInput ? inputDocument : viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
     : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? context.domain : undefined) : context.domain) as DomainDocument | undefined;
   // S4: the complete simulation contract belongs in the work area when
   // editing its method, rather than inside the narrow properties column.
   const workspaceMethod = search.inspector === 'method' && ['thermal-field','transient','sheath-losses','electrothermal'].includes(module);
-  const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded;
+  const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded && !selectionError;
+  // A maximized result starts without a hidden lazy canvas. Once the engineer
+  // opens it, keep the existing canvas mounted across maximize/restore so its
+  // local drawing state and the provider's unsaved inputs remain intact.
+  const mountCanvas=showCanvas && (!dockMax || canvasMounted);
+  useEffect(()=>{if(showCanvas && !dockMax)setCanvasMounted(true);},[showCanvas,dockMax]);
   const independentInput = study.definition.input_source === 'study';
-  const canvasReadOnly = viewingOldInput;
+  const canvasReadOnly = viewingOldInput || savedCandidateDrawing;
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
   const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
   const requestedCanvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
@@ -264,26 +331,36 @@ export function StudyWorkspace() {
   const missingTemperatureField = !fieldView && !needsFieldProjection;
   const canvasView = requestedCanvasView === 'field' && missingTemperatureField ? 'section' : requestedCanvasView;
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
+  const needsDrawingInput = ['three', 'section'].includes(canvasView) || savedCandidateDrawing && canvasView === 'cable';
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
-    enabled:showCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
+    enabled:!!run && !pendingRun && (savedCandidateDrawing || mountCanvas && needsDrawingInput)
+      && (!context.dirty || savedCandidateDrawing) && (!selectionContext || !!fieldCase),
     queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
-  const drawingRun = preview.result?.view || drawingInput.data || run;
+  const loadedDrawingRun = preview.result?.view || drawingInput.data || run;
+  const drawingRun = selectionContext ? fieldCase && loadedDrawingRun ? caseRun(loadedDrawingRun, fieldCase) : undefined : loadedDrawingRun;
   const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
-  const drawingDocument = optionalRecord(savedDrawingCase?.input).schema_version === 'cablesim.domain/1' ? savedDrawingCase!.input as DomainDocument : canvasDocument;
+  const drawingDocument = optionalRecord(savedDrawingCase?.input).schema_version === 'cablesim.domain/1' ? savedDrawingCase!.input as DomainDocument : savedCandidateDrawing ? undefined : canvasDocument;
   // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
-  const annotations = shownRun && !pendingRun ? conductorAnnotations(shownRun, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
+  const annotations = shownRun && !pendingRun && (!selectionContext || !!fieldCase) ? conductorAnnotations(shownRun, fieldCase) : undefined;
   const shownDefinition = viewingOldInput ? optionalRecord(optionalRecord(run?.snapshot).definition) as StudyDefinition : draft?.definition || study.definition;
   const methodPin = optionalRecord(moduleConfiguration(shownDefinition, module)?.method || shownDefinition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
   const capabilityEntry = (Array.isArray(pluginEntry?.capabilities) ? pluginEntry!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(methodPin.capability));
-  const edits = context.dirty ? Math.max(1, Object.keys(context.domainDraft?.fields || {}).length + Object.keys(context.draft?.parameterFields || {}).length) : 0;
+  const domainEdits = context.domainDraft ? countInputChanges(context.domainDraft.base, context.domainDraft.document, Object.keys(context.domainDraft.fields)) : 0;
+  const draftDefinition = context.draft?.definition || study.definition;
+  const parameterPaths = Object.values(context.draft?.parameterFields || {}).map(field =>
+    (draftDefinition.modules?.[field.module] ? `/modules/${field.module}` : '')
+    + (field.crosscheck === undefined ? '/parameters' : `/crosschecks/${field.crosscheck}/parameters`) + field.path);
+  const studyEdits = context.draft ? countInputChanges(context.draft.base.definition, draftDefinition, parameterPaths)
+    + (context.draft.title !== context.draft.base.title ? 1 : 0) : 0;
+  const edits = context.dirty ? Math.max(1, domainEdits + studyEdits + Object.keys(context.moduleInputs).length) : 0;
   // 浏览子模块不会改变研究状态；状态来自研究保存的最近运行摘要。
   const overallRun = optionalRecord(study.raw.latest_run);
   const methodPresentationNotice = useMethodPresentationNotice(study, search.run ? run : overallRun.id ? overallRun : undefined);
   const presentation = studyPresentation(study, overallRun.id ? overallRun : undefined, edits, context.runError, context.loadingRuns && !overallRun.id);
   const selectedPresentation = studyPresentation(study, run, edits);
   const recalculateTarget = { wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined };
-  const onRecalculated = (next: Record<string, unknown>) => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), delivery: '', generate: false } }); };
+  const onRecalculated = (next: Record<string, unknown>) => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), case: undefined, delivery: '', generate: false } }); };
   const recalculate = presentation.code === 'outdated' ? <StudyRecalculate value={presentation.staleValue} target={recalculateTarget} disabledReason={context.dirty ? '请先保存修改' : undefined} onComplete={onRecalculated} /> : undefined;
   const methodInfo = {
     name: text(pluginEntry?.name) || displayName(text(methodPin.plugin_id)),
@@ -317,13 +394,24 @@ export function StudyWorkspace() {
   function currentSearch() {
     return { ...search, workspace: study.workspace };
   }
-  // 电缆、截面、工况不再是单独页面：并入当前计算的工作窗口，画布切到对应视图
-  if (inputModule)
+  function selectCandidate(row: SelectionRow) {
+    void navigate({ search: { ...currentSearch(), run: text(run?.id), case: row.id }, replace: true });
+  }
+  // The old generic run links landed type calculations in ampacity/batch.
+  // Preserve explicit reports, evidence tabs, model and method deep links.
+  const legacyRunEntry = (module === 'ampacity' && tab === 'results' || module === 'batch' && tab === 'space')
+    && !hasSavedViewIntent(search);
+  const savedEntry = legacyRunEntry ? savedRunEntry(context, search,
+    () => void navigate({search:{...currentSearch(),theme:theme === 'light' ? 'dark' : 'light'},replace:true})) : null;
+  if (savedEntry) return savedEntry;
+  // Keep the coordinate/media tables in this workbench. The drawing aliases
+  // open the matching view of the calculation without losing a fixed run.
+  if (inputModule && !sectionTable)
     return (
       <Redirect
         to="/studies/$sid/$module/$tab"
         params={{ sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) }}
-        search={{ ...search, workspace: study.workspace, view: module === "cable" ? "cable" : "section" }}
+        search={{ ...search, workspace: study.workspace, view: module === "cable" ? "cable" : tab === 'three-dimensional' ? 'three' : "section" }}
         replace
       />
     );
@@ -345,7 +433,7 @@ export function StudyWorkspace() {
   // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
   const answer = pendingRun || !run ? null
     : savedMethod.capability === 'iec-thermal-field' && module !== 'report' ? <FemConclusionBar run={run} />
-    : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={(row) => setSelected(row)} dirty={context.dirty} part="conclusion" />
+    : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={selectCandidate} dirty={context.dirty} part="conclusion" />
       : module === 'ampacity' ? <StudyResults run={shownRun} onSelect={inputProps.onSelect} part="conclusion" />
         : moduleBehavior.resultConclusion.has(module) ? <SavedRunConclusion run={run} />
         : null;
@@ -355,17 +443,31 @@ export function StudyWorkspace() {
   const analyses = enabled.filter(key => !moduleBehavior.input.has(key) && key !== 'report' && (key !== 'thermal-field' || calculatedModule === key))
     .map(key => ({value:key,label:key === calculatedModule ? (capabilityEntry?.analysis==='ampacity_correction' ? text(capabilityEntry.title) : taskName(study.definition, study.task)) : moduleDefinitions[key].label}));
   const currentAnalysis = module === 'report' || moduleBehavior.input.has(module) ? calculatedModule : module;
+  const inputCalculationModule = snapshotInput && savedInputReady
+    ? text(optionalRecord(run!.snapshot).module) || rootModule(optionalRecord(optionalRecord(run!.snapshot).definition) as StudyDefinition)
+    : calculatedModule;
   const reportReason = !run ? '先运行研究，取得保存结果' : context.dirty ? '先保存修改并重新运行' : selectedPresentation.historical ? '旧结果保持为历史，请先重算' : !['succeeded','partial'].includes(text(run.status)) ? '等待运行成功后生成' : undefined;
   const commandActions: CommandAction[] = [
     {id:'save',label:context.dirty?'保存修改':'已保存',icon:'action/save',role:'save',variant:'outline',loading:context.saving,disabledReason:!context.dirty?'工程修改已保存':undefined,onSelect:()=>void context.save()},
     {id:'undo',label:'撤销',icon:'action/undo',priority:70,variant:'ghost',disabledReason:!context.canUndo?'没有可撤销的修改':context.saving?'正在保存':undefined,onSelect:()=>void context.undo()},
     {id:'redo',label:'重做',icon:'action/redo',priority:40,variant:'ghost',disabledReason:!context.canRedo?'没有可重做的修改':context.saving?'正在保存':undefined,onSelect:()=>void context.redo()},
-    ...(module==='selection' && canvasDocument ? [{id:'canvas',label:canvasExpanded?'收起布置图':'查看布置图',priority:20,variant:'ghost' as const,onSelect:()=>setCanvasExpanded(value=>!value)}] : []),
+    ...(module==='selection' && canvasDocument ? [{id:'canvas',label:canvasExpanded?'收起布置图':'查看布置图',priority:20,variant:'ghost' as const,onSelect:()=>{
+      if (canvasExpanded) {
+        setCanvasExpanded(false);
+        if (search.view) void navigate({search:{...currentSearch(),view:undefined},replace:true});
+      } else {
+        setCanvasExpanded(true);
+        setDockMax(false);
+      }
+    }}] : []),
+    ...(sectionTable ? [{id:'calculation',label:`返回${moduleDefinitions[inputCalculationModule]?.label || '计算结果'}`,role:'primary' as const,
+      disabledReason:snapshotInput && !savedInputReady ? '先读取并核对指定运行的保存输入' : !moduleDefinitions[inputCalculationModule] ? '该保存运行的计算模块尚未支持显示' : undefined,
+      onSelect:()=>void navigate({params:{sid,module:inputCalculationModule,tab:studyEntryTab(inputCalculationModule)},search:currentSearch()})}] : []),
     ...(module !== 'report' ? [{id:'report',label:'生成计算书',icon:'result/report',priority:80,variant:'ghost' as const,disabledReason:reportReason,onSelect:()=>void navigate({ params: { sid, module: 'report', tab: 'preview' }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}] : []),
   ];
   const commandBar = <CommandBar label="工程命令" actions={commandActions} status={!presentation.historical?presentation.label:undefined} leading={<>
         {analyses.length > 1 && <Select label="分析" value={analyses.some(item => item.value === currentAnalysis) ? currentAnalysis : calculatedModule} options={analyses}
-          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />}
+          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',case:undefined,delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />}
         <PreviewControls preview={preview} />
         {runnable && !snapshotInput && <StudyRunControl
                         key={sid + module}
@@ -387,7 +489,7 @@ export function StudyWorkspace() {
                             );
                           navigate({
                             params: { sid, module: destination, tab: nextTab },
-                            search: { ...currentSearch(), run: "", delivery: "", inspector: field.startsWith('/parameters') ? 'method' : 'input' },
+                            search: { ...currentSearch(), run: "", case: undefined, delivery: "", inspector: field.startsWith('/parameters') ? 'method' : 'input' },
                           }).then(() => focusPreflightField(field, workspace.domain));
                         }}
                         onResult={(id, outputModule) =>
@@ -397,7 +499,7 @@ export function StudyWorkspace() {
                               module: outputModule,
                               tab: moduleDefinitions[outputModule].tabs[0].id,
                             },
-                            search: { ...currentSearch(), run: id, delivery: "" },
+                            search: { ...currentSearch(), run: id, case: undefined, delivery: "" },
                           })
                         }
                       />}
@@ -435,7 +537,7 @@ export function StudyWorkspace() {
             />
           }
           actions={null}
-          property={module === "report" ? undefined : (
+          property={module === "report" || snapshotInput && !savedInputReady ? undefined : (
             <WorkbenchInspector
               relationPanel={<RelationPanel kind="study" id={sid} />}
               view={search.inspector === "agent" ? "agent" : methodPanel && search.inspector === "method" ? "method" : "input"}
@@ -471,10 +573,10 @@ export function StudyWorkspace() {
         >
           {commandBar}
           <div className="workbench-frame">
-          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined}>
+          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={savedCandidateDrawing ? drawingDocument : canvasDocument} modelLabel={savedCandidateDrawing ? '保存候选模型（只读）' : viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} activeModelSearch={selectionContext && run && fieldCase ? { run: text(run.id), case: fieldCase } : undefined} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
+          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined} data-canvas={showCanvas && canvasMax ? 'max' : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
-          {showCanvas && (
+          {mountCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views study-canvas-toolbar" role="toolbar" aria-label="视图与绘图工具">
                 <div className="study-view-switch" role="group" aria-label="模型视图">
@@ -483,12 +585,14 @@ export function StudyWorkspace() {
                     <Icon name={icon} /><span className="study-view-label">{label}</span>
                   </button>
                 ))}
-                </div><div data-drawing-toolbar-slot />
+                </div>
+                <Button size="compact" variant="ghost" className="study-model-size" aria-pressed={canvasMax} onClick={() => setCanvasMax(value => !value)}>{canvasMax ? '还原模型布局' : '放大模型'}</Button>
+                <div data-drawing-toolbar-slot />
                 {canvasView==='field' && fieldView?.kind==='fem' && <Button size="compact" variant="ghost" onClick={()=>setFullFieldDomain(value=>!value)}>{fullFieldDomain ? '对准电缆区域' : '适配全域'}</Button>}
               </div>
               {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
               {canvasView === "field" && fieldView ? (
-                <div className="study-field-slot"><FieldView
+                <div className="study-field-slot" data-run-id={text((needsFieldProjection ? fieldRun : shownRun)?.id)} data-case-id={text(fieldView.case.case_id)} data-field-digest={text(optionalRecord(fieldView.case.artifact_digests)['x-cablesim.temperature-field'])}><FieldView
                   label={fieldView.kind === "iec" ? `土壤温度场（IEC 解析） · ${fieldLoadLabel(fieldView.case)}` : "温度场"}
                   key={fullFieldDomain ? 'full-domain' : 'cable-region'}
                   points={focusedField!.points}
@@ -509,13 +613,16 @@ export function StudyWorkspace() {
                   hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: fieldView.kind === "iec" ? "土壤最高" : "最高" }}
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
                   limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
-                /></div>
+                />
+                {fieldView.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
+                </div>
               ) : canvasView === 'field' && needsFieldProjection && fieldProjection.isPending ? <LoadingState title="正在读取保存场图" />
                 : canvasView === 'field' && fieldProjection.error ? <ErrorState title="场图读取失败" description={message(fieldProjection.error)} action={<Button onClick={() => void fieldProjection.refetch()}>重新读取</Button>} />
                 : canvasView === 'field' ? <InlineEmpty title="该保存运行没有温度场" />
-                : ['three','section'].includes(canvasView) && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
-                : ['three','section'].includes(canvasView) && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
-                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} readOnly={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
+                : needsDrawingInput && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
+                : needsDrawingInput && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} />
+                : savedCandidateDrawing && !drawingDocument ? <ErrorState title="保存候选模型不可用" description="所选工况没有可核对的模型输入，不能显示当前工程作为替代。" action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
+                <StudyDrawing document={savedCandidateDrawing ? drawingDocument! : canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} readOnly={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
                   preview={capabilityEntry?.preview === true && !methodInfo.hpc && !canvasReadOnly && !independentInput ? geometryPreview : undefined}
                   onPropose={canvasReadOnly || independentInput ? undefined : changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
                   if (!run || context.dirty || image.metadata.field?.provisional || image.metadata.field?.runId !== run.id) throw Error('请从所选保存运行的三维结果导出，试算图不能进入计算书。');
@@ -523,7 +630,6 @@ export function StudyWorkspace() {
                   downloadBlob(image.blob, '三维视图.png');
                 }} />
               )}
-              {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
             </section>
           )}
           {showCanvas && <WorkbenchSplitter kind="study" />}
@@ -549,7 +655,9 @@ export function StudyWorkspace() {
               description={message(context.saveError)}
             />
           )}
-          {workspaceMethod ? <div className="study-method-workspace" aria-label="有限元方法参数">
+          {selectionError ? <ErrorState title="保存候选无法核对" description={message(selectionError)}
+            action={<Button onClick={() => void navigate({ params: { sid, module: 'selection', tab: 'results' }, search: { ...currentSearch(), case: undefined } })}>返回候选结果</Button>} />
+          : workspaceMethod ? <div className="study-method-workspace" aria-label="有限元方法参数">
             <h3 className="study-parameters-heading">本次计算参数</h3>
             <p className="muted">先核对网格、计算域、材料来源和热边界；数值求解选项在“高级参数”。</p>
             <StudyMethodForm module={module} historical={methodHistorical} savedRun={methodHistorical ? run : undefined}
@@ -571,8 +679,18 @@ export function StudyWorkspace() {
             />
           ) : search.run && !run ? (
             <ErrorState description="指定运行不存在或不属于此研究。" />
-          ) : pendingRun && !inputModule && tab !== "parameters" ? (
+          ) : pendingRun && tab !== "parameters" ? (
             <LoadingState title="运行尚未完成" />
+          ) : candidateInput ? (
+            !selectedRow ? <InlineEmpty title="该运行没有推荐候选，请返回结果选择要查看的型号。" />
+            : sectionInputError ? <ErrorState title="候选输入读取失败" description={message(sectionInputError)}
+              action={<Button onClick={() => void sectionCaseInput.refetch()}>重新读取</Button>} />
+            : !sectionCaseInput.data ? <LoadingState title="正在读取候选的保存输入" />
+            : <div className="study-saved-candidate-input" data-run-id={text(run?.id)} data-case-id={fieldCase}
+                data-input-digest={text(optionalRecord(sectionCase?.input_ref).sha256) || undefined}>
+                <p className="muted">保存候选 · {selectedRow.name}</p>
+                <SectionInputs {...inputProps} />
+              </div>
           ) : inputModule ? (
             run?.integrity !== "verified" ? (
               <ErrorState description="固定运行输入未通过完整性校验" />
@@ -610,6 +728,8 @@ export function StudyWorkspace() {
               cases={(view?.rows || []).map((row) => ({ id: row.id, label: row.name }))}
               initialCase={selectedRow?.id || view?.recommendation?.id}
             />
+          ) : !run && ["transient", "sheath-losses"].includes(module) && !moduleConfiguration(study.definition, module) ? (
+            <SimulationSetup module={module} />
           ) : module === "transient" && tab === "history" ? (
             <StudyNativeArtifact run={run} kind="history" />
           ) : module === "sheath-losses" && tab === "losses" ? (
@@ -644,9 +764,7 @@ export function StudyWorkspace() {
                 theme={theme}
                 run={run}
                 selectedId={selectedRow?.id}
-                onSelect={(row) => {
-                  setSelected(row);
-                            }}
+                onSelect={selectCandidate}
                 dirty={context.dirty}
                 part="details"
               />
@@ -660,9 +778,9 @@ export function StudyWorkspace() {
           ) : module === "sweep" ? (
             <StudySweep run={run} tab={tab} readOnly={!!search.run} onSelect={inputProps.onSelect} />
           ) : module === "batch" ? (
-            <StudyBatch tab={tab} readOnly={!!search.run} datasetId={search.dataset || ""} onDataset={id => navigate({ params: { sid, module: "batch", tab: "results" }, search: { ...currentSearch(), dataset: id, run: "" } })} onSelect={inputProps.onSelect} />
+            <StudyBatch tab={tab} readOnly={!!search.run} datasetId={search.dataset || ""} onDataset={id => navigate({ params: { sid, module: "batch", tab: "results" }, search: { ...currentSearch(), dataset: id, run: "", case: undefined } })} onSelect={inputProps.onSelect} />
           ) : module === "method-compare" ? (
-            (study.definition.modules?.["method-compare"]?.method.capability || (calculatedModule === "method-compare" ? study.definition.method.capability : "")) === "physics-comparison" ? <StudyPhysicsComparison run={run} tab={tab} readOnly={!!search.run} /> : <StudyCompare run={run} tab={tab} readOnly={!!search.run} selectedRuns={search.compare || ""} onComparison={compare => navigate({ params: { sid, module: "method-compare", tab: "inputs" }, search: { ...currentSearch(), compare, run: "" } })} />
+            (study.definition.modules?.["method-compare"]?.method.capability || (calculatedModule === "method-compare" ? study.definition.method.capability : "")) === "physics-comparison" ? <StudyPhysicsComparison run={run} tab={tab} readOnly={!!search.run} /> : <StudyCompare run={run} tab={tab} readOnly={!!search.run} selectedRuns={search.compare || ""} onComparison={compare => navigate({ params: { sid, module: "method-compare", tab: "inputs" }, search: { ...currentSearch(), compare, run: "", case: undefined } })} />
           ) : module === "simulation" ? (
             <StudySimulation run={run} tab={tab} readOnly={!!search.run} />
           ) : module === "report" ? (
@@ -673,6 +791,11 @@ export function StudyWorkspace() {
               did={search.delivery}
               tab={tab}
               dirty={context.dirty}
+              calculationLabel={moduleDefinitions[calculatedModule].label}
+              onReturnToCalculation={() => void navigate({
+                params: { sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) },
+                search: { ...currentSearch(), run: '', case: undefined, delivery: '', generate: false, preflight: false },
+              })}
               cadImage={reportImage && reportImage.runId === run?.id ? reportImage.image : undefined}
               runs={runs}
               autoGenerate={search.generate}
@@ -730,7 +853,7 @@ export function StudyWorkspace() {
           />
         </label>
       </Dialog>
-      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} />
+      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} sourceStudyId={study.id} />
       <StudyGeometryProposal proposal={geometryProposal} onClose={()=>setGeometryProposal(undefined)} />
       <RunRecordsDrawer
         workspace={study.workspace}
@@ -744,8 +867,7 @@ export function StudyWorkspace() {
         error={context.runError}
         onRetry={context.refresh}
         onSelect={(id) => {
-          setSelected(undefined);
-          navigate({ search: { ...currentSearch(), run: id, delivery: "" } });
+          navigate({ search: { ...currentSearch(), run: id, case: undefined, delivery: "" } });
         }}
       />
     </>

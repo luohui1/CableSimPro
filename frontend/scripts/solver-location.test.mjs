@@ -1,11 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { solverLocation, savedSolverLocation } from '../src/lib/solver-location.ts';
+import { solverLocation, savedSolverLocation, pinnedSolverCapability } from '../src/lib/solver-location.ts';
 import { taskName, readableRunName, statusLabel } from '../src/lib/status-vocabulary.ts';
 import { formatDateTime } from '../src/lib/format.ts';
 import { internalTokens } from './visible-names.mjs';
 
 const profile = { configured: true, status: 'configured', remote_plugins: [], remote_capabilities: {} };
+test('工程列表按固定能力声明求解位置，不把进程隔离当成本机求解', () => {
+  const pin = { plugin_id: 'simulation', version: '1.7.1', release_digest: 'saved-release', capability: 'thermal' };
+  const catalog = [{ method: pin, execution_policy: { backend: 'subprocess' }, capabilities: [
+    { id: 'thermal', solver: 'slurm', analysis: 'thermal' }, { id: 'prediction', solver: 'either' }, { id: 'legacy' },
+  ] }];
+  assert.equal(solverLocation(pin.plugin_id, pinnedSolverCapability(pin, catalog), { ...profile, configured: false }).location, 'slurm');
+  const prediction = pinnedSolverCapability({ ...pin, capability: 'prediction' }, catalog);
+  assert.equal(solverLocation(pin.plugin_id, prediction, profile).location, 'local');
+  assert.equal(solverLocation(pin.plugin_id, prediction, { ...profile, remote_plugins: [pin.plugin_id] }).location, 'slurm');
+  assert.equal(solverLocation(pin.plugin_id, pinnedSolverCapability({ ...pin, capability: 'legacy' }, catalog), profile).location, 'local');
+});
+test('目录没有同一固定发行或能力时保持未知，不以当前版本替代', () => {
+  const pin = { plugin_id: 'simulation', version: '1.7.1', release_digest: 'saved-release', capability: 'thermal' };
+  const catalog = [{ method: pin, capabilities: [{ id: 'thermal', solver: 'slurm' }] }];
+  for (const changed of [{ plugin_id: 'other' }, { version: '1.7.2' }, { release_digest: 'other-release' }, { capability: 'missing' }, { release_digest: undefined }])
+    assert.equal(pinnedSolverCapability({ ...pin, ...changed }, catalog), undefined);
+  assert.equal(pinnedSolverCapability(pin, []), undefined);
+  assert.equal(pinnedSolverCapability(pin, [{ method: pin, capabilities: [{ id: 'thermal', solver: 'unknown' }] }]), undefined);
+});
 test('能力声明与路由的完整判定表，缺字段兼容旧插件', () => {
   for (const solver of [undefined, 'local', 'slurm', 'either']) for (const selected of [false, true]) for (const configured of [false, true]) {
     const result = solverLocation('p', { id: 'c', solver }, { ...profile, configured, remote_capabilities: selected ? { p: ['c'] } : {} });

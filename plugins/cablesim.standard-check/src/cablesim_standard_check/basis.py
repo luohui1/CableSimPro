@@ -216,7 +216,7 @@ def apply(checker,parameters):
         if row['basis_missing_fields']: continue
         ref=refs.get(row['id'])
         if not ref or row['id'] not in plan:
-            reason = row.get('basis_uncovered_reason') or '本库暂未收录 · 下一轮；保留此标准版本与要求。'
+            reason = row.get('basis_uncovered_reason') or '本库暂未收录；保留此标准版本与要求。'
             if checker.family == 'ehv':
                 reason = (row.get('reason') or reason) if row['id'] not in plan else '此电压、材料、截面与制造条件组合没有已固定依据；不插值、换版或套用 110 kV。'
             row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason=reason);continue

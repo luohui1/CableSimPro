@@ -76,7 +76,7 @@ def lookup_references(research, queries):
                 'artifact_digest':case.artifact_digests['x-cablesim.standards-basis']}
             continue
         if answer['status'] != 'resolved':
-            missing.append({'key':key,'query':queries[key], 'reason':answer.get('reason','本库暂未收录 · 下一轮')})
+            missing.append({'key':key,'query':queries[key], 'reason':answer.get('reason','本库暂未收录')})
             continue
         record = answer['records'][0]
         references[key] = {'schema':'cablesim.standard-basis-ref/1','plugin_id':answer['plugin_id'],
@@ -194,7 +194,7 @@ class Requirements:
             if output.status!='succeeded': raise HTTPException(422,output.error or '标准依据查询失败，请核对适用条件。')
             answer=output.artifacts['x-cablesim.standards-basis']
             key=next(k for k,v in ids.items() if v==output.case_id); query=queries[key]
-            if answer['status']!='resolved': missing.append({'query':query,'reason':answer.get('reason','此条件本库暂未收录 · 下一轮')});continue
+            if answer['status']!='resolved': missing.append({'query':query,'reason':answer.get('reason','此条件本库暂未收录')});continue
             record=answer['records'][0]
             ref={'schema':'cablesim.standard-basis-ref/1','plugin_id':answer['plugin_id'],'plugin_version':answer['plugin_version'],
                  'data_sha256':answer['data_sha256'],'query_sha256':answer['query_sha256'],'query':query,'record_id':record['id'],

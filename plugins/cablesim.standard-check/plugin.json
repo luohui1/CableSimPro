@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -92,12 +92,12 @@
       },
       "limitations": [
         "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。",
-        "GB/T 11017.1—2024 和 11017.2—2014 本库暂未收录 · 下一轮；其最薄点与中压铜丝间隙算法不由其他版本代替。",
+        "GB/T 11017.1—2024 和 11017.2—2014 本库暂未收录；其最薄点与中压铜丝间隙算法不由其他版本代替。",
         "第 1 部分内衬层、护套、最薄点及成缆分支尚未覆盖；附加包带和未知构造阻止完整假定直径链。",
         "设计输入、厂家上限与实测值分别标记；缺少短路故障要求时金属屏蔽截面不作合格判定。本核对不批准要求、型号或产品认证。"
       ],
       "category": "data-standard",
-      "description": "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。；GB/T 11017.1—2024 和 11017.2—2014 本库暂未收录 · 下一轮；其最薄点与中压铜丝间隙算法不由其他版本代替。",
+      "description": "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。；GB/T 11017.1—2024 和 11017.2—2014 本库暂未收录；其最薄点与中压铜丝间隙算法不由其他版本代替。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false,
@@ -759,8 +759,8 @@
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "d9fe817a34b1e8c17ab19068fbc8bdedb59ef499862e95d24dcc831b31a7d1b4",
-      "size_bytes": 18030
+      "sha256": "c340a82636abe0de18d745852bc1536aa20d273809d9d40feb27d81f2682ac4f",
+      "size_bytes": 18017
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -789,8 +789,8 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "89514444875ff4e717f6be67e7d0072774712c5367b48fcf3550b9ba1cfe0fd1",
-      "size_bytes": 65519
+      "sha256": "bb16bf9d3b26d437f443166fa8429427b1171a091c5095dd6836024589f65611",
+      "size_bytes": 65467
     },
     {
       "path": "src/cablesim_standard_check/manufacturing.py",

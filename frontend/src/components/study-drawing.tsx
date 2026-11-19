@@ -285,6 +285,7 @@ export function StudyDrawing({
           document={document}
           sectionId={section?.id || ""}
           historical={historical}
+          readOnly={readOnly}
           selected={selection}
           onSelect={selectSection}
           run={run} fieldCase={fieldCase} viewportRef={viewportRef} onExport={onExport} preview={preview} onPropose={onPropose}

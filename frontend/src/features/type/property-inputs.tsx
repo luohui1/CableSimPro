@@ -1,6 +1,7 @@
 import { text } from '@/api/client';
 import { NumberField } from '@/components/ui/number-field';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { at, displayed, fieldSource, pointer, type NumericInput } from '@/lib/domain-fields';
 import { sourceKind } from '@/lib/selection-view';
@@ -18,6 +19,24 @@ function Numeric({ spec, integer }: { spec: NumericInput; integer?: boolean }) {
 export function TypeRatingInputs() {
   const state = useTypeWorkspace(), cable = state.document!.cable_types[0];
   return <div className="type-property-fields" aria-label="额定电压输入">{(['u0', 'u'] as const).map(key => <Numeric key={key} spec={{ path: pointer('cable_types', cable.id, 'rating', key), label: key === 'u0' ? '额定电压 U₀' : '额定电压 U', unit: 'kV', scale: .001, precision: 1, required: true, min: 0, minExclusive: true }} />)}</div>;
+}
+export function StructureSourceInput({ cableId }: { cableId: string }) {
+  const state = useTypeWorkspace(), cable = state.document!.cable_types.find(item => item.id === cableId);
+  if (!cable) return null;
+  const root = pointer('cable_types', cable.id), source = fieldSource(state.document!, root);
+  const locked = state.locked(root), disabled = state.busy || locked;
+  return <details className="type-structure-source type-property-detail">
+    <summary>型号结构来源</summary>
+    <div className="type-property-fields">
+      <label data-field-path={pointer('provenance', root)}>结构依据与出处
+        <Textarea aria-label="型号结构来源" value={text(source.reference)} disabled={disabled} rows={5}
+          onChange={event => state.edit(root, cable, { ...source, kind: 'user', reference: event.target.value, reviewed: false })} />
+      </label>
+      <p className="muted">填写真实结构图、设计或试验资料的文件名、版本和页码，说明尺寸、成缆绞距、屏蔽电阻与铠装绕包的依据。没有资料时保留空白。</p>
+      <p className="muted">此项是型号整体依据；各字段已有来源分别保留。录入后仍待人工核对。</p>
+      {disabled && <p className="muted">{state.busy ? '正在保存或恢复修改，请完成后编辑来源。' : '此型号或结构已锁定，请在可编辑的独立方案中维护来源。'}</p>}
+    </div>
+  </details>;
 }
 export function StructurePropertyInputs({ row }: { row: LayerRow }) {
   const state = useTypeWorkspace(), root = row.path.slice(0, row.path.lastIndexOf('/'));

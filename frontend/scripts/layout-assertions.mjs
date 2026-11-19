@@ -28,11 +28,18 @@ export async function assertLayout(page, label, nameOptions) {
     const font = Math.min(
       ...seen.map((node) => parseFloat(getComputedStyle(node).fontSize)),
     );
+    // A computed colour may be rgb(), color(srgb …), oklch() or a color-mix() such as
+    // a hover fill "color-mix(in srgb, rgb(13, 13, 13) 2%, transparent)", whose digits
+    // read in order once gave an alpha of 2 and a negative background. The canvas
+    // resolves any CSS colour to 8-bit RGBA; one it cannot parse stays transparent.
+    const paint = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
     function rgba(color) {
-      const values = color.match(/[\d.]+/g)?.map(Number) || [];
-      return values.length >= 3
-        ? [...values.slice(0, 3), values[3] ?? 1]
-        : [0, 0, 0, 0];
+      paint.clearRect(0, 0, 1, 1);
+      paint.fillStyle = "rgba(0, 0, 0, 0)";
+      paint.fillStyle = color;
+      paint.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
     }
     function over(a, b) {
       return [0, 1, 2]
@@ -103,11 +110,8 @@ export async function assertLayout(page, label, nameOptions) {
     const collapsed = [...document.querySelectorAll(".property-collapsed")].map(
       (node) => ({ width: node.clientWidth, scrollWidth: node.scrollWidth }),
     );
-    const primaryScope = document.querySelector('[role="dialog"]') || document;
-    const primary = [
-      ...primaryScope.querySelectorAll(".button-primary,.button-run"),
-    ].filter((node) => {
-      if (node.disabled || node.closest('[aria-hidden="true"],[inert]')) return false;
+    const painted = node => {
+      if (node.closest('[aria-hidden="true"],[inert]')) return false;
       const folded = node.closest('details:not([open])');
       if (folded && !folded.querySelector(':scope > summary')?.contains(node)) return false;
       if (!node.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })) return false;
@@ -124,7 +128,13 @@ export async function assertLayout(page, label, nameOptions) {
         }
       }
       return right - left > 1 && bottom - top > 1;
-    }).length;
+    };
+    const primaryScope = [...document.querySelectorAll('[role="dialog"]')].find(painted) || document;
+    const primaryLabels = [
+      ...primaryScope.querySelectorAll(".button-primary,.button-run"),
+    ].filter(node => painted(node) && !node.disabled)
+      .map(node => node.textContent.trim() || node.getAttribute('aria-label'));
+    const primary = primaryLabels.length;
     return {
       overflow:
         document.documentElement.scrollWidth > innerWidth + 1 ||
@@ -134,6 +144,7 @@ export async function assertLayout(page, label, nameOptions) {
       overlap,
       collapsed,
       primary,
+      primaryLabels,
     };
   });
   assert.equal(result.overflow, false, label + ": 页面越界");
@@ -148,7 +159,7 @@ export async function assertLayout(page, label, nameOptions) {
     result.collapsed.every((value) => value.scrollWidth <= value.width),
     label + ": 收起属性栏横向溢出",
   );
-  assert.ok(result.primary <= 1, label + ": 多个主操作");
+  assert.ok(result.primary <= 1, label + ": 多个主操作 " + JSON.stringify(result.primaryLabels));
   return result;
 }
 

@@ -48,6 +48,17 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const idle = useIdleStart();
   const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal), enabled: idle, staleTime: 30_000 });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal), enabled: idle, staleTime: 30_000 });
+  // A workspace index includes model workspaces. Publish the two real indexes
+  // together so an initial/refresh response cannot temporarily classify a model
+  // as a project. Keep the last complete pair while either index refreshes.
+  const [navigationIndex, setNavigationIndex] = useState<{ spaces: Record<string, unknown>[]; types: Record<string, unknown>[] } | null>(null);
+  useEffect(() => {
+    if (!spaces.isSuccess || !types.isSuccess || spaces.isFetching || types.isFetching) return;
+    setNavigationIndex(previous => previous?.spaces === spaces.data && previous?.types === types.data
+      ? previous : { spaces: spaces.data, types: types.data });
+  }, [spaces.data, spaces.isSuccess, spaces.isFetching, types.data, types.isSuccess, types.isFetching]);
+  const indexError = spaces.isError || types.isError;
+  const retryIndexes = () => void Promise.all([spaces.refetch(), types.refetch()]);
   // 研究名片（只用于各工程的研究数）和待办数在浏览器空闲后再读，不和页面首屏抢宿主；
   // 当前工程优先取地址里的 workspace，不必等研究列表
   const studies = useQuery({ queryKey: ['study-index', 'sidebar-cards'], queryFn: ({ signal }) => indexAll('study', signal), enabled: idle });
@@ -58,8 +69,9 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const activeType = pathname.match(/^\/types\/([^/]+)/)?.[1] || '';
   const inGallery = pathname.startsWith('/gallery');
   const at = (prefix: string) => pathname === prefix || pathname.startsWith(prefix + '/') ? 'page' as const : undefined;
-  const typeIds = new Set((types.data || []).map(row => text(row.id)));
-  const projects = (spaces.data || []).filter(space => !typeIds.has(text(space.id)));
+  const typeRows = navigationIndex?.types || [];
+  const typeIds = new Set(typeRows.map(row => text(row.id)));
+  const projects = (navigationIndex?.spaces || []).filter(space => !typeIds.has(text(space.id)));
   const activeProject = (typeof search.workspace === 'string' && search.workspace) || studies.data?.items.find(row => row.id === activeStudy)?.parent?.id || '';
   useEffect(() => {
     const container = scroll.current;
@@ -69,7 +81,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
     const viewport = container.getBoundingClientRect(), item = active.getBoundingClientRect();
     if (item.bottom > viewport.bottom) container.scrollTop += item.bottom - viewport.bottom;
     else if (item.top < viewport.top) container.scrollTop += item.top - viewport.top;
-  }, [pathname, activeProject, activeType, collapsed, spaces.data, types.data, studies.data]);
+  }, [pathname, activeProject, activeType, collapsed, navigationIndex, studies.data]);
 
   return <aside className="workbench-sidebar" aria-label="导航">
     <div className="sidebar-head">
@@ -91,7 +103,8 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       <Link className="module-item" to="/inbox" search={{ theme }} title="待办"><Icon name="status/pending" /><span>待办</span>{!!todo && <span className="sidebar-count">{todo}</span>}</Link>
       <div className="tree-caption">工作</div>
       <Link className="module-item" to="/studies" search={{ theme }} activeOptions={{ exact: true }} title="工程"><Icon name="object/folder" /><span>工程</span></Link>
-      {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : <>
+      {indexError && <div className="tree-empty" role="status">{navigationIndex ? '目录更新失败，暂显示上次读取结果。' : '工程与型号分类读取失败。'}<Button size="compact" variant="ghost" onClick={retryIndexes}>重新读取目录</Button></div>}
+      {!navigationIndex ? !indexError && <div className="tree-empty" aria-live="polite">正在读取工程与型号</div> : <>
         {/* 只列最近几个，当前打开的始终在列；其余到列表页找，侧栏不随数量无限变长 */}
         {recent(projects, (project) => text(project.id) === activeProject).map(project => {
           const id = text(project.id), count = (studies.data?.items || []).filter(row => row.parent?.id === id).length;
@@ -102,13 +115,13 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
         {projects.length > SHOWN && <Link className="tree-row tree-more" to="/studies" search={{ theme }}>全部 {projects.length} 个工程</Link>}
       </>}
       <Link className="module-item" to="/types" search={{ theme }} activeOptions={{ exact: true }} title="型号设计"><Icon name="nav/cable-type" /><span>型号设计</span></Link>
-      {recent(types.data || [], (row) => text(row.id) === activeType).map(row => {
+      {recent(typeRows, (row) => text(row.id) === activeType).map(row => {
         const wid = text(row.id);
         return <Link key={wid} className="tree-row tree-object" to="/types/$wid/$module/$tab" params={{ wid, module: 'structure', tab: 'table' }} search={{ theme }} aria-current={wid === activeType ? 'page' : undefined} title={text(row.name)}>
           <span className="tree-label">{text(row.name)}</span>
         </Link>;
       })}
-      {(types.data || []).length > SHOWN && <Link className="tree-row tree-more" to="/types" search={{ theme }}>全部 {(types.data || []).length} 个型号设计</Link>}
+      {typeRows.length > SHOWN && <Link className="tree-row tree-more" to="/types" search={{ theme }}>全部 {typeRows.length} 个型号设计</Link>}
       <div className="tree-caption">资源</div>
       <Link className="module-item" to="/resources/cables" search={{ theme }} aria-current={at('/resources/cables')} title="电缆型号版本"><Icon name="resource/cable-type" /><span>电缆型号版本</span></Link>
       <Link className="module-item" to="/resources/$group" params={{ group: 'materials' }} search={{ theme }} aria-current={at('/resources/materials')} title="材料与部件"><Icon name="resource/material" /><span>材料与部件</span></Link>

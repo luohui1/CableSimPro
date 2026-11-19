@@ -7,6 +7,7 @@ import {
   ApiError,
 } from "@/api/client";
 import { savedDomain, type DomainDocument } from "@/lib/domain-fields";
+import { pickSavedCase } from "./saved-case";
 import {
   sectionGeometry,
   type SectionGeometry,
@@ -52,16 +53,10 @@ export function temperatureView(
     record(value, "工况"),
   );
   const reference = text(optionalRecord(run.convergence).reference_case_id);
-  const chosen =
-    cases.find(
-      (value) =>
-        (value.case_id === preferredCase || value.case_id === reference) &&
-        optionalRecord(value.artifacts)["x-cablesim.temperature-field"],
-    ) ||
-    cases.find(
-      (value) =>
-        optionalRecord(value.artifacts)["x-cablesim.temperature-field"],
-    );
+  const chosen = pickSavedCase(
+    cases.filter(value => optionalRecord(value.artifacts)["x-cablesim.temperature-field"]),
+    preferredCase, reference,
+  );
   if (!chosen) return undefined;
   const status = optionalRecord(
     optionalRecord(run.artifact_status)[text(chosen.case_id)],

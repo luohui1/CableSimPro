@@ -215,7 +215,7 @@ def test_real_requirement_basis_and_executor_use_220kv_tables_without_pass_claim
             result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
                 {'case_id': 'extra-high', 'input': document, 'parameters': parameters}])
             assert result.cases[0].status == 'succeeded', result.cases[0].error
-            assert (result.plugin_version, result.method_version) == ('1.8.6', '1.8.5')
+            assert (result.plugin_version, result.method_version) == ('1.8.7', '1.8.5')
             return result.cases[0].artifacts['x-cablesim.standard-check']
 
         checked = execute(document, parameters)
@@ -295,7 +295,7 @@ def test_live_220kv_manufacturing_limits_use_exact_records_and_independent_input
         cases.append(('standard-construction', borrowed))
         result = app.state.research.executor.run('cablesim.standard-check', 'dimensions', [
             {'case_id': name, 'input': value, 'parameters': parameters} for name, value in cases])
-        assert (result.plugin_version, result.method_version) == ('1.8.6', '1.8.5')
+        assert (result.plugin_version, result.method_version) == ('1.8.7', '1.8.5')
         assert len(result.cases) == len(cases)
         outputs = {output.case_id: output for output in result.cases}
         for case_name, inputs in cases[:4]:

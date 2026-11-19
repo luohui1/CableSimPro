@@ -57,6 +57,19 @@ def test_explicit_engineering_conversion_examples(value, unit, role, text, targe
     assert raw_text(value) == original
 
 
+@pytest.mark.parametrize('value,unit,text', [
+    (9.99995, 'ohm/km', '10.00'), (9.9995e-05, 'ohm/km', '0.0001000'), (999.95, 'A/m', '1000'),
+])
+def test_rounding_that_carries_a_magnitude_keeps_four_digits_in_producer_and_verifier(value, unit, text):
+    # Ω/km keeps trailing zeros; 9.99995 rounded at 0.001 carries to "10.000" and a
+    # tiny value would read as unrounded, so both sides round once at the new magnitude.
+    display = number_display(value, unit)
+    assert display['text'] == text
+    cell = {'value': value, 'raw_text': raw_text(value), 'value_ref': {'source_id': 'record', 'pointer': '/value'},
+            'unit': unit, 'unit_ref': None, 'display': display}
+    assert check_engineering_number(cell, {'record': {'value': value}}) == display
+
+
 @pytest.mark.parametrize('value,answer', [(2.5, '2'), (3.5, '4'), (-2.5, '-2'),
     (-3.5, '-4'), (2.500001, '3'), (2.499999, '2'), (4.500001, '5')])
 def test_rounds_once_not_by_intermediate_decimal_places(value, answer):
