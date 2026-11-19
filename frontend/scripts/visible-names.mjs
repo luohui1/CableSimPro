@@ -25,6 +25,21 @@ export function internalTokens(text) {
     ),
   ].filter((value) => !allowed.test(value));
 }
+
+/** Preserve cited annex/example labels without exempting unrelated paths. */
+export function engineeringReferenceException(text, token) {
+  if (typeof text !== 'string' || !text.includes(token)) return null;
+  const citation = token === 'A/B'
+    ? { id: 'standard-annex', pattern: /附录\s+A\/B(?![A-Za-z0-9_./\\-])/g }
+    : token === 'Case2/10'
+      ? { id: 'tb880-examples', pattern: /\bTB\s*880\s+Case2\/10(?![A-Za-z0-9_./\\-])/g }
+      : null;
+  if (!citation) return null;
+  // A second, uncited occurrence in the same node must still be reported.
+  const remaining = text.replace(citation.pattern, match => match.replace(token, ''));
+  return remaining.includes(token) ? null : citation.id;
+}
+
 export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
   const violations = [];
   for (const frame of includeFrames ? page.frames() : [page.mainFrame()]) {
@@ -68,7 +83,7 @@ export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
       .catch(() => []);
     for (const text of texts)
       for (const token of internalTokens(text))
-        violations.push({
+        if (!engineeringReferenceException(text, token)) violations.push({
           frame: frame === page.mainFrame() ? "页面" : "文档",
           token,
           text: text.slice(0, 200),

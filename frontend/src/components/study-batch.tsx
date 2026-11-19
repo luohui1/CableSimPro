@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   batchConfiguration,
@@ -33,6 +34,7 @@ import { Button } from "./ui/button";
 import { NumberField } from "./ui/number-field";
 import { Select } from "./ui/select";
 import type { InputSelection } from "./study-inputs";
+import "./study-batch.css";
 type Axis = components["schemas"]["Axis"];
 type AxisInput = {
   axis: Axis;
@@ -442,7 +444,7 @@ export function StudyBatch({
   if (tab === 'space' && readOnly) return <div data-module-state="historical"><EmptyState title="该运行未保存批量配置" description="请选择数据集记录查看固定输入。" /></div>;
   return (
     <div
-      className="input-module"
+      className="input-module study-batch"
       data-module-state={state}
       onKeyDown={(event) => {
         if (
@@ -497,6 +499,7 @@ export function StudyBatch({
           <div className="input-form-grid">
             <Select
               label="基准模块"
+              path="batch-source-module"
               disabled={readOnly || !!staged}
               value={editor.sourceModule || ""}
               options={(Array.isArray(meta.data?.source_modules)
@@ -789,8 +792,15 @@ export function StudyBatch({
       ) : (
         <QueryState
           query={chosenId ? dataset : history}
-          empty={!result && "尚无批量数据集"}
+          empty={false}
         >
+          {!result ? <EmptyState title="尚无批量数据集"
+            description={readOnly ? "此固定运行没有批量数据集记录。" : "先设置采样范围、来源和超算执行条件，再预检批量。"}
+            action={!readOnly ? <Link className="button button-primary button-standard"
+              to="/studies/$sid/$module/$tab" params={{ sid, module: "batch", tab: "space" }}
+              search={current => ({ ...current, workspace: wid, run: "", dataset: "" })}>
+              设置批量参数
+            </Link> : undefined} /> : <>
           <Toolbar>
             <Select
               label="数据集记录"
@@ -1056,6 +1066,7 @@ export function StudyBatch({
               </Toolbar>
             </>
           )}
+          </>}
         </QueryState>
       )}
       {(resume.error || exporting.error) && (

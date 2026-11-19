@@ -1,4 +1,5 @@
 import { numeric, optionalRecord, text } from "@/api/client";
+import { pickSavedCase } from "./saved-case";
 
 /**
  * 把一次运行里某个工况的导体温度（运行工况，插件给出的 SI 值）转成截面标注：
@@ -6,7 +7,7 @@ import { numeric, optionalRecord, text } from "@/api/client";
  */
 export function conductorAnnotations(run: Record<string, unknown> | undefined, caseId?: string) {
   const cases = (Array.isArray(optionalRecord(run?.output).cases) ? optionalRecord(run?.output).cases as unknown[] : []).map(optionalRecord);
-  const current = (caseId && cases.find((item) => text(item.case_id) === caseId)) || cases[0];
+  const current = pickSavedCase(cases, caseId);
   if (!current) return undefined;
   const temperatures = new Map<string, number>();
   for (const item of Array.isArray(current.results) ? current.results : []) {

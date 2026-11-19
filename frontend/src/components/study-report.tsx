@@ -10,6 +10,7 @@ import {
   text,
   responseData,
   message,
+  numeric,
   ApiError,
   optionalRecord,
 } from "@/api/client";
@@ -26,6 +27,8 @@ import { hpcJson } from '@/features/field/run-label';
 import { savedRunLabel } from './study-run-label';
 import { reportSectionImages } from './study-report-drawing';
 import { useFemEvidence } from './study-fem-conclusion';
+import { FormalExport } from './formal-export';
+import type { FormalSource } from '@/api/formal-deliveries';
 
 export function StudyReport(props: ComponentProps<typeof CurrentReport>) {
   const search = useSearch({ strict: false });
@@ -39,6 +42,8 @@ function CurrentReport({
   tab,
   dirty,
   onDelivery,
+  calculationLabel,
+  onReturnToCalculation,
   autoGenerate = false,
   onGenerateConsumed,
   cadImage, runs = [],
@@ -50,6 +55,8 @@ function CurrentReport({
   tab: string;
   dirty: boolean;
   onDelivery: (id: string) => void;
+  calculationLabel: string;
+  onReturnToCalculation: () => void;
   autoGenerate?: boolean;
   onGenerateConsumed?: () => void;
   cadImage?: CadImage;
@@ -67,6 +74,26 @@ function CurrentReport({
   useEffect(() => { setFemId(''); setIecId(''); }, [run?.id]);
   const methodOf = (value: Record<string, unknown>) => optionalRecord(value.method || optionalRecord(optionalRecord(value.snapshot).definition).method);
   const primaryFem = methodOf(run || {}).capability === 'iec-thermal-field';
+  // Formal deliveries require the *current* optimistic workspace revision,
+  // alongside the immutable run input/output hashes. Never reuse a draft or
+  // silently fall back to a revision embedded in an old run snapshot.
+  const formalWorkspace = useQuery({
+    queryKey: ['formal-delivery-workspace', wid], enabled: !!run && !dirty,
+    queryFn: async ({signal}) => record(await responseData(api.GET('/api/workspaces/{wid}', {
+      params: { path: { wid } }, signal,
+    })), '正式交付工程'),
+  });
+  const formalRevision = numeric(formalWorkspace.data?.revision);
+  const formalSource: FormalSource | null = !dirty && run?.integrity === 'verified'
+    && (run.status === 'succeeded' || run.status === 'partial')
+    && typeof run.id === 'string' && typeof run.input_digest === 'string'
+    && typeof run.output_digest === 'string' && formalRevision !== null
+      ? { workspace_id: wid, expected_revision: formalRevision,
+          runs: [{run_id: run.id, input_digest: run.input_digest, output_digest: run.output_digest}] } : null;
+  const ratingDriver = optionalRecord(optionalRecord(optionalRecord(run?.snapshot).definition).driver);
+  const ratingCases = Array.isArray(ratingDriver.cases) ? ratingDriver.cases : [];
+  const formalRating = ratingDriver.kind === 'batch' && ratingCases.length > 0
+    && ratingCases.every(item => optionalRecord(optionalRecord(item).metadata).kind === 'type-rating-table');
   const related = useQuery({
     queryKey: ['report-source-runs', wid], enabled: !did && !!run && !autoGenerate && !generating.current,
     queryFn: async ({signal}) => {
@@ -263,6 +290,7 @@ function CurrentReport({
         art="report"
         title="尚无可交付运行"
         description="计算书只从一次成功的运行生成。先在计算模块运行，再回到这里生成。"
+        action={<Button variant="primary" onClick={onReturnToCalculation}>返回{calculationLabel}</Button>}
       />
     );
   if (!current && !did)
@@ -290,6 +318,10 @@ function CurrentReport({
         <StatusMark kind={create.isPending ? 'running' : create.error && !cancelled ? 'error' : did ? 'current' : 'saved'} label={create.isPending ? '正在生成' : cancelled ? '已取消' : create.error ? '生成失败' : did ? '已生成 · 所选运行' : '所选运行'} />
         {create.isPending && <><span role="status">{progressLabels[text(generation?.stage)] || '正在准备'}</span><Button variant="ghost" size="compact" disabled={generation?.stage==='save' || generation?.state==='cancelled'} onClick={()=>void cancelGeneration().catch(error=>setPreviewError(error as Error))}>取消生成</Button></>}
         <div className="spacer" />
+        <FormalExport kind="calculation" alternativeKinds={formalRating ? ['rating_table', 'research_report'] : ['research_report']}
+          source={formalSource}
+          disabledReason={dirty ? '请先保存当前研究。' : create.isPending ? '当前计算书正在生成。' :
+            formalWorkspace.error ? message(formalWorkspace.error) : ''} />
         {!create.isPending && did ? (
           <>
           <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />

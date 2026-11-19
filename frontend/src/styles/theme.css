@@ -207,7 +207,7 @@ input { caret-color: var(--text); }
 .property-panel dl { display: flex; flex-direction: column; }
 .property-row { display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-compact); }
 .property-row dt { color: var(--text-secondary); font-size: var(--text-note); flex: none; }
-.property-row dd { margin-left: auto; display: flex; align-items: baseline; justify-content: flex-end; gap: var(--space-1); text-align: right; white-space: nowrap; font-size: var(--text-note); }
+.property-row dd { margin-left: auto; display: flex; flex-wrap: wrap; min-width: 0; align-items: baseline; justify-content: flex-end; gap: var(--space-1); text-align: right; white-space: normal; overflow-wrap: anywhere; font-size: var(--text-note); }
 .property-row.is-stacked { flex-direction: column; align-items: stretch; gap: var(--space-1); padding-block: var(--space-1); }
 .property-row.is-stacked dd { margin-left: 0; justify-content: flex-start; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .property-collapsed { padding: var(--space-1); display: flex; justify-content: center; }
@@ -228,7 +228,8 @@ input { caret-color: var(--text); }
 .symbol-running { border: 0; }
 .status-running { color: var(--text-secondary); }
 .status-error, .status-conflict, .status-invalid, .status-unsatisfied { color: var(--error); }
-.status-draft, .status-partial { color: var(--attention); }
+.status-draft, .status-partial { color: var(--text); }
+.status-draft .status-symbol, .status-partial .status-symbol { color: var(--attention); }
 .status-proposal { color: var(--agent); }
 .status-satisfied { color: var(--success); }
 .is-verdict .status-symbol { width: calc(var(--space-1) + var(--space-1) / 2); height: calc(var(--space-1) + var(--space-1) / 2); background: currentColor; border: 0; }

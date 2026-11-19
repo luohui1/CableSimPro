@@ -18,12 +18,16 @@ export function readinessSnapshot() {
   };
   const regions = [...document.querySelectorAll('.main-content,.provider-state')].filter(visible);
   const content = regions.some(e => e.innerText.trim().length > 0 || [...e.querySelectorAll('canvas,svg,input,textarea,table')].some(visible));
-  const busy = [...document.querySelectorAll('[aria-busy="true"],.route-skeleton,.skeleton-lines,.skeleton-bar,.route-progress[data-active="true"]')]
+  const busy = [...document.querySelectorAll('[aria-busy="true"],[data-type-state="loading"],.route-skeleton,.skeleton-lines,.skeleton-bar,.route-progress[data-active="true"]')]
     .filter(visible).map(e => ({ canvas: !!e.closest('.cad-viewport,.field-view,.type-canvas-frame'), selector: e.className?.baseVal ?? e.className, text: (e.innerText || e.getAttribute('aria-label') || '').trim().slice(0, 160) }));
   // Some older readers expose a status message without aria-busy. Do not wait for polling/networkidle.
   for (const e of document.querySelectorAll('[role="status"],.muted')) if (visible(e) && /^(正在读取|正在加载|正在打开)/.test(e.innerText.trim())) {
     busy.push({ canvas: !!e.closest('.cad-viewport,.field-view,.type-canvas-frame'), selector: e.className, text: e.innerText.trim().slice(0, 160) });
   }
+  const illustrations = [...document.querySelectorAll('.plugin-figure img')].filter(visible)
+    .map(e => ({ label: e.alt, complete: e.complete, ready: e.complete && e.naturalWidth > 0 }));
+  for (const illustration of illustrations) if (!illustration.complete)
+    busy.push({ canvas: false, selector: '.plugin-figure img', text: '正在读取方法示意图：' + illustration.label });
   const canvases = [...document.querySelectorAll('.cad-viewport,canvas.field-canvas')]
     .filter(visible).map(e => {
     const cad = e.matches('.cad-viewport'), canvas = cad ? e.querySelector('canvas') : e;
@@ -44,7 +48,8 @@ export function readinessSnapshot() {
   if (!canvases.length && /\/structure\/three\/?$/.test(location.pathname) && three && visible(three) && !three.querySelector('.state-inline,.state-view[role="alert"]'))
     canvases.push({ kind: '三维', ready: false, pendingMount: true, error: false });
   const errors = [...document.querySelectorAll('.state-view[role="alert"],.provider-state [role="alert"]')].filter(visible).map(e => e.innerText.trim());
-  return { content, busy, canvases, errors, mainReady: content && !busy.some(b => !b.canvas),
+  errors.push(...illustrations.filter(e => e.complete && !e.ready).map(e => '方法示意图读取失败：' + e.label));
+  return { content, busy, canvases, illustrations, errors, mainReady: content && !busy.some(b => !b.canvas),
     ready: content && !busy.length && canvases.every(c => c.ready || c.error || c.empty) };
 }
 
@@ -52,7 +57,7 @@ export function readinessSnapshot() {
 export async function installReadinessObserver(page) {
   await page.addInitScript(({ snapshot }) => {
     const inspect = (0, eval)('(' + snapshot + ')');
-    window.__loadAudit = { mainMs: null, frameMs: null, longTasks: [], workers: [], latest: null };
+    window.__loadAudit = { url: location.href, mainMs: null, frameMs: null, sampledAtMs: null, longTasks: [], workers: [], latest: null };
     const audit = window.__loadAudit;
     try { new PerformanceObserver(list => { for (const t of list.getEntries()) audit.longTasks.push({ startMs: t.startTime, durationMs: t.duration, name: t.name }); }).observe({ type: 'longtask', buffered: true }); } catch { /* Not supported by every engine. */ }
     // FieldView draws saved meshes with WebGL. An allocated blank canvas is not a frame.
@@ -66,10 +71,17 @@ export async function installReadinessObserver(page) {
         return result;
       };
     }
-    let mainCandidate = false, frameCandidate = false, queued = false;
+    let mainCandidate = false, frameCandidate = false, queued = false, currentUrl = location.href;
     function sample() {
       if (document.body) {
-        const state = inspect(); audit.latest = state;
+        // A client redirect can briefly paint the preceding workspace. Its
+        // ready timestamp cannot describe the target saved run or page.
+        if (currentUrl !== location.href) {
+          currentUrl = location.href; audit.url = currentUrl; audit.mainMs = null; audit.frameMs = null;
+          mainCandidate = false; frameCandidate = false;
+        }
+        const state = inspect(); audit.latest = state; audit.sampledAtMs = performance.now();
+        if (!state.mainReady) audit.mainMs = null;
         if (state.mainReady && mainCandidate && audit.mainMs === null) audit.mainMs = performance.now();
         mainCandidate = state.mainReady;
         if (state.canvases.length && state.canvases.every(c => c.ready) && frameCandidate && audit.frameMs === null) audit.frameMs = performance.now();
@@ -79,9 +91,14 @@ export async function installReadinessObserver(page) {
       else queued = false;
     }
     const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(sample); } };
-    new MutationObserver(schedule).observe(document, { childList: true, subtree: true, attributes: true,
-      attributeFilter: ['aria-busy', 'data-active', 'data-cad-ready', 'data-cad-state', 'data-audit-first-draw', 'class', 'hidden'] });
+    // Readiness depends on status text as well as element insertion. React may
+    // update an existing Text node without changing its parent's children.
+    new MutationObserver(schedule).observe(document, { childList: true, characterData: true, subtree: true, attributes: true,
+      attributeFilter: ['aria-busy', 'data-active', 'data-type-state', 'data-cad-ready', 'data-cad-state', 'data-audit-first-draw', 'class', 'hidden'] });
     addEventListener('DOMContentLoaded', schedule);
+    // Image completion changes a DOM property, not an observed attribute.
+    addEventListener('load', schedule, { capture: true });
+    addEventListener('error', schedule, { capture: true });
     addEventListener('scroll', schedule, { capture:true, passive:true });
     addEventListener('resize', schedule, { passive:true }); schedule();
   }, { snapshot: readinessSnapshot.toString() });
@@ -107,7 +124,13 @@ export async function waitForPageReady(page, { includeCanvas = true, timeout = 3
     }
     return state;
   } catch (error) {
-    const state = await page.evaluate(readinessSnapshot).catch(() => null);
+    const state = await page.evaluate(({ snapshot }) => {
+      const audit = window.__loadAudit;
+      return { actualUrl: location.href, now: performance.now(),
+        fresh: (0, eval)('(' + snapshot + ')')(),
+        observed: audit ? { url: audit.url, sampledAtMs: audit.sampledAtMs, mainMs: audit.mainMs,
+          frameMs: audit.frameMs, latest: audit.latest } : null };
+    }, { snapshot: readinessSnapshot.toString() }).catch(() => null);
     throw Error('页面未就绪：' + JSON.stringify(state) + '\n' + error.message);
   }
 }
