@@ -1,57 +1,59 @@
 3:"$Sreact.fragment"
-4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
-5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
-6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
-7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
-8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
-9:I[39756,["$4","$5","$6","$7","$8"],"default"]
-a:I[37457,["$4","$5","$6","$7","$8"],"default"]
-f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
-10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
-11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
-12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
-13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
-14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
-15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
-16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
-17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
-18:I[63508,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Mermaid"]
-19:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
-1a:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
-1b:I[44324,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"CodeBlock"]
-1c:I[44324,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Pre"]
-2a:"ViewportBoundary"
-2b:I[97367,["$4","$5","$6","$7","$8"],"$2a"]
-2c:"MetadataBoundary"
-2d:I[97367,["$4","$5","$6","$7","$8"],"$2c"]
-2e:"$Sreact.suspense"
-2f:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+4:"/CableSimPro/_next/static/chunks/3g75j_0bs722a.js"
+5:"/CableSimPro/_next/static/chunks/2oagijnovdded.js"
+6:"/CableSimPro/_next/static/chunks/433wbphdycpyh.js"
+7:"/CableSimPro/_next/static/chunks/3zsketc5g6m6z.js"
+8:"/CableSimPro/_next/static/chunks/44p5y7elpi1a1.js"
+9:I[339756,["$4","$5","$6","$7","$8"],"default"]
+a:I[837457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/17rosht-wqq05.js"
+10:"/CableSimPro/_next/static/chunks/3ftxm39its_86.js"
+11:"/CableSimPro/_next/static/chunks/2mt-uxmrf1voe.js"
+12:"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js"
+13:"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js"
+14:"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js"
+15:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsPage"]
+16:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsTitle"]
+17:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsDescription"]
+18:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsBody"]
+19:I[463508,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"Mermaid"]
+1a:I[494157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"Heading"]
+1b:I[647873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"default"]
+1c:I[144324,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"CodeBlock"]
+1d:I[144324,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"Pre"]
+2c:"ViewportBoundary"
+2d:I[897367,["$4","$5","$6","$7","$8"],"$2c"]
+2e:"MetadataBoundary"
+2f:I[897367,["$4","$5","$6","$7","$8"],"$2e"]
+30:"$Sreact.suspense"
+31:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
 c:X
 c:C
 d:X
-e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#三个协议","title":"三个协议"},{"depth":2,"url":"#sdk","title":"SDK"},{"depth":2,"url":"#开发环境","title":"开发环境"},{"depth":2,"url":"#接口参考","title":"接口参考"},{"depth":2,"url":"#宿主契约","title":"宿主契约"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"插件与开发总览"}],["$","$L16",null,{"children":"插件式架构、数据与运行协议、SDK、开发环境与接口参考。"}],["$","$L17",null,{"children":[["$","p",null,{"children":["CableSimPro 的宿主只提供工程底座：工程与版本、研究与运行快照、来源追溯、结果工件、交付文件和审批。",["$","strong",null,{"children":"所有计算方法都是插件"}],"，宿主不内置算法。这样每个结果都能追溯到具体的插件、方法版本和封签过的源码，新方法可以独立开发、验证和发行。"]}],"\n",["$","$L18",null,{"chart":"flowchart TB\r\n  subgraph 宿主\r\n    W[\"工程、研究与型号\"] --> P[\"预检与执行器\"]\r\n    P --> R[\"运行快照与结果工件\"]\r\n    R --> D[\"交付文件\"]\r\n  end\r\n  P -- \"cablesim.run/2<br/>request.json\" --> X[\"插件子进程\"]\r\n  X -- \"result.json + 工件\" --> P\r\n  M[\"plugin.json<br/>清单与封签\"] -.-> P"}],"\n",["$","$L19",null,{"as":"h2","id":"三个协议","children":"三个协议"}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"协议"}],["$","th",null,{"children":"作用"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"cablesim.plugin/2"}]}],["$","td",null,{"children":["插件清单：身份、运行方式、权限、资源、计算能力与封签。见",["$","$L1a",null,{"href":"./plugin-manifest/","children":"插件清单字段"}],"。"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"cablesim.domain/1"}]}],["$","td",null,{"children":"领域输入：电缆、敷设、负荷、环境和材料，全部为 SI 单位，每个数值可带来源。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"cablesim.run/2"}]}],["$","td",null,{"children":["子进程运行：宿主写 ",["$","code",null,{"children":"input/request.json"}],"，插件写 ",["$","code",null,{"children":"output/result.json"}],"，每个工况为 ",["$","code",null,{"children":"succeeded"}],"、",["$","code",null,{"children":"not_applicable"}]," 或 ",["$","code",null,{"children":"failed"}],"。"]}]]}]]}]]}]}],"\n",["$","$L19",null,{"as":"h2","id":"sdk","children":"SDK"}],"\n",["$","p",null,{"children":["插件与宿主共用的领域模型和仿真工件契约在仓库的 ",["$","code",null,{"children":"cablesim_sdk/"}]," 中，例如领域对象（",["$","code",null,{"children":"domain.py"}],"）、载流量结果（",["$","code",null,{"children":"ampacity.py"}],"）、参数单位（",["$","code",null,{"children":"parameter_units.py"}],"）和仿真工件（",["$","code",null,{"children":"simulation_artifacts.py"}],"）。物理工件的 JSON Schema 在 ",["$","code",null,{"children":"plugin-spec/"}]," 中。"]}],"\n",["$","$L19",null,{"as":"h2","id":"开发环境","children":"开发环境"}],"\n",["$","p",null,{"children":"在代码仓库根目录："}],"\n",["$","$L1b",null,{"className":"shiki shiki-themes github-light github-dark","style":{"--shiki-light":"#24292e","--shiki-dark":"#e1e4e8","--shiki-light-bg":"#fff","--shiki-dark-bg":"#24292e"},"tabIndex":"0","icon":"<svg viewBox=\"0 0 24 24\"><path d=\"m 4,4 a 1,1 0 0 0 -0.7070312,0.2929687 1,1 0 0 0 0,1.4140625 L 8.5859375,11 3.2929688,16.292969 a 1,1 0 0 0 0,1.414062 1,1 0 0 0 1.4140624,0 l 5.9999998,-6 a 1.0001,1.0001 0 0 0 0,-1.414062 L 4.7070312,4.2929687 A 1,1 0 0 0 4,4 Z m 8,14 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 8 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z\" fill=\"currentColor\" /></svg>","children":["$","$L1c",null,{"children":["$","code",null,{"children":[["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"python"}],["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" scripts/run_demo.py"}],["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"           # 构建界面并在 127.0.0.1:8100 启动，用发布种子生成示例"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"python"}],["$","span",null,{"style":{"--shiki-light":"#005CC5","--shiki-dark":"#79B8FF"},"children":" -m"}],["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" pytest"}],["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"                     # 后端测试与仓库卫生检查"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"python"}],"$L1d","$L1e","$L1f"]}]]}]}]}],"\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24"]}]]}],["$L25","$L26","$L27"],"$L28"]}],"p":"$@29","v":null,"s":"$d"}}]]
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L15",null,{"toc":[{"depth":2,"url":"#三个协议","title":"三个协议"},{"depth":2,"url":"#sdk","title":"SDK"},{"depth":2,"url":"#开发环境","title":"开发环境"},{"depth":2,"url":"#接口参考","title":"接口参考"},{"depth":2,"url":"#宿主契约","title":"宿主契约"}],"children":[["$","$L16",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"插件与开发总览"}],["$","$L17",null,{"children":"插件式架构、数据与运行协议、SDK、开发环境与接口参考。"}],["$","$L18",null,{"children":[["$","p",null,{"children":["CableSimPro 的宿主只提供工程底座：工程与版本、研究与运行快照、来源追溯、结果工件、交付文件和审批。",["$","strong",null,{"children":"所有计算方法都是插件"}],"，宿主不内置算法。这样每个结果都能追溯到具体的插件、方法版本和封签过的源码，新方法可以独立开发、验证和发行。"]}],"\n",["$","$L19",null,{"chart":"flowchart TB\r\n  subgraph 宿主\r\n    W[\"工程、研究与型号\"] --> P[\"预检与执行器\"]\r\n    P --> R[\"运行快照与结果工件\"]\r\n    R --> D[\"交付文件\"]\r\n  end\r\n  P -- \"cablesim.run/2<br/>request.json\" --> X[\"插件子进程\"]\r\n  X -- \"result.json + 工件\" --> P\r\n  M[\"plugin.json<br/>清单与封签\"] -.-> P"}],"\n",["$","$L1a",null,{"as":"h2","id":"三个协议","children":"三个协议"}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"协议"}],["$","th",null,{"children":"作用"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"cablesim.plugin/2"}]}],["$","td",null,{"children":["插件清单：身份、运行方式、权限、资源、计算能力与封签。见",["$","$L1b",null,{"href":"./plugin-manifest/","children":"插件清单字段"}],"。"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"cablesim.domain/1"}]}],["$","td",null,{"children":"领域输入：电缆、敷设、负荷、环境和材料，全部为 SI 单位，每个数值可带来源。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"cablesim.run/2"}]}],["$","td",null,{"children":["子进程运行：宿主写 ",["$","code",null,{"children":"input/request.json"}],"，插件写 ",["$","code",null,{"children":"output/result.json"}],"，每个工况为 ",["$","code",null,{"children":"succeeded"}],"、",["$","code",null,{"children":"not_applicable"}]," 或 ",["$","code",null,{"children":"failed"}],"。"]}]]}]]}]]}]}],"\n",["$","$L1a",null,{"as":"h2","id":"sdk","children":"SDK"}],"\n",["$","p",null,{"children":["插件与宿主共用的领域模型和仿真工件契约在仓库的 ",["$","code",null,{"children":"cablesim_sdk/"}]," 中，例如领域对象（",["$","code",null,{"children":"domain.py"}],"）、载流量结果（",["$","code",null,{"children":"ampacity.py"}],"）、参数单位（",["$","code",null,{"children":"parameter_units.py"}],"）和仿真工件（",["$","code",null,{"children":"simulation_artifacts.py"}],"）。物理工件的 JSON Schema 在 ",["$","code",null,{"children":"plugin-spec/"}]," 中。"]}],"\n",["$","$L1a",null,{"as":"h2","id":"开发环境","children":"开发环境"}],"\n",["$","p",null,{"children":"在代码仓库根目录："}],"\n",["$","$L1c",null,{"className":"shiki shiki-themes github-light github-dark","style":{"--shiki-light":"#24292e","--shiki-dark":"#e1e4e8","--shiki-light-bg":"#fff","--shiki-dark-bg":"#24292e"},"tabIndex":"0","icon":"<svg viewBox=\"0 0 24 24\"><path d=\"m 4,4 a 1,1 0 0 0 -0.7070312,0.2929687 1,1 0 0 0 0,1.4140625 L 8.5859375,11 3.2929688,16.292969 a 1,1 0 0 0 0,1.414062 1,1 0 0 0 1.4140624,0 l 5.9999998,-6 a 1.0001,1.0001 0 0 0 0,-1.414062 L 4.7070312,4.2929687 A 1,1 0 0 0 4,4 Z m 8,14 a 1,1 0 0 0 -1,1 1,1 0 0 0 1,1 h 8 a 1,1 0 0 0 1,-1 1,1 0 0 0 -1,-1 z\" fill=\"currentColor\" /></svg>","children":["$","$L1d",null,{"children":["$","code",null,{"children":[["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"python"}],["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" scripts/run_demo.py"}],["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"           # 构建界面并在 127.0.0.1:8100 启动，用发布种子生成示例"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"python"}],["$","span",null,{"style":{"--shiki-light":"#005CC5","--shiki-dark":"#79B8FF"},"children":" -m"}],["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" pytest"}],["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"                     # 后端测试与仓库卫生检查"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"python"}],"$L1e","$L1f","$L20"]}]]}]}]}],"\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25"]}]]}],["$L26","$L27","$L28","$L29"],"$L2a"]}],"p":"$@2b","v":null,"s":"$d"}}]]
 2:[["children",{"s":{"n":"slug","t":"oc","k":"develop","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
 1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
-0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L2b",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L2d",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2e",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"插件与开发总览 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"插件式架构、数据与运行协议、SDK、开发环境与接口参考。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L2f","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@30","v":null,"s":"$d"}},"a":"$@31","u":"$@32","b":"VFdhPxdEcqe-su-7Vvs9c"}
-33:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L2d",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L2f",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$30",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"插件与开发总览 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"插件式架构、数据与运行协议、SDK、开发环境与接口参考。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L31","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@32","v":null,"s":"$d"}},"a":"$@33","u":"$@34","b":"seiRgGfGSXD_Jqq7KEExg"}
+35:I[897367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
 :HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
-1d:["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" scripts/plugin_sdk.py"}]
-1e:["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" verify"}]
-1f:["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"  # 校验全部插件清单与封签"}]
-20:["$","p",null,{"children":["有限元、批量仿真等原生回归在 Slurm 集群上运行（",["$","code",null,{"children":"python scripts/run_plugin_tests_hpc.py"}],"），不在本机执行原生求解器。仓库约定见根目录的 ",["$","code",null,{"children":"AGENTS.md"}],"。"]}]
-21:["$","$L19",null,{"as":"h2","id":"接口参考","children":"接口参考"}]
-22:["$","p",null,{"children":["宿主的全部 HTTP 接口由 FastAPI 自动描述，本站把它生成为",["$","$L1a",null,{"href":"./api/","children":"接口参考"}],"，按功能分组列出每个接口的路径、参数、请求体和响应，并附 curl 调用示例。接口参考的页面框架和接口摘要来自自动生成，为英文。接口与界面按钮、Agent 工具使用的是同一套接口。"]}]
-23:["$","$L19",null,{"as":"h2","id":"宿主契约","children":"宿主契约"}]
-24:["$","p",null,{"children":["侧栏“宿主契约”收录已经实现的宿主接口约定，例如",["$","$L1a",null,{"href":"./host/formal-deliveries/","children":"正式交付文件契约"}],"。"]}]
-25:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
-26:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
-27:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
-28:["$","$L33",null,{"children":["$","$2e",null,{"name":"Next.MetadataOutlet","children":"$@34"}]}]
-32:true
+1e:["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" scripts/plugin_sdk.py"}]
+1f:["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":" verify"}]
+20:["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"  # 校验全部插件清单与封签"}]
+21:["$","p",null,{"children":["有限元、批量仿真等原生回归在 Slurm 集群上运行（",["$","code",null,{"children":"python scripts/run_plugin_tests_hpc.py"}],"），不在本机执行原生求解器。仓库约定见根目录的 ",["$","code",null,{"children":"AGENTS.md"}],"。"]}]
+22:["$","$L1a",null,{"as":"h2","id":"接口参考","children":"接口参考"}]
+23:["$","p",null,{"children":["宿主的全部 HTTP 接口由 FastAPI 自动描述，本站把它生成为",["$","$L1b",null,{"href":"./api/","children":"接口参考"}],"，按功能分组列出每个接口的路径、参数、请求体和响应，并附 curl 调用示例。接口参考的页面框架和接口摘要来自自动生成，为英文。接口与界面按钮、Agent 工具使用的是同一套接口。"]}]
+24:["$","$L1a",null,{"as":"h2","id":"宿主契约","children":"宿主契约"}]
+25:["$","p",null,{"children":["侧栏“宿主契约”收录已经实现的宿主接口约定，例如",["$","$L1b",null,{"href":"./host/formal-deliveries/","children":"正式交付文件契约"}],"。"]}]
+26:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+27:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js","async":true}]
+28:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js","async":true}]
+29:["$","script","script-2",{"src":"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js","async":true}]
+2a:["$","$L35",null,{"children":["$","$30",null,{"name":"Next.MetadataOutlet","children":"$@36"}]}]
+34:true
 d:300
-34:null
+36:null
 d:C
-31:0
+33:0
 b:"$undefined"
-30:"$undefined"
-29:"$undefined"
+32:"$undefined"
+2b:"$undefined"

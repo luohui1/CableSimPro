@@ -1,67 +1,69 @@
 3:"$Sreact.fragment"
-4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
-5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
-6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
-7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
-8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
-9:I[39756,["$4","$5","$6","$7","$8"],"default"]
-a:I[37457,["$4","$5","$6","$7","$8"],"default"]
-f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
-10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
-11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
-12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
-13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
-14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
-15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
-16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
-17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
-18:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
-19:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
-34:"ViewportBoundary"
-35:I[97367,["$4","$5","$6","$7","$8"],"$34"]
-36:"MetadataBoundary"
-37:I[97367,["$4","$5","$6","$7","$8"],"$36"]
-38:"$Sreact.suspense"
-39:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+4:"/CableSimPro/_next/static/chunks/3g75j_0bs722a.js"
+5:"/CableSimPro/_next/static/chunks/2oagijnovdded.js"
+6:"/CableSimPro/_next/static/chunks/433wbphdycpyh.js"
+7:"/CableSimPro/_next/static/chunks/3zsketc5g6m6z.js"
+8:"/CableSimPro/_next/static/chunks/44p5y7elpi1a1.js"
+9:I[339756,["$4","$5","$6","$7","$8"],"default"]
+a:I[837457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/17rosht-wqq05.js"
+10:"/CableSimPro/_next/static/chunks/3ftxm39its_86.js"
+11:"/CableSimPro/_next/static/chunks/2mt-uxmrf1voe.js"
+12:"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js"
+13:"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js"
+14:"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js"
+15:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsPage"]
+16:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsTitle"]
+17:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsDescription"]
+18:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsBody"]
+19:I[647873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"default"]
+1a:I[494157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"Heading"]
+36:"ViewportBoundary"
+37:I[897367,["$4","$5","$6","$7","$8"],"$36"]
+38:"MetadataBoundary"
+39:I[897367,["$4","$5","$6","$7","$8"],"$38"]
+3a:"$Sreact.suspense"
+3b:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
 c:X
 c:C
 d:X
-e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#最近一轮更新","title":"最近一轮更新"},{"depth":3,"url":"#离线安装包自带-agent-对话68","title":"离线安装包自带 Agent 对话（#68）"},{"depth":3,"url":"#agent-对话接入工作台63","title":"Agent 对话接入工作台（#63）"},{"depth":3,"url":"#工作台四条主线67","title":"工作台四条主线（#67）"},{"depth":3,"url":"#温度收敛容差按温差显示65","title":"温度收敛容差按温差显示（#65）"},{"depth":3,"url":"#正式交付文件的显示规则66","title":"正式交付文件的显示规则（#66）"},{"depth":3,"url":"#收尾修正70","title":"收尾修正（#70）"},{"depth":2,"url":"#本版本包含","title":"本版本包含"},{"depth":3,"url":"#安装与运行","title":"安装与运行"},{"depth":3,"url":"#电缆型号","title":"电缆型号"},{"depth":3,"url":"#载流量与仿真","title":"载流量与仿真"},{"depth":3,"url":"#交付","title":"交付"},{"depth":3,"url":"#agent","title":"Agent"},{"depth":2,"url":"#文档","title":"文档"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"发布说明"}],["$","$L16",null,{"children":"当前版本包含的功能，以及最近一轮更新的内容。"}],["$","$L17",null,{"children":[["$","p",null,{"children":["当前为开发中的版本，宿主版本号 0.1.0 系列，工程输入格式第 1 版（",["$","code",null,{"children":"cablesim.domain/1"}],"）。在软件“设置 → 关于”中可以看到宿主版本、输入格式，发行包的 ",["$","code",null,{"children":"/api/release-info"}]," 还会返回构建编号和源码提交。各计算插件的版本见",["$","$L18",null,{"href":"../methods/catalog/","children":"方法清单"}],"。"]}],"\n",["$","$L19",null,{"as":"h2","id":"最近一轮更新","children":"最近一轮更新"}],"\n",["$","$L19",null,{"as":"h3","id":"离线安装包自带-agent-对话68","children":"离线安装包自带 Agent 对话（#68）"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"安装包带有固定版本的官方 Node.js 24.22.3 和 Agent 对话服务，安装和运行都不需要联网，也不需要系统中预装 Node.js 或 npm。"}],"\n",["$","li",null,{"children":[["$","code",null,{"children":"release.toml"}]," 新增 ",["$","code",null,{"children":"[agent]"}]," 一节：",["$","code",null,{"children":"enabled"}],"（默认 ",["$","code",null,{"children":"true"}],"）、",["$","code",null,{"children":"port"}],"（默认 ",["$","code",null,{"children":"8111"}],"）。"]}],"\n",["$","li",null,{"children":"对话服务只监听本机，拿不到任何模型密钥；没有启动成功时，工作台其余功能照常可用。"}],"\n",["$","li",null,{"children":["模型只需配置一处，优先顺序为“设置 → AI 模型” > ",["$","code",null,{"children":"release.toml [model]"}]," / ",["$","code",null,{"children":"CABLESIM_LLM_*"}]," > ",["$","code",null,{"children":"CABLE_STUDIO_MODEL_*"}],"。"]}],"\n",["$","li",null,{"children":["回退到不含 Agent 的旧版本前，须先从 ",["$","code",null,{"children":"release.toml"}]," 删除 ",["$","code",null,{"children":"[agent]"}]," 一节。"]}],"\n"]}],"\n",["$","p",null,{"children":["详见 ",["$","$L18",null,{"href":"../install/agent/","children":"Agent 对话服务"}],"。"]}],"\n",["$","$L19",null,{"as":"h3","id":"agent-对话接入工作台63","children":"Agent 对话接入工作台（#63）"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"工作台内的 Agent 对话：读取工程、研究、型号与运行结果；每一次建立、修改、运行和导出都是固定内容的提案，须由人在对话中接受后执行。"}],"\n",["$","li",null,{"children":"对话中建立研究、重算与对比、编制载流量表、核对型号并生成计算书和规格书；计算书与规格书经正式交付服务输出，含四个签栏和追溯页。"}],"\n",["$","li",null,{"children":"对话中导入厂家结构表：上传原件、保存预览、草稿入库、标准核对四步，逐步人工接受。"}],"\n",["$","li",null,{"children":"长对话自动压缩；上下文窗口与最大输出在“设置 → AI 模型”中设置。"}],"\n"]}],"\n",["$","$L19",null,{"as":"h3","id":"工作台四条主线67","children":"工作台四条主线（#67）"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"载流量研究、型号设计、资源库、仿真四条主线可以完整地用鼠标和键盘操作。"}],"\n",["$","li",null,{"children":"研究页直接导出正式交付文件（PDF / Excel）：固定保存来源，人工填写文件编号与版次，保留四个签栏。"}],"\n",["$","li",null,{"children":"查看已保存的选型运行时，所选候选与其运行、工况一起固定，结果、布置图、模型和返回操作都对应同一候选；保存的结构只读，右侧当前草稿与撤销保持独立。"}],"\n",["$","li",null,{"children":"“电缆型号版本”页新增“导入厂家结构表”（XLS / XLSX / CSV，五步向导）和“提取厂家 PDF”两个入口。"}],"\n",["$","li",null,{"children":"型号设计中标准核对运行失败时，显示该次运行的实际错误和缺失字段的位置。"}],"\n",["$","li",null,{"children":"资源编辑器支持“文献资料”来源；宿主新增密度、电阻率、体积热容和无量纲四类物理量。"}],"\n"]}],"\n",["$","$L19",null,{"as":"h3","id":"温度收敛容差按温差显示65","children":"温度收敛容差按温差显示（#65）"}],"\n",["$","p",null,{"children":"迭代计算的温度收敛容差是温差，现在以 K 显示和输入（此前误按绝对温度显示为带 −273.15 偏移的 °C）。初始温度、环境温度等绝对温度仍以 °C 显示。计算本身不受影响。涉及的插件发行："}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"插件"}],["$","th",null,{"children":"新发行"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["电缆有限元仿真（",["$","code",null,{"children":"cablesim.simulation"}],"）"]}],["$","td",null,{"children":"1.7.2"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["IEC 60287 载流量（",["$","code",null,{"children":"cablesim.iec60287"}],"）"]}],["$","td",null,{"children":"1.2.1"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["混合载流量研究（",["$","code",null,{"children":"cablesim.hybrid-rating"}],"）"]}],["$","td",null,{"children":"1.1.1"}]]}],"$L1a"]}]]}]}],"\n","$L1b","\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29","\n","$L2a","\n","$L2b","\n","$L2c","\n","$L2d","\n","$L2e"]}]]}],["$L2f","$L30","$L31"],"$L32"]}],"p":"$@33","v":null,"s":"$d"}}]]
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L15",null,{"toc":[{"depth":2,"url":"#最近一轮更新","title":"最近一轮更新"},{"depth":3,"url":"#离线安装包自带-agent-对话68","title":"离线安装包自带 Agent 对话（#68）"},{"depth":3,"url":"#agent-对话接入工作台63","title":"Agent 对话接入工作台（#63）"},{"depth":3,"url":"#工作台四条主线67","title":"工作台四条主线（#67）"},{"depth":3,"url":"#温度收敛容差按温差显示65","title":"温度收敛容差按温差显示（#65）"},{"depth":3,"url":"#正式交付文件的显示规则66","title":"正式交付文件的显示规则（#66）"},{"depth":3,"url":"#收尾修正70","title":"收尾修正（#70）"},{"depth":2,"url":"#本版本包含","title":"本版本包含"},{"depth":3,"url":"#安装与运行","title":"安装与运行"},{"depth":3,"url":"#电缆型号","title":"电缆型号"},{"depth":3,"url":"#载流量与仿真","title":"载流量与仿真"},{"depth":3,"url":"#交付","title":"交付"},{"depth":3,"url":"#agent","title":"Agent"},{"depth":2,"url":"#文档","title":"文档"}],"children":[["$","$L16",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"发布说明"}],["$","$L17",null,{"children":"当前版本包含的功能，以及最近一轮更新的内容。"}],["$","$L18",null,{"children":[["$","p",null,{"children":["当前为开发中的版本，宿主版本号 0.1.0 系列，工程输入格式第 1 版（",["$","code",null,{"children":"cablesim.domain/1"}],"）。在软件“设置 → 关于”中可以看到宿主版本、输入格式，发行包的 ",["$","code",null,{"children":"/api/release-info"}]," 还会返回构建编号和源码提交。各计算插件的版本见",["$","$L19",null,{"href":"../methods/catalog/","children":"方法清单"}],"。"]}],"\n",["$","$L1a",null,{"as":"h2","id":"最近一轮更新","children":"最近一轮更新"}],"\n",["$","$L1a",null,{"as":"h3","id":"离线安装包自带-agent-对话68","children":"离线安装包自带 Agent 对话（#68）"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"安装包带有固定版本的官方 Node.js 24.22.3 和 Agent 对话服务，安装和运行都不需要联网，也不需要系统中预装 Node.js 或 npm。"}],"\n",["$","li",null,{"children":[["$","code",null,{"children":"release.toml"}]," 新增 ",["$","code",null,{"children":"[agent]"}]," 一节：",["$","code",null,{"children":"enabled"}],"（默认 ",["$","code",null,{"children":"true"}],"）、",["$","code",null,{"children":"port"}],"（默认 ",["$","code",null,{"children":"8111"}],"）。"]}],"\n",["$","li",null,{"children":"对话服务只监听本机，拿不到任何模型密钥；没有启动成功时，工作台其余功能照常可用。"}],"\n",["$","li",null,{"children":["模型只需配置一处，优先顺序为“设置 → AI 模型” > ",["$","code",null,{"children":"release.toml [model]"}]," / ",["$","code",null,{"children":"CABLESIM_LLM_*"}]," > ",["$","code",null,{"children":"CABLE_STUDIO_MODEL_*"}],"。"]}],"\n",["$","li",null,{"children":["回退到不含 Agent 的旧版本前，须先从 ",["$","code",null,{"children":"release.toml"}]," 删除 ",["$","code",null,{"children":"[agent]"}]," 一节。"]}],"\n"]}],"\n",["$","p",null,{"children":["详见 ",["$","$L19",null,{"href":"../install/agent/","children":"Agent 对话服务"}],"。"]}],"\n",["$","$L1a",null,{"as":"h3","id":"agent-对话接入工作台63","children":"Agent 对话接入工作台（#63）"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"工作台内的 Agent 对话：读取工程、研究、型号与运行结果；每一次建立、修改、运行和导出都是固定内容的提案，须由人在对话中接受后执行。"}],"\n",["$","li",null,{"children":"对话中建立研究、重算与对比、编制载流量表、核对型号并生成计算书和规格书；计算书与规格书经正式交付服务输出，含四个签栏和追溯页。"}],"\n",["$","li",null,{"children":"对话中导入厂家结构表：上传原件、保存预览、草稿入库、标准核对四步，逐步人工接受。"}],"\n",["$","li",null,{"children":"长对话自动压缩；上下文窗口与最大输出在“设置 → AI 模型”中设置。"}],"\n"]}],"\n",["$","$L1a",null,{"as":"h3","id":"工作台四条主线67","children":"工作台四条主线（#67）"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"载流量研究、型号设计、资源库、仿真四条主线可以完整地用鼠标和键盘操作。"}],"\n",["$","li",null,{"children":"研究页直接导出正式交付文件（PDF / Excel）：固定保存来源，人工填写文件编号与版次，保留四个签栏。"}],"\n",["$","li",null,{"children":"查看已保存的选型运行时，所选候选与其运行、工况一起固定，结果、布置图、模型和返回操作都对应同一候选；保存的结构只读，右侧当前草稿与撤销保持独立。"}],"\n",["$","li",null,{"children":"“电缆型号版本”页新增“导入厂家结构表”（XLS / XLSX / CSV，五步向导）和“提取厂家 PDF”两个入口。"}],"\n",["$","li",null,{"children":"型号设计中标准核对运行失败时，显示该次运行的实际错误和缺失字段的位置。"}],"\n",["$","li",null,{"children":"资源编辑器支持“文献资料”来源；宿主新增密度、电阻率、体积热容和无量纲四类物理量。"}],"\n"]}],"\n",["$","$L1a",null,{"as":"h3","id":"温度收敛容差按温差显示65","children":"温度收敛容差按温差显示（#65）"}],"\n",["$","p",null,{"children":"迭代计算的温度收敛容差是温差，现在以 K 显示和输入（此前误按绝对温度显示为带 −273.15 偏移的 °C）。初始温度、环境温度等绝对温度仍以 °C 显示。计算本身不受影响。涉及的插件发行："}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"插件"}],["$","th",null,{"children":"新发行"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["电缆有限元仿真（",["$","code",null,{"children":"cablesim.simulation"}],"）"]}],["$","td",null,{"children":"1.7.2"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["IEC 60287 载流量（",["$","code",null,{"children":"cablesim.iec60287"}],"）"]}],["$","td",null,{"children":"1.2.1"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["混合载流量研究（",["$","code",null,{"children":"cablesim.hybrid-rating"}],"）"]}],["$","td",null,{"children":"1.1.1"}]]}],"$L1b"]}]]}]}],"\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29","\n","$L2a","\n","$L2b","\n","$L2c","\n","$L2d","\n","$L2e","\n","$L2f"]}]]}],["$L30","$L31","$L32","$L33"],"$L34"]}],"p":"$@35","v":null,"s":"$d"}}]]
 2:[["children",{"s":{"n":"slug","t":"oc","k":"releases","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
 1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
-0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L35",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L37",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$38",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"发布说明 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"当前版本包含的功能，以及最近一轮更新的内容。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L39","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@3a","v":null,"s":"$d"}},"a":"$@3b","u":"$@3c","b":"VFdhPxdEcqe-su-7Vvs9c"}
-3d:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L37",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L39",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$3a",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"发布说明 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"当前版本包含的功能，以及最近一轮更新的内容。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L3b","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@3c","v":null,"s":"$d"}},"a":"$@3d","u":"$@3e","b":"seiRgGfGSXD_Jqq7KEExg"}
+3f:I[897367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
 :HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
-1a:["$","tr",null,{"children":[["$","td",null,{"children":["COMSOL 参考对照（",["$","code",null,{"children":"cablesim.comsol-bridge"}],"）"]}],["$","td",null,{"children":"1.0.4"}]]}]
-1b:["$","$L19",null,{"as":"h3","id":"正式交付文件的显示规则66","children":"正式交付文件的显示规则（#66）"}]
-1c:["$","p",null,{"children":["显示政策升级为 ",["$","code",null,{"children":"cablesim.engineering-display/2"}],"："]}]
-1d:["$","ul",null,{"children":["\n",["$","li",null,{"children":"热阻率、热阻等含温差的复合单位按 IEC 60287 写 K：K·m/W、W/(m·K)、J/(kg·K)、J/(m³·K)；绝对温度（°C）和温度系数（1/°C）不变。"}],"\n",["$","li",null,{"children":"正文不用 E 记数法：电容写 μF/km，电感写 mH/km，电阻率写 Ω·mm²/m，其余数值写普通小数。"}],"\n",["$","li",null,{"children":"规格书正文只列结构尺寸和每公里用料；建模长度、模型体积和材料密度移到追溯章节。"}],"\n"]}]
-1e:["$","p",null,{"children":["详见",["$","$L18",null,{"href":"../guide/deliverables/","children":"正式交付文件"}],"。"]}]
-1f:["$","$L19",null,{"as":"h3","id":"收尾修正70","children":"收尾修正（#70）"}]
-20:["$","ul",null,{"children":["\n",["$","li",null,{"children":"标准依据库尚未收录的条款统一显示“本库暂未收录”。标准核对插件发行 1.8.7，方法版本 1.8.5 不变，判定不变。"}],"\n",["$","li",null,{"children":["插件发行只改参数的显示单位、换算比例或偏移（SI 单位不变）时，属于展示变化，不再使已保存的结果变为历史结果；#65 改正温度容差显示后，已保存的有限元与电热耦合运行仍为当前结果。见",["$","$L18",null,{"href":"../install/upgrade-restore/#%E5%8D%87%E7%BA%A7%E5%90%8E%E5%B7%B2%E4%BF%9D%E5%AD%98%E7%9A%84%E7%BB%93%E6%9E%9C%E6%98%AF%E5%90%A6%E4%BB%8D%E7%84%B6%E6%9C%89%E6%95%88","children":"升级后已保存的结果是否仍然有效"}],"。"]}],"\n",["$","li",null,{"children":"修约进位到更高一位数量级时，按新的数量级保留四位有效数字，例如 9.99995 Ω/km 显示为 10.00；安装包附带的校验程序按同一规则核对。"}],"\n",["$","li",null,{"children":"资源编辑器可以录入长度、面积、温度、温差、线电阻、热阻率、热导率、电流、频率、密度、电阻率、体积热容和无量纲参数。"}],"\n"]}]
-21:["$","$L19",null,{"as":"h2","id":"本版本包含","children":"本版本包含"}]
-22:["$","$L19",null,{"as":"h3","id":"安装与运行","children":"安装与运行"}]
-23:["$","ul",null,{"children":["\n",["$","li",null,{"children":"Windows 10 / 11 x64 与 Linux x86_64 离线安装包：自带 Python 3.12 运行时、Node.js 运行时和全部依赖，安装与计算全程离线，不需要管理员权限。"}],"\n",["$","li",null,{"children":"升级前自动快照工程库，健康检查失败自动恢复；支持回退到上一版本。"}],"\n",["$","li",null,{"children":"工程库备份与恢复（界面、命令行与接口）。"}],"\n"]}]
-24:["$","$L19",null,{"as":"h3","id":"电缆型号","children":"电缆型号"}]
-25:["$","ul",null,{"children":["\n",["$","li",null,{"children":"厂家结构表导入：XLS / XLSX / CSV，工作表选择、列映射保存与复用、系列声明、逐行预览与逐项来源，人工确认后入库。填写系列声明时即检查同名系列，入库报错显示在对应按钮旁。"}],"\n",["$","li",null,{"children":"厂家 PDF 资料提取：逐页识别参数，保留页码与原文位置，候选值经人工逐项核对。"}],"\n",["$","li",null,{"children":"型号系列：批量标准核对、批量载流量计算、批量审核和独立改版；批量操作的结果显示在工具栏下方。"}],"\n",["$","li",null,{"children":"公开样本对照：各规格共用的说明在表格上方只写一次。"}],"\n",["$","li",null,{"children":"部件与研究模板：把已保存型号的部件或成功运行的研究定义冻结为参考草稿，人工确认后采用到另一个工程；冻结证据按工程单位显示。"}],"\n",["$","li",null,{"children":"型号设计：结构、执行标准、标准尺寸核对、电气参数、短路容量、载流量表、规格书的生成、评审与发布。"}],"\n"]}]
-26:["$","$L19",null,{"as":"h3","id":"载流量与仿真","children":"载流量与仿真"}]
-27:["$","ul",null,{"children":["\n",["$","li",null,{"children":"IEC 60287 稳态载流量：多回路直埋、排管与矩形回填，单芯与独立屏蔽三芯，护套与铠装损耗，交叉热源降额。"}],"\n",["$","li",null,{"children":"GB 50217 附录 D 载流量校正；简化热网络交叉校核。"}],"\n",["$","li",null,{"children":"有限元温度场、暂态、护套损耗与电热耦合（Slurm 超算），与 IEC 的对照及收敛证据。"}],"\n",["$","li",null,{"children":"运行记录、两次运行对比、参数扫描、问询选型。"}],"\n"]}]
-28:["$","$L19",null,{"as":"h3","id":"交付","children":"交付"}]
-29:["$","ul",null,{"children":["\n",["$","li",null,{"children":"计算书、规格书、载流量表和研究报告的正式交付文件：固定来源预览，PDF / Excel 导出，四个签栏与追溯章节，支持按工程或系列批量导出。"}],"\n",["$","li",null,{"children":"研究页和型号设计页直接导出，也可以经正式交付接口集成。"}],"\n"]}]
-2a:["$","$L19",null,{"as":"h3","id":"agent","children":"Agent"}]
-2b:["$","ul",null,{"children":["\n",["$","li",null,{"children":"工作台内的 Agent 对话，接入 OpenAI 兼容接口的模型，包括内网私有化部署的模型。"}],"\n",["$","li",null,{"children":"离线安装包自带 Agent 对话服务。"}],"\n"]}]
-2c:["$","$L19",null,{"as":"h2","id":"文档","children":"文档"}]
-2d:["$","ul",null,{"children":["\n",["$","li",null,{"children":["本文档站点随代码仓库构建，可离线部署，见",["$","$L18",null,{"href":"../install/docs-site/","children":"部署本文档站点"}],"。"]}],"\n",["$","li",null,{"children":["新增",["$","$L18",null,{"href":"../reference/faq/","children":"常见问题"}],"与",["$","$L18",null,{"href":"../reference/glossary/","children":"术语表"}],"。"]}],"\n"]}]
-2e:["$","p",null,{"children":["已知限制见",["$","$L18",null,{"href":"./limitations/","children":"已知限制"}],"。"]}]
-2f:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
-30:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
-31:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
-32:["$","$L3d",null,{"children":["$","$38",null,{"name":"Next.MetadataOutlet","children":"$@3e"}]}]
-3c:true
+1b:["$","tr",null,{"children":[["$","td",null,{"children":["COMSOL 参考对照（",["$","code",null,{"children":"cablesim.comsol-bridge"}],"）"]}],["$","td",null,{"children":"1.0.4"}]]}]
+1c:["$","$L1a",null,{"as":"h3","id":"正式交付文件的显示规则66","children":"正式交付文件的显示规则（#66）"}]
+1d:["$","p",null,{"children":["显示政策升级为 ",["$","code",null,{"children":"cablesim.engineering-display/2"}],"："]}]
+1e:["$","ul",null,{"children":["\n",["$","li",null,{"children":"热阻率、热阻等含温差的复合单位按 IEC 60287 写 K：K·m/W、W/(m·K)、J/(kg·K)、J/(m³·K)；绝对温度（°C）和温度系数（1/°C）不变。"}],"\n",["$","li",null,{"children":"正文不用 E 记数法：电容写 μF/km，电感写 mH/km，电阻率写 Ω·mm²/m，其余数值写普通小数。"}],"\n",["$","li",null,{"children":"规格书正文只列结构尺寸和每公里用料；建模长度、模型体积和材料密度移到追溯章节。"}],"\n"]}]
+1f:["$","p",null,{"children":["详见",["$","$L19",null,{"href":"../guide/deliverables/","children":"正式交付文件"}],"。"]}]
+20:["$","$L1a",null,{"as":"h3","id":"收尾修正70","children":"收尾修正（#70）"}]
+21:["$","ul",null,{"children":["\n",["$","li",null,{"children":"标准依据库尚未收录的条款统一显示“本库暂未收录”。标准核对插件发行 1.8.7，方法版本 1.8.5 不变，判定不变。"}],"\n",["$","li",null,{"children":["插件发行只改参数的显示单位、换算比例或偏移（SI 单位不变）时，属于展示变化，不再使已保存的结果变为历史结果；#65 改正温度容差显示后，已保存的有限元与电热耦合运行仍为当前结果。见",["$","$L19",null,{"href":"../install/upgrade-restore/#%E5%8D%87%E7%BA%A7%E5%90%8E%E5%B7%B2%E4%BF%9D%E5%AD%98%E7%9A%84%E7%BB%93%E6%9E%9C%E6%98%AF%E5%90%A6%E4%BB%8D%E7%84%B6%E6%9C%89%E6%95%88","children":"升级后已保存的结果是否仍然有效"}],"。"]}],"\n",["$","li",null,{"children":"修约进位到更高一位数量级时，按新的数量级保留四位有效数字，例如 9.99995 Ω/km 显示为 10.00；安装包附带的校验程序按同一规则核对。"}],"\n",["$","li",null,{"children":"资源编辑器可以录入长度、面积、温度、温差、线电阻、热阻率、热导率、电流、频率、密度、电阻率、体积热容和无量纲参数。"}],"\n"]}]
+22:["$","$L1a",null,{"as":"h2","id":"本版本包含","children":"本版本包含"}]
+23:["$","$L1a",null,{"as":"h3","id":"安装与运行","children":"安装与运行"}]
+24:["$","ul",null,{"children":["\n",["$","li",null,{"children":"Windows 10 / 11 x64 与 Linux x86_64 离线安装包：自带 Python 3.12 运行时、Node.js 运行时和全部依赖，安装与计算全程离线，不需要管理员权限。"}],"\n",["$","li",null,{"children":"升级前自动快照工程库，健康检查失败自动恢复；支持回退到上一版本。"}],"\n",["$","li",null,{"children":"工程库备份与恢复（界面、命令行与接口）。"}],"\n"]}]
+25:["$","$L1a",null,{"as":"h3","id":"电缆型号","children":"电缆型号"}]
+26:["$","ul",null,{"children":["\n",["$","li",null,{"children":"厂家结构表导入：XLS / XLSX / CSV，工作表选择、列映射保存与复用、系列声明、逐行预览与逐项来源，人工确认后入库。填写系列声明时即检查同名系列，入库报错显示在对应按钮旁。"}],"\n",["$","li",null,{"children":"厂家 PDF 资料提取：逐页识别参数，保留页码与原文位置，候选值经人工逐项核对。"}],"\n",["$","li",null,{"children":"型号系列：批量标准核对、批量载流量计算、批量审核和独立改版；批量操作的结果显示在工具栏下方。"}],"\n",["$","li",null,{"children":"公开样本对照：各规格共用的说明在表格上方只写一次。"}],"\n",["$","li",null,{"children":"部件与研究模板：把已保存型号的部件或成功运行的研究定义冻结为参考草稿，人工确认后采用到另一个工程；冻结证据按工程单位显示。"}],"\n",["$","li",null,{"children":"型号设计：结构、执行标准、标准尺寸核对、电气参数、短路容量、载流量表、规格书的生成、评审与发布。"}],"\n"]}]
+27:["$","$L1a",null,{"as":"h3","id":"载流量与仿真","children":"载流量与仿真"}]
+28:["$","ul",null,{"children":["\n",["$","li",null,{"children":"IEC 60287 稳态载流量：多回路直埋、排管与矩形回填，单芯与独立屏蔽三芯，护套与铠装损耗，交叉热源降额。"}],"\n",["$","li",null,{"children":"GB 50217 附录 D 载流量校正；简化热网络交叉校核。"}],"\n",["$","li",null,{"children":"有限元温度场、暂态、护套损耗与电热耦合（Slurm 超算），与 IEC 的对照及收敛证据。"}],"\n",["$","li",null,{"children":"运行记录、两次运行对比、参数扫描、问询选型。"}],"\n"]}]
+29:["$","$L1a",null,{"as":"h3","id":"交付","children":"交付"}]
+2a:["$","ul",null,{"children":["\n",["$","li",null,{"children":"计算书、规格书、载流量表和研究报告的正式交付文件：固定来源预览，PDF / Excel 导出，四个签栏与追溯章节，支持按工程或系列批量导出。"}],"\n",["$","li",null,{"children":"研究页和型号设计页直接导出，也可以经正式交付接口集成。"}],"\n"]}]
+2b:["$","$L1a",null,{"as":"h3","id":"agent","children":"Agent"}]
+2c:["$","ul",null,{"children":["\n",["$","li",null,{"children":"工作台内的 Agent 对话，接入 OpenAI 兼容接口的模型，包括内网私有化部署的模型。"}],"\n",["$","li",null,{"children":"离线安装包自带 Agent 对话服务。"}],"\n"]}]
+2d:["$","$L1a",null,{"as":"h2","id":"文档","children":"文档"}]
+2e:["$","ul",null,{"children":["\n",["$","li",null,{"children":["本文档站点随代码仓库构建，可离线部署，见",["$","$L19",null,{"href":"../install/docs-site/","children":"部署本文档站点"}],"。"]}],"\n",["$","li",null,{"children":["新增",["$","$L19",null,{"href":"../reference/faq/","children":"常见问题"}],"与",["$","$L19",null,{"href":"../reference/glossary/","children":"术语表"}],"。"]}],"\n"]}]
+2f:["$","p",null,{"children":["已知限制见",["$","$L19",null,{"href":"./limitations/","children":"已知限制"}],"。"]}]
+30:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+31:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js","async":true}]
+32:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js","async":true}]
+33:["$","script","script-2",{"src":"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js","async":true}]
+34:["$","$L3f",null,{"children":["$","$3a",null,{"name":"Next.MetadataOutlet","children":"$@40"}]}]
+3e:true
 d:300
-3e:null
+40:null
 d:C
-3b:0
+3d:0
 b:"$undefined"
-3a:"$undefined"
-33:"$undefined"
+3c:"$undefined"
+35:"$undefined"

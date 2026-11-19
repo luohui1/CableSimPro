@@ -1,31 +1,32 @@
 3:"$Sreact.fragment"
-4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
-5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
-6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
-7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
-8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
-9:I[39756,["$4","$5","$6","$7","$8"],"default"]
-a:I[37457,["$4","$5","$6","$7","$8"],"default"]
-f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
-10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
-11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
-12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
-13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
-14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
-15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
-16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
-17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
-18:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
-26:"ViewportBoundary"
-27:I[97367,["$4","$5","$6","$7","$8"],"$26"]
-28:"MetadataBoundary"
-29:I[97367,["$4","$5","$6","$7","$8"],"$28"]
-2a:"$Sreact.suspense"
-2b:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+4:"/CableSimPro/_next/static/chunks/3g75j_0bs722a.js"
+5:"/CableSimPro/_next/static/chunks/2oagijnovdded.js"
+6:"/CableSimPro/_next/static/chunks/433wbphdycpyh.js"
+7:"/CableSimPro/_next/static/chunks/3zsketc5g6m6z.js"
+8:"/CableSimPro/_next/static/chunks/44p5y7elpi1a1.js"
+9:I[339756,["$4","$5","$6","$7","$8"],"default"]
+a:I[837457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/17rosht-wqq05.js"
+10:"/CableSimPro/_next/static/chunks/3ftxm39its_86.js"
+11:"/CableSimPro/_next/static/chunks/2mt-uxmrf1voe.js"
+12:"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js"
+13:"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js"
+14:"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js"
+15:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsPage"]
+16:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsTitle"]
+17:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsDescription"]
+18:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsBody"]
+19:I[494157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"Heading"]
+28:"ViewportBoundary"
+29:I[897367,["$4","$5","$6","$7","$8"],"$28"]
+2a:"MetadataBoundary"
+2b:I[897367,["$4","$5","$6","$7","$8"],"$2a"]
+2c:"$Sreact.suspense"
+2d:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
 c:X
 c:C
 d:X
-19:T823,{
+1a:T823,{
   "schema": "cablesim.plugin/2",
   "id": "example.report-template",
   "version": "1.0.0",
@@ -109,17 +110,17 @@ d:X
     }
   ]
 }
-e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#报告模板report-template","title":"报告模板（report-template）"},{"depth":2,"url":"#agent-技能agent-skill","title":"Agent 技能（agent-skill）"},{"depth":2,"url":"#开发与验证","title":"开发与验证"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"插件示例"}],["$","$L16",null,{"children":"报告模板与 Agent 技能两类声明式插件的完整示例清单。"}],["$","$L17",null,{"children":[["$","p",null,{"children":["仓库 ",["$","code",null,{"children":"docs/plugins/examples/"}]," 提供两个",["$","strong",null,{"children":"声明式"}],"插件示例：它们不包含计算代码，只用清单声明内容，由宿主按规则使用。计算方法插件的完整写法可以参照仓库 ",["$","code",null,{"children":"plugins/"}]," 中的第一方插件，例如 ",["$","code",null,{"children":"plugins/cablesim.gb50217-correction/"}],"。下面的文件内容在构建时直接读取自仓库，与仓库保持一致。"]}],"\n",["$","$L18",null,{"as":"h2","id":"报告模板report-template","children":"报告模板（report-template）"}],"\n",["$","p",null,{"children":["能力 ",["$","code",null,{"children":"kind"}]," 为 ",["$","code",null,{"children":"report-template"}],"：声明计算书的章节、可引用的数据和版面模板。报告模板不能混入方法输出，也不能触发计算。"]}],"\n",["$","figure",null,{"className":"not-prose my-5 overflow-hidden border border-fd-foreground/60 bg-fd-card","children":[["$","figcaption",null,{"className":"border-b border-fd-foreground/40 bg-fd-background px-3.5 py-1.5 font-mono text-xs text-fd-muted-foreground","children":"docs/plugins/examples/report-template/plugin.json"}],["$","pre",null,{"className":"overflow-x-auto p-4 font-mono text-xs leading-relaxed text-fd-foreground","children":["$","code",null,{"children":"$19"}]}]]}],"\n","$L1a","\n","$L1b","\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20"]}]]}],["$L21","$L22","$L23"],"$L24"]}],"p":"$@25","v":null,"s":"$d"}}]]
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L15",null,{"toc":[{"depth":2,"url":"#报告模板report-template","title":"报告模板（report-template）"},{"depth":2,"url":"#agent-技能agent-skill","title":"Agent 技能（agent-skill）"},{"depth":2,"url":"#开发与验证","title":"开发与验证"}],"children":[["$","$L16",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"插件示例"}],["$","$L17",null,{"children":"报告模板与 Agent 技能两类声明式插件的完整示例清单。"}],["$","$L18",null,{"children":[["$","p",null,{"children":["仓库 ",["$","code",null,{"children":"docs/plugins/examples/"}]," 提供两个",["$","strong",null,{"children":"声明式"}],"插件示例：它们不包含计算代码，只用清单声明内容，由宿主按规则使用。计算方法插件的完整写法可以参照仓库 ",["$","code",null,{"children":"plugins/"}]," 中的第一方插件，例如 ",["$","code",null,{"children":"plugins/cablesim.gb50217-correction/"}],"。下面的文件内容在构建时直接读取自仓库，与仓库保持一致。"]}],"\n",["$","$L19",null,{"as":"h2","id":"报告模板report-template","children":"报告模板（report-template）"}],"\n",["$","p",null,{"children":["能力 ",["$","code",null,{"children":"kind"}]," 为 ",["$","code",null,{"children":"report-template"}],"：声明计算书的章节、可引用的数据和版面模板。报告模板不能混入方法输出，也不能触发计算。"]}],"\n",["$","figure",null,{"className":"not-prose my-5 overflow-hidden border border-fd-foreground/60 bg-fd-card","children":[["$","figcaption",null,{"className":"border-b border-fd-foreground/40 bg-fd-background px-3.5 py-1.5 font-mono text-xs text-fd-muted-foreground","children":"docs/plugins/examples/report-template/plugin.json"}],["$","pre",null,{"className":"overflow-x-auto p-4 font-mono text-xs leading-relaxed text-fd-foreground","children":["$","code",null,{"children":"$1a"}]}]]}],"\n","$L1b","\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20","\n","$L21"]}]]}],["$L22","$L23","$L24","$L25"],"$L26"]}],"p":"$@27","v":null,"s":"$d"}}]]
 2:[["children",{"s":{"n":"slug","t":"oc","k":"develop/examples","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
 1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
-0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L27",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L29",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2a",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"插件示例 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"报告模板与 Agent 技能两类声明式插件的完整示例清单。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L2b","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@2c","v":null,"s":"$d"}},"a":"$@2d","u":"$@2e","b":"VFdhPxdEcqe-su-7Vvs9c"}
-30:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
-31:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L29",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L2b",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2c",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"插件示例 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"报告模板与 Agent 技能两类声明式插件的完整示例清单。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L2d","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@2e","v":null,"s":"$d"}},"a":"$@2f","u":"$@30","b":"seiRgGfGSXD_Jqq7KEExg"}
+32:I[647873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"default"]
+33:I[897367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
 :HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
-1a:["$","figure",null,{"className":"not-prose my-5 overflow-hidden border border-fd-foreground/60 bg-fd-card","children":[["$","figcaption",null,{"className":"border-b border-fd-foreground/40 bg-fd-background px-3.5 py-1.5 font-mono text-xs text-fd-muted-foreground","children":"docs/plugins/examples/report-template/assets/template.html"}],["$","pre",null,{"className":"overflow-x-auto p-4 font-mono text-xs leading-relaxed text-fd-foreground","children":["$","code",null,{"children":"<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>结果与来源</title><h1>结果与来源</h1><p>声明示例；尚无模板运行时。结果、来源与局限由已核验上下文绑定，不在模板中计算。</p></html>\n"}]}]]}]
-1b:["$","$L18",null,{"as":"h2","id":"agent-技能agent-skill","children":"Agent 技能（agent-skill）"}]
-1c:["$","p",null,{"children":["能力 ",["$","code",null,{"children":"kind"}]," 为 ",["$","code",null,{"children":"agent-skill"}],"：声明一个 Agent 可以执行的多步任务，每一步引用宿主或其他插件已有的能力及输入绑定。技能只编排已有能力，不能放宽权限、跳过预检或代替人工批准。"]}]
-2f:T94d,{
+1b:["$","figure",null,{"className":"not-prose my-5 overflow-hidden border border-fd-foreground/60 bg-fd-card","children":[["$","figcaption",null,{"className":"border-b border-fd-foreground/40 bg-fd-background px-3.5 py-1.5 font-mono text-xs text-fd-muted-foreground","children":"docs/plugins/examples/report-template/assets/template.html"}],["$","pre",null,{"className":"overflow-x-auto p-4 font-mono text-xs leading-relaxed text-fd-foreground","children":["$","code",null,{"children":"<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>结果与来源</title><h1>结果与来源</h1><p>声明示例；尚无模板运行时。结果、来源与局限由已核验上下文绑定，不在模板中计算。</p></html>\n"}]}]]}]
+1c:["$","$L19",null,{"as":"h2","id":"agent-技能agent-skill","children":"Agent 技能（agent-skill）"}]
+1d:["$","p",null,{"children":["能力 ",["$","code",null,{"children":"kind"}]," 为 ",["$","code",null,{"children":"agent-skill"}],"：声明一个 Agent 可以执行的多步任务，每一步引用宿主或其他插件已有的能力及输入绑定。技能只编排已有能力，不能放宽权限、跳过预检或代替人工批准。"]}]
+31:T94d,{
   "schema": "cablesim.plugin/2",
   "id": "example.agent-skill",
   "version": "1.0.0",
@@ -214,19 +215,20 @@ e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$",
     }
   ]
 }
-1d:["$","figure",null,{"className":"not-prose my-5 overflow-hidden border border-fd-foreground/60 bg-fd-card","children":[["$","figcaption",null,{"className":"border-b border-fd-foreground/40 bg-fd-background px-3.5 py-1.5 font-mono text-xs text-fd-muted-foreground","children":"docs/plugins/examples/agent-skill/plugin.json"}],["$","pre",null,{"className":"overflow-x-auto p-4 font-mono text-xs leading-relaxed text-fd-foreground","children":["$","code",null,{"children":"$2f"}]}]]}]
-1e:["$","$L18",null,{"as":"h2","id":"开发与验证","children":"开发与验证"}]
-1f:["$","ol",null,{"children":["\n",["$","li",null,{"children":["在 ",["$","code",null,{"children":"plugins/<id>/"}]," 下放置 ",["$","code",null,{"children":"plugin.json"}],"、源码和资源；"]}],"\n",["$","li",null,{"children":["用 ",["$","code",null,{"children":"python scripts/plugin_sdk.py seal plugins/<id>/plugin.json --write"}]," 生成封签；"]}],"\n",["$","li",null,{"children":["用 ",["$","code",null,{"children":"python scripts/plugin_sdk.py verify"}]," 校验；"]}],"\n",["$","li",null,{"children":["在 ",["$","code",null,{"children":"tests/"}]," 或插件自带的测试中，用独立的解析解、手算或公开算例核对结果，并把用例写进清单的 ",["$","code",null,{"children":"validation"}],"。"]}],"\n"]}]
-20:["$","p",null,{"children":["字段说明见",["$","$L30",null,{"href":"../plugin-manifest/","children":"插件清单字段"}],"。"]}]
-21:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
-22:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
-23:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
-24:["$","$L31",null,{"children":["$","$2a",null,{"name":"Next.MetadataOutlet","children":"$@32"}]}]
-2e:true
+1e:["$","figure",null,{"className":"not-prose my-5 overflow-hidden border border-fd-foreground/60 bg-fd-card","children":[["$","figcaption",null,{"className":"border-b border-fd-foreground/40 bg-fd-background px-3.5 py-1.5 font-mono text-xs text-fd-muted-foreground","children":"docs/plugins/examples/agent-skill/plugin.json"}],["$","pre",null,{"className":"overflow-x-auto p-4 font-mono text-xs leading-relaxed text-fd-foreground","children":["$","code",null,{"children":"$31"}]}]]}]
+1f:["$","$L19",null,{"as":"h2","id":"开发与验证","children":"开发与验证"}]
+20:["$","ol",null,{"children":["\n",["$","li",null,{"children":["在 ",["$","code",null,{"children":"plugins/<id>/"}]," 下放置 ",["$","code",null,{"children":"plugin.json"}],"、源码和资源；"]}],"\n",["$","li",null,{"children":["用 ",["$","code",null,{"children":"python scripts/plugin_sdk.py seal plugins/<id>/plugin.json --write"}]," 生成封签；"]}],"\n",["$","li",null,{"children":["用 ",["$","code",null,{"children":"python scripts/plugin_sdk.py verify"}]," 校验；"]}],"\n",["$","li",null,{"children":["在 ",["$","code",null,{"children":"tests/"}]," 或插件自带的测试中，用独立的解析解、手算或公开算例核对结果，并把用例写进清单的 ",["$","code",null,{"children":"validation"}],"。"]}],"\n"]}]
+21:["$","p",null,{"children":["字段说明见",["$","$L32",null,{"href":"../plugin-manifest/","children":"插件清单字段"}],"。"]}]
+22:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+23:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js","async":true}]
+24:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js","async":true}]
+25:["$","script","script-2",{"src":"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js","async":true}]
+26:["$","$L33",null,{"children":["$","$2c",null,{"name":"Next.MetadataOutlet","children":"$@34"}]}]
+30:true
 d:300
-32:null
+34:null
 d:C
-2d:0
+2f:0
 b:"$undefined"
-2c:"$undefined"
-25:"$undefined"
+2e:"$undefined"
+27:"$undefined"

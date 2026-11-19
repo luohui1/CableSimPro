@@ -1,50 +1,46 @@
 3:"$Sreact.fragment"
-4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
-5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
-6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
-7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
-8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
-9:I[39756,["$4","$5","$6","$7","$8"],"default"]
-a:I[37457,["$4","$5","$6","$7","$8"],"default"]
-f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
-10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
-11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
-12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
-13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
-14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
-15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
-16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
-17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
-18:I[35272,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"VideoPlayer"]
-19:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
-1a:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
-23:"ViewportBoundary"
-24:I[97367,["$4","$5","$6","$7","$8"],"$23"]
-25:"MetadataBoundary"
-26:I[97367,["$4","$5","$6","$7","$8"],"$25"]
-27:"$Sreact.suspense"
-28:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+4:"/CableSimPro/_next/static/chunks/3g75j_0bs722a.js"
+5:"/CableSimPro/_next/static/chunks/2oagijnovdded.js"
+6:"/CableSimPro/_next/static/chunks/433wbphdycpyh.js"
+7:"/CableSimPro/_next/static/chunks/3zsketc5g6m6z.js"
+8:"/CableSimPro/_next/static/chunks/44p5y7elpi1a1.js"
+9:I[339756,["$4","$5","$6","$7","$8"],"default"]
+a:I[837457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/17rosht-wqq05.js"
+10:"/CableSimPro/_next/static/chunks/3ftxm39its_86.js"
+11:"/CableSimPro/_next/static/chunks/2mt-uxmrf1voe.js"
+12:"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js"
+13:"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js"
+14:"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js"
+15:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsPage"]
+16:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsTitle"]
+17:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsDescription"]
+18:I[298330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"DocsBody"]
+19:I[494157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"Heading"]
+1a:"ArchitectureTreeDiagram"
+1b:I[138563,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"$1a"]
+1c:I[235272,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"VideoPlayer"]
+1d:I[138563,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13","$14"],"SystemTreeMap"]
+1e:I[897367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+1f:"$Sreact.suspense"
+22:"ViewportBoundary"
+23:I[897367,["$4","$5","$6","$7","$8"],"$22"]
+24:"MetadataBoundary"
+25:I[897367,["$4","$5","$6","$7","$8"],"$24"]
+26:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
 c:X
 c:C
 d:X
-e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#快速上手含实操视频","title":"快速上手（含实操视频）"},{"depth":2,"url":"#按模块查阅","title":"按模块查阅"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"文档总览"}],["$","$L16",null,{"children":"面向电缆制造企业与科研院所的电缆设计、载流量计算、有限元仿真与工程智能体文档。"}],["$","$L17",null,{"children":[["$","p",null,{"children":"CableSimPro 将**电缆结构设计、IEC 60287 / GB 标准载流量校核、超算有限元热仿真与受控工程智能体（Agent）**整合在同一套可追溯工程库上。每一项计算结果均绑定输入快照、方法封签与版本，缺数据明确终止，审核签发由工程师确认。"}],"\n",["$","$L18",null,{"kind":"overview"}],"\n",["$","$L19",null,{"as":"h2","id":"快速上手含实操视频","children":"快速上手（含实操视频）"}],"\n",["$","div",null,{"children":[["$","$L1a",null,{"href":"./quickstart/factory/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"制造企业：从结构表到正式规格书"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"五步向导导入 Excel 结构表 → 逐项追溯原始行号 → 全系列批量核对与载流量计算 → 导出产品规格书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./quickstart/research/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"科研院所：从新建工程到计算书"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"新建 110 kV 品字形直埋研究 → 预检求解 → 修改土壤热阻率重算对比 → 预览并下载 PDF 计算书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./guide/agent/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"工程智能体（Agent）实操与边界"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"只读快照查询、“待你审阅”字段级修改提案卡、人工单步授权重算与带四级签栏正式计算书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]],"className":"grid grid-cols-2 gap-3 @container"}],"\n",["$","$L19",null,{"as":"h2","id":"按模块查阅","children":"按模块查阅"}],"\n",["$","div",null,{"children":[["$","$L1a",null,{"href":"./install/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"安装与部署"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"Windows / Linux 离线安装包、release.toml 配置、AI 模型接入、Slurm 超算接入、内网部署与备份恢复"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./guide/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"用户指南"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"型号库与结构表导入、型号设计、载流量研究与参数扫描、有限元仿真、正式交付文件与资源管理"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./methods/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"计算方法与依据"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"IEC 60287、GB 50217 校正、热网络交叉校核、产品标准核对、有限元对照及完整验证等级清单"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./develop/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"插件与二次开发"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":"$L1b"}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],"$L1c","$L1d"],"className":"grid grid-cols-2 gap-3 @container"}]]}]]}],["$L1e","$L1f","$L20"],"$L21"]}],"p":"$@22","v":null,"s":"$d"}}]]
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L15",null,{"toc":[{"depth":2,"url":"#一平台四层工程架构","title":"一、平台四层工程架构"},{"depth":2,"url":"#二平台全链路实机演示0142","title":["二、平台全链路实机演示（",["$","code",null,{"children":"01:42"}],"）"]},{"depth":2,"url":"#三全站文档树状导航4-层--6-大分支--三级目录","title":"三、全站文档树状导航（4 层 · 6 大分支 · 三级目录）"}],"children":[["$","$L16",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"文档总览与体系树"}],["$","$L17",null,{"children":"按「入门部署 → 业务指南 → 算法依据 → 插件扩展 → 工程边界」四层树状结构组织的完整文档地图。"}],["$","$L18",null,{"children":[["$","p",null,{"children":["CableSimPro 采用",["$","strong",null,{"children":"宿主底座与封签插件完全解耦"}],"的架构：宿主只管理工程版本、运行前预检、不可变快照、来源追溯与签审交付，全部电热计算与标准核对均由独立封签插件执行；缺数据明确终止，AI 提案须经工程师单步确认。"]}],"\n",["$","$L19",null,{"as":"h2","id":"一平台四层工程架构","children":"一、平台四层工程架构"}],"\n",["$","$L1b",null,{}],"\n",["$","$L19",null,{"as":"h2","id":"二平台全链路实机演示0142","children":["二、平台全链路实机演示（",["$","code",null,{"children":"01:42"}],"）"]}],"\n",["$","$L1c",null,{"kind":"overview"}],"\n",["$","$L19",null,{"as":"h2","id":"三全站文档树状导航4-层--6-大分支--三级目录","children":"三、全站文档树状导航（4 层 · 6 大分支 · 三级目录）"}],"\n",["$","p",null,{"children":["左侧边栏已按相同的",["$","strong",null,{"children":"四层 × 六分支 × 三级可折叠树"}],"组织；你也可以直接在下方树状总览中展开或折叠任意分支，点击节点直达对应章节："]}],"\n",["$","$L1d",null,{}]]}]]}],[["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}],["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/2zc4ior6-mjkv.js","async":true}],["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/42yl1cfr8ywe5.js","async":true}],["$","script","script-2",{"src":"/CableSimPro/_next/static/chunks/1ji27exy0-8h0.js","async":true}]],["$","$L1e",null,{"children":["$","$1f",null,{"name":"Next.MetadataOutlet","children":"$@20"}]}]]}],"p":"$@21","v":null,"s":"$d"}}]]
 2:[["children",{"s":{"n":"slug","t":"oc","k":"","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
 1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
-0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L24",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L26",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$27",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"文档总览 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"面向电缆制造企业与科研院所的电缆设计、载流量计算、有限元仿真与工程智能体文档。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L28","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@29","v":null,"s":"$d"}},"a":"$@2a","u":"$@2b","b":"VFdhPxdEcqe-su-7Vvs9c"}
-2c:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
-:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
-1b:["$","p",null,{"children":"cablesim.plugin/2 清单规范、报告模板与 Agent 技能声明示例、宿主架构契约与 REST 接口参考"}]
-1c:["$","$L1a",null,{"href":"./reference/faq/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"常见问题与术语"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"安装排错、缺项拦截原因、结果口径区分与电缆热工符号对照"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]
-1d:["$","$L1a",null,{"href":"./releases/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"版本说明与适用边界"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"各版本功能范围与当前工程边界声明"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]
-1e:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
-1f:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
-20:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
-21:["$","$L2c",null,{"children":["$","$27",null,{"name":"Next.MetadataOutlet","children":"$@2d"}]}]
-2b:true
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L23",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L25",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1f",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"文档总览与体系树 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"按「入门部署 → 业务指南 → 算法依据 → 插件扩展 → 工程边界」四层树状结构组织的完整文档地图。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L26","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@27","v":null,"s":"$d"}},"a":"$@28","u":"$@29","b":"seiRgGfGSXD_Jqq7KEExg"}
+20:null
+29:true
 d:300
-2d:null
 d:C
-2a:0
+28:0
 b:"$undefined"
-29:"$undefined"
-22:"$undefined"
+27:"$undefined"
+21:"$undefined"
