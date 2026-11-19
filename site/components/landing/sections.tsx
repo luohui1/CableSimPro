@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import { AgentDemo } from './agent-demo';
 import { Reveal } from './motion-bits';
+import { SystemTreeMap } from '../system-tree-map';
 import { ThermalMatrix } from './thermal-matrix';
 
 // 插件清单（plugins/*/plugin.json）里实际引用的标准
@@ -239,15 +240,6 @@ const deploy = [
   { title: '超算求解', text: '有限元与批量仿真作业提交至 Slurm 集群，设有核时上限，结果连同收敛性证据一并取回。' },
 ];
 
-const docs = [
-  { title: '快速入门（含视频）', text: '按制造企业与科研院所两条主线完成首次实操。', href: '/docs/quickstart/factory/' },
-  { title: '安装与部署', text: '离线安装、参数配置、内网部署、超算与模型接入。', href: '/docs/install/' },
-  { title: '使用指南', text: '型号库、载流量研究、仿真、交付文件与 Agent。', href: '/docs/guide/' },
-  { title: '方法与依据', text: '各计算方法的原理、适用范围、验证等级与依据。', href: '/docs/methods/' },
-  { title: '插件与开发', text: '插件清单字段、声明式示例、宿主契约与 REST 接口。', href: '/docs/develop/' },
-  { title: '版本与适用边界', text: '版本更新说明、常见问题与当前已知限制。', href: '/docs/releases/' },
-];
-
 export function DeployAndDocs() {
   return (
     <section className="border-t border-fd-foreground/60">
@@ -270,24 +262,16 @@ export function DeployAndDocs() {
         </div>
 
         <Reveal className="mt-20">
-          <h2 className={heading}>文档导航</h2>
+          <h2 className={heading}>
+            全站文档<span className="whitespace-nowrap text-brand">树状体系导航</span>。
+          </h2>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-fd-muted-foreground">
+            全站 50 余篇技术文档按「入门与部署 → 工作台指南 → 计算方法依据 → 插件开发 → 工程边界」分级组织，点击任意分支即可展开查阅。
+          </p>
         </Reveal>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {docs.map((item, index) => (
-            <Reveal key={item.title} delay={(index % 3) * 0.06}>
-              <Link
-                href={item.href}
-                className="group flex h-full items-start justify-between gap-4 border border-fd-foreground/70 bg-fd-card px-5 py-4 transition-colors hover:bg-brand-soft"
-              >
-                <span>
-                  <span className="block font-display text-xl">{item.title}</span>
-                  <span className="mt-1 block text-[15px] text-fd-muted-foreground">{item.text}</span>
-                </span>
-                <ArrowRight className="mt-1 size-4 shrink-0 transition-transform group-hover:translate-x-1" />
-              </Link>
-            </Reveal>
-          ))}
-        </div>
+        <Reveal className="mt-8" delay={0.06}>
+          <SystemTreeMap compact />
+        </Reveal>
       </div>
     </section>
   );

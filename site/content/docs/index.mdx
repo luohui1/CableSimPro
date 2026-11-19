@@ -1,45 +1,20 @@
 ---
-title: "文档总览"
-description: "面向电缆制造企业与科研院所的电缆设计、载流量计算、有限元仿真与工程智能体文档。"
+title: "文档总览与体系树"
+description: "按「入门部署 → 业务指南 → 算法依据 → 插件扩展 → 工程边界」四层树状结构组织的完整文档地图。"
 ---
 
-CableSimPro 将**电缆结构设计、IEC 60287 / GB 标准载流量校核、超算有限元热仿真与受控工程智能体（Agent）**整合在同一套可追溯工程库上。每一项计算结果均绑定输入快照、方法封签与版本，缺数据明确终止，审核签发由工程师确认。
+CableSimPro 采用**宿主底座与封签插件完全解耦**的架构：宿主只管理工程版本、运行前预检、不可变快照、来源追溯与签审交付，全部电热计算与标准核对均由独立封签插件执行；缺数据明确终止，AI 提案须经工程师单步确认。
+
+## 一、平台四层工程架构
+
+<ArchitectureTreeDiagram />
+
+## 二、平台全链路实机演示（`01:42`）
 
 <VideoPlayer kind="overview" />
 
-## 快速上手（含实操视频）
+## 三、全站文档树状导航（4 层 · 6 大分支 · 三级目录）
 
-<Cards>
-  <Card title="制造企业：从结构表到正式规格书" href="./quickstart/factory/">
-    五步向导导入 Excel 结构表 → 逐项追溯原始行号 → 全系列批量核对与载流量计算 → 导出产品规格书
-  </Card>
-  <Card title="科研院所：从新建工程到计算书" href="./quickstart/research/">
-    新建 110 kV 品字形直埋研究 → 预检求解 → 修改土壤热阻率重算对比 → 预览并下载 PDF 计算书
-  </Card>
-  <Card title="工程智能体（Agent）实操与边界" href="./guide/agent/">
-    只读快照查询、“待你审阅”字段级修改提案卡、人工单步授权重算与带四级签栏正式计算书
-  </Card>
-</Cards>
+左侧边栏已按相同的**四层 × 六分支 × 三级可折叠树**组织；你也可以直接在下方树状总览中展开或折叠任意分支，点击节点直达对应章节：
 
-## 按模块查阅
-
-<Cards>
-  <Card title="安装与部署" href="./install/">
-    Windows / Linux 离线安装包、release.toml 配置、AI 模型接入、Slurm 超算接入、内网部署与备份恢复
-  </Card>
-  <Card title="用户指南" href="./guide/">
-    型号库与结构表导入、型号设计、载流量研究与参数扫描、有限元仿真、正式交付文件与资源管理
-  </Card>
-  <Card title="计算方法与依据" href="./methods/">
-    IEC 60287、GB 50217 校正、热网络交叉校核、产品标准核对、有限元对照及完整验证等级清单
-  </Card>
-  <Card title="插件与二次开发" href="./develop/">
-    cablesim.plugin/2 清单规范、报告模板与 Agent 技能声明示例、宿主架构契约与 REST 接口参考
-  </Card>
-  <Card title="常见问题与术语" href="./reference/faq/">
-    安装排错、缺项拦截原因、结果口径区分与电缆热工符号对照
-  </Card>
-  <Card title="版本说明与适用边界" href="./releases/">
-    各版本功能范围与当前工程边界声明
-  </Card>
-</Cards>
+<SystemTreeMap />

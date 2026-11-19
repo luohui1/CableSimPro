@@ -83,6 +83,14 @@
   --color-fd-muted-foreground: rgb(236 232 225 / 0.7);
 }
 
+/* 文档侧边栏：强化树状层级缩进引导线与分区标题辨识度 */
+#nd-sidebar [data-radix-collapsible-content] > div,
+#nd-sidebar ul ul {
+  border-left: 1px solid color-mix(in oklab, var(--color-fd-foreground) 18%, transparent);
+  margin-left: 0.65rem;
+  padding-left: 0.45rem;
+}
+
 html {
   scrollbar-gutter: stable;
 }

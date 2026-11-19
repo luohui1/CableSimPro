@@ -10,6 +10,7 @@ import { Mermaid } from '@/components/mermaid';
 import { OpenApiReference } from '@/components/openapi-reference';
 import { PluginCatalog } from '@/components/plugin-catalog';
 import { PluginMethods } from '@/components/plugin-methods';
+import { ArchitectureTreeDiagram, SystemTreeMap } from '@/components/system-tree-map';
 import { VideoPlayer } from '@/components/video-player';
 
 export function getMDXComponents(components?: MDXComponents) {
@@ -29,6 +30,8 @@ export function getMDXComponents(components?: MDXComponents) {
     ExampleCode,
     OpenApiReference,
     VideoPlayer,
+    SystemTreeMap,
+    ArchitectureTreeDiagram,
     ...components,
   } satisfies MDXComponents;
 }
