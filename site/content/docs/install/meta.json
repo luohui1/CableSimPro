@@ -1,0 +1,14 @@
+{
+  "title": "安装与部署",
+  "pages": [
+    "index",
+    "configuration",
+    "model",
+    "agent",
+    "hpc",
+    "intranet",
+    "docs-site",
+    "upgrade-restore",
+    "reference"
+  ]
+}

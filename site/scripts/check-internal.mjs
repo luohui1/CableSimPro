@@ -1,6 +1,6 @@
 // 公开前的内部信息检查：内部主机名、内网地址、本机路径、个人信息、密钥和内部过程记录。
-// 检查三处：站点内容源（src/content/docs，含从 docs/ 同步的页面）、生成数据（.generated/ 中的插件清单、
-// 示例与接口描述）和构建产物 dist/ 中的页面、站点地图等文本文件。
+// 检查三处：站点内容与首页组件源码（content/、components/、app/）、生成数据（.generated/ 中的插件清单、
+// 示例与接口描述）和构建产物 out/ 中的页面、预取数据与搜索索引。
 // 规则见 internal-check.json。发现任何一项即以退出码 1 结束，使构建失败。
 // 用法：node scripts/check-internal.mjs [--sources-only]
 import { existsSync } from 'node:fs';
@@ -82,26 +82,32 @@ const decode = (text) =>
     .replace(/&([a-z]+);/gi, (entity, name) => named[name.toLowerCase()] ?? entity);
 
 let scanned = 0;
-async function scanFiles(files, prepare = (text) => text) {
+async function scanFiles(files, prepare = (text, _file) => text) {
   for (const file of files) {
-    const text = prepare(await readFile(file, 'utf8'));
+    const text = prepare(await readFile(file, 'utf8'), file);
     scanned++;
     scan(text, (index) => `${relative(file)}:${lineOf(text, index)}`);
   }
 }
 
-await scanFiles(await walk(path.join(site, 'src/content/docs'), (f) => /\.(md|mdx)$/.test(f)));
+for (const folder of ['content', 'components', 'app', 'lib'])
+  await scanFiles(await walk(path.join(site, folder), (f) => /\.(md|mdx|tsx?|json|css)$/.test(f)));
 const generated = path.join(site, '.generated');
 if (existsSync(generated)) await scanFiles(await walk(generated, (f) => f.endsWith('.json')));
 
-const dist = path.join(site, 'dist');
+const dist = path.join(site, 'out');
 if (!process.argv.includes('--sources-only') && existsSync(dist)) {
-  // _astro/ 与 pagefind/ 是打包后的第三方库和压缩索引，索引内容与页面文字相同
-  const skip = (f) => [`${path.sep}_astro${path.sep}`, `${path.sep}pagefind${path.sep}`].some((dir) => f.includes(dir));
-  const pages = await walk(dist, (f) => /\.(html|xml|txt|json|svg|webmanifest)$/.test(f) && !skip(f));
-  await scanFiles(pages, (text) =>
-    decode(text.replace(/(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi, '$1$2').replace(/<style\b[\s\S]*?<\/style>/gi, ' ')),
-  );
+  // _next/static/ 是打包后的脚本与第三方库；页面文字都在 HTML、预取数据（.txt）和搜索索引（api/search）里
+  const skip = (f) => f.includes(`${path.sep}_next${path.sep}static${path.sep}`);
+  const pages = await walk(dist, (f) => (/\.(html|xml|txt|json|svg|webmanifest)$/.test(f) || f.endsWith(`${path.sep}api${path.sep}search`)) && !skip(f));
+  await scanFiles(pages, (text, file) => {
+    const stripped = text.replace(/(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi, '$1$2').replace(/<style\b[\s\S]*?<\/style>/gi, ' ');
+    const unescaped =
+      file.endsWith('.txt') || file.endsWith('.json') || file.endsWith(`${path.sep}api${path.sep}search`)
+        ? stripped.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+        : stripped;
+    return decode(unescaped);
+  });
 }
 
 const unique = [...new Map(findings.map((f) => [`${f.where}|${f.label}|${f.text}`, f])).values()];

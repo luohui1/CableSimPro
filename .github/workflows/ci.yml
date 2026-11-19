@@ -364,5 +364,5 @@ jobs:
         with:
           name: docs-site
           retention-days: 14
-          path: site/dist/
+          path: site/out/
           if-no-files-found: error

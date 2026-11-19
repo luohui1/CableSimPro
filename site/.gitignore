@@ -1,10 +1,19 @@
 # 依赖与构建输出
 node_modules/
-dist/
-.astro/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
 
 # 构建前由 scripts/prepare-content.mjs 生成：docs/ 的同步副本、插件与接口数据、品牌图标
 .generated/
+content/docs/_synced/
+content/docs/install/reference/
+content/docs/methods/notes/
+content/docs/develop/host/
 src/content/docs/_synced/
 src/assets/generated/
 public/favicon.svg
+public/videos/
+app/icon.svg
+.source/

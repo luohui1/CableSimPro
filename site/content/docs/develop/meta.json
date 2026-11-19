@@ -1,0 +1,10 @@
+{
+  "title": "插件与开发",
+  "pages": [
+    "index",
+    "plugin-manifest",
+    "examples",
+    "api",
+    "host"
+  ]
+}

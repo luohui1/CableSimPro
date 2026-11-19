@@ -51,7 +51,7 @@ jobs:
           npm run check:links
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: site/dist/
+          path: site/out/
   deploy:
     name: Deploy to GitHub Pages
     needs: build

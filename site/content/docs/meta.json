@@ -1,0 +1,19 @@
+{
+  "title": "CableSimPro 文档",
+  "pages": [
+    "index",
+    "---快速上手---",
+    "...quickstart",
+    "---安装与部署---",
+    "...install",
+    "---用户指南---",
+    "...guide",
+    "---方法与依据---",
+    "...methods",
+    "---插件与开发---",
+    "...develop",
+    "---参考与发布---",
+    "...reference",
+    "...releases"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "$comment": "独立电缆热模型 v2.0.0 的验证结果摘录（来自该模型《训练与使用说明》的验证表）。check 为新增结构的独立复核（每组 10 例），holdout 为原结构适用域内的留出集；amp 是最大载流量相对误差（%），temp 是最大导体温差（℃），都以收敛的有限元结果为参照。模型更新后同步本文件。",
+  "version": "2.0.0",
+  "scenes": ["直埋单回", "直埋双回", "排管", "矩形回填", "两层土壤"],
+  "structures": [
+    { "id": "mv10-cu-240", "name": "6/10 kV 1×240", "cells": [{"kind": "check", "n": 10, "amp": 0.0188, "temp": 0.0659}, {"kind": "check", "n": 10, "amp": 0.0212, "temp": 0.0181}, {"kind": "check", "n": 10, "amp": 0.207, "temp": 0.0759}, {"kind": "check", "n": 10, "amp": 0.3471, "temp": 0.0937}, {"kind": "check", "n": 10, "amp": 0.1031, "temp": 0.1287}] },
+    { "id": "mv20-cu-240", "name": "12/20 kV 1×240", "cells": [{"kind": "holdout", "n": 999, "amp": 0.0033, "temp": 0.0158}, {"kind": "holdout", "n": 100, "amp": 0.0192, "temp": 0.0225}, {"kind": "holdout", "n": 100, "amp": 0.2072, "temp": 0.1827}, {"kind": "holdout", "n": 102, "amp": 0.1404, "temp": 0.1594}, {"kind": "holdout", "n": 58, "amp": 0.3566, "temp": 0.1867}] },
+    { "id": "mv20-cu-300", "name": "12/20 kV 1×300", "cells": [{"kind": "check", "n": 10, "amp": 0.0139, "temp": 0.0549}, {"kind": "check", "n": 10, "amp": 0.0148, "temp": 0.0476}, {"kind": "check", "n": 10, "amp": 0.0512, "temp": 0.0237}, {"kind": "check", "n": 10, "amp": 0.1884, "temp": 0.0486}, {"kind": "check", "n": 10, "amp": 0.0631, "temp": 0.1847}] },
+    { "id": "mv20-cu-400", "name": "12/20 kV 1×400", "cells": [{"kind": "holdout", "n": 999, "amp": 0.0033, "temp": 0.0158}, {"kind": "holdout", "n": 100, "amp": 0.0192, "temp": 0.0225}, {"kind": "holdout", "n": 100, "amp": 0.2072, "temp": 0.1827}, {"kind": "holdout", "n": 102, "amp": 0.1404, "temp": 0.1594}, {"kind": "holdout", "n": 58, "amp": 0.3566, "temp": 0.1867}] },
+    { "id": "hv110-cu-800", "name": "64/110 kV 1×800", "cells": [{"kind": "check", "n": 10, "amp": 0.0465, "temp": 0.0345}, {"kind": "check", "n": 10, "amp": 0.0511, "temp": 0.0613}, {"kind": "check", "n": 10, "amp": 0.0369, "temp": 0.0287}, {"kind": "check", "n": 10, "amp": 0.142, "temp": 0.0295}, {"kind": "check", "n": 10, "amp": 0.1008, "temp": 0.2183}] }
+  ]
+}

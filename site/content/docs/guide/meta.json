@@ -1,0 +1,13 @@
+{
+  "title": "用户指南",
+  "pages": [
+    "index",
+    "type-library",
+    "type-design",
+    "ampacity-study",
+    "simulation",
+    "deliverables",
+    "resources",
+    "agent"
+  ]
+}

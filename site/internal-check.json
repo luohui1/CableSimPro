@@ -3,7 +3,7 @@
   "hostnames": ["dghpc", "dg83"],
   "allowedPaths": [
     "^[A-Za-z]:[\\\\/]CableSimPro(?:-data|-config)?(?:[\\\\/][^\\\\/]*)*$",
-    "^D:[\\\\/]config[\\\\/]release\\.toml$"
+    "^D:[\\\\/]config[\\\\/](?:release\\.toml)?$"
   ],
   "allowedEmails": ["example.com", "example.org"],
   "processTerms": [

@@ -1,0 +1,150 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* 字体：西文与数字用 Geist，中文用思源黑体（Noto Sans SC，可变字重），代码用 Geist Mono；全部随站点打包，离线可用 */
+@theme {
+  --font-sans: var(--font-geist-sans), 'Noto Sans SC Variable', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: var(--font-geist-mono), 'Noto Sans SC Variable', ui-monospace, monospace;
+  --font-pixel: var(--font-geist-pixel-square), var(--font-geist-mono), monospace;
+  /* 标题用得意黑（Smiley Sans，SIL OFL），随站点打包 */
+  --font-display: 'Smiley Sans Oblique', var(--font-geist-sans), 'Noto Sans SC Variable', sans-serif;
+
+  /* 暖白纸色底，铜色取自 design/tokens.css 的 --copper */
+  --color-fd-background: #f2f0ea;
+  --color-fd-foreground: #1c1a17;
+  --color-fd-muted: #ebe8e0;
+  --color-fd-muted-foreground: #6e675c;
+  --color-fd-popover: #f7f5f0;
+  --color-fd-popover-foreground: #26231f;
+  --color-fd-card: #f7f5ef;
+  --color-fd-card-foreground: #1c1a17;
+  --color-fd-border: rgb(60 50 35 / 0.16);
+  --color-fd-primary: #1c1a17;
+  --color-fd-primary-foreground: #f7f5f0;
+  --color-fd-secondary: #e9e5dc;
+  --color-fd-secondary-foreground: #1c1a17;
+  --color-fd-accent: rgb(120 100 70 / 0.13);
+  --color-fd-accent-foreground: #1c1a17;
+  --color-fd-ring: #b8af9f;
+
+  --color-brand: #aa5827;
+  --color-brand-soft: #f3d9bf;
+  /* 反色色带（深底）上的铜色 */
+  --color-brand-invert: #e08a4c;
+}
+
+/* 品牌标记与正式前端共用的颜色（design/tokens.css 的 --brand-* 与 --conductor） */
+:root {
+  --brand-ink: #12283a;
+  --brand-primary: #0064bc;
+  --brand-signal: #00a6e4;
+  --brand-insulation: #a3abb3;
+  --brand-insulation-edge: #cdd2d7;
+  --brand-core: #182838;
+  --brand-strand-edge: #b56a40;
+  --conductor: #c47a3d;
+}
+
+.dark {
+  --color-fd-background: #12110f;
+  --color-fd-foreground: #ece8e1;
+  --color-fd-muted: #1d1b18;
+  --color-fd-muted-foreground: rgb(236 232 225 / 0.62);
+  --color-fd-popover: #1a1916;
+  --color-fd-popover-foreground: #e2ded6;
+  --color-fd-card: #181714;
+  --color-fd-card-foreground: #f4f1eb;
+  --color-fd-border: rgb(236 225 205 / 0.12);
+  --color-fd-primary: #f4f1eb;
+  --color-fd-primary-foreground: #1c1a17;
+  --color-fd-secondary: #1f1d1a;
+  --color-fd-secondary-foreground: #ece8e1;
+  --color-fd-accent: rgb(236 225 205 / 0.1);
+  --color-fd-accent-foreground: #ece8e1;
+  --color-fd-ring: #6e675c;
+
+  --color-brand: #e08a4c;
+  --color-brand-soft: #4a2d18;
+  --color-brand-invert: #aa5827;
+
+  --brand-ink: #d7e2ec;
+  --brand-primary: #4fa3e8;
+  --brand-signal: #4cc8f4;
+  --brand-insulation: #6c747c;
+  --brand-insulation-edge: #8a929a;
+  --brand-core: #0b0c0e;
+  --brand-strand-edge: #8c4e2c;
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: #1f1d1a;
+  --color-fd-secondary: #22201c;
+  --color-fd-muted-foreground: rgb(236 232 225 / 0.7);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* 长公式横向滚动，不撑破版面 */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25rem;
+}
+
+/* 正文截图：细边框、圆角 */
+.prose img {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+}
+
+.prose :where(strong) {
+  font-weight: 600;
+  color: var(--color-fd-foreground);
+}
+
+/* 首页：窗口标题栏的横纹和刻度尺 */
+.window-stripes {
+  background-image: repeating-linear-gradient(to bottom, currentColor 0 1px, transparent 1px 3px);
+}
+
+.ruler {
+  background-image:
+    repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px 120px),
+    repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px 12px);
+  background-size:
+    100% 14px,
+    100% 6px;
+  background-position:
+    left bottom,
+    left bottom;
+  background-repeat: no-repeat;
+}
+
+/* 首页：依据标准的滚动条（两份内容首尾相接，悬停暂停） */
+@keyframes ticker {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.ticker {
+  animation: ticker 44s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker {
+    animation: none;
+  }
+}

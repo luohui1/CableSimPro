@@ -7,9 +7,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const site = fileURLToPath(new URL('..', import.meta.url));
-const dist = path.join(site, 'dist');
+const dist = path.join(site, 'out');
 const base = ('/' + (process.env.DOCS_BASE || '/').replace(/^\/+|\/+$/g, '') + '/').replace('//', '/');
-if (!existsSync(dist)) throw Error('没有 dist/，请先运行 npm run build');
+if (!existsSync(dist)) throw Error('没有 out/，请先运行 npm run build');
 
 async function walk(dir) {
   const out = [];
@@ -28,9 +28,7 @@ const idsCache = new Map();
 function ids(file) {
   if (!idsCache.has(file)) {
     const text = html.get(file) ?? '';
-    // 锚点只认 id，以及旧式的 <a name>；<meta name>、<input name> 不是锚点
-    const anchors = [...text.matchAll(/\sid="([^"]+)"/g), ...text.matchAll(/<a\b[^>]*\sname="([^"]+)"/gi)];
-    idsCache.set(file, new Set(anchors.map((m) => m[1])));
+    idsCache.set(file, new Set([...text.matchAll(/\s(?:id|name)="([^"]+)"/g)].map((m) => m[1])));
   }
   return idsCache.get(file);
 }
@@ -54,14 +52,11 @@ const broken = [];
 let checked = 0;
 for (const file of pages) {
   const from = pageUrl(file);
-  // 只去掉内联脚本的内容，保留 <script src> 本身；同一个标签里的 src、srcset、href 等逐个检查
-  const text = html.get(file).replace(/(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi, '$1$2');
+  const text = html.get(file).replace(/<script\b[\s\S]*?<\/script>/gi, '');
   const refs = [];
-  for (const tag of text.matchAll(/<(?:a|area|link|img|source|iframe|script|use|image|video|audio|track|embed)\b[^>]*>/gi)) {
-    for (const m of tag[0].matchAll(/\s(href|src|srcset|xlink:href|poster)="([^"]*)"/gi)) {
-      if (m[1].toLowerCase() === 'srcset') refs.push(...m[2].split(',').map((part) => part.trim().split(/\s+/)[0]));
-      else refs.push(m[2]);
-    }
+  for (const m of text.matchAll(/<(?:a|link|img|source|iframe|script|use)\b[^>]*?\s(href|src|srcset|xlink:href)="([^"]*)"/gi)) {
+    if (m[1].toLowerCase() === 'srcset') refs.push(...m[2].split(',').map((part) => part.trim().split(/\s+/)[0]));
+    else refs.push(m[2]);
   }
   for (const raw of refs) {
     const ref = raw.replace(/&amp;/g, '&');

@@ -7,38 +7,42 @@
   },
   "scripts": {
     "content": "node scripts/prepare-content.mjs",
-    "dev": "node scripts/prepare-content.mjs && astro dev",
-    "build": "node scripts/build.mjs",
+    "dev": "node scripts/prepare-content.mjs && next dev",
+    "build": "node scripts/prepare-content.mjs && next build && node scripts/flatten-prefetch.mjs && node scripts/check-internal.mjs",
     "check:internal": "node scripts/check-internal.mjs",
     "check:links": "node scripts/check-links.mjs",
     "check:search": "node scripts/check-search.mjs",
-    "screenshots": "node scripts/screenshots.mjs",
-    "preview": "astro preview"
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "7.3.9",
-    "@astrojs/starlight": "0.43.1",
-    "astro": "7.4.12",
-    "astro-mermaid": "2.2.0",
+    "@chinese-fonts/dyh": "3.0.0",
+    "@fontsource-variable/noto-sans-sc": "5.3.1",
+    "@fumadocs/language": "0.2.21",
+    "cn": "0.5.2",
+    "fumadocs-core": "16.19.4",
+    "fumadocs-mdx": "15.6.3",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.19.4",
+    "geist": "1.9.0",
     "katex": "0.16.47",
+    "lucide-react": "1.74.0",
     "mermaid": "12.3.0",
+    "motion": "14.14.0",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "rehype-katex": "7.0.1",
-    "remark-math": "6.0.0",
-    "sharp": "0.35.5",
-    "starlight-image-zoom": "0.16.3",
-    "starlight-openapi": "0.27.1"
+    "remark-math": "6.0.0"
   },
   "devDependencies": {
-    "mdast-util-from-markdown": "2.1.0",
-    "mdast-util-gfm": "3.1.0",
-    "mdast-util-math": "3.0.0",
-    "micromark-extension-gfm": "3.0.0",
-    "micromark-extension-math": "3.1.0",
+    "@tailwindcss/postcss": "4.3.5",
+    "@types/mdx": "2.0.14",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "playwright": "1.63.0",
-    "unist-util-visit": "5.2.0"
-  },
-  "overrides": {
-    "@pagefind/linux-arm64": "1.5.2",
-    "@pagefind/windows-arm64": "1.5.2"
+    "postcss": "8.5.33",
+    "sharp": "0.35.5",
+    "tailwindcss": "4.3.5",
+    "typescript": "7.0.2"
   }
 }

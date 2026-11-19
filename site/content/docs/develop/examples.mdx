@@ -1,0 +1,29 @@
+---
+title: "插件示例"
+description: "报告模板与 Agent 技能两类声明式插件的完整示例清单。"
+---
+
+仓库 `docs/plugins/examples/` 提供两个**声明式**插件示例：它们不包含计算代码，只用清单声明内容，由宿主按规则使用。计算方法插件的完整写法可以参照仓库 `plugins/` 中的第一方插件，例如 `plugins/cablesim.gb50217-correction/`。下面的文件内容在构建时直接读取自仓库，与仓库保持一致。
+
+## 报告模板（report-template）
+
+能力 `kind` 为 `report-template`：声明计算书的章节、可引用的数据和版面模板。报告模板不能混入方法输出，也不能触发计算。
+
+<ExampleCode name="report-template/plugin.json" lang="json" />
+
+<ExampleCode name="report-template/assets/template.html" lang="html" />
+
+## Agent 技能（agent-skill）
+
+能力 `kind` 为 `agent-skill`：声明一个 Agent 可以执行的多步任务，每一步引用宿主或其他插件已有的能力及输入绑定。技能只编排已有能力，不能放宽权限、跳过预检或代替人工批准。
+
+<ExampleCode name="agent-skill/plugin.json" lang="json" />
+
+## 开发与验证
+
+1. 在 `plugins/<id>/` 下放置 `plugin.json`、源码和资源；
+2. 用 `python scripts/plugin_sdk.py seal plugins/<id>/plugin.json --write` 生成封签；
+3. 用 `python scripts/plugin_sdk.py verify` 校验；
+4. 在 `tests/` 或插件自带的测试中，用独立的解析解、手算或公开算例核对结果，并把用例写进清单的 `validation`。
+
+字段说明见[插件清单字段](../plugin-manifest/)。
