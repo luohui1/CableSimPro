@@ -91,7 +91,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     from .kernel.type_library import TypeLibrary, make_router as type_library_router
     type_library = TypeLibrary(types)
     from .kernel.resource_exchange import ResourceExchange, make_router as resource_exchange_router
-    exchange = ResourceExchange(workspace_store, assets)
+    exchange = ResourceExchange(workspace_store, assets, types)
     from .kernel.datasheets import Documents, make_router as documents_router
     documents = Documents(workspace_store)
     owner = OwnerLock(workspace_store.path)

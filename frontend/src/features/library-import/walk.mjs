@@ -9,8 +9,12 @@ import { chromium, expect as baseExpect } from '@playwright/test';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 import { walkShortBasis } from './short-basis-walk.mjs';
 import { walkManufacturer } from './manufacturer-walk.mjs';
+import { walkMaterialImport } from './material-import-walk.mjs';
 import { walkResources } from './resource-walk.mjs';
 import { walkResourceApplications } from './resource-application-walk.mjs';
+import { walkTaiIImport } from './tai-i-import-walk.mjs';
+import { walkGbTray } from './gb-tray-walk.mjs';
+import { walkGbOutdoor } from './gb-outdoor-walk.mjs';
 import { exportResourceExchange, safeRequestHeaders, saveRawResponse } from './resource-exchange-walk.mjs';
 
 if (process.env.E2E_ISOLATED !== '1') throw new Error('结构表走查只允许操作隔离验收数据库。');
@@ -21,7 +25,7 @@ const out = path.resolve(process.env.LIBRARY_IMPORT_EVIDENCE || path.join(root, 
 await fs.mkdir(out, { recursive: true });
 const expect = baseExpect.configure({ timeout: 30000 });
 const executablePath = process.env.BROWSER_EXECUTABLE || [chromium.executablePath(), '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-const report = { checks: [], screenshots: [], errors: [], requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [] };
+const report = { checks: [], screenshots: [], errors: [], requests: [], failed_requests: [], failures: [], layout_failures: [], dialog_positions: [], guidance_positions: [] };
 const saveReport = () => fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
 await saveReport();
 let browser;
@@ -45,7 +49,16 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
   const page = await context.newPage();
   page.on('pageerror', error => report.errors.push({ viewport: viewport.width, kind: 'page', page: page.url(), time: new Date().toISOString(), message: error.message }));
   page.on('console', entry => { if (entry.type() === 'error') report.errors.push({ viewport: viewport.width, kind: 'console', page: page.url(), time: new Date().toISOString(), location: entry.location(), message: entry.text() }); });
-  page.on('requestfailed', request => { if (!request.failure()?.errorText.includes('ERR_ABORTED')) report.errors.push({ viewport: viewport.width, kind: 'request', url: request.url(), message: request.failure()?.errorText }); });
+  page.on('requestfailed', request => {
+    const failure = { viewport: viewport.width, kind: 'request', page: page.url(), time: new Date().toISOString(),
+      method: request.method(), url: request.url(), resource_type: request.resourceType(),
+      navigation: request.isNavigationRequest(), message: request.failure()?.errorText };
+    // Keep every failure, including browser cancellations, in the raw ledger.
+    // Retain the existing error gate separately so a cancelled navigation is
+    // available for inspection instead of disappearing from the evidence.
+    report.failed_requests.push(failure);
+    if (!failure.message?.includes('ERR_ABORTED')) report.errors.push(failure);
+  });
   page.on('response', response => {
     if (!response.url().includes('/api/')) return;
     report.requests.push({ viewport: viewport.width, method: response.request().method(), url: response.url(), status: response.status() });
@@ -1026,11 +1039,34 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 108
     report.checks.push(`${viewport.width}：从页面下载Bahra完整原件，真实上传→19列映射→13规格缺项预览→人工确认入库；未声明的计算参数保持为空。逐规格19列原值/SI换算/单位/表行列/原件SHA/方法1.1.0/参考分档一致。11项目录性能只保存为来源事实，不进入工程结构输入、不制造计算；全部性能行按窗口完整截图，1s/90℃与各敷设标签保留。实际展开目录适用条件，逐项原值、单位、单回路热隔离说明及未声明条件完整可见并截图。`);
     await walkShortBasis({ page, base, viewport, out, capture, expect, report, readApi });
     await walkManufacturer({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report });
+    await walkMaterialImport({ page, base, viewport, out, root, samplePath, expect, capture, select, afterAction, recordResponse, report });
     await walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, readApi, report,
       previousCalculation: { request: ratedResponse.request().postDataJSON(), response: rated } });
     const resourceAudit = JSON.parse(await fs.readFile(path.join(out, `${viewport.width}-resources-summary.json`), 'utf8'));
     exchangeTasks.push(await exportResourceExchange({ page, base, viewport, out, root, expect, capture, readApi, resourceAudit, report }));
     await walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report });
+    // Collect each extension's original failure independently; any failure
+    // still fails the complete walk instead of hiding the other flow's evidence.
+    const extensionFailures = [];
+    try {
+      await walkTaiIImport({ page, base, viewport, out, root, expect, capture, select, afterAction, recordResponse, positionDialogContent, report });
+    } catch (error) {
+      extensionFailures.push(error);
+      report.failures.push({ viewport: viewport.width, phase: '台一110千伏原表导入', message: String(error), stack: error.stack });
+    }
+    try {
+      await walkGbTray({ page, base, viewport, out, root, expect, capture, select, afterAction, report });
+    } catch (error) {
+      extensionFailures.push(error);
+      report.failures.push({ viewport: viewport.width, phase: 'D06合成机制条件与运行', message: String(error), stack: error.stack });
+    }
+    try {
+      await walkGbOutdoor({ page, base, viewport, out, root, expect, capture, afterAction, report });
+    } catch (error) {
+      extensionFailures.push(error);
+      report.failures.push({ viewport: viewport.width, phase: 'D07同温户外无遮阳合成机制', message: String(error), stack: error.stack });
+    }
+    if (extensionFailures.length) throw new AggregateError(extensionFailures, '新增真实流程存在失败，原始证据分别保留');
   } catch (error) {
     report.failures.push({ viewport: viewport.width, message: String(error) });
     await page.screenshot({ path: path.join(out, `${viewport.width}-failure.png`) }).catch(() => {});

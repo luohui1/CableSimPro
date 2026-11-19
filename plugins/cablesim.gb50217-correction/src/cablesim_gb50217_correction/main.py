@@ -8,6 +8,7 @@ import platform
 from pydantic import ValidationError
 from backend.plugin_host.registry import PluginHostError
 from cablesim_gb50217_correction.correction import calculate, CorrectionError, ARTIFACT, BASELINE, FACTOR
+from cablesim_gb50217_correction.outdoor import calculate_outdoor
 from cablesim_sdk.parameter_units import decode_request
 from cablesim_sdk.result_answers import attach_witnesses
 from cablesim_sdk.ampacity import AmpacityBasis
@@ -16,10 +17,12 @@ from cablesim_sdk.ampacity import AmpacityBasis
 def main():
     manifest=Path(__file__).resolve().parents[2]/'plugin.json'
     request=decode_request(json.loads(Path('input/request.json').read_text('utf-8')),manifest)
+    handler,method_version={'steady-rating':(calculate,'1.1.0'),
+                            'outdoor-unshaded-rating':(calculate_outdoor,'1.0.0')}[request['capability']]
     cases=[]
     for case in request['cases']:
         try:
-            trace=calculate(case['input'],case.get('parameters',{}))
+            trace=handler(case['input'],case.get('parameters',{}))
             if request['phase']=='check':
                 cases.append(dict(case_id=case['case_id'],status='succeeded',results=[],artifacts=[]))
                 continue
@@ -39,11 +42,11 @@ def main():
         except CorrectionError as exc:
             cases.append(dict(case_id=case['case_id'],status='not_applicable',error=dict(code=exc.code,message=str(exc),field=exc.field)))
         except ValidationError as exc:
-            first=exc.errors()[0]; field=('/parameters/' if exc.title == 'Parameters' else '/input/')+'/'.join(str(v).replace('~','~0').replace('/','~1') for v in first['loc'])
+            first=exc.errors()[0]; field=('/parameters/' if exc.title in ('Parameters','OutdoorParameters') else '/input/')+'/'.join(str(v).replace('~','~0').replace('/','~1') for v in first['loc'])
             cases.append(dict(case_id=case['case_id'],status='failed',error=dict(code='INPUT_INVALID',message='请补齐或修正该字段；数值必须使用契约规定的 SI 单位。',field=field)))
         except PluginHostError as exc:
             cases.append(dict(case_id=case['case_id'],status='failed',error=dict(code=exc.code,message=exc.message,field='/parameters/baseline_source')))
-    result=dict(protocol='cablesim.run/2',cases=cases,environment=dict(python=platform.python_version(),packages={},method='1.0.0'))
+    result=dict(protocol='cablesim.run/2',cases=cases,environment=dict(python=platform.python_version(),packages={},method=method_version))
     attach_witnesses(request,result,manifest)
     Path('output/result.json').write_text(json.dumps(result,ensure_ascii=False,allow_nan=False),'utf-8')
 

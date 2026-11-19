@@ -10,6 +10,7 @@ from uuid import uuid4, uuid5, NAMESPACE_URL
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from ..plugin_host import PluginHostError
 from .contracts import CreateStudy, RunStudy
 from .workspace import fingerprint, stamp
 from . import factory_tables as tables
@@ -30,7 +31,8 @@ def child_request(request, spec, operation):
 
 
 def failure(error):
-    detail = error.detail if isinstance(error, HTTPException) else error.as_dict() if isinstance(error, CoreError) else str(error)
+    detail = (error.detail if isinstance(error, HTTPException) else error.as_dict() if isinstance(error, CoreError)
+              else {'code': error.code, 'message': error.message} if isinstance(error, PluginHostError) else str(error))
     return {'status': 'failed', 'message': detail.get('message', str(detail)) if isinstance(detail, dict) else str(detail), 'detail': detail}
 
 
@@ -52,15 +54,17 @@ def _entries(service, specs):
 
 def _run(service, spec, definition, request):
     research = service.research
+    # A study pin fixes the plugin release; the method version belongs to its
+    # declared capability. Resolve both through the ordinary sealed-release gate.
+    plugin, capability = research.resolve(definition['method'])
     wid, revision = spec['workspace_id'], spec['workspace_revision']
     study = research.save(wid, CreateStudy(expected_revision=revision, **definition))
     check = research.preflight(wid, study['id'], revision, study['revision'])
     run = research.execute(wid, study['id'], RunStudy(request_id=request, expected_revision=revision,
         expected_study_revision=study['revision'], lock_digest=check['lock_digest'], scope_acknowledged=True), checked_preflight=check)
-    method = definition['method']
-    plugin = research.registry(method['plugin_id']).get(method['plugin_id'])
     result = {'status': run['status'], 'workspace_id': wid, 'study_id': study['id'], 'run_id': run['id'],
-              'method_name': plugin.manifest.name, 'method_version': method['version'], 'confidence': 'reference',
+              'method_name': plugin.manifest.name, 'method_version': capability.method_version,
+              'plugin_version': plugin.manifest.version, 'confidence': 'reference',
               'input_digest': run['input_digest'], 'output_digest': run['output_digest'],
               'message': '运行记录已保存；计算状态、标准核对结论与人工批准状态分别判断。'}
     if definition['driver']['kind'] == 'batch':
@@ -189,7 +193,7 @@ def run_batch(service, series_id, body, actor):
                         adopt_for_batch(ResourceData(service.research.executor), service.types.assets,
                             service.research, workspace, definition, body.environment_references)
                 item.update(_run(service, spec, definition, child_request(body.request_id, spec['id'], body.operation)))
-            except (HTTPException, ValidationError, CoreError, ValueError) as error:
+            except (HTTPException, ValidationError, CoreError, PluginHostError, ValueError) as error:
                 item.update(failure(error))
             result['items'].append(item)
             with service.store.db(True) as db:

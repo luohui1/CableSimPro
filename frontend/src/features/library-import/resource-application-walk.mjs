@@ -42,14 +42,33 @@ function workspaceLabel(items, id) {
 
 /** Observe the real page without replacing fetch or changing query state. A
  * response event proves headers only; finished/body observations are separate. */
-async function observeStudyOpening({ page, base, viewport, out, write, workspaceId, studyId }) {
+export async function observeStudyOpening({ page, base, viewport, out, write, workspaceId, studyId }) {
   const started = performance.now(), origin = new URL(base).origin;
   let sequence = 0, phase = 'registering', closed = false;
   const ledger = { schema_version: 'cablesim.study-open-observation/1', workspace_id: workspaceId, study_id: studyId,
     viewport, scope: 'All same-origin page API requests during this operation; direct API readbacks remain in the applications HTTP index.',
     started_at: new Date().toISOString(), boundaries: [], requests: [], navigations: [], errors: [] };
-  const byRequest = new Map(), pending = new Set();
+  const byRequest = new Map(), unfinished = new Set(), pending = new Set(), wakeups = new Set();
+  let changes = 0, cutoff = null;
+  const settledDuringFinish = [];
   const stamp = () => ({ sequence: ++sequence, at: new Date().toISOString(), elapsed_ms: performance.now() - started, phase });
+  function changed() {
+    changes += 1;
+    const ready = [...wakeups]; wakeups.clear();
+    for (const resolve of ready) resolve();
+  }
+  function observing() {
+    if (!closed && cutoff && performance.now() >= cutoff.deadline) cutoff.close('timeout');
+    return !closed;
+  }
+  function nextChange(version) {
+    return new Promise(resolve => {
+      wakeups.add(resolve);
+      // Register before rechecking so a completion cannot be lost between the
+      // drain's predicate and its subscription to the next lifecycle event.
+      if (closed || changes !== version) { wakeups.delete(resolve); resolve(); }
+    });
+  }
   async function bounded(promise, timeoutMs) {
     let timer;
     try {
@@ -58,7 +77,7 @@ async function observeStudyOpening({ page, base, viewport, out, write, workspace
     } finally { clearTimeout(timer); }
   }
   function requestRecord(request, observedEvent) {
-    if (closed) return null;
+    if (!observing()) return null;
     const url = new URL(request.url());
     if (url.origin !== origin || !url.pathname.startsWith('/api/')) return null;
     if (!byRequest.has(request)) {
@@ -69,15 +88,18 @@ async function observeStudyOpening({ page, base, viewport, out, write, workspace
         request_headers: Object.fromEntries(['content-type', 'x-cablesim-actor'].filter(key => headers[key] !== undefined).map(key => [key, headers[key]])),
         post_data: body === null ? { available: false } : { available: true, bytes: body.length, sha256: createHash('sha256').update(body).digest('hex') },
         request_started: null, request_finished: null, request_failed: null, response: null, timing: request.timing() };
-      byRequest.set(request, item); ledger.requests.push(item);
+      byRequest.set(request, item); ledger.requests.push(item); unfinished.add(request);
     }
     return byRequest.get(request);
   }
-  const onRequest = request => { const item = requestRecord(request, 'request'); if (item) item.request_started = stamp(); };
-  const onFinished = request => { const item = requestRecord(request, 'requestfinished'); if (item) { item.request_finished = stamp(); item.timing = request.timing(); } };
+  const onRequest = request => { const item = requestRecord(request, 'request'); if (item) { item.request_started = stamp(); changed(); } };
+  const onFinished = request => {
+    const item = requestRecord(request, 'requestfinished');
+    if (item) { item.request_finished = stamp(); item.timing = request.timing(); unfinished.delete(request); changed(); }
+  };
   const onFailed = request => {
     const item = requestRecord(request, 'requestfailed');
-    if (item) { item.request_failed = { ...stamp(), failure: request.failure() }; item.timing = request.timing(); }
+    if (item) { item.request_failed = { ...stamp(), failure: request.failure() }; item.timing = request.timing(); unfinished.delete(request); changed(); }
   };
   const onResponse = response => {
     const request = response.request(), item = requestRecord(request, 'response');
@@ -90,38 +112,45 @@ async function observeStudyOpening({ page, base, viewport, out, write, workspace
       let stage = 'response.finished';
       try {
         const result = await response.finished();
-        if (closed) return;
+        if (!observing()) return;
         item.response.finished = { ...stamp(), result: result === null ? 'null' : 'error', error: result === null ? null : String(result) };
         item.timing = request.timing();
         if (result !== null) return;
         stage = 'response.body';
         const bytes = await response.body();
-        if (closed) return;
+        if (!observing()) return;
         const filename = `${viewport.width}-applications-study-open-response-${String(item.id).padStart(3, '0')}.json`;
         item.response.body = { ...stamp(), status: 'writing', file: filename, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
         stage = 'write_response_body';
         await fs.writeFile(path.join(out, filename), bytes);
-        if (!closed) item.response.body = { ...item.response.body, saved: stamp(), status: 'saved' };
+        if (observing()) item.response.body = { ...item.response.body, saved: stamp(), status: 'saved' };
       } catch (error) {
-        if (closed) return;
+        if (!observing()) return;
         const failure = { ...stamp(), result: 'rejected', error: String(error) };
         if (stage === 'response.finished') item.response.finished = failure;
         else item.response.body_error = { ...failure, stage };
       }
     })();
-    pending.add(task); void task.finally(() => pending.delete(task));
+    pending.add(task); changed();
+    const settled = result => {
+      if (cutoff && !closed) settledDuringFinish.push(result);
+      pending.delete(task); changed();
+    };
+    void task.then(() => settled({ status: 'fulfilled' }), error => settled({ status: 'rejected', reason: String(error) }));
   };
-  const onNavigation = frame => { if (!closed && frame === page.mainFrame()) ledger.navigations.push({ ...stamp(), url: frame.url() }); };
-  const onConsole = entry => { if (!closed && entry.type() === 'error') ledger.errors.push({ ...stamp(), kind: 'console', message: entry.text(), location: entry.location() }); };
-  const onPageError = error => { if (!closed) ledger.errors.push({ ...stamp(), kind: 'page', message: String(error) }); };
+  const onNavigation = frame => { if (observing() && frame === page.mainFrame()) ledger.navigations.push({ ...stamp(), url: frame.url() }); };
+  const onConsole = entry => { if (observing() && entry.type() === 'error') ledger.errors.push({ ...stamp(), kind: 'console', message: entry.text(), location: entry.location() }); };
+  const onPageError = error => { if (observing()) ledger.errors.push({ ...stamp(), kind: 'page', message: String(error) }); };
   const listeners = { request: onRequest, requestfinished: onFinished, requestfailed: onFailed, response: onResponse,
     framenavigated: onNavigation, console: onConsole, pageerror: onPageError };
   for (const [event, listener] of Object.entries(listeners)) page.on(event, listener);
   const originalDocument = await bounded(page.evaluateHandle(() => document), 1000);
   async function checkpoint(name, timeoutMs = 2000) {
+    if (!observing()) return;
     phase = name;
-    const boundary = { name, ...stamp(), page_url: page.url() };
-    boundary.browser = await bounded(page.evaluate(async ({ workspaceId, studyId, inspectQueries }) => {
+    const boundary = { name, ...stamp(), page_url: page.url(), browser: { status: 'pending', timeout_ms: timeoutMs } };
+    ledger.boundaries.push(boundary);
+    const browser = await bounded(page.evaluate(async ({ workspaceId, studyId, inspectQueries }) => {
       const snapshot = { url: location.href, ready_state: document.readyState, time_origin: performance.timeOrigin,
         performance_now: performance.now(), navigation: performance.getEntriesByType('navigation').map(item => item.toJSON()),
         queries: { status: 'not_inspected', reason: 'Source module inspection is restricted to the existing dev server.' } };
@@ -138,29 +167,37 @@ async function observeStudyOpening({ page, base, viewport, out, write, workspace
       }
       return snapshot;
     }, { workspaceId, studyId, inspectQueries: process.env.E2E_DEV === '1' }), timeoutMs);
-    ledger.boundaries.push(boundary);
+    if (observing()) boundary.browser = browser;
     return boundary;
   }
   await checkpoint('before_click');
   await write('study-open-ledger', ledger);
   return {
-    mark(name) { phase = name; ledger.boundaries.push({ name, ...stamp(), page_url: page.url() }); },
+    mark(name) { if (observing()) { phase = name; ledger.boundaries.push({ name, ...stamp(), page_url: page.url() }); } },
     checkpoint,
     async finish({ error, automaticRunRequests }) {
-      const deadline = performance.now() + 2000;
+      assert.ok(!closed && !cutoff, '研究打开观察只能收尾一次');
+      const finishing = performance.now(), deadline = finishing + 2000;
       const remaining = () => Math.max(0, deadline - performance.now());
-      try {
-        ledger.outcome = error ? 'failed' : 'passed'; ledger.failure = error ? String(error) : null;
-        ledger.final_observation_budget_ms = 2000;
-        await checkpoint(error ? 'operation_failed' : 'operation_completed', remaining());
-        // This short drain only completes observation already in flight. It
-        // does not extend any UI readiness timeout or retry an application call.
-        ledger.observer_drain = await bounded(Promise.allSettled([...pending]), remaining());
-        ledger.document_identity = originalDocument.status === 'complete'
-          ? await bounded(page.evaluate(original => original === document, originalDocument.value), remaining())
-          : { status: originalDocument.status, error: originalDocument.error ?? null };
+      let timer;
+      ledger.outcome = error ? 'failed' : 'passed'; ledger.failure = error ? String(error) : null;
+      ledger.final_observation_budget_ms = 2000;
+      ledger.document_identity = originalDocument.status === 'complete' ? { status: 'pending' }
+        : { status: originalDocument.status, error: originalDocument.error ?? null };
+      function close(status) {
+        if (closed) return;
+        closed = true;
+        clearTimeout(timer);
+        for (const [event, listener] of Object.entries(listeners)) page.off(event, listener);
+        ledger.observer_drain = status === 'complete' ? { status, value: [...settledDuringFinish] }
+          : status === 'timeout' ? { status, timeout_ms: 2000 } : { status };
+        for (const boundary of ledger.boundaries) {
+          if (boundary.browser?.status === 'pending') boundary.browser = { status, timeout_ms: boundary.browser.timeout_ms };
+        }
+        if (ledger.document_identity.status === 'pending') ledger.document_identity = { status, timeout_ms: 2000 };
         for (const [request, item] of byRequest) {
-          item.timing = request.timing();
+          // Playwright exposes a mutable object that can change after cutoff.
+          item.timing = { ...request.timing() };
           const terminal = item.request_finished ?? item.request_failed;
           item.observed_duration_ms = item.request_started && terminal ? terminal.elapsed_ms - item.request_started.elapsed_ms : null;
           item.headers_to_response_finished_ms = item.response?.finished
@@ -172,9 +209,26 @@ async function observeStudyOpening({ page, base, viewport, out, write, workspace
           || item.response?.body?.status === 'writing').map(item => item.id);
         ledger.pending_observation_tasks_at_cutoff = pending.size;
         ledger.automatic_run_requests = [...automaticRunRequests]; ledger.closed = stamp();
+        ledger.final_observation_elapsed_ms = performance.now() - finishing;
+        changed();
+      }
+      cutoff = { deadline, close };
+      timer = setTimeout(() => close('timeout'), remaining());
+      try {
+        await checkpoint(error ? 'operation_failed' : 'operation_completed', remaining());
+        if (observing() && originalDocument.status === 'complete') {
+          const identity = await bounded(page.evaluate(original => original === document, originalDocument.value), remaining());
+          if (observing()) ledger.document_identity = identity;
+        }
+        // Drain after the last browser read. Requests without response headers
+        // and body tasks created by late responses share the original deadline.
+        // Empty-check and close are synchronous; callbacks cannot reopen it.
+        while (observing()) {
+          if (!unfinished.size && !pending.size) { close('complete'); break; }
+          await nextChange(changes);
+        }
       } finally {
-        closed = true;
-        for (const [event, listener] of Object.entries(listeners)) page.off(event, listener);
+        close('error');
         if (originalDocument.status === 'complete') await bounded(originalDocument.value.dispose(), remaining());
         await write('study-open-ledger', ledger);
       }
@@ -187,7 +241,7 @@ async function observeStudyOpening({ page, base, viewport, out, write, workspace
  * capture, review, publication, preview and adoption goes through visible UI. */
 export async function walkResourceApplications({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, report }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
-  const audit = { scope: '真实保存输入的部件与研究模板；参考分档，不授予工程批准', setup: [], http: [], read_only_checks: [], components: [], study: null, study_opening: null };
+  const audit = { scope: '真实保存输入的部件与研究模板；参考分档，不授予工程批准', setup: [], http: [], read_only_checks: [], focus_outcomes: [], components: [], study: null, study_opening: null };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-applications-${name}.json`), JSON.stringify(value, null, 2));
   async function decoded(response, endpoint, method) {
     const body = await response.body();
@@ -216,6 +270,25 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
     assert.equal(response.request().headers()['x-cablesim-actor'], 'human');
     const value = await response.json(); await recordResponse(`applications-${name}`, response, value);
     return { request: response.request().postDataJSON(), value };
+  }
+  async function adoptedNotice(revision, label, study = false) {
+    const notice = page.getByRole('status', { name: '采用结果回执', exact: true });
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toContainText(study ? `工程输入仍为修订 ${revision}；没有启动计算。` : `已采用到型号输入修订 ${revision}，固定来源与逐字段变化已保存。`);
+    await expect(notice).toBeFocused();
+    await expect(notice).toBeInViewport({ ratio: 1 });
+    const actual = await notice.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { focused: document.activeElement === element, text: element.innerText,
+        position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        viewport: { width: innerWidth, height: innerHeight } };
+    });
+    assert.equal(actual.focused, true);
+    assert.ok(actual.position.x >= 0 && actual.position.y >= 0
+      && actual.position.x + actual.position.width <= actual.viewport.width
+      && actual.position.y + actual.position.height <= actual.viewport.height);
+    audit.focus_outcomes.push({ label, revision, ...actual, passed: true });
+    await write('focus-outcomes', audit.focus_outcomes);
   }
   async function projects() {
     const rows = [];
@@ -392,6 +465,13 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
         assert.deepEqual(after.domain.provenance[pathname], targetBefore.domain.provenance[pathname], '未选对象的出处不变：' + pathname);
     }
     assert.deepEqual((await readApi(`/api/library/resources/applications/${frozen.asset.id}/evidence`)).source, frozen.evidence.source);
+    await adoptedNotice(after.revision, label);
+    await expect(page.getByRole('combobox', { name: '采用目标型号', exact: true })).toContainText(`输入修订 ${after.revision}`);
+    await expect(page.getByText('此材料标识已存在。请另取独立标识，或明确选择复用并核对全部材料内容。', { exact: true })).toHaveCount(0);
+    if (preview.value.material_action === 'create') {
+      await expect(page.getByText(`此独立材料已在本次采用中创建，并已回读输入修订 ${after.revision}。再次采用仍需选择其他独立标识或明确复用。`, { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: '预览目标采用变化', exact: true })).toBeDisabled();
+    }
     await capture(label + '人工采用后保存回读');
     await page.getByRole('link', { name: '打开目标型号并核对或撤销', exact: true }).click();
     const undo = page.getByRole('button', { name: '撤销', exact: true }); await expect(undo).toBeEnabled();
@@ -497,6 +577,7 @@ export async function walkResourceApplications({ page, base, viewport, out, expe
       assert.deepEqual(saved.definition, preview.value.definition);
       const savedRuns = await readApi(`/api/workspaces/${target.id}/studies/${saved.id}/runs?view=summary&after=0&limit=20`);
       assert.deepEqual(savedRuns.items, []); assert.equal(savedRuns.next_cursor, null);
+      await adoptedNotice(target.revision, '研究模板', true);
       await capture('研究模板仅保存研究而未运行');
       const openStudy = page.getByRole('button', { name: '打开新保存研究', exact: true });
       await expect(openStudy).toBeEnabled();

@@ -14,6 +14,12 @@ const materialCases = [
     conditions: { reference_temperature_k: 293.15, material: 'copper', material_role: 'conductor' }, selections: [['材料组成', '铜'], ['材料用途', '导体']], inputs: [['参考温度 / K', '293.15']], sourceKind: 'standard', pages: [35, 83],
     source: 'b300bb2bea52ce64e24c8137193559d7ee4cc04013ec4122357a2625e868a327', recordSha: '5d49f9b63234b84be6820b2acc6db6de461e16a67855094da7ab8c77f0adea90' },
 ];
+const lossCase = { table: 'iec60287-1-1-table3', record: 'iec60287-1-1-table3/r15/tan_delta', parameter: 'loss_tangent', label: '损耗角正切', value: .004, unit: '1', dimension: 'dimensionless',
+  rowTitle: '电流制式：交流；温度口径：最高允许工作温度；绝缘材料：XLPE；绝缘填充状态：无填料；额定相电压 U₀ / V：不大于 18000；线电压 U / V：不大于 30000',
+  conditions: { current_system: 'AC', temperature_basis: 'maximum_permissible', insulation: 'XLPE', filler: 'unfilled', u0_v: 8700, u_v: 15000 },
+  selections: [['电流制式', '交流'], ['温度口径', '最高允许工作温度'], ['绝缘材料', 'XLPE'], ['绝缘填充状态', '无填料']],
+  inputs: [['额定相电压 U₀ / V', '8700'], ['线电压 U / V', '15000']], sourceKind: 'standard', pages: [37, 85],
+  source: 'b300bb2bea52ce64e24c8137193559d7ee4cc04013ec4122357a2625e868a327', recordSha: 'b416d33c3934d3e90aa404d685f262e45bb0ba992b860d1e461a6bae2d548d23' };
 const depthCase = { table: 'iec60287-3-1-annex-a4', record: 'iec60287-3-1-annex-a4/r5/value', parameter: 'depth_m', label: '电缆埋深参考', value: .7, unit: 'm', dimension: 'length',
   conditions: { country: 'China', reference_item: '>1–35kV埋深', u_v: 15000 }, selections: [['国家', '中国'], ['原文参考项目', '>1–35kV埋深']], inputs: [['实际运行线电压 U / V', '15000']], sourceKind: 'standard', pages: [10, 42],
   source: '618e8d8cd829a15cb0bdcf08af4d73afc0b8928a3ea0eeb42bdc75cc87b08f63', recordSha: 'acf5222199c224c333af6e1be96b2af316772a5574e2228af05650fd653c9cf3' };
@@ -30,8 +36,27 @@ const sha = value => assert.match(value, /^[a-f0-9]{64}$/);
  * APIs; neither replaces resource creation, publication, binding or adoption. */
 export async function walkResources({ page, base, viewport, out, expect, capture, select, afterAction, recordResponse, positionDialogContent, report, previousCalculation }) {
   assert.equal(process.env.E2E_ISOLATED, '1');
-  const audit = { selections: [], assets: [], material: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [], api_responses: [] };
+  const audit = { selections: [], assets: [], material: {}, loss_tangent: {}, environment: {}, expected_ui_refusals: [], receipt_downloads: [], api_responses: [], focus_outcomes: [] };
   const write = (name, value) => fs.writeFile(path.join(out, `${viewport.width}-resources-${name}.json`), JSON.stringify(value, null, 2));
+  async function materialOutcome(text, name) {
+    const result = page.getByRole('status').filter({ hasText: text });
+    // Assert the product's own focus/scroll before any capture or further click.
+    // toBeVisible alone accepts text below the viewport and hid this defect.
+    let passed = false;
+    try {
+      await expect(result).toBeFocused();
+      await expect(result).toBeInViewport({ ratio: 1 });
+      passed = true;
+    } finally {
+      const measured = await result.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        return { text: element.textContent, focused: document.activeElement === element,
+          position: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+      }).catch(error => ({ measurement_error: String(error) }));
+      audit.focus_outcomes.push({ name, viewport, passed, ...measured });
+      await write('focus-outcomes', audit.focus_outcomes);
+    }
+  }
   async function supportingResponse(response, endpoint, method) {
     const body = await response.body();
     const file = `${viewport.width}-resources-http-${String(audit.api_responses.length + 1).padStart(3, '0')}.json`;
@@ -146,13 +171,15 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     audit.selections.push({ parameter: item.parameter, ...selected });
     return selected;
   }
-  async function createAndPublish(category, entries) {
+  async function createAndPublish(category, entries, options = {}) {
     const kind = category === 'materials' ? 'material' : 'installation';
-    const logName = category === 'environment' ? `${kind}-${entries[0].parameter}` : kind;
+    const logName = options.logName ?? (category === 'environment' ? `${kind}-${entries[0].parameter}` : kind);
+    const caption = options.caption ?? (kind === 'material' ? '材料' : '环境');
     const before = await readApi(`/api/foundation/assets?kind=${kind}`);
     await page.getByRole('button', { name: '预览参考草稿', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '生成参考资料草稿', exact: true });
-    const name = `${category === 'materials' ? '铜三项参考物性' : entries.some(item => item.parameter === 'depth_m') ? '原文电缆埋深参考基准未明' : '明确研究语境下的湿土热阻率参考'} ${viewport.width} ${Date.now()}`;
+    const namePrefix = options.namePrefix ?? (category === 'materials' ? '铜三项参考物性' : entries.some(item => item.parameter === 'depth_m') ? '原文电缆埋深参考基准未明' : '明确研究语境下的湿土热阻率参考');
+    const name = `${namePrefix} ${viewport.width} ${Date.now()}`;
     await dialog.getByLabel('参考资料名称', { exact: true }).fill(name);
     const preview = await postUI(`/api/library/resources/${category}/draft-preview`, dialog.getByRole('button', { name: '读取草稿预览', exact: true }), `${logName}-draft-preview`);
     assert.equal(preview.value.approval, 'not_granted'); assert.equal(preview.value.applied_to_workspace, false);
@@ -165,7 +192,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
       assert.deepEqual(evidence.quantity, entry.value.quantity); assert.equal(evidence.record_sha256, entry.value.record.record_sha256);
     }
     await expect(dialog.getByRole('button', { name: '确认创建参考草稿', exact: true })).toBeDisabled();
-    await capture(`${kind === 'material' ? '材料' : '环境'}草稿预览不入库`);
+    await capture(`${caption}草稿预览不入库`);
     await dialog.getByRole('checkbox').check();
     const saved = await postUI(`/api/library/resources/${category}/draft`, dialog.getByRole('button', { name: '确认创建参考草稿', exact: true }), `${logName}-draft`, 201);
     assert.equal(saved.request.preview_digest, preview.value.preview_digest); assert.equal(saved.request.human_confirmed, true);
@@ -184,7 +211,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
       await expect(publication.getByRole('button', { name: confirmation, exact: true })).toBeDisabled();
       await publication.getByLabel('参考资料核对说明', { exact: true }).fill('人工核对原文、逐项单位和适用限制；仅发布参考资料，不作实测或工程批准。');
       await publication.getByRole('checkbox').check();
-      await capture(`${kind === 'material' ? '材料' : '环境'}${action === 'review' ? '逐项来源人工核对' : '参考版本人工发布'}`);
+      await capture(`${caption}${action === 'review' ? '逐项来源人工核对' : '参考版本人工发布'}`);
       const result = await postUI(`/api/foundation/assets/${asset.id}/transition`, publication.getByRole('button', { name: confirmation, exact: true }), `${logName}-${action}`);
       assert.equal(result.request.expected_revision, asset.revision); assert.equal(result.request.content_sha256, asset.content_sha256);
       assert.equal(result.request.human_confirmed, true);
@@ -224,6 +251,9 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await bindingDialog.getByRole('checkbox').check();
   await capture('仅绑定铜材料来源不采用数值');
   const binding = await postUI(`/api/types/${wid}/resources/material-confirm`, bindingDialog.getByRole('button', { name: '确认仅绑定来源', exact: true }), 'material-bind');
+  await expect(bindingDialog).toBeHidden();
+  await materialOutcome('已绑定此参考版本的来源。', 'copper-source-binding');
+  await capture('铜材料来源绑定成功结果自动呈现');
   const bound = await readApi(`/api/types/${wid}/workspace`);
   assert.deepEqual(bound.domain, initial.domain, '来源绑定不能改动材料数值或结构');
   assert.equal(bound.type_resource_bindings.material['material/cu'].resource_id, materialAsset.id);
@@ -262,7 +292,8 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     assert.deepEqual((await readApi(`/api/workspaces/${wid}/revisions/${initial.revision}`)).state, historicalInitial.state);
     audit.material.adoptions.push({ parameter: item.parameter, preview, adopted, readback: saved });
     current = saved;
-    await expect(page.getByRole('status').filter({ hasText: `所选物性已写入型号输入修订 ${saved.revision}` })).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await materialOutcome(`所选物性已写入型号输入修订 ${saved.revision}`, `copper-${item.parameter}-adoption`);
     await expect(page.getByRole('combobox', { name: '目标型号', exact: true })).toContainText(`${qifan.name} · 输入修订 ${saved.revision}`);
     await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeEnabled();
     await capture(`铜${item.label}人工采用并保存来源`);
@@ -275,6 +306,7 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await expect(sameDialog.getByRole('status')).toContainText('该值已一致');
   await capture('已有相同物性时阻止重复采用');
   await sameDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeFocused();
   audit.expected_ui_refusals.push({ kind: 'same_material_value', preview: same.value });
   // The same database is used for both viewport loops. Exercise the real history
   // API, preserving the binding while restoring the original three missing facts.
@@ -320,6 +352,94 @@ export async function walkResources({ page, base, viewport, out, expect, capture
   await oldSources.scrollIntoViewIfNeeded(); await capture('既有材料原出处完整可读且缺回执不能新采用');
   assert.deepEqual(await readApi(`/api/foundation/assets/${legacy.id}`), legacy);
   await write('legacy-asset-readonly', { asset: legacy, unchanged: true, lookup_receipt_synthesized: false });
+
+  // The real source already contains 0.004, but no reviewed applicability
+  // declaration for the maximum-permissible-temperature basis. Preserve both
+  // facts: source selection/publication cannot invent the missing declaration
+  // or justify rewriting an equal value. Positive adoption/undo is separately
+  // tested with explicit design inputs, not by altering this released example.
+  const lossTypes = await readApi('/api/design/type-workspaces');
+  const lossSources = [];
+  for (const candidate of lossTypes.filter(item => item.name === 'YJV22-8.7/15 3×300')) {
+    const snapshot = await readApi(`/api/types/${candidate.id}/workspace`);
+    if (!snapshot.type_plan_source && !snapshot.exchange_origin) lossSources.push({ candidate, snapshot });
+  }
+  assert.equal(lossSources.length, 1, '损耗角正切须核对原有真实型号，不能使用临时方案或交换副本');
+  const { candidate: lossType, snapshot: lossInitial } = lossSources[0];
+  const lossWid = lossType.id, lossMid = 'material/xlpe';
+  const insulation = lossInitial.domain.materials.find(item => item.id === lossMid);
+  assert.ok(insulation); assert.equal(insulation.standard_kind, 'XLPE');
+  assert.equal(insulation.loss_tangent, lossCase.value, '不得清空真实已有物性以制造采用正例');
+  assert.equal(lossInitial.domain.cable_types.length, 1);
+  assert.equal(lossInitial.domain.cable_types[0].rating.u0, lossCase.conditions.u0_v);
+  assert.equal(lossInitial.domain.cable_types[0].rating.u, lossCase.conditions.u_v);
+  assert.equal(lossInitial.domain.provenance[`/materials/${escapePointer(lossMid)}/applicability`], undefined,
+    '不得补造最高允许工作温度口径声明以绕过拒绝');
+  await page.getByRole('button', { name: '浏览资料目录', exact: true }).click();
+  const selectedLoss = { parameter: lossCase.parameter, ...await choose('materials', lossCase) };
+  const lossAsset = await createAndPublish('materials', [selectedLoss], {
+    namePrefix: 'XLPE损耗角正切参考·目标温度口径待核', logName: 'material-loss-tangent', caption: '损耗角正切',
+  });
+  assert.equal(lossAsset.release.reference_evidence.length, 1);
+  assert.equal(lossAsset.release.sources[0].kind, lossCase.sourceKind);
+  assert.equal(lossAsset.release.reference_evidence[0].receipt.method.method_version, '0.9.1');
+  await select('目标型号', `${lossType.name} · 输入修订 ${lossInitial.revision}`);
+  const lossTargets = await readApi(`/api/types/${lossWid}/resources`);
+  const lossTarget = lossTargets.targets.find(item => item.id === lossMid);
+  assert.ok(lossTarget); await select('目标设计材料', lossTarget.name);
+  const lossBindPreview = await postUI(`/api/types/${lossWid}/resources/material-preview`, page.getByRole('button', { name: '预览来源绑定', exact: true }), 'loss-tangent-bind-preview');
+  assert.equal(lossBindPreview.request.expected_revision, lossInitial.revision);
+  const lossBindDialog = page.getByRole('dialog', { name: '核对材料来源绑定', exact: true });
+  await expect(lossBindDialog.getByRole('button', { name: '确认仅绑定来源', exact: true })).toBeDisabled();
+  await lossBindDialog.getByRole('checkbox').check();
+  await capture('真实XLPE仅绑定损耗角正切参考不改已有值');
+  const lossBinding = await postUI(`/api/types/${lossWid}/resources/material-confirm`, lossBindDialog.getByRole('button', { name: '确认仅绑定来源', exact: true }), 'loss-tangent-bind');
+  await expect(lossBindDialog).toBeHidden();
+  await materialOutcome('已绑定此参考版本的来源。', 'loss-tangent-source-binding');
+  await capture('损耗角正切来源绑定成功结果自动呈现');
+  assert.equal(lossBinding.request.preview_digest, lossBindPreview.value.digest);
+  const lossBound = await readApi(`/api/types/${lossWid}/workspace`);
+  assert.deepEqual(lossBound.domain, lossInitial.domain, '绑定损耗角正切来源不能改动任何型号字段或出处');
+  assert.equal(lossBound.type_resource_bindings.material[lossMid].resource_id, lossAsset.id);
+  const adoptedBeforeLoss = report.requests.filter(request => request.method === 'POST' && request.url.endsWith('/api/library/resources/materials/adopt')).length;
+  await expect(page.getByRole('combobox', { name: '待核对材料物性', exact: true })).toBeEnabled();
+  await select('待核对材料物性', lossCase.label);
+  const lossPreview = await postUI('/api/library/resources/materials/preview', page.getByRole('button', { name: '预览这一项物性', exact: true }), 'loss-tangent-temperature-basis-refused');
+  assert.equal(lossPreview.request.expected_revision, lossBound.revision);
+  assert.equal(lossPreview.value.property, 'loss_tangent'); assert.equal(lossPreview.value.adoptable, false);
+  assert.equal(lossPreview.value.comparison.status, 'condition_mismatch');
+  assert.equal(lossPreview.value.comparison.actual, lossCase.value);
+  assert.equal(lossPreview.value.evidence.quantity.value, lossCase.value);
+  assert.equal(lossPreview.value.evidence.record_sha256, lossCase.recordSha);
+  assert.equal(lossPreview.value.approval, 'not_granted'); assert.equal(lossPreview.value.applied_to_workspace, false);
+  const lossChecks = lossPreview.value.comparison.condition_checks;
+  assert.equal(lossChecks.length, Object.keys(lossCase.conditions).length);
+  assert.deepEqual(lossChecks.filter(item => item.status !== 'matched').map(item => item.condition), ['temperature_basis']);
+  assert.equal(lossChecks.find(item => item.condition === 'temperature_basis').actual, null);
+  assert.match(lossPreview.value.reason, /^temperature_basis：/);
+  const lossDialog = page.getByRole('dialog', { name: '核对并采用一项材料物性', exact: true });
+  await expect(lossDialog.getByRole('button', { name: '确认采用这一项物性', exact: true })).toBeDisabled();
+  await expect(lossDialog.getByRole('checkbox')).toHaveCount(0);
+  await expect(lossDialog.getByRole('status')).toContainText('温度口径：型号没有此条件的明确事实');
+  await lossDialog.locator('.library-import-dialog-body').evaluate(element => element.scrollTo({ top: 0 }));
+  await capture('损耗角正切真实已有值与同值参考仍不可采用');
+  await positionDialogContent(lossDialog.getByRole('table', { name: '材料适用条件逐项核对', exact: true }));
+  await capture('损耗角正切六项条件完整核对缺温度口径拒绝');
+  await positionDialogContent(lossDialog.locator('.reference-evidence'));
+  await capture('损耗角正切IEC原文页码条件与参考分档');
+  await lossDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(page.getByRole('button', { name: '预览这一项物性', exact: true })).toBeFocused();
+  assert.equal(report.requests.filter(request => request.method === 'POST' && request.url.endsWith('/api/library/resources/materials/adopt')).length, adoptedBeforeLoss);
+  const lossReadback = await readApi(`/api/types/${lossWid}/workspace`);
+  assert.deepEqual(lossReadback, lossBound, '拒绝预览不得写入修订、物性或来源');
+  const lossRestored = await explicitTypesWrite(`/api/workspaces/${lossWid}/history/undo`, 'POST', { expected_revision: lossBound.revision }, 'undo-loss-tangent-binding');
+  assert.deepEqual(lossRestored.domain, lossInitial.domain);
+  assert.deepEqual(lossRestored.type_resource_bindings, lossInitial.type_resource_bindings, '撤销仅恢复绑定前状态，不制造物性采用');
+  audit.loss_tangent = { workspace_id: lossWid, initial: lossInitial, selection: selectedLoss, asset: lossAsset,
+    binding_preview: lossBindPreview, binding: lossBinding, bound: lossBound, preview: lossPreview, readback: lossReadback,
+    binding_undo: lossRestored, adoption_request_sent: false, existing_value_preserved: true };
+  audit.expected_ui_refusals.push({ kind: 'loss_tangent_temperature_basis_missing_despite_equal_value', preview: lossPreview.value, adoption_request_sent: false });
+  await write('loss-tangent-audit', audit.loss_tangent);
 
   await select('资料类别', '敷设与环境');
   await page.getByRole('button', { name: '浏览资料目录', exact: true }).click();
@@ -466,5 +586,6 @@ export async function walkResources({ page, base, viewport, out, expect, capture
     saved_run: savedRun, workspace_after: after, previous_calculation: previous, run_index: runIndex, previous_run: oldRun, previous_run_readback: oldReadback };
   await write('environment-audit', audit.environment); await write('summary', audit);
   report.checks.push(`${viewport.width}：标准/文献原表经真实 UI 逐条条件核对→SI 回执→只读草稿预览→人工入库→来源核对/发布；铜密度8889、体积热容3460000、20°C电阻率1.7241e-8逐项采用到真实起帆空缺，数值/页码/原件SHA/记录SHA/回执/修订均回读，旧修订未改，真实undo恢复原值且保留来源绑定。原表范围及空条件明确阻止选值，同值阻止重复采用。`);
+  report.checks.push(`${viewport.width}：IEC60287-1-1 Table3损耗角正切0.004经真实UI显式选择全部六项条件→草稿→人工核对/发布→绑定既有3×300的XLPE。真实已有0.004未清空，缺少已核对最高允许工作温度口径时仍拒绝采用，同值也不重复写入；完整条件/页码/回执/前后输入已回读，0次采用请求，真实undo仅恢复来源绑定。此项不是实际示例的正向物性采用。`);
   report.checks.push(`${viewport.width}：仅经既有Types文档接口明示研究15kV/50Hz与逐字段来源，原材料/结构不改；A.4原文埋深保留参考且因测量基准未知禁止采用到中心埋深。已证Table2湿土1 K·m/W经UI创建发布，明确研究语境与工况后仅预览热阻率1.2→1.0，人工确认沿用系列真实计算；回执进入同一运行，旧快照/输出摘要不变，工作区领域输入不被工况参考回写。`);
 }

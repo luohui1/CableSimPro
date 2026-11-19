@@ -17,6 +17,15 @@ from . import factory_tables as tables
 from .catalogue_core import CoreError, designation, structure
 
 
+def _finite_rating_number(value):
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 class DeclaredParameter(StrictModel):
     value: float | str
     reference: str = Field(min_length=1, max_length=2000)
@@ -27,6 +36,10 @@ class DeclaredParameter(StrictModel):
         if not self.reference.strip() or isinstance(self.value, float) and not math.isfinite(self.value):
             raise ValueError('参数必须有有限值及非空出处。')
         return self
+
+
+class DeclaredMaterialProperty(DeclaredParameter):
+    value: float = Field(strict=True, allow_inf_nan=False)
 
 
 class SeriesDeclaration(StrictModel):
@@ -51,7 +64,18 @@ class SeriesDeclaration(StrictModel):
     oversheath: Literal['PVC', 'PE'] | None = None
     armour_material: str | None = None
     outer_diameter_precision_mm: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-    material_properties: dict[str, dict[str, DeclaredParameter]] = Field(default_factory=dict)
+    material_properties: dict[str, dict[str, DeclaredMaterialProperty]] = Field(default_factory=dict)
+
+    @field_validator('modelling', mode='before')
+    @classmethod
+    def declared_rating_numbers(cls, value):
+        if isinstance(value, dict):
+            for key in ('normal_temperature_k', 'short_circuit_temperature_k', 'conductor_class'):
+                parameter = value.get(key)
+                number = parameter.get('value') if isinstance(parameter, dict) else getattr(parameter, 'value', None)
+                if key in value and not _finite_rating_number(number):
+                    raise ValueError(key + '：须为有限数值，不接受字符串或布尔值。')
+        return value
 
     @field_validator('cores', mode='before')
     @classmethod
@@ -190,6 +214,167 @@ def _full_sources(payload, facts, series, derivation):
         if roles.get(layer['role']) in source_by_key:
             sources[f'/cable_type/common_layers/{index}/thickness'] = source_by_key[roles[layer['role']]]
     return sources
+
+
+MATERIAL_MAPPING_METHOD = {'name': '明示材料物性映射', 'version': '1.0.0'}
+RATING_MAPPING_METHOD = {'name': '明示额定条件映射', 'version': '1.0.0'}
+
+
+def _declared_ratings(payload, modelling):
+    """Retain stated limits without rewriting an already constructed model.
+
+    A permissible temperature is not an operating temperature or a fault
+    duration. No study inputs are created here. Existing different values
+    cannot be replaced after the constructor has derived its results.
+    """
+    from backend.domain.guards import pointer
+
+    cable = payload['cable_type']
+    limits = cable['rating']['max_conductor_temperature']
+    plans, issues = [], []
+    for key, field in (('normal_temperature_k', 'normal'), ('short_circuit_temperature_k', 'short_circuit'),
+                       ('conductor_class', 'conductor_class')):
+        if key not in modelling:
+            continue
+        declared = modelling[key]
+        value = declared.get('value')
+        unit = '1' if key == 'conductor_class' else 'K'
+        reason = None
+        if not _finite_rating_number(value) or value <= 0:
+            reason = '须为有限正数，不接受字符串或布尔值。'
+        elif declared.get('unit') != unit or not declared.get('reference', '').strip():
+            reason = '须有明确出处及匹配的 SI 单位 ' + unit + '。'
+        elif key == 'conductor_class' and value not in (1, 2, 5, 6):
+            reason = '导体类别只能明确声明为 1、2、5 或 6。'
+        if reason:
+            issues.append({'column': '', 'field': 'modelling.' + key, 'code': 'TABLE_RATING_INVALID',
+                           'message': key + '：' + reason})
+            continue
+        if key == 'conductor_class':
+            value = int(value)
+            targets = [(core['conductor'], pointer('cable_type', 'cores', core['id'], 'conductor', field))
+                       for core in cable['cores']]
+        else:
+            targets = [(limits, pointer('cable_type', 'rating', 'max_conductor_temperature', field))]
+        if any(target.get(field) is not None and target[field] != value for target, _ in targets):
+            issues.append({'column': '', 'field': 'modelling.' + key, 'code': 'TABLE_RATING_CONFLICT',
+                           'message': '明示额定条件与已有构造值冲突；须按新条件重新构造，'
+                                      '不能覆盖后沿用旧派生结果或原导体类别的标准查询：' + key})
+            continue
+        plans.append((key, field, value, declared, targets))
+    if issues:
+        return {}, [], issues
+    if not plans:
+        return {}, [], []
+    resulting_limits = {**limits, **{field: value for _, field, value, _, _ in plans if field != 'conductor_class'}}
+    if (resulting_limits.get('normal') is not None and resulting_limits.get('short_circuit') is not None
+            and resulting_limits['short_circuit'] < resulting_limits['normal']):
+        return {}, [], [{'column': '', 'field': 'modelling.short_circuit_temperature_k',
+                         'code': 'TABLE_RATING_INVALID', 'message': '短路许可温限不能低于正常运行许可温限。'}]
+    sources, receipt = {}, []
+    for key, field, value, declared, targets in plans:
+        for target, path in targets:
+            target[field] = value
+            sources[path] = candidate_source({'kind': 'user', 'method': RATING_MAPPING_METHOD,
+                'confidence': 'reference', 'reviewed': False, 'field': key, 'evidence': deepcopy(declared),
+                'usage': 'declared_conductor_class' if field == 'conductor_class' else 'permitted_temperature_limit'})
+        receipt.append({'field': key, 'paths': [path for _, path in targets], 'value': value, 'unit': declared['unit']})
+    return sources, receipt, []
+
+
+def _material_properties(payload, declared):
+    """Map explicit role-scoped properties without changing other uses or results.
+
+    The constructor may share a material between a conductor and its screen.
+    A declaration for one role must not become a statement about the other.
+    Conflicting nonempty constructor values require a new construction, since
+    its derived quantities have already used those values. This adapter never
+    recomputes them, and validates the whole declaration before changing a row.
+    """
+    from backend.domain.guards import pointer
+    from backend.domain.models import Material
+    from .stated_single_core import PROPERTY_UNITS
+
+    if not declared:
+        return {}, [], []
+    slots = []
+    for core in payload['cable_type']['cores']:
+        path = pointer('cable_type', 'cores', core['id'])
+        slots.append(('conductor', core['conductor'], path + '/conductor/material'))
+        slots.extend((layer['role'], layer, path + pointer('layers', layer['role'], 'material'))
+                     for layer in core['layers'])
+    slots.extend((layer['role'], layer, pointer('cable_type', 'common_layers', layer['role'], 'material'))
+                 for layer in payload['cable_type']['common_layers'])
+    materials = {material['id']: material for material in payload['materials']}
+    reserved = set(materials)
+    issues, plans = [], []
+
+    def invalid(field, message):
+        issues.append({'column': '', 'field': 'material_properties.' + field,
+                       'code': 'TABLE_MATERIAL_INVALID', 'message': message})
+
+    for role, properties in declared.items():
+        targets = [(slot, path) for use, slot, path in slots if use == role]
+        identities = {slot['material'] for slot, _ in targets}
+        if len(identities) != 1 or not identities <= materials.keys():
+            invalid(role, '明示材料物性须对应当前结构中唯一的材料用途；此用途不存在或对应多个材料：' + role)
+            continue
+        if not properties:
+            continue
+        original_id = next(iter(identities))
+        original = materials[original_id]
+        material = deepcopy(original)
+        before = len(issues)
+        for key, prop in properties.items():
+            field = role + '.' + key
+            if key not in PROPERTY_UNITS:
+                invalid(field, '未覆盖的材料物性，未忽略此声明：' + field)
+            elif not prop.get('reference', '').strip() or prop.get('unit') not in PROPERTY_UNITS[key]:
+                invalid(field, '材料物性须有明确出处及匹配的 SI 单位：' + field)
+            elif type(prop.get('value')) not in (int, float) or not math.isfinite(prop['value']):
+                invalid(field, '材料物性须为有限数值，不接受字符串或布尔值：' + field)
+            elif original.get(key) is not None and original[key] != prop['value']:
+                invalid(field, '明示物性与已有构造值冲突；须按新物性重新构造，不能覆盖后沿用旧派生结果：' + field)
+            else:
+                material[key] = prop['value']
+        try:
+            Material.model_validate(material)
+        except ValidationError as error:
+            for problem in error.errors(include_input=False, include_url=False):
+                field = role + '.' + str(problem['loc'][-1])
+                invalid(field, '材料物性不符合领域约束：' + field + '；' + problem['msg'])
+        if len(issues) != before:
+            continue
+        if any(use != role and slot['material'] == original_id for use, slot, _ in slots):
+            identifier = 'material/import-' + role.replace('_', '-')
+            suffix = 2
+            while identifier in reserved:
+                identifier = 'material/import-' + role.replace('_', '-') + '-' + str(suffix)
+                suffix += 1
+            material['id'] = identifier
+            reserved.add(identifier)
+        plans.append((role, original_id, material, targets, properties))
+    if issues:
+        return {}, [], issues
+
+    sources, receipt = {}, []
+    for role, original_id, material, targets, properties in plans:
+        mapping = {'role': role, 'from_material': original_id, 'to_material': material['id'],
+                   'properties': sorted(properties)}
+        receipt.append(mapping)
+        if material['id'] == original_id:
+            materials[original_id].update(material)
+        else:
+            payload['materials'].append(material)
+            for slot, path in targets:
+                slot['material'] = material['id']
+                sources[path] = candidate_source({'kind': 'derived', 'method': MATERIAL_MAPPING_METHOD,
+                    'confidence': 'reference', 'reviewed': False, 'evidence': mapping})
+        for key, prop in properties.items():
+            sources[pointer('materials', material['id'], key)] = candidate_source({
+                'kind': 'user', 'method': MATERIAL_MAPPING_METHOD, 'confidence': 'reference',
+                'reviewed': False, 'role': role, 'property': key, 'evidence': deepcopy(prop)})
+    return sources, receipt, []
 
 
 def _validation_issues(item, error, mapping):
@@ -347,10 +532,25 @@ def build_rows(upload, sheet, rows, series, mapping):
             if any(f['key'] == 'r20' and f['source']['origin'] == 'standard' for f in item['values']):
                 for core in payload['cable_type']['cores']:
                     core['conductor']['r20_basis'] = 'design'
-            item.update(status='ready', missing=[], closure=row['closure'], derivation=row['derivation'])
+            rating_sources, rating_mapping, issues = _declared_ratings(payload, series.get('modelling', {}))
+            if issues:
+                item['issues'].extend(issues)
+                item.update(status='error', payload=None)
+                continue
+            sources, material_mapping, issues = _material_properties(payload, series.get('material_properties', {}))
+            if issues:
+                item['issues'].extend(issues)
+                item.update(status='error', payload=None)
+                continue
+            derivation = deepcopy(row['derivation'])
+            if rating_mapping:
+                derivation['rating_mapping'] = {'method': RATING_MAPPING_METHOD, 'items': rating_mapping}
+            if material_mapping:
+                derivation['material_mapping'] = {'method': MATERIAL_MAPPING_METHOD, 'items': material_mapping}
+            item.update(status='ready', missing=[], closure=row['closure'], derivation=derivation)
             item['warnings'] = row['warnings']
             item['payload'] = {'name': item['name'], 'version': '1', 'confirmed': False, **payload,
-                               'sources': _full_sources(payload, item['values'], series, row['derivation'])}
+                               'sources': {**_full_sources(payload, item['values'], series, derivation), **rating_sources, **sources}}
     for item in result:
         if item['payload']:
             try:

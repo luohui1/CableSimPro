@@ -3,16 +3,21 @@
 Usage: python scripts/verify_catalogue_originals.py --output <new-directory>
 Optional --people-pdf and --bahra-pdf use local originals instead of downloading
 the fixed official URLs. --catalogue-root selects a copy of the two JSON files.
-No application, importer or calculation plugin is used. All output is evidence,
+No application, import API or calculation plugin is executed. All output is evidence,
 not product approval; the 46 unpublished People R20 entries remain absent.
 The 877 product-table cells remain separate from four material-guide values and
-84 logical direct-burial factors; published guidance is not a calculation input.
+84 logical direct-burial factors and three People permissible limits; these
+separate reference facts are not actual calculation inputs.
+Official downloads share one transport retry and a checked time budget; all
+attempts, including failures, are retained in original-pdf-downloads.json.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import errno
 import hashlib
+from http.client import HTTPException, IncompleteRead
 import json
 import math
 import re
@@ -22,17 +27,18 @@ from collections import Counter
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import fitz
 
 ROOT = Path(__file__).resolve().parents[1]
-METHOD_VERSION = '1.1.0'
+METHOD_VERSION = '1.2.0'
 MAX_PDF_BYTES = 32 * 1024 * 1024
 NETWORK_TIMEOUT = 30
 DOWNLOAD_SECONDS = 120
+DOWNLOAD_STAGE_SECONDS = 270
 SOURCES = {
     'people': {
         'file': 'people_mv_xlpe.json', 'pages': 6,
@@ -125,48 +131,175 @@ class OfficialRedirect(HTTPRedirectHandler):
         return super().redirect_request(request, fp, code, message, headers, newurl)
 
 
-def pdf_bytes(name, local_path):
+def checked_pdf(name, data, origin):
     source = SOURCES[name]
-    if local_path is not None:
-        require(local_path.is_file(), 'SOURCE_MISSING', f'{name}: original PDF is not a file: {local_path}')
-        require(local_path.stat().st_size <= MAX_PDF_BYTES, 'SOURCE_SIZE', f'{name}: PDF exceeds size limit')
-        data = local_path.read_bytes()
-        origin = {'mode': 'local', 'path': str(local_path.resolve())}
-    else:
-        request = Request(source['url'], headers={'User-Agent': 'CableSimPro catalogue-source-verification/1.0',
-                                                'Accept': 'application/pdf', 'Accept-Encoding': 'identity'})
-        started = time.monotonic()
-        try:
-            with build_opener(OfficialRedirect(source)).open(request, timeout=NETWORK_TIMEOUT) as response:
-                official_url(response.geturl(), source)
-                require(response.status == 200, 'SOURCE_HTTP', f'{name}: expected HTTP 200')
-                declared_size = response.headers.get('Content-Length')
-                if declared_size is not None:
-                    require(declared_size.isdigit() and int(declared_size) <= MAX_PDF_BYTES,
-                            'SOURCE_SIZE', f'{name}: invalid or excessive Content-Length')
-                chunks, size = [], 0
-                while True:
-                    require(time.monotonic() - started <= DOWNLOAD_SECONDS, 'SOURCE_TIMEOUT',
-                            f'{name}: download exceeded {DOWNLOAD_SECONDS} seconds')
-                    chunk = response.read1(128 * 1024)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    require(size <= MAX_PDF_BYTES, 'SOURCE_SIZE', f'{name}: download exceeds size limit')
-                    require(time.monotonic() - started <= DOWNLOAD_SECONDS, 'SOURCE_TIMEOUT',
-                            f'{name}: download exceeded {DOWNLOAD_SECONDS} seconds')
-                    chunks.append(chunk)
-                data = b''.join(chunks)
-                if declared_size is not None:
-                    require(len(data) == int(declared_size), 'SOURCE_SIZE', f'{name}: incomplete HTTP body')
-                origin = {'mode': 'official_download', 'final_url': response.geturl()}
-        except (OSError, URLError) as exc:
-            raise AuditError('SOURCE_UNAVAILABLE', f'{name}: official PDF download failed: {exc}') from exc
     digest = hashlib.sha256(data).hexdigest()
     require(digest == source['sha256'], 'PDF_SHA256_MISMATCH',
             f'{name}: expected {source["sha256"]}, received {digest}')
     require(data.startswith(b'%PDF-'), 'SOURCE_FORMAT', f'{name}: source is not a PDF')
     return data, {**origin, 'primary_url': source['url'], 'sha256': digest, 'bytes': len(data)}
+
+
+def retryable_transport(error):
+    if isinstance(error, AuditError):
+        return error.code == 'SOURCE_TIMEOUT'
+    if isinstance(error, HTTPError):
+        return False
+    if isinstance(error, URLError):
+        error = error.reason
+    # IncompleteRead and RemoteDisconnected are protocol failures, even though
+    # RemoteDisconnected also inherits ConnectionResetError in Python.
+    return not isinstance(error, HTTPException) and (
+        isinstance(error, (TimeoutError, ConnectionResetError))
+        or isinstance(error, OSError) and error.errno in (errno.ETIMEDOUT, errno.ECONNRESET))
+
+
+class DownloadAudit:
+    """One shared reconnect and a checked time budget for both official PDFs."""
+
+    def __init__(self, output):
+        self.output = output
+        self.started = None
+        self.remaining_retries = 1
+        self.report = {
+            'policy': {'shared_extra_connections': 1, 'stage_check_budget_seconds': DOWNLOAD_STAGE_SECONDS,
+                       'attempt_check_budget_seconds': DOWNLOAD_SECONDS, 'socket_timeout_seconds': NETWORK_TIMEOUT,
+                       'limit': 'Budgets are checked at I/O boundaries, not hard wall-clock deadlines. '
+                                'Blocking socket operations, DNS and scheduling can overrun a remaining budget; '
+                                'the CI step timeout remains the outer limit.'},
+            'attempts': [], 'finished_utc': None,
+        }
+
+    def elapsed(self):
+        return 0 if self.started is None else time.monotonic() - self.started
+
+    def save(self, cause=None):
+        if self.report['finished_utc'] is None:
+            self.report['stage_elapsed_seconds'] = self.elapsed()
+        self.report['remaining_extra_connections'] = self.remaining_retries
+        try:
+            write_json(self.output, self.report)
+        except OSError as error:
+            detail = f'Cannot save download diagnostics: {error}'
+            print(json.dumps({'code': 'SOURCE_DIAGNOSTICS_UNAVAILABLE', 'detail': detail,
+                              'original_error': str(cause) if cause is not None else None}), file=sys.stderr)
+            if cause is None:
+                raise AuditError('SOURCE_DIAGNOSTICS_UNAVAILABLE', detail) from error
+            return False
+        return True
+
+    def finish(self, cause=None):
+        if self.report['finished_utc'] is None:
+            self.report['stage_elapsed_seconds'] = self.elapsed()
+            self.report['finished_utc'] = datetime.now(timezone.utc).isoformat()
+        if cause is not None:
+            self.report['audit_error'] = {'code': getattr(cause, 'code', type(cause).__name__), 'detail': str(cause)}
+        self.save(cause)
+
+    def fetch(self, name):
+        source = SOURCES[name]
+        if self.started is None:
+            self.started = time.monotonic()
+        attempt_number = 0
+        while True:
+            attempt_number += 1
+            started = time.monotonic()
+            attempt = {'source': name, 'attempt': attempt_number, 'url': source['url'], 'final_url': None,
+                       'started_utc': datetime.now(timezone.utc).isoformat(), 'http_status': None,
+                       'declared_size': None, 'received_bytes': 0, 'redirects': [], 'connection_started': False,
+                       'elapsed_seconds': 0, 'status': 'started'}
+            self.report['attempts'].append(attempt)
+
+            def budget():
+                require(self.elapsed() < DOWNLOAD_STAGE_SECONDS, 'SOURCE_DOWNLOAD_BUDGET',
+                        f'{name}: shared download check budget of {DOWNLOAD_STAGE_SECONDS} seconds exhausted')
+                require(time.monotonic() - started < DOWNLOAD_SECONDS, 'SOURCE_TIMEOUT',
+                        f'{name}: download exceeded {DOWNLOAD_SECONDS} seconds')
+
+            class ObservedRedirect(OfficialRedirect):
+                def redirect_request(self, request, fp, code, message, headers, newurl):
+                    attempt['redirects'].append({'url': request.full_url, 'http_status': code,
+                                                'location': newurl, 'declared_size': headers.get('Content-Length')})
+                    attempt['http_status'], attempt['final_url'] = code, request.full_url
+                    # URL rejection takes precedence over a spent time budget.
+                    redirected = super().redirect_request(request, fp, code, message, headers, newurl)
+                    budget()
+                    return redirected
+
+            chunks = []
+            try:
+                self.save()
+                official_url(source['url'], source)
+                budget()
+                request = Request(source['url'], headers={'User-Agent': 'CableSimPro catalogue-source-verification/1.0',
+                                                        'Accept': 'application/pdf', 'Accept-Encoding': 'identity'})
+                attempt['connection_started'] = True
+                with build_opener(ObservedRedirect(source)).open(request, timeout=NETWORK_TIMEOUT) as response:
+                    attempt['final_url'], attempt['http_status'] = response.geturl(), response.status
+                    attempt['declared_size'] = response.headers.get('Content-Length')
+                    attempt['elapsed_seconds'] = time.monotonic() - started
+                    self.save()
+                    official_url(response.geturl(), source)
+                    require(response.status == 200, 'SOURCE_HTTP', f'{name}: expected HTTP 200')
+                    declared_size = attempt['declared_size']
+                    if declared_size is not None:
+                        require(declared_size.isdigit() and int(declared_size) <= MAX_PDF_BYTES,
+                                'SOURCE_SIZE', f'{name}: invalid or excessive Content-Length')
+                    while True:
+                        budget()
+                        chunk = response.read1(128 * 1024)
+                        attempt['received_bytes'] += len(chunk)
+                        require(attempt['received_bytes'] <= MAX_PDF_BYTES, 'SOURCE_SIZE',
+                                f'{name}: download exceeds size limit')
+                        budget()
+                        attempt['elapsed_seconds'] = time.monotonic() - started
+                        self.save()
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    data = b''.join(chunks)
+                    if declared_size is not None:
+                        require(len(data) == int(declared_size), 'SOURCE_SIZE', f'{name}: incomplete HTTP body')
+                    result = checked_pdf(name, data, {'mode': 'official_download', 'final_url': response.geturl()})
+            except (ValueError, OSError, URLError, HTTPException) as error:
+                if isinstance(error, HTTPError):
+                    attempt.update(http_status=error.code, final_url=error.geturl(),
+                                   declared_size=error.headers.get('Content-Length') if error.headers else None)
+                    error.close()
+                if isinstance(error, IncompleteRead):
+                    attempt['received_bytes'] += len(error.partial)
+                code = error.code if isinstance(error, AuditError) else (
+                    'SOURCE_HTTP' if isinstance(error, HTTPError) else
+                    'SOURCE_SIZE' if isinstance(error, IncompleteRead) else
+                    'SOURCE_INPUT_INVALID' if isinstance(error, ValueError) else 'SOURCE_UNAVAILABLE')
+                retry = retryable_transport(error) and self.remaining_retries > 0 and self.elapsed() < DOWNLOAD_STAGE_SECONDS
+                chunks.clear()  # A reconnect never appends to an earlier response.
+                attempt.update(status='failed', elapsed_seconds=time.monotonic() - started,
+                               error={'code': code, 'type': type(error).__name__, 'detail': str(error)},
+                               retryable_transport=retryable_transport(error), retry_scheduled=retry,
+                               partial_body_discarded=True)
+                if retry:
+                    self.remaining_retries -= 1
+                persisted = self.save(error)  # A diagnostics write error cannot replace this rejection.
+                if retry and persisted:
+                    continue
+                if isinstance(error, AuditError):
+                    raise
+                raise AuditError(code, f'{name}: official PDF download failed: {error}') from error
+            attempt.update(status='passed', elapsed_seconds=time.monotonic() - started,
+                           sha256=result[1]['sha256'], retry_scheduled=False)
+            self.save()
+            return result
+
+
+def pdf_bytes(name, local_path, downloads):
+    if local_path is not None:
+        require(local_path.is_file(), 'SOURCE_MISSING', f'{name}: original PDF is not a file: {local_path}')
+        require(local_path.stat().st_size <= MAX_PDF_BYTES, 'SOURCE_SIZE', f'{name}: PDF exceeds size limit')
+        data = local_path.read_bytes()
+        origin = {'mode': 'local', 'path': str(local_path.resolve())}
+        return checked_pdf(name, data, origin)
+    return downloads.fetch(name)
 
 
 def unique_object(pairs):
@@ -606,6 +739,92 @@ def audit_published_guidance(doc, data):
             'scope': 'Manufacturer reference guidance only; not manufacturing measurements, GB 50217 factors, or actual calculation inputs.'}
 
 
+def audit_people_operating_limits(doc, published, modelling):
+    """Compare declared limits with independent text in the pinned first page.
+
+    Read the complete clauses, including <= / maximum-duration wording, inside
+    the fixed usage-characteristics region. A number elsewhere on the page is
+    not evidence for this limit. The declared numeric values never determine
+    what is extracted or where it is read.
+    """
+    require(isinstance(published, dict) and isinstance(modelling, dict),
+            'OPERATING_LIMIT_SCHEMA', 'People permissible-limit declarations must be objects')
+    source = published.get('source', {})
+    require(published.get('schema') == 'cablesim.published-operating-limits/1'
+            and published.get('semantic') == 'manufacturer_limit'
+            and published.get('usage') == 'permitted_limits_only'
+            and published.get('confidence') == 'reference' and published.get('reviewed') is False,
+            'OPERATING_LIMIT_SCHEMA', 'People operating facts must remain unreviewed permissible limits')
+    method = {'id': 'cablesim.catalogue-operating-limits-transcription',
+              'name': '人民电器公开使用特性转录', 'version': '1.0.0'}
+    require(published.get('method') == method, 'OPERATING_LIMIT_SCHEMA', 'People transcription method differs')
+    require(isinstance(source, dict) and source.get('sha256') == SOURCES['people']['sha256'] and source.get('url') == SOURCES['people']['url']
+            and source.get('pdf_page') == 1 and source.get('printed_page') == 43,
+            'OPERATING_LIMIT_SOURCE', 'People operating-limit source or original page differs')
+    region = (205, 210, 552, 296)
+    header = header_evidence(doc, 1, region, ('使用特性',))
+    footer = re.sub(r'\s+', '', doc[0].get_text(clip=fitz.Rect(40, 620, 100, 642)))
+    require(footer == '043', 'PDF_LAYOUT_MISMATCH', 'People usage characteristics must be on printed page 043')
+    text = re.sub(r'\s+', '', header['text'])
+    normal = list(re.finditer(r'电缆导体的长期允许工作温度[:：]≤(\d+(?:\.\d+)?)(?:℃|°C)', text))
+    short = list(re.finditer(r'短路时[（(]最长持续时间不超过(\d+(?:\.\d+)?)s[）)]'
+                            r'电缆的最高工作温度[:：](\d+(?:\.\d+)?)(?:℃|°C)', text))
+    require(len(normal) == len(short) == 1, 'PDF_LAYOUT_MISMATCH',
+            'People usage temperature units or maximum-duration condition is missing or ambiguous')
+    originals = {
+        'normal_temperature': (normal[0].group(1), 'degC', normal[0].group(0), {}),
+        'short_circuit_temperature': (short[0].group(2), 'degC', short[0].group(0),
+                                     {'maximum_duration_s': float(short[0].group(1))}),
+        'short_circuit_duration': (short[0].group(1), 's', short[0].group(0),
+                                  {'maximum_temperature_c': float(short[0].group(2))}),
+    }
+    facts = published.get('limits', {})
+    require(isinstance(facts, dict) and set(facts) == set(originals), 'OPERATING_LIMIT_SCHEMA', 'People permissible-limit coverage differs')
+    require(set(modelling) == {'normal_temperature_k', 'short_circuit_temperature_k'},
+            'OPERATING_LIMIT_MAPPING', 'Only declared temperature limits may be mapped; no actual fault duration')
+    checks = []
+    for key, (original, unit, clause, conditions) in originals.items():
+        fact = facts[key]
+        require(isinstance(fact, dict) and set(fact) == {'value', 'unit', 'criterion'}
+                and fact.get('unit') == unit and fact.get('criterion') == 'maximum',
+                'OPERATING_LIMIT_SCHEMA', 'People permissible-limit unit or maximum semantics differs: ' + key)
+        value = float(numeric(fact['value'], 'People permissible limit ' + key))
+        require(value > 0, 'OPERATING_LIMIT_SCHEMA', 'People permissible limit must be positive: ' + key)
+        difference = Decimal(str(value)) - Decimal(original)
+        checks.append({'id': 'people.usage.' + key, 'unit': unit, 'criterion': 'maximum', 'conditions': conditions,
+                       'dataset_value': value, 'pdf_value': float(original), 'difference': float(difference),
+                       'status': 'exact_match' if difference == 0 else 'mismatch', 'text': clause,
+                       'pdf_page': 1, 'printed_page': 43, 'bbox_pdf_points': list(region)})
+        if key == 'short_circuit_duration':
+            continue
+        parameter = modelling[key + '_k']
+        require(isinstance(parameter, dict) and parameter.get('unit') == 'K' and type(parameter.get('value')) in (int, float)
+                and math.isfinite(parameter['value'])
+                and Decimal(str(parameter['value'])) == Decimal(str(value)) + Decimal('273.15'),
+                'OPERATING_LIMIT_MAPPING', 'People SI temperature conversion differs: ' + key)
+        try:
+            reference = json.loads(parameter['reference'], object_pairs_hook=unique_object, parse_constant=nonfinite_json)
+        except (KeyError, TypeError, ValueError) as error:
+            raise AuditError('OPERATING_LIMIT_MAPPING', 'People temperature source is malformed: ' + key) from error
+        require(isinstance(reference, dict) and reference.get('source') == source and reference.get('semantic') == 'manufacturer_limit'
+                and reference.get('method') == method
+                and reference.get('quantity') == key and reference.get('value') == value
+                and reference.get('unit') == unit and reference.get('criterion') == 'maximum'
+                and reference.get('conversion') == {'name': '摄氏温度换算开尔文', 'version': '1.0.0',
+                                                      'expression': 'T/K = t/degC + 273.15'}
+                and reference.get('limitations') == published.get('limitations')
+                and isinstance(reference.get('limitations'), list) and bool(reference['limitations']),
+                'OPERATING_LIMIT_MAPPING', 'People exact declared source or limit semantics differs: ' + key)
+        if key == 'short_circuit_temperature':
+            require(reference.get('conditions') == {'short_circuit_duration': facts['short_circuit_duration']},
+                    'OPERATING_LIMIT_MAPPING', 'People short-circuit temperature lost its maximum-duration condition')
+    return {'summary': {'permissible_limits_checked': len(checks),
+                        'numeric_status_counts': dict(Counter(row['status'] for row in checks)),
+                        'mismatches': [row for row in checks if row['status'] != 'exact_match']},
+            'source_headers_and_units': header, 'printed_page_text': footer, 'numeric_checks': checks,
+            'scope': 'Published maximum temperatures and their duration condition only; not operating/fault inputs or manufacturing measurements.'}
+
+
 def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
 
@@ -614,35 +833,48 @@ def run(args):
     require(not args.output.exists(), 'OUTPUT_EXISTS', 'Output must be a new directory; existing evidence is never overwritten.')
     args.output.mkdir(parents=True)
     docs = {}
+    downloads = DownloadAudit(args.output / 'original-pdf-downloads.json')
     try:
         data, catalogue_files, source_files = {}, {}, {}
         for name in SOURCES:
             data[name], catalogue_files[name] = read_catalogue(name, args.catalogue_root)
-            raw, source_files[name] = pdf_bytes(name, getattr(args, name + '_pdf'))
+            raw, source_files[name] = pdf_bytes(name, getattr(args, name + '_pdf'), downloads)
             docs[name] = fitz.open(stream=raw, filetype='pdf')
             require(not docs[name].needs_pass and len(docs[name]) == SOURCES[name]['pages'], 'PDF_LAYOUT_MISMATCH',
                     f'{name}: encrypted PDF or unexpected page count')
             source_files[name]['pdf_pages'] = len(docs[name])
+        downloads.finish()
         originals = original_cells(docs)
         checks, metrics, summary = compare_catalogues(data, originals)
         guidance = audit_published_guidance(docs['bahra'], data['bahra'])
+        # Read the production metadata helper only; do not build a workbook,
+        # invoke an importer, start the application, or execute a method.
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from backend.kernel.public_catalogues import _data, _people_operating_limits
+        modelling, published = _people_operating_limits(_data('people-mv'))
+        operating_limits = audit_people_operating_limits(docs['people'], published, modelling)
         summary['published_guidance'] = guidance['summary']
-        mismatches = summary['mismatches'] + guidance['summary']['mismatches']
+        summary['published_operating_limits'] = operating_limits['summary']
+        mismatches = summary['mismatches'] + guidance['summary']['mismatches'] + operating_limits['summary']['mismatches']
         summary['status'] = 'failed' if mismatches else 'passed'
         report = {'created_utc': datetime.now(timezone.utc).isoformat(),
             'method': {'id': 'cablesim.catalogue-original-audit', 'version': METHOD_VERSION,
                        'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                        'pdf_engine': 'PyMuPDF', 'pdf_engine_version': fitz.VersionBind},
-            'audit_method': 'Independent coordinate extraction from SHA-pinned original PDFs; no workbook, importer, application or calculation plugin.',
+            'audit_method': 'Independent coordinate extraction from SHA-pinned original PDFs; no workbook, import API, application or calculation plugin execution.',
             'source_files': source_files, 'catalogue_files': catalogue_files,
             'original_headers_and_units': originals[3], 'overlaid_pdf_tokens_suppressed': originals[4],
             'summary': summary, 'four_metric_checks': metrics, 'all_numeric_cell_checks': checks,
             'published_guidance_audit': guidance,
+            'published_operating_limits_audit': operating_limits,
+            'operating_limits_declaration_sha256': hashlib.sha256((ROOT / 'backend/kernel/public_catalogues.py').read_bytes()).hexdigest(),
             'rendered_pages': {},
             'visual_review': 'PNG pages are evidence for review; this automated run does not assert human visual inspection.',
             'limits': [
                 'Checks faithful transcription of published approximate values, not measured manufacturing data or product compliance.',
-                'The original product-table coverage is 877 numeric cells; four material-guide values and 84 logical factors are reported separately. This is not coverage of the complete handbooks.',
+                'The original product-table coverage is 877 numeric cells; four material-guide values, 84 logical factors, and three People operating limits are reported separately. This is not coverage of the complete handbooks.',
+                'People page 1 permits up to 90 degrees C normally and 250 degrees C for at most 5 seconds. These maxima never declare actual operating temperatures, fault duration or test results.',
                 'People R20 is unpublished: 46 absent slots do not count as numeric matches.',
                 'Missing manufacturer construction and installation conditions remain missing; no reference assumptions are used here.',
                 'Bahra reactance, cable codes and drum lengths are outside the transcribed columns; their neighbouring grid positions are not silently substituted.',
@@ -678,16 +910,25 @@ def run(args):
             writer.writeheader()
             writer.writerows({**item, 'conditions': json.dumps(item['conditions'], ensure_ascii=False, sort_keys=True),
                               'bbox_pdf_points': json.dumps(item['bbox_pdf_points'])} for item in guidance['numeric_checks'])
+        with (args.output / 'original-pdf-operating-limits.csv').open('w', newline='', encoding='utf-8') as stream:
+            fields = ['id', 'unit', 'criterion', 'conditions', 'dataset_value', 'pdf_value', 'difference',
+                      'status', 'text', 'pdf_page', 'printed_page', 'bbox_pdf_points']
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows({**item, 'conditions': json.dumps(item['conditions'], ensure_ascii=False, sort_keys=True),
+                              'bbox_pdf_points': json.dumps(item['bbox_pdf_points'])} for item in operating_limits['numeric_checks'])
         require(not mismatches, 'CATALOGUE_VALUE_MISMATCH',
                 f'{len(mismatches)} published values differ from the original PDFs; see original-pdf-cell-audit.json')
         require(summary['four_metric_status_counts'] == {'exact_match': 190, 'not_published': 46}
                 and summary['all_transcribed_numeric_cell_status_counts'] == {'exact_match': 877}
-                and guidance['summary']['numeric_status_counts'] == {'exact_match': 88},
+                and guidance['summary']['numeric_status_counts'] == {'exact_match': 88}
+                and operating_limits['summary']['numeric_status_counts'] == {'exact_match': 3},
                 'AUDIT_COVERAGE', 'Unexpected exact-match or unpublished-metric coverage')
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     finally:
         for doc in docs.values():
             doc.close()
+        downloads.finish(sys.exception())
 
 
 def main():

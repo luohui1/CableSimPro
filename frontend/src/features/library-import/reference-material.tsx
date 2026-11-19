@@ -20,6 +20,9 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const noticeElement = useRef<HTMLParagraphElement>(null);
+  const previewTrigger = useRef<HTMLButtonElement | null>(null);
+  const focusResultAfterClose = useRef(false);
   const [requiredRevision, setRequiredRevision] = useState<number | null>(null);
   const workspaces = useQuery({ queryKey: ['library-reference-type-targets'], queryFn: ({ signal }) => referenceRequest<{ id: string; name: string; revision: number }[]>('/api/design/type-workspaces', { signal }) });
   const resources = useQuery({ queryKey: ['library-reference-type-resources', workspaceId], enabled: !!workspaceId,
@@ -31,8 +34,11 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
   const awaitingRevision = requiredRevision !== null && (resources.data?.revision ?? 0) < requiredRevision;
   useEffect(() => { setPreview(null); setBinding(null); }, [workspaceId, materialId, property, resources.data?.revision]);
   const reset = () => { setPreview(null); setBinding(null); setError(''); setNotice(''); };
-  async function read(bindingOnly: boolean) {
+  async function read(bindingOnly: boolean, trigger: HTMLButtonElement) {
     if (!resources.data || !target || awaitingRevision) return;
+    // Loading disables the trigger before the async preview opens its dialog.
+    // Capture the clicked element now, while it still owns keyboard focus.
+    previewTrigger.current = trigger;
     setBusy(true); setError(''); setNotice('');
     try {
       if (bindingOnly) setBinding(await referencePost<BindingPreview>(`/api/types/${encodeURIComponent(workspaceId)}/resources/material-preview`, {
@@ -46,11 +52,13 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
     } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
   function boundDone(value: TypeResourceView) {
+    focusResultAfterClose.current = true;
     client.setQueryData(['library-reference-type-resources', workspaceId], value);
     void client.invalidateQueries({ queryKey: ['library-reference-type-targets'] });
     setBinding(null); setPreview(null); setNotice('已绑定此参考版本的来源。下一步逐项预览设计物性与参考值，再决定是否采用。');
   }
   function adopted(revision: number) {
+    focusResultAfterClose.current = true;
     setRequiredRevision(revision);
     setPreview(null); setNotice(`所选物性已写入型号输入修订 ${revision}，逐项来源与原值已保存，分档仍为参考。`);
     void client.invalidateQueries({ queryKey: ['library-reference-type-resources', workspaceId] });
@@ -58,7 +66,24 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
     void client.invalidateQueries({ queryKey: ['type-workspace', workspaceId] });
     void client.invalidateQueries({ queryKey: ['type-library'] });
   }
-  return <section className="reference-section library-import-stack" aria-label="材料来源绑定与逐项采用">
+  function closeAutoFocus(event: Event) {
+    const showResult = focusResultAfterClose.current;
+    const trigger = previewTrigger.current;
+    if (!showResult && !trigger?.isConnected) return;
+    focusResultAfterClose.current = false;
+    event.preventDefault();
+    requestAnimationFrame(() => {
+      if (!showResult) {
+        if (trigger?.isConnected && !trigger.disabled) trigger.focus({ preventScroll: true });
+        return;
+      }
+      const result = noticeElement.current;
+      if (!result) return;
+      result.focus({ preventScroll: true });
+      result.scrollIntoView({ block: 'center' });
+    });
+  }
+  return <section className="reference-section reference-material-workflow library-import-stack" aria-label="材料来源绑定与逐项采用">
     <h2>材料来源绑定与逐项采用</h2>
     <p className="muted">先将此固定参考版本绑定到目标材料，再逐项核对真实型号条件与数值差异。缺少材料类别、用途或适用温度事实时，保留拒绝原因。</p>
     <div className="library-import-fields library-import-fields-pair">
@@ -72,19 +97,19 @@ export function MaterialReferenceAdoption({ asset }: { asset: ReferenceAsset }) 
     {resources.error && <ErrorState description={message(resources.error)} action={<Button onClick={() => void resources.refetch()}>重新读取材料</Button>} />}
     {target && <>
       <p>当前来源：{target.binding ? `${target.binding.name} · ${target.binding.version}` : '尚未绑定'}。{target.reason}</p>
-      <div><Button loading={busy} disabled={!resources.data || awaitingRevision} onClick={() => void read(true)}>预览来源绑定</Button></div>
+      <div><Button loading={busy} disabled={!resources.data || awaitingRevision} onClick={event => void read(true, event.currentTarget)}>预览来源绑定</Button></div>
       <Select label="待核对材料物性" value={property} disabled={busy || !bound || awaitingRevision} options={[{ value: '', label: bound ? '请选择一项物性' : '请先人工确认来源绑定' }, ...properties.map(item => ({ value: item.parameter, label: parameterNames[item.parameter] ?? item.parameter }))]}
         onChange={next => { setProperty(next); reset(); }} />
-      <div><Button variant="primary" loading={busy || awaitingRevision} disabled={!bound || !property} onClick={() => void read(false)}>预览这一项物性</Button></div>
+      <div><Button variant="primary" loading={busy || awaitingRevision} disabled={!bound || !property} onClick={event => void read(false, event.currentTarget)}>预览这一项物性</Button></div>
     </>}
     {awaitingRevision && <p role="status">正在读取采用后的输入修订 {requiredRevision}，读取完成后可继续核对下一项。</p>}
-    {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
-    {binding && <MaterialBindingDialog preview={binding} asset={asset} onClose={() => setBinding(null)} onDone={boundDone} />}
-    {preview && <MaterialAdoptionDialog key={preview.response.preview_digest} preview={preview.response} request={preview.request} onClose={() => setPreview(null)} onDone={adopted} />}
+    {notice && <p ref={noticeElement} role="status" tabIndex={-1}>{notice}</p>}{error && <p role="alert">{error}</p>}
+    {binding && <MaterialBindingDialog preview={binding} asset={asset} onClose={() => setBinding(null)} onCloseAutoFocus={closeAutoFocus} onDone={boundDone} />}
+    {preview && <MaterialAdoptionDialog key={preview.response.preview_digest} preview={preview.response} request={preview.request} onClose={() => setPreview(null)} onCloseAutoFocus={closeAutoFocus} onDone={adopted} />}
   </section>;
 }
 
-function MaterialBindingDialog({ preview, asset, onClose, onDone }: { preview: BindingPreview; asset: ReferenceAsset; onClose: () => void; onDone: (value: TypeResourceView) => void }) {
+function MaterialBindingDialog({ preview, asset, onClose, onCloseAutoFocus, onDone }: { preview: BindingPreview; asset: ReferenceAsset; onClose: () => void; onCloseAutoFocus: (event: Event) => void; onDone: (value: TypeResourceView) => void }) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -97,6 +122,7 @@ function MaterialBindingDialog({ preview, asset, onClose, onDone }: { preview: B
     })); } catch (cause) { setError(message(cause)); } finally { setBusy(false); }
   }
   return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title="核对材料来源绑定" busy={busy}
+    onCloseAutoFocus={onCloseAutoFocus}
     description="绑定固定资料版本和来源；参考数值的采用在下一步逐项决定。"
     actions={<Button variant="primary" loading={busy} disabled={!confirmed} onClick={() => void bind()}>确认仅绑定来源</Button>}>
     <div className="library-import-stack">{preview.rows.map(row => <section key={row.id} className="library-import-stack">
@@ -115,7 +141,7 @@ function MaterialBindingDialog({ preview, asset, onClose, onDone }: { preview: B
   </LibraryDialog>;
 }
 
-function MaterialAdoptionDialog({ preview, request, onClose, onDone }: { preview: MaterialPreview; request: MaterialPreviewRequest; onClose: () => void; onDone: (revision: number) => void }) {
+function MaterialAdoptionDialog({ preview, request, onClose, onCloseAutoFocus, onDone }: { preview: MaterialPreview; request: MaterialPreviewRequest; onClose: () => void; onCloseAutoFocus: (event: Event) => void; onDone: (revision: number) => void }) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -130,6 +156,7 @@ function MaterialAdoptionDialog({ preview, request, onClose, onDone }: { preview
   }
   const item = preview.comparison, evidence = preview.evidence;
   return <LibraryDialog open onOpenChange={open => { if (!open && !busy) onClose(); }} title="核对并采用一项材料物性" busy={busy}
+    onCloseAutoFocus={onCloseAutoFocus}
     description={`${preview.material_name} · ${item.label} · 输入修订 ${preview.revision}`}
     actions={<Button variant="primary" loading={busy} disabled={!preview.adoptable || !confirmed} onClick={() => void adopt()}>确认采用这一项物性</Button>}>
     <div className="library-import-stack">

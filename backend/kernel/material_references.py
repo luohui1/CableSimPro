@@ -30,10 +30,11 @@ PROPERTIES = {
     'volumetric_heat_capacity': ('volumetric_heat_capacity', {'volumetric_heat_capacity'}, '体积热容', 'J/(m³.K)'),
     'electrical_resistivity_20': ('resistivity', {'resistivity_20_ohm_m'}, '20 °C 电阻率', 'ohm.m'),
     'relative_permittivity': ('dimensionless', {'relative_permittivity'}, '相对介电常数', '1'),
+    'loss_tangent': ('dimensionless', {'tan_delta'}, '损耗角正切', '1'),
     'thermal_resistivity': ('thermal_resistivity', {'thermal_resistivity', 'thermal_resistivity_k_m_w'}, '热阻率', 'K.m/W'),
 }
 MaterialProperty = Literal['density', 'volumetric_heat_capacity', 'electrical_resistivity_20',
-                           'relative_permittivity', 'thermal_resistivity']
+                           'relative_permittivity', 'loss_tangent', 'thermal_resistivity']
 
 
 class MaterialSelection(StrictModel):
@@ -45,7 +46,7 @@ class MaterialReferenceDraft(StrictModel):
     asset_id: Identifier
     version: Version
     name: str = Field(min_length=1, max_length=128)
-    selections: list[MaterialSelection] = Field(min_length=1, max_length=5)
+    selections: list[MaterialSelection] = Field(min_length=1, max_length=6)
 
     @model_validator(mode='after')
     def unique_properties(self):

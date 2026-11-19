@@ -1,11 +1,13 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import { optionalRecord, text } from '@/api/client';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { displayUnit } from '@/lib/display-names';
-import { sourceLocationText, type Field, type SeriesDeclaration, type Vocabulary } from './api';
+import { displayName, displayUnit } from '@/lib/display-names';
+import { confidenceText, methodText, sourceLocationText, type Field, type SeriesDeclaration, type Vocabulary } from './api';
+import { MaterialDeclarations } from './material-declaration';
 
 export function emptyDeclaration(): SeriesDeclaration {
   return { name: '', manufacturer: '', designation: '', cores: 3, u0_v: 0, u_v: 0, standards: [], origin: 'factory', resistance_basis: 'stated', common: {}, common_basis: {}, modelling: {} };
@@ -16,6 +18,93 @@ const PARTS = [
   { id: 'insulation', label: '绝缘与屏蔽', matches: (key: string) => key.includes('insulation') || key.includes('screen') },
   { id: 'protection', label: '保护层与外径', matches: (key: string) => !key.startsWith('conductor_') && !key.includes('insulation') && !key.includes('screen') && key !== 'r20' },
 ];
+const RATING_FIELDS = [
+  { key: 'normal_temperature_k', label: '正常运行许可温限' },
+  { key: 'short_circuit_temperature_k', label: '短路许可温限' },
+  { key: 'conductor_class', label: '导体类别' },
+];
+const LIMIT_LABELS: Record<string, string> = { normal_temperature: '正常运行温限', short_circuit_temperature: '短路温限', short_circuit_duration: '最长短路时限' };
+const ratingUnit = (unit: unknown) => typeof unit === 'string' && unit ? unit === 'degC' ? '°C' : displayUnit(unit) : '单位未声明';
+const limitText = (value: unknown) => {
+  const item = optionalRecord(value);
+  return `${item.criterion === 'maximum' ? '≤ ' : ''}${typeof item.value === 'number' && Number.isFinite(item.value) ? item.value : '数值未声明'} ${ratingUnit(item.unit)}`;
+};
+const limitationsOf = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+function ParameterValue({ field, value, children }: { field: string; value?: number | string; children: ReactNode }) {
+  const [editing, setEditing] = useState(false);
+  const known = typeof value === 'string' && (
+    field === 'conductor_form' && ['solid_round', 'stranded_round', 'stranded_round_compacted'].includes(value)
+    || field === 'screen_model' && ['continuous_contact', 'given_r20'].includes(value)
+  );
+  if (!known && !editing) return children;
+  return <div className="library-import-stack">
+    <p>{known ? displayName(value) : value}</p>
+    <details className="library-import-explanation" open={editing} onToggle={event => setEditing(event.currentTarget.open)}>
+      <summary>编辑原始声明</summary>
+      {children}
+    </details>
+  </div>;
+}
+
+function RatingSource({ value }: { value: unknown }) {
+  const source = optionalRecord(value), url = text(source.url);
+  return <div className="library-import-issues">
+    <p>出处：{text(source.title) || '资料名称未声明'}{text(source.file) && ` · ${text(source.file)}`}{text(source.location) && ` · ${sourceLocationText(text(source.location))}`}</p>
+    <p>原件页码：印刷第 {typeof source.printed_page === 'number' ? source.printed_page : '未注明'} 页 · PDF 第 {typeof source.pdf_page === 'number' ? source.pdf_page : '未注明'} 页。</p>
+    <p>原件 SHA-256：<code className="library-import-digest">{text(source.sha256) || '未声明'}</code></p>
+    {/^https?:\/\//.test(url) && <p><a className="library-import-source-url" href={url} target="_blank" rel="noopener noreferrer">查看来源原件</a></p>}
+  </div>;
+}
+
+function RatingReference({ reference, field }: { reference: string; field: string }) {
+  let parsed: Record<string, unknown> = {};
+  try { parsed = optionalRecord(JSON.parse(reference)); } catch { /* A manufacturer's own source may be plain text. */ }
+  const transcribed = parsed.semantic === 'manufacturer_limit' && Object.hasOwn(LIMIT_LABELS, text(parsed.quantity));
+  const conversion = optionalRecord(parsed.conversion), duration = optionalRecord(parsed.conditions).short_circuit_duration;
+  const expression = text(conversion.expression);
+  const shownExpression = expression === 'T/K = t/degC + 273.15' ? '开尔文温度（K）= 摄氏温度（°C）+273.15' : expression;
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([reference], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = `${field}-source.txt`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return <div className="library-import-stack">
+    {transcribed ? <>
+      <p>原文项目：{LIMIT_LABELS[text(parsed.quantity)]} {limitText(parsed)} · 厂家许可上限。</p>
+      {duration !== undefined && <p>原文适用条件：最长短路时限 {limitText(duration)}。</p>}
+      <p>转录方法：{methodText(parsed.method)}；换算：{methodText(conversion)}{shownExpression && ` · ${shownExpression}`}。</p>
+      <RatingSource value={parsed.source} />
+      {limitationsOf(parsed.limitations).map((item, index) => <p key={index}>{item}</p>)}
+    </> : <p>{reference || '出处未声明，预览将保留缺项或拒绝。'}</p>}
+    <p className="muted">原始出处按上传文本保存；展示与下载不表示已认证或工程批准。</p>
+    {!!reference && <div><Button type="button" onClick={download}>下载完整声明出处</Button></div>}
+  </div>;
+}
+
+function DeclaredRatings({ value }: { value: SeriesDeclaration }) {
+  const fields = RATING_FIELDS.filter(field => value.modelling[field.key] !== undefined);
+  const published = optionalRecord(value.reference?.published_operating_limits), limits = optionalRecord(published.limits);
+  if (!fields.length && !Object.keys(published).length) return null;
+  return <section className="library-import-common" aria-label="已声明的额定条件">
+    <h2>已声明的额定条件</h2>
+    <p>以下保留本次声明的数值、单位与出处；许可温限不是研究实际运行温度，最长短路时限不是本次故障持续时间。研究输入须另行明确。</p>
+    {fields.map(field => <div className="library-import-common-item" key={field.key}>
+      <p><strong>{field.label}：</strong>{String(value.modelling[field.key].value)} {ratingUnit(value.modelling[field.key].unit)}</p>
+      <details className="library-import-explanation"><summary>{field.label}完整出处</summary>
+        <RatingReference reference={value.modelling[field.key].reference} field={field.key} />
+      </details>
+    </div>)}
+    {!!Object.keys(published).length && <section className="library-import-common-item" aria-label="公开手册许可上限">
+      <h3>公开手册声明的许可上限</h3>
+      <p>原手册限值供对照，不替代上方本次声明，也不填入研究工况。</p>
+      {Object.entries(LIMIT_LABELS).filter(([key]) => limits[key] !== undefined).map(([key, label]) => <p key={key}>{label}：{limitText(limits[key])}</p>)}
+      <p>转录方法：{methodText(published.method)} · 可信分档：{confidenceText(published.confidence)} · {published.reviewed === false ? '尚未人工审核' : published.reviewed === true ? '原来源标记已审核，本次入库仍须人工确认' : '审核状态未声明'}。</p>
+      {limitationsOf(published.limitations).map((item, index) => <p key={index}>{item}</p>)}
+      <details className="library-import-explanation"><summary>手册原件位置与完整摘要</summary><RatingSource value={published.source} /></details>
+    </section>}
+  </section>;
+}
 
 export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
   value: SeriesDeclaration; onChange: (value: SeriesDeclaration) => void; vocabulary: Vocabulary; mapped: Set<string>;
@@ -95,6 +184,7 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
         {sourceNotice && <p role="status">{sourceNotice}</p>}
       </div>
     </details>
+    <DeclaredRatings value={value} />
     <section className="library-import-stack" aria-label="全系列统一尺寸">
       <h2>全系列统一尺寸</h2>
       <p className="muted">原表已有的列按逐行数值导入；其余尺寸需写明取值依据。未提供的参数保留缺项。</p>
@@ -113,16 +203,18 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
     <details className="library-import-details">
       <summary>计算参数与来源</summary>
       <div className="library-import-stack">
-        <p className="muted">这些参数参与计算，不由导入器猜测。选用参考值后请逐项核对适用范围。</p>
-        <div><Button type="button" onClick={() => set({ modelling: structuredClone(vocabulary.reference_modelling) })}>选用有来源的参考参数</Button></div>
+        <p className="muted">这些参数参与计算，不由导入器猜测。点击下方按钮只补充未声明项目，已有数值与出处全部保留；补充后请逐项核对适用范围，需改值时在对应字段明确编辑。</p>
+        <div><Button type="button" onClick={() => set({ modelling: { ...structuredClone(vocabulary.reference_modelling), ...value.modelling } })}>补充尚未声明的参考参数</Button></div>
         {vocabulary.modelling.map(field => <div className="library-import-value" key={field.key}>
           <label htmlFor={`library-model-${field.key}`}>{field.label}<span className="unit"> / {displayUnit(field.unit)}</span></label>
+          <ParameterValue field={field.key} value={value.modelling[field.key]?.value}>
           <Input id={`library-model-${field.key}`} aria-label={`参数${field.label}`} value={value.modelling[field.key]?.value ?? ''} onChange={event => {
             const modelling = { ...value.modelling }, raw = event.target.value;
             if (raw === '') delete modelling[field.key];
             else modelling[field.key] = { value: numberOf(raw) ?? raw, reference: modelling[field.key]?.reference || '' };
             set({ modelling });
           }} />
+          </ParameterValue>
           <Textarea aria-label={`${field.label}参数依据`} required={!!value.modelling[field.key]} placeholder="参数的出处与适用条件" value={value.modelling[field.key]?.reference || ''} onChange={event => {
             const current = value.modelling[field.key];
             if (current) set({ modelling: { ...value.modelling, [field.key]: { ...current, reference: event.target.value } } });
@@ -130,5 +222,11 @@ export function DeclarationForm({ value, onChange, vocabulary, mapped }: {
         </div>)}
       </div>
     </details>
+    <MaterialDeclarations value={value.material_properties} onChange={material_properties => {
+      const next = { ...value };
+      if (material_properties) next.material_properties = material_properties;
+      else delete next.material_properties;
+      onChange(next);
+    }} />
   </div>;
 }

@@ -1,6 +1,7 @@
 """Public manufacturer tables for the canonical type-library import workflow.
 
-The transcribed catalogue JSON remains the only copy of the published numbers.
+The transcribed catalogue JSON remains the only copy of product-table numbers.
+Published usage limits are attached separately with their original conditions.
 Workbook generation does not complete missing engineering parameters. In
 particular, Bahra's unlisted screens are absent from the import, even though the
 older, explicitly assumed catalogue comparison can calculate a reference case.
@@ -11,6 +12,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from hashlib import sha256
 from io import BytesIO, StringIO
+import json
 import re
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -68,6 +70,33 @@ def _sheet_name(table):
     return f"{words[0]}{words[1]} {table['designations'][0]}"
 
 
+def _people_operating_limits(data):
+    """Published permissible limits, never actual study/fault parameters."""
+    source = {**deepcopy(data['source']), 'location': '使用特性第 3、4 项',
+              'pdf_page': 1, 'printed_page': 43}
+    facts = {'normal_temperature': {'value': 90, 'unit': 'degC', 'criterion': 'maximum'},
+             'short_circuit_temperature': {'value': 250, 'unit': 'degC', 'criterion': 'maximum'},
+             'short_circuit_duration': {'value': 5, 'unit': 's', 'criterion': 'maximum'}}
+    limitations = ['厂家声明的使用温限及最长短路时限，非实际运行温度、故障持续时间或实测结果；'
+                   '研究参数须另行明确，不能自动采用这些上限。']
+    method = {'id': 'cablesim.catalogue-operating-limits-transcription',
+              'name': '人民电器公开使用特性转录', 'version': '1.0.0'}
+    published = {'schema': 'cablesim.published-operating-limits/1', 'source': source,
+                 'semantic': 'manufacturer_limit', 'usage': 'permitted_limits_only',
+                 'method': method, 'confidence': 'reference', 'reviewed': False, 'limits': facts, 'limitations': limitations}
+    modelling = {}
+    for name in ('normal_temperature', 'short_circuit_temperature'):
+        original = facts[name]
+        reference = {'source': source, 'semantic': 'manufacturer_limit', 'method': method, 'quantity': name, **original,
+                     'conversion': {'name': '摄氏温度换算开尔文', 'version': '1.0.0', 'expression': 'T/K = t/degC + 273.15'},
+                     'limitations': limitations}
+        if name == 'short_circuit_temperature':
+            reference['conditions'] = {'short_circuit_duration': facts['short_circuit_duration']}
+        modelling[name + '_k'] = {'value': original['value'] + 273.15, 'unit': 'K',
+                                  'reference': json.dumps(reference, ensure_ascii=False, sort_keys=True)}
+    return modelling, published
+
+
 def _declarations(name):
     data = _data(name)
     if name == 'people-mv':
@@ -85,6 +114,9 @@ def _declarations(name):
             series['reference'] = {'resistance': series['common_basis']['r20'],
                                    'original_standards': data['standards_stated'],
                                    'review_standards': series['standards']}
+            rating_declarations, operating_limits = _people_operating_limits(data)
+            series['modelling'].update(rating_declarations)
+            series['reference']['published_operating_limits'] = operating_limits
             mapping = {}
             for index, (field, _unit, _label) in enumerate(table['columns']):
                 if field.startswith('weight:'):

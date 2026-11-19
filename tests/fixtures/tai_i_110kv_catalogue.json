@@ -1,0 +1,101 @@
+{
+  "schema": "cablesim.manufacturer-import-fixture/1",
+  "source": {
+    "publisher": "台一国际股份有限公司",
+    "title": "电力电缆型录",
+    "url": "https://www.tai-i-int.com.tw/media/product/733/file/________.pdf",
+    "sha256": "72b21e5d15f5d50a5b30a01c822ca3771bd0cc190cbfa4edd47bf23a948c9cdd",
+    "size_bytes": 6940265,
+    "pdf_page": 7,
+    "printed_pages": [
+      10
+    ],
+    "context_pdf_page": 6,
+    "context_printed_page": 9,
+    "table": "印刷第10页左下 YJLW02(03)，64/110(126) kV，240至1600 mm²的10行",
+    "scope": "公开厂家目录中的近似结构和重量、标称绝缘厚度及最大20℃导体直流电阻；不是制造实测或签章规格书。",
+    "method": {
+      "name": "厂家目录原表转录",
+      "version": "1.0.0"
+    },
+    "confidence": "reference",
+    "reviewed": false,
+    "column_meanings": {
+      "r20": {
+        "quantity": "厂家原刊最大20℃导体直流电阻限值，不是该规格的制造实测值。",
+        "unit": "Ω/km"
+      },
+      "weight": {
+        "quantity": "厂家近似总重，不是制造实测质量或材料密度。",
+        "unit": "kg/km"
+      },
+      "outer_diameter": {
+        "quantity": "厂家近似成品外径，不是制造实测尺寸或制造公差。",
+        "unit": "mm"
+      },
+      "conductor_diameter": {
+        "quantity": "厂家近似导体外径，不是制造实测尺寸或制造公差。",
+        "unit": "mm"
+      }
+    },
+    "original_standards": [
+      "GB 11017",
+      "IEC 60840",
+      "Q/WLZ 04.03"
+    ],
+    "normalization": "原表合并电压单元格逐行保留同一声明；仅去除独立原件提取中明确核验为全空的一行。整数的千分位逗号转为数值单元格，未改变90个原刊数值。绝缘近似外径保留为未映射原始列，不从外径差推算屏蔽厚度。",
+    "limitations": [
+      "110 kV的独立数据表位于PDF第7页左下，不使用PDF第6页右上127/220(252) kV表；型号说明和适用条件在PDF第6页右下。",
+      "原手册没有给GB 11017、IEC 60840及Q/WLZ 04.03的年号，不自动绑定或替换成其他年版。",
+      "本表同时标YJLW02(03)；本导入明确选择原型号说明中的YJLW02/PVC变体，近似重量不作为某一配方的实测重量。",
+      "800 mm²的R20原刊为0.0211 Ω/km，原样保留，不替换成220 kV表或其他标准的数值。",
+      "电阻列为厂家公布的20℃最大值上限，不是实测值；按参考原刊值保留，不据此视为制造检验合格。",
+      "工作温度90℃仅作为厂家公开使用特性保留；本导入不据此补入研究实际温度、型号运行温限或短路温限。",
+      "敷设环境温度和最小弯曲半径的中文原文为大于0℃、大于15D，英文使用≧；保留两语言符号歧义，不自动选用边界值。",
+      "本表未刊载流量；半导电层、缓冲层、波纹深度和节距、材料物性及制造实测均未补造。"
+    ]
+  },
+  "declaration": {
+    "name": "台一 YJLW02 64/110 kV 原表",
+    "manufacturer": "台一国际股份有限公司",
+    "designation": "YJLW02",
+    "cores": 1,
+    "u0_v": 64000,
+    "u_v": 110000,
+    "um_v": 126000,
+    "origin": "public",
+    "conductor": "copper",
+    "insulation": "XLPE",
+    "metal_sheath": "corrugated_aluminium",
+    "oversheath": "PVC",
+    "resistance_basis": "stated",
+    "standards": [
+      "GB 11017",
+      "IEC 60840",
+      "Q/WLZ 04.03"
+    ]
+  },
+  "headers": [
+    "额定电压 / kV",
+    "导体标称截面 / mm²",
+    "导体近似外径 / mm",
+    "绝缘标称厚度 / mm",
+    "绝缘近似外径 / mm",
+    "铝套厚度 / mm",
+    "外护套厚度 / mm",
+    "成品近似外径 / mm",
+    "最大导体20℃直流电阻 / Ω/km",
+    "近似总重 / kg/km"
+  ],
+  "mapping": {
+    "area": 1,
+    "conductor_diameter": 2,
+    "insulation_thickness": 3,
+    "metallic_sheath_thickness": 5,
+    "oversheath_thickness": 6,
+    "outer_diameter": 7,
+    "r20": 8,
+    "weight": 9
+  },
+  "table_file": "tai_i_110kv.csv"
+}

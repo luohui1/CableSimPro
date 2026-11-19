@@ -1,4 +1,4 @@
-"""Audit real LV, 35 kV and 220 kV imports against their official originals.
+"""Audit real LV, 35 kV, 110 kV and 220 kV imports against their originals.
 
 The normal test suite never downloads manufacturer files. This CI gate obtains
 the originals explicitly, runs the same real upload-to-Types workflows with
@@ -31,7 +31,7 @@ from verify_catalogue_originals import AuditError, OfficialRedirect, official_ur
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'tests/fixtures'
-METHOD = {'name': '厂家结构表原件与真实导入核验', 'version': '1.0.0'}
+METHOD = {'name': '厂家结构表原件与真实导入核验', 'version': '1.1.0'}
 SOURCES = {
     'chint': {
         'metadata': 'chint_lv_yjv_source.json', 'suffix': '.pdf',
@@ -51,8 +51,9 @@ SOURCES = {
         'metadata': 'tai_i_220kv_catalogue.json', 'suffix': '.pdf',
         'environment': 'CABLESIM_TAI_I_ORIGINAL',
         'test': 'tests/test_tai_i_220kv_import.py',
+        'extra_tests': ('tests/test_tai_i_110kv_import.py',),
         'hosts': {'www.tai-i-int.com.tw', 'tai-i-int.com.tw'},
-        'limit': 32 * 1024 * 1024, 'render_pages': (6,),
+        'limit': 32 * 1024 * 1024, 'render_pages': (6, 7),
     },
 }
 
@@ -140,8 +141,10 @@ def main():
                             pdf[page - 1].get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False).save(output / filename)
                             receipt['rendered_pages'].append({'pdf_page': page, 'file': filename})
             junit = output / 'import-tests.xml'
+            tests = [test for item in SOURCES.values()
+                     for test in (item['test'], *item.get('extra_tests', ()))]
             command = [sys.executable, '-m', 'pytest', '-n', '0', '-q', '--tb=short',
-                       '--junitxml=' + str(junit), *[item['test'] for item in SOURCES.values()]]
+                       '--junitxml=' + str(junit), *tests]
             result = subprocess.run(command, cwd=ROOT, env=environment, timeout=300)
             report['test_exit_code'] = result.returncode
             require(result.returncode == 0, 'IMPORT_TEST_FAILED', 'Source or real import workflow failed; see the pytest evidence.')
@@ -149,7 +152,7 @@ def main():
             counts = {key: sum(int(suite.get(key, '0')) for suite in suites)
                       for key in ('tests', 'failures', 'errors', 'skipped')}
             report['tests'] = counts
-            require(counts['tests'] >= 11 and not any(counts[key] for key in ('failures', 'errors', 'skipped')),
+            require(counts['tests'] >= 14 and not any(counts[key] for key in ('failures', 'errors', 'skipped')),
                     'AUDIT_INCOMPLETE', f'Every original-source check and import must run: {counts}')
             report['status'] = 'passed'
     except (AuditError, OSError, ValueError, subprocess.TimeoutExpired) as exc:

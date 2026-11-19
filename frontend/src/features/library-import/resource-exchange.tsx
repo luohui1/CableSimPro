@@ -13,7 +13,7 @@ import { formatDateTime } from '@/lib/format';
 import { LibraryDialog } from './dialog';
 import { EvidenceTable, ReferenceSource, quantityText } from './reference-evidence';
 import { assetStatusNames, parameterNames, referenceRequest, type AssetSummary, type ReferenceAsset, type ReferenceEvidence } from './reference-api';
-import { downloadResourceExchange, exchangeKindNames, type ExchangeFormat, type ExchangeWorkspace, type ResourceExchangePreview, type ResourceExchangeReceipt } from './resource-exchange-api';
+import { downloadResourceExchange, exchangeKindNames, type ExchangeFormat, type ExchangeWorkspace, type PublishedModelProofSummary, type ResourceExchangePreview, type ResourceExchangeReceipt } from './resource-exchange-api';
 
 export function ResourceExchange() {
   const [operation, setOperation] = useState('export');
@@ -21,7 +21,7 @@ export function ResourceExchange() {
     <div className="library-import-fields library-import-fields-pair"><Select label="交换操作" value={operation} onChange={setOperation}
       options={[{ value: 'export', label: '导出本机数据' }, { value: 'import', label: '导入交换文件' }]} /></div>
     <p>资料完整保留数值、原始来源和固定查询回执。工程搬运已保存输入，在目标机器建立独立副本。</p>
-    <p className="muted">新资料须在本机重新核对、发布；导入不采用参数。运行、审核、原始文件和交付历史请使用整库备份恢复。</p>
+    <p className="muted">新资料须在本机重新核对、发布；导入不采用参数。工程固定的发布证明仅作为外部来源，不继承本机运行或审批。完整运行、审核、原始文件和交付历史请使用整库备份恢复。</p>
     {operation === 'export' ? <ResourceExport /> : <ResourceImport />}
   </section>;
 }
@@ -72,7 +72,7 @@ function ResourceExport() {
         options={[{ value: 'material', label: '材料资料' }, { value: 'installation', label: '敷设与环境' }, { value: 'project', label: '工程输入' }]} />
       <label className="text-field">按名称查找交换内容<Input aria-label="按名称查找交换内容" disabled={busy} value={filter} onChange={event => { setFilter(event.target.value); setOffset(0); }} /></label>
     </div>
-    {kind === 'project' && <p className="muted">按现有工程索引选择已保存输入。独立型号请使用型号系列交换；本页不把型号占位输入补成工程。</p>}
+    {kind === 'project' && <p className="muted">按现有工程索引选择已保存输入。固定已发布型号的工程会携带该版本的完整发布证明及准确依赖；目标工程绑定独立草稿，不关联目标库同名型号。独立型号请使用型号系列交换。</p>}
     {kind === 'project' ? projects.isPending ? <LoadingState title="正在读取已保存工程" /> : projects.error ? <ErrorState description={message(projects.error)} action={<Button onClick={() => void projects.refetch()}>重新读取工程</Button>} /> : <DataTable label="可导出的工程输入" showGroups={false}
       groups={[{ id: 'projects', label: '工程输入', rows: projects.data?.items ?? [] }]} rowLabel={row => row.name} columns={[
         { id: 'select', label: '选择', render: row => <Checkbox aria-label={`选择工程 ${row.name}`} checked={!!selectedProjects[row.id]} disabled={busy || (!selectedProjects[row.id] && projectCount >= 20)} onCheckedChange={value => chooseProject(row, value === true)} /> },
@@ -99,7 +99,7 @@ function ResourceExport() {
       { id: 'remove', label: '移出本次范围', render: row => <Button size="compact" disabled={busy} aria-label={`移出交换范围 ${row.name}`} onClick={() => row.project ? chooseProject(selectedProjects[row.id], false) : chooseAsset(selectedAssets[row.id], false)}>移出</Button> },
     ]} />}
     {!!selected.length && <div><Button disabled={busy} onClick={() => { setSelectedAssets({}); setSelectedProjects({}); setDownloaded(null); }}>清空本次选择</Button></div>}
-    <p className="muted">单次最多 100 个资料版本及 20 个工程；完整资料依赖随包导出。单个工程输入限 1 MiB、4096 条锁定记录，文件总计限 8 MiB。单个工程超限须使用整库备份；多个对象合计超限可减少本次选择。</p>
+    <p className="muted">单次最多 100 个资料版本及 20 个工程，完整依赖计入资料数量。每个工程的普通输入限 1 MiB、4096 条锁定记录；经完整校验的固定发布证明单独限 8 MiB，完整交换包和文件仍各限 8 MiB。超限时拒绝整包，不删减来源或锁；单工程超限请使用整库备份，多个对象合计超限可减少本次选择。</p>
     <div className="library-import-fields library-import-fields-pair"><Select label="交换文件格式" value={format} disabled={busy} onChange={value => { setFormat(value as ExchangeFormat); setDownloaded(null); }}
       options={[{ value: 'xlsx', label: 'Excel 交换文件' }, { value: 'json', label: 'JSON 交换文件' }]} /></div>
     <div><Button variant="primary" loading={busy} disabled={!selected.length} onClick={() => void download()}>导出已选资料与工程</Button></div>
@@ -170,6 +170,7 @@ function ResourceImport() {
         { id: 'result', label: '本机处理', wrap: true, render: row => row.action === 'create_draft' ? '新建草稿，须本机核对' : '复用相同内容，保持本机状态' },
         { id: 'open', label: '逐项来源', render: row => <Button size="compact" aria-label={`查看导入资料：${row.name}`} onClick={() => setInspecting(row.id)}>查看完整来源</Button> },
       ]} />}
+      {preview.projects.map(item => item.published_model && <PublishedProjectEvidence key={item.origin_id} name={item.name} value={item.published_model} />)}
       {receipt.projects.map(item => <div key={item.id}><Button asChild><a href={`/studies?workspace=${encodeURIComponent(item.id)}`}>打开工程：{preview.projects.find(source => source.origin_id === item.origin_id)?.name ?? '独立输入副本'}</a></Button></div>)}
     </div> : preview && <div className="library-import-stack">
       <h2>核对资料与工程交换预览</h2>
@@ -181,14 +182,32 @@ function ResourceImport() {
       ]} />}
       {!!preview.projects.length && <DataTable label="工程交换预览" showGroups={false} groups={[{ id: 'projects', label: '工程输入', rows: preview.projects.map(item => ({ ...item, id: item.origin_id })) }]} rowLabel={row => row.name} columns={[
         { id: 'name', label: '工程名称', wrap: true, render: row => row.name },
-        { id: 'action', label: '导入后处理', wrap: true, render: () => '建立独立输入副本，不含运行和审批' },
+        { id: 'action', label: '导入后处理', wrap: true, render: () => '建立独立输入副本，不继承本机运行或审批' },
       ]} />}
+      {preview.projects.map(item => item.published_model && <PublishedProjectEvidence key={item.origin_id} name={item.name} value={item.published_model} />)}
       <ul>{preview.limitations.map(item => <li key={item}>{item}</li>)}</ul>
       <label className="library-import-confirm"><Checkbox aria-label="确认资料与工程交换范围" checked={confirmed} disabled={!!busy} onCheckedChange={value => setConfirmed(value === true)} /><span>我已核对文件及以上范围，确认新资料以草稿保存、工程建立独立输入副本，不继承来源方审批。</span></label>
       <div><Button variant="primary" loading={!!busy} disabled={!confirmed} onClick={() => void save()}>确认导入资料与工程</Button></div>
     </div>}
     {inspecting && <ExchangeAssetDetail id={inspecting} onClose={() => setInspecting('')} />}
   </div>;
+}
+
+function PublishedProjectEvidence({ name, value }: { name: string; value: PublishedModelProofSummary }) {
+  return <section className="reference-evidence library-import-stack" aria-label={`${name}的已发布型号来源`}>
+    <h3>固定已发布型号来源</h3>
+    <p>{name} · 固定发行版本 {value.version}</p>
+    <p>完整证明 {value.proof_bytes.toLocaleString('zh-CN')} 字节；准确依赖 {value.dependency_count} 个；来源运行记录 {value.source_run_count} 条。</p>
+    <p>本次交换不创建本机运行记录；来源运行仅按外部声明保存。原批准回执作为来源保存，目标型号绑定为草稿，不构成本机批准。</p>
+    <p>来源记录的核对人：{value.source_approval.reviewer}；原确认时间：{formatDateTime(value.source_approval.approved_at)}。导入不会提升来源可信分档。</p>
+    <details className="library-import-details">
+      <summary>固定发布来源完整性</summary>
+      <div className="library-import-issues">
+        <span className="library-import-digest">发行内容 SHA-256：{value.asset_sha256}</span>
+        <span className="library-import-digest">冻结规格书 SHA-256：{value.specification_sha256}</span>
+      </div>
+    </details>
+  </section>;
 }
 
 function ExchangeAssetDetail({ id, onClose }: { id: string; onClose: () => void }) {

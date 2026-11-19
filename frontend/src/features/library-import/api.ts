@@ -3,11 +3,13 @@ import { displayText } from '@/lib/display-names';
 
 export interface Field { key: string; label: string; unit: string }
 export interface GivenParameter { value: number | string; unit?: string; reference: string }
+export interface DeclaredMaterialProperty { value: number; unit: string; reference: string }
 export interface SeriesDeclaration {
   name: string; manufacturer: string; designation: string; cores: number;
   u0_v: number; u_v: number; um_v?: number | null; standards: string[];
   origin: 'factory' | 'public' | 'demo'; common: Record<string, number>;
   common_basis: Record<string, string>; modelling: Record<string, GivenParameter>;
+  material_properties?: Record<string, Record<string, DeclaredMaterialProperty>>;
   source?: Record<string, unknown> & { title?: string; location?: string; sha256?: string; file?: string; url?: string; locator?: string };
   armour_material?: string;
   conductor?: 'copper' | 'aluminium'; insulation?: 'XLPE' | 'PVC';
@@ -33,6 +35,16 @@ export function normalizeSeriesDeclaration(suggestion: UploadedSeriesDeclaration
     const entry = record(parameter, '工作表计算参数');
     if (!['number', 'string'].includes(typeof entry.value) || typeof entry.reference !== 'string')
       throw new ApiError(502, '工作表计算参数的数值或出处缺失，请重新上传并核对声明。');
+  }
+  if (value.material_properties !== undefined) {
+    for (const properties of Object.values(record(value.material_properties, '工作表材料物性'))) {
+      for (const parameter of Object.values(record(properties, '工作表材料用途'))) {
+        const entry = record(parameter, '工作表明示材料物性');
+        if (typeof entry.value !== 'number' || !Number.isFinite(entry.value)
+            || typeof entry.unit !== 'string' || typeof entry.reference !== 'string')
+          throw new ApiError(502, '工作表明示材料物性的数值、单位或出处缺失，请重新上传并核对声明。');
+      }
+    }
   }
   return { ...value, common: value.common ?? {}, common_basis: value.common_basis ?? {}, modelling: value.modelling ?? {} };
 }
@@ -191,12 +203,14 @@ const IMPORT_PARAMETER_NAMES: Record<string, string> = {
   conductor_class: '导体类别', core_lay_length: '成缆节距', screen_model: '铜带纵向电阻模型',
   screen_radial_factor: '铜带径向包络与单带厚度之比', filler_rho: '填充与包带热阻率',
   armour_gap_ratio: '钢带间隙与带宽之比', steel_relative_permeability: '钢带相对磁导率', diameter_rounding: '外径列示精度的半个单位',
+  corrugation_depth: '金属套波纹深度', corrugation_pitch: '金属套波纹节距',
 };
-const IMPORT_MATERIAL_ROLES: Record<string, string> = {
+export const IMPORT_MATERIAL_ROLES: Record<string, string> = {
   conductor: '导体', conductor_screen: '导体屏蔽', insulation: '绝缘', insulation_screen: '绝缘屏蔽',
   buffer: '缓冲层', metallic_sheath: '金属套', separator: '隔离层', oversheath: '外护套',
+  metallic_screen: '金属屏蔽', bedding: '内衬层', filler: '填充', binder: '包带', armour: '铠装',
 };
-const IMPORT_MATERIAL_PROPERTIES: Record<string, string> = {
+export const IMPORT_MATERIAL_PROPERTIES: Record<string, string> = {
   thermal_resistivity: '热阻率', volumetric_heat_capacity: '体积热容', electrical_resistivity_20: '20 °C 电阻率',
   temperature_coefficient_20: '20 °C 电阻温度系数', relative_permittivity: '相对介电常数', loss_tangent: '介质损耗角正切',
   relative_permeability: '相对磁导率', emissivity: '发射率', solar_absorptivity: '太阳吸收率', density: '密度',
@@ -204,10 +218,11 @@ const IMPORT_MATERIAL_PROPERTIES: Record<string, string> = {
 export function issueText(value: string | ImportIssue): string { return displayLibraryText(typeof value === 'string' ? value : value.message); }
 export function tableHeaderText(value: string): string { return value.replace(/\buF(?=\/)/g, 'μF'); }
 export function displayLibraryText(value: string): string {
-  const named = value.replace(/\b([a-z][a-z_]+)\.([a-z][a-z_0-9]+)\b/g, (original, role: string, property: string) =>
+  const named = value.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻')
+    .replace(/\bmaterial_properties\./g, '材料物性 · ').replace(/\b([a-z][a-z_]+)\.([a-z][a-z_0-9]+)\b/g, (original, role: string, property: string) =>
     IMPORT_MATERIAL_ROLES[role] && IMPORT_MATERIAL_PROPERTIES[property] ? `${IMPORT_MATERIAL_ROLES[role]}${IMPORT_MATERIAL_PROPERTIES[property]}` : original)
-    .replace(/\b[a-z][a-z_0-9]+\b/g, key => IMPORT_PARAMETER_NAMES[key] || key);
-  return displayText(named.replace(/cable_types\/(?:cable_type\/)?[^/\s]+\/cores\/layers\/metallic_screen\/longitudinal_r20/g, '金属屏蔽纵向电阻'));
+    .replace(/\b[a-z][a-z_0-9]+\b/g, key => IMPORT_PARAMETER_NAMES[key] || IMPORT_MATERIAL_ROLES[key] || IMPORT_MATERIAL_PROPERTIES[key] || key);
+  return displayText(named);
 }
 export function confidenceText(value?: unknown): string {
   const key = typeof value === 'string' ? value : text(optionalRecord(value).tier);

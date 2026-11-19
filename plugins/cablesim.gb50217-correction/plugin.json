@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.gb50217-correction",
-  "version": "1.0.7",
+  "version": "1.0.9",
   "name": "GB 50217 载流量校正",
   "description": "按附录 D 对有出处的单根基准载流量校正；表外条件拒绝，系数由标准依据库核验。",
   "icon": "assets/icon.svg",
@@ -44,7 +44,7 @@
       "id": "steady-rating",
       "title": "按 GB 50217 校正",
       "solver": "local",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "ampacity_correction",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -85,8 +85,9 @@
       },
       "limitations": [
         "仅 10 kV 及以下；相同型号、正常温限和中心埋深的单根基准。",
-        "覆盖 D.0.1 温度表与 D.0.2 公式、D.0.3 土壤、D.0.4 / D.0.5 单层并列；其他分支明确拒绝。",
+        "覆盖 D.0.1 温度表与 D.0.2 公式、D.0.3 土壤、D.0.4 / D.0.5 单层并列；D.0.6 仅覆盖明确保存并有来源的梯架或托盘、1–4 层、每层不少于 7 根水平接触的同型号三芯电缆，各层横向排列相同。",
         "D.0.3 仅用于表 C.0.1-2；并列表不用于三相交流单芯电缆。",
+        "D.0.6 与 D.0.5 互斥；不推断梯架类别或标准层间距，不覆盖 D.0.7 日照、强制风冷、排管和外部热源。",
         "厂家基准由工程师核对；校正结果不是 IEC 完整热路计算，也不代表厂家保证值。"
       ],
       "description": "读取封签标准依据库的校正系数，将有出处的单根基准载流量换算到保存的实际工况。",
@@ -295,6 +296,70 @@
               "kind": "engineering",
               "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
             }
+          },
+          "tray_kind": {
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "tray",
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.6；有来源的明确类别、保存布局与人工条件核对，不填物理默认值"
+            },
+            "type": "string",
+            "title": "桥架类别",
+            "enum": [
+              "ladder",
+              "tray"
+            ],
+            "x-enum-labels": {
+              "ladder": "梯架",
+              "tray": "托盘"
+            },
+            "x-order": 10,
+            "description": "可选 D.0.6 分支，须与布局出处和明确确认一起填写；不从 rack、结构名称或外观猜类别。三项均未提供时保持原方法路径。"
+          },
+          "tray_layout_source": {
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "tray",
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.6；有来源的明确类别、保存布局与人工条件核对，不填物理默认值"
+            },
+            "type": "string",
+            "title": "桥架与布局出处",
+            "minLength": 4,
+            "maxLength": 2000,
+            "x-order": 11,
+            "description": "完整注明梯架或托盘类别、实际安装图纸或明确研究输入的名称、版本和条件。保存位置及径向几何也须各有来源；不可用期望层数替代实际布局。"
+          },
+          "tray_layout_confirmed": {
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "tray",
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.6；有来源的明确类别、保存布局与人工条件核对，不填物理默认值"
+            },
+            "type": "boolean",
+            "title": "已核对桥架类别与保存布局",
+            "x-order": 12,
+            "description": "必须实际勾选确认类别与保存布局一致、每层不少于 7 根逐根接触、1–4 层且各层排列一致；此确认不等于产品批准或厂家认证。"
           }
         },
         "required": [
@@ -321,6 +386,355 @@
           "id": "evidence",
           "title": "原件出处与人工核对",
           "order": 1
+        },
+        {
+          "id": "tray",
+          "title": "桥架适用条件（可选，三项须同时提供）",
+          "order": 2
+        }
+      ],
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "校正后允许电流",
+          "condition": "rating-simultaneous",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.gb50217-correction"
+        },
+        {
+          "key": "x-cablesim.gb50217.baseline-current",
+          "title": "基准载流量",
+          "condition": "rating-simultaneous",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.gb50217-correction"
+        },
+        {
+          "key": "x-cablesim.gb50217.correction-factor",
+          "title": "总校正系数",
+          "condition": "rating-simultaneous",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.gb50217-correction"
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace"
+        }
+      },
+      "study_tasks": [
+        "rating"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "outdoor-unshaded-rating",
+      "title": "GB 50217 户外无遮阳校正",
+      "solver": "local",
+      "method_version": "1.0.0",
+      "analysis": "ampacity_correction",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.gb50217.baseline-current",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.gb50217.correction-factor",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.gb50217-correction",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "tests/test_gb50217_outdoor.py"
+        ]
+      },
+      "limitations": [
+        "仅一个空气截面、一个三相回路的一根三芯电缆；额定与实际线电压同为 1 kV 或 6 kV，三芯标称截面一致。",
+        "只覆盖 D.0.7 的 13 个三芯数值格；全部 6 个空格不适用，另 5 个单芯数值仅供查询，不执行。",
+        "基准必须为同实际户外环境温度、同型号及正常温限的户内空气单根载流量；只乘 D.0.7，不叠加 D.0.1–6。",
+        "户外明敷无遮阳与自然通风须明确声明及来源；不接受量化辐照或风速输入，不添加默认辐照、零风速或换热公式。",
+        "结果为标准参考校正；人工确认输入不等于厂家保证、实测结果或工程批准。"
+      ],
+      "description": "仅将同实际户外环境温度的户内空气单根基准乘以封签 D.0.7 原值，不叠加温度或分组系数。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "baseline_current_a": {
+            "exclusiveMinimum": 0,
+            "title": "基准载流量",
+            "type": "number",
+            "description": "按同一实际户外环境温度取得的户内空气单根基准、同型号和正常温限；不是目标负荷，不能使用已经乘过日照或分组系数的值。",
+            "x-unit": {
+              "si": "A",
+              "display": "A",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "baseline",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_ambient_k": {
+            "exclusiveMinimum": 0,
+            "title": "基准环境温度",
+            "type": "number",
+            "description": "须与保存 Domain 的实际户外空气温度相同，不默认 40 °C，也不再乘 D.0.1 或 D.0.2。",
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "baseline",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_environment": {
+            "type": "string",
+            "title": "基准环境口径",
+            "description": "须明确选择原表规定的基准；不从温度或旧方法参数推断。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "baseline",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.7；明确原表基准及户外明敷无遮阳条件，不推断或补值"
+            },
+            "enum": [
+              "indoor_air_at_outdoor_ambient"
+            ],
+            "x-enum-labels": {
+              "indoor_air_at_outdoor_ambient": "按实际户外温度取得的户内空气单根载流量"
+            }
+          },
+          "baseline_source": {
+            "maxLength": 2000,
+            "minLength": 4,
+            "title": "基准原件名称与条件出处",
+            "type": "string",
+            "description": "完整保留原件或保存工件出处与版本，说明同温度户内空气单根基准及相同正常导体温限；机制输入须明确标注不是厂家额定值。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "基准原件或保存工件摘要",
+            "type": "string",
+            "description": "由原件或保存工件取得的 SHA256；人工声明，插件不会冒称已验证厂家额定值。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_page": {
+            "minimum": 1,
+            "title": "基准原文页码",
+            "type": "integer",
+            "description": "原件中的 1 起始页码；保存工件请填写可复核的页号。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_reviewed": {
+            "title": "基准条件已人工核对",
+            "type": "boolean",
+            "description": "真实人工核对同型号、同温限、同实际空气温度的户内空气单根基准及原件；此前未乘日照或分组系数。不是产品批准。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 6,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "outdoor_exposure_source": {
+            "type": "string",
+            "title": "户外明敷与无遮阳出处",
+            "description": "保存实际图纸、现场或明确研究输入的出处和版本，说明户外明敷无遮阳及自然通风；不能补写厂家未给的量化辐照。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "outdoor",
+            "x-order": 7,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.7；明确原表基准及户外明敷无遮阳条件，不推断或补值"
+            },
+            "minLength": 4,
+            "maxLength": 2000
+          },
+          "outdoor_unshaded_confirmed": {
+            "type": "boolean",
+            "title": "已确认户外明敷且无遮阳",
+            "description": "须由人明确确认当前保存的电缆工况；不从名称、温度或辐照数值推断，不代表工程批准。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "outdoor",
+            "x-order": 8,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 表 D.0.7；明确原表基准及户外明敷无遮阳条件，不推断或补值"
+            }
+          },
+          "basis_release_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "标准依据库发行摘要",
+            "type": "string",
+            "description": "固定到当前核验过的标准依据库发行；变化时拒绝静默换表。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 9,
+            "x-level": "advanced",
+            "default": "1babba59486ce48b4581ee0d1b4058cff93b58b6ab7230b4794c81f85f6be743",
+            "x-default-basis": {
+              "kind": "binding",
+              "reference": "标准依据库 0.9.1 的已核验发行摘要；已有配置保持原绑定，不静默换表"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          }
+        },
+        "required": [
+          "baseline_current_a",
+          "baseline_ambient_k",
+          "baseline_environment",
+          "baseline_source",
+          "baseline_sha256",
+          "baseline_page",
+          "baseline_reviewed",
+          "outdoor_exposure_source",
+          "outdoor_unshaded_confirmed",
+          "basis_release_digest"
+        ]
+      },
+      "x-groups": [
+        {
+          "id": "baseline",
+          "title": "同温度户内空气基准",
+          "order": 0
+        },
+        {
+          "id": "evidence",
+          "title": "原件出处与人工核对",
+          "order": 1
+        },
+        {
+          "id": "outdoor",
+          "title": "户外无遮阳适用条件",
+          "order": 2
         }
       ],
       "x-headline": [
@@ -389,13 +803,18 @@
     },
     {
       "path": "src/cablesim_gb50217_correction/correction.py",
-      "sha256": "4670cff763dca7fa732990b45d20b14697d604863ca1010cda36fb97b9d195de",
-      "size_bytes": 14572
+      "sha256": "1a8aa2f4d94a21fcf577c4c08f604a1dce7174debfe7c21a2445aed50a76653d",
+      "size_bytes": 27471
     },
     {
       "path": "src/cablesim_gb50217_correction/main.py",
-      "sha256": "68ae4eb0a46895a950232566bcfd082290a42b254198fae59dce8b594631b050",
-      "size_bytes": 3546
+      "sha256": "babd1281dde645336221d0d3fd734675f25f2bb1a4f006418867b4a945d53af4",
+      "size_bytes": 3810
+    },
+    {
+      "path": "src/cablesim_gb50217_correction/outdoor.py",
+      "sha256": "033230c75d588fd406223c0cbe35a935a681cc21c31eac40a6691daaeecdebdc",
+      "size_bytes": 13431
     },
     {
       "path": "src/host-dependencies.json",
