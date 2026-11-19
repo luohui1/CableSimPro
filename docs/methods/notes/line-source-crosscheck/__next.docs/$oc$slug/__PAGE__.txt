@@ -1,0 +1,56 @@
+3:"$Sreact.fragment"
+4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
+5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
+6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
+7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
+8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
+9:I[39756,["$4","$5","$6","$7","$8"],"default"]
+a:I[37457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
+10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
+11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
+12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
+13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
+14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
+15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
+16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
+17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
+18:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
+28:"ViewportBoundary"
+29:I[97367,["$4","$5","$6","$7","$8"],"$28"]
+2a:"MetadataBoundary"
+2b:I[97367,["$4","$5","$6","$7","$8"],"$2a"]
+2c:"$Sreact.suspense"
+2d:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+c:X
+c:C
+d:X
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#independent-equation-family","title":"Independent equation family"},{"depth":2,"url":"#why-a-difference-is-expected","title":"Why a difference is expected"},{"depth":2,"url":"#provenance-and-fail-closed-behavior","title":"Provenance and fail-closed behavior"},{"depth":2,"url":"#evidence-gate","title":"Evidence gate"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"半空间线热源交叉校核（英文）"}],["$","$L16",null,{}],["$","$L17",null,{"children":[["$","p",null,{"children":["This increment adds ",["$","code",null,{"children":"cablesim.line-source-crosscheck@0.1.0"}]," without changing the\nexisting buried or electrothermal release bytes. It is a validation-category plugin\nthat consumes the ",["$","strong",null,{"children":"newest successful, current-revision"}]," ",["$","code",null,{"children":"cablesim.buried-reference@0.1.0"}],"\njob. The v0.1 UI has no arbitrary job/file selector; the exact chosen job ID is sealed in the result. It does not accept arbitrary files, another project, a stale source snapshot or\nan electrothermal/ampacity job."]}],"\n",["$","$L18",null,{"as":"h2","id":"independent-equation-family","children":"Independent equation family"}],"\n",["$","p",null,{"children":["For three line sources at ",["$","code",null,{"children":"(x_j, y_j)"}]," in homogeneous semi-infinite soil with an\nisothermal ground plane at ",["$","code",null,{"children":"y=0"}],", the method-of-images coefficient from source ",["$","code",null,{"children":"j"}],"\nto cable ",["$","code",null,{"children":"i"}]," is"]}],"\n",["$","p",null,{"children":[["$","code",null,{"children":"G_ij = rho_soil/(2*pi) * ln(r_image / r_real)"}],"."]}],"\n",["$","p",null,{"children":[["$","code",null,{"children":"r_image = sqrt((x_i-x_j)^2 + (y_i+y_j)^2)"}],". For different cables,\n",["$","code",null,{"children":"r_real"}]," is their center distance; for the self term, it is the cable jacket outer\nradius. Each cable's own center-to-jacket rise adds"]}],"\n",["$","p",null,{"children":["$","code",null,{"children":"R_internal = 1/(4*pi*k_conductor) + sum[ln(r_o/r_i)/(2*pi*k_layer)]"}]}],"\n",["$","p",null,{"children":"through the five outer material layers. The analytical conductor-center temperature\nis therefore"}],"\n",["$","p",null,{"children":[["$","code",null,{"children":"T_i = T_ambient + q_i*R_internal + sum_j(G_ij*q_j)"}],"."]}],"\n",["$","p",null,{"children":["This calculation shares the saved dimensions, material constants, positions, soil\nthermal resistivity and explicit W/m sources, but it does ",["$","strong",null,{"children":"not"}]," share the FEM weak\nform, sparse assembly or solution. It is consequently useful as an independent\nequation-family check, not as experimental validation."]}],"\n",["$","$L18",null,{"as":"h2","id":"why-a-difference-is-expected","children":"Why a difference is expected"}],"\n",["$","p",null,{"children":"The FEM source job uses a finite rectangle with ambient-temperature ground, side and\nbottom boundaries and polygonal interfaces. The analytical model has only an\nisothermal ground plane and an otherwise infinite soil half-space, and represents\neach cable externally as a line source. Its internal cable resistance remains a\ncircular six-layer solution. Reported FEM-minus-analytical differences therefore\ncombine at least:"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"finite side/bottom truncation in the FEM domain;"}],"\n",["$","li",null,{"children":"line-source and circular-interface approximations in the analytical reference;"}],"\n",["$","li",null,{"children":"polygonal geometry and P1 mesh discretization;"}],"\n",["$","li",null,{"children":"numerical rounding and source integration."}],"\n"]}],"\n","$L19","\n","$L1a","\n","$L1b","\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20","\n","$L21","\n","$L22"]}]]}],["$L23","$L24","$L25"],"$L26"]}],"p":"$@27","v":null,"s":"$d"}}]]
+2:[["children",{"s":{"n":"slug","t":"oc","k":"methods/notes/line-source-crosscheck","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
+1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L29",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L2b",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2c",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"半空间线热源交叉校核（英文） | CableSimPro 文档"}],["$","link","1",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L2d","2",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@2e","v":null,"s":"$d"}},"a":"$@2f","u":"$@30","b":"VFdhPxdEcqe-su-7Vvs9c"}
+31:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+32:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
+19:["$","p",null,{"children":"There is deliberately no built-in pass/fail tolerance. Expanding the FEM soil box\nshould normally reduce artificial cooling if truncation dominates, but a decreasing\ndifference does not prove infinite-domain accuracy, mesh independence, material\naccuracy or compliance."}]
+1a:["$","$L18",null,{"as":"h2","id":"provenance-and-fail-closed-behavior","children":"Provenance and fail-closed behavior"}]
+1b:["$","p",null,{"children":["The host copies only the source job's sealed ",["$","code",null,{"children":"thermal.json"}]," and a bounded metadata\nrecord containing its exact plugin pin, command, arguments, project revision and\nsnapshot digest. The worker recalculates the comparison from the current saved\nScenario and CircularRecipe. It rejects changed powers, domain scale, resolution,\nambient temperature, soil conductivity, geometry, plugin identity or source command.\nThe resulting ",["$","code",null,{"children":"line-source.json"}]," is hashed like every other project artifact."]}]
+1c:["$","p",null,{"children":"The UI shows phase-by-phase source heat, FEM peak, analytical center temperature,\ndifference, the external resistance matrix and the finite-domain dimensions. It\nnever promotes the report to the host ampacity result and labels the absence of an\nengineering acceptance threshold."}]
+1d:["$","$L18",null,{"as":"h2","id":"evidence-gate","children":"Evidence gate"}]
+1e:["$","p",null,{"children":[["$","code",null,{"children":"Line-source cross-check evidence"}]," runs:"]}]
+1f:["$","ul",null,{"children":["\n",["$","li",null,{"children":"the full host regression suite and checked-in schema/integrity checks;"}],"\n",["$","li",null,{"children":"real Gmsh/scikit-fem buried sources at domain scales 4, 8 and 16 on Linux and\nWindows, checking that this fixture approaches the unchanged half-space result;"}],"\n",["$","li",null,{"children":"the actual install/enable/source/invoke/download chain, cross-project and stale\nsource rejection, and no engineering revision change."}],"\n"]}]
+20:["$","p",null,{"children":"The default synthetic fixture is not manufacturer data or a published cable rating.\nExact numerical claims must cite an exact commit and its workflow artifacts."}]
+21:["$","hr",null,{}]
+22:["$","p",null,{"children":["本页由仓库文件 ",["$","$L31",null,{"href":"https://github.com/luohui1/CableSimPro/blob/6f6747763180fb81cdcee393670b260e1439f9cb/docs/plugins/LINE_SOURCE_CROSSCHECK.md","children":"docs/plugins/LINE_SOURCE_CROSSCHECK.md"}]," 生成，修改请编辑该文件。"]}]
+23:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+24:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
+25:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
+26:["$","$L32",null,{"children":["$","$2c",null,{"name":"Next.MetadataOutlet","children":"$@33"}]}]
+30:true
+d:300
+33:null
+d:C
+2f:0
+b:"$undefined"
+2e:"$undefined"
+27:"$undefined"

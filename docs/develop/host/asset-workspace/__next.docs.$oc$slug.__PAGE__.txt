@@ -1,0 +1,54 @@
+3:"$Sreact.fragment"
+4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
+5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
+6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
+7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
+8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
+9:I[39756,["$4","$5","$6","$7","$8"],"default"]
+a:I[37457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
+10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
+11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
+12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
+13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
+14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
+15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
+16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
+17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
+18:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
+26:"ViewportBoundary"
+27:I[97367,["$4","$5","$6","$7","$8"],"$26"]
+28:"MetadataBoundary"
+29:I[97367,["$4","$5","$6","$7","$8"],"$28"]
+2a:"$Sreact.suspense"
+2b:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+c:X
+c:C
+d:X
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#status","title":"Status"},{"depth":2,"url":"#domain-and-persistence","title":"Domain and persistence"},{"depth":2,"url":"#interfaces","title":"Interfaces"},{"depth":2,"url":"#test-evidence","title":"Test evidence"},{"depth":2,"url":"#next-boundaries","title":"Next boundaries"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"R2.1 — local engineering asset library"}],["$","$L16",null,{}],["$","$L17",null,{"children":[["$","$L18",null,{"as":"h2","id":"status","children":"Status"}],"\n",["$","p",null,{"children":["The backend contract below is implemented and tested (",["$","code",null,{"children":"tests/foundation/test_assets.py"}],",\n",["$","code",null,{"children":"test_asset_router.py"}],"). The asset library UI was retired with the old shells (architecture\nD1, PRD §4.4) and is paused; ",["$","code",null,{"children":"app/App.tsx"}]," does not expose it yet. When it returns it must\nreuse the workflow shell's controls rather than a separate collection page."]}],"\n",["$","p",null,{"children":"An asset section preview is generated from saved layer radii, not an image file,\nthermal result, B-Rep or manufacturer rendering."}],"\n",["$","$L18",null,{"as":"h2","id":"domain-and-persistence","children":"Domain and persistence"}],"\n",["$","p",null,{"children":[["$","code",null,{"children":"AssetRelease"}]," now optionally contains a single-core circular geometry recipe,\nwhich participates in its content digest. The six taxonomy kinds are ",["$","strong",null,{"children":"definition\ncategories"}],", not declarations that numerical methods or geometry builders exist\nfor all those classes. The current capture lane saves structure and a parameter\nsummary only: it does not copy installation, constitutive materials or results."]}],"\n",["$","p",null,{"children":[["$","code",null,{"children":"engineering_assets"}]," stores exact asset ID/version, local record revision, immutable\nrelease content/digest, status and review digest. ",["$","code",null,{"children":"engineering_asset_events"}]," stores\none local event per record revision. Both update atomically under BEGIN IMMEDIATE.\nThe local operator is the sole authority in this preview: there is no fabricated\nuser identity, independent-review claim or enterprise RBAC certification."]}],"\n",["$","p",null,{"children":"Lifecycle:"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"Import/capture -> draft. Reads never publish or apply definitions."}],"\n",["$","li",null,{"children":"Draft -> reviewed requires an explicit source acknowledgement and a note."}],"\n",["$","li",null,{"children":"Reviewed -> published requires matching record revision, reviewed content digest,\nand currently published, digest-matching transitive dependencies."}],"\n",["$","li",null,{"children":"Reviewed -> draft clears its review digest before editing."}],"\n",["$","li",null,{"children":"Published -> deprecated preserves content and blocks new dependent publication."}],"\n",["$","li",null,{"children":"Published/deprecated -> derived version creates a new draft, keeping the old one."}],"\n"]}],"\n",["$","p",null,{"children":["Imported ",["$","code",null,{"children":"SourceReference.reviewed"}]," is not promoted automatically. Local review\nrecords acknowledge inspection but do not change the origin's evidence quality.\nNo lifecycle action mutates a workspace, its history, runs, locks or proposals.\nCapture binds asset creation to the workspace revision in the same DB transaction."]}],"\n",["$","$L18",null,{"as":"h2","id":"interfaces","children":"Interfaces"}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":"$L19"}],"\n","$L1a","\n","$L1b","\n","$L1c","\n","$L1d","\n","$L1e","\n","$L1f","\n","$L20"]}]]}],["$L21","$L22","$L23"],"$L24"]}],"p":"$@25","v":null,"s":"$d"}}]]
+2:[["children",{"s":{"n":"slug","t":"oc","k":"develop/host/asset-workspace","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
+1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L27",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L29",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2a",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"R2.1 — local engineering asset library | CableSimPro 文档"}],["$","link","1",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L2b","2",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@2c","v":null,"s":"$d"}},"a":"$@2d","u":"$@2e","b":"VFdhPxdEcqe-su-7Vvs9c"}
+2f:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+30:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
+19:["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"Method"}],["$","th",null,{"children":["Path suffix under ",["$","code",null,{"children":"/api/foundation"}]]}],["$","th",null,{"children":"Contract"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":"GET"}],["$","td",null,{"children":["$","code",null,{"children":"/assets"}]}],["$","td",null,{"children":"bounded search/category/status filtering and pagination"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"GET"}],["$","td",null,{"children":["$","code",null,{"children":"/assets/{id}"}]}],["$","td",null,{"children":"exact definition, pending issues and 100 latest local events"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"POST"}],["$","td",null,{"children":["$","code",null,{"children":"/assets/import"}]}],["$","td",null,{"children":[["$","code",null,{"children":"csp-asset/0.1"}]," envelope; all inputs become drafts"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"POST"}],["$","td",null,{"children":["$","code",null,{"children":"/workspaces/{id}/assets/capture"}]}],["$","td",null,{"children":"expected workspace revision + asset name"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"PUT"}],["$","td",null,{"children":["$","code",null,{"children":"/assets/{id}"}]}],["$","td",null,{"children":"expected asset revision + full draft definition"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"POST"}],["$","td",null,{"children":["$","code",null,{"children":"/assets/{id}/transition"}]}],["$","td",null,{"children":"expected revision + content SHA + explicit action/note"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"POST"}],["$","td",null,{"children":["$","code",null,{"children":"/assets/{id}/derive"}]}],["$","td",null,{"children":"expected revision + content SHA + new exact version"}]]}]]}]]}]
+1a:["$","p",null,{"children":"JSON definitions only. Nonempty file manifests are rejected until isolated payload\nverification/storage is implemented. This is not archive ingestion, a CAD importer,\nor script execution. Instance-to-project application and project asset-lock binding\nremain subsequent slices; merely publishing a definition never changes a study."}]
+1b:["$","$L18",null,{"as":"h2","id":"test-evidence","children":"Test evidence"}]
+1c:["$","p",null,{"children":"Backend tests cover immutable releases, source trust preservation, stale review, atomic CAS,\nconcurrent reviewers, changed/deprecated transitive dependencies, corrupt content,\nJSON version conflicts, unsafe payload declarations, project immutability, capture,\nexport and derive. There is currently no browser test because there is no UI."}]
+1d:["$","$L18",null,{"as":"h2","id":"next-boundaries","children":"Next boundaries"}]
+1e:["$","p",null,{"children":"Geometry workers, material laws, manufacturing product catalogues, arbitrary payload\nstorage, project asset application, COMSOL/AEDT native build and numerical validation\nare not implemented by this slice. Keep those capabilities disabled until their\nown data and execution contracts are validated."}]
+1f:["$","hr",null,{}]
+20:["$","p",null,{"children":["本页由仓库文件 ",["$","$L2f",null,{"href":"https://github.com/luohui1/CableSimPro/blob/6f6747763180fb81cdcee393670b260e1439f9cb/docs/architecture/ASSET_WORKSPACE.md","children":"docs/architecture/ASSET_WORKSPACE.md"}]," 生成，修改请编辑该文件。"]}]
+21:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+22:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
+23:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
+24:["$","$L30",null,{"children":["$","$2a",null,{"name":"Next.MetadataOutlet","children":"$@31"}]}]
+2e:true
+d:300
+31:null
+d:C
+2d:0
+b:"$undefined"
+2c:"$undefined"
+25:"$undefined"

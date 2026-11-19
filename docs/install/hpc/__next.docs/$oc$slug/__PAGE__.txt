@@ -1,0 +1,51 @@
+3:"$Sreact.fragment"
+4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
+5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
+6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
+7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
+8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
+9:I[39756,["$4","$5","$6","$7","$8"],"default"]
+a:I[37457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
+10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
+11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
+12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
+13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
+14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
+15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
+16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
+17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
+18:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
+19:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+1a:I[5014,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+24:"ViewportBoundary"
+25:I[97367,["$4","$5","$6","$7","$8"],"$24"]
+26:"MetadataBoundary"
+27:I[97367,["$4","$5","$6","$7","$8"],"$26"]
+28:"$Sreact.suspense"
+29:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+c:X
+c:C
+d:X
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#每个方法在哪里运行","title":"每个方法在哪里运行"},{"depth":2,"url":"#配置超算连接","title":"配置超算连接"},{"depth":3,"url":"#集群上需要准备什么","title":"集群上需要准备什么"},{"depth":2,"url":"#作业与证据","title":"作业与证据"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"仿真计算环境（Slurm 集群）"}],["$","$L16",null,{"children":"为有限元、批量仿真等方法配置 Slurm 超算集群，以及各方法在哪里运行。"}],["$","$L17",null,{"children":[["$","p",null,{"children":["IEC 60287、GB 50217 校正、热网络、标准核对等解析方法在 CableSimPro 所在的服务器上直接运行（“本机”）。有限元温度场、暂态、电热耦合、批量仿真数据集和混合模型训练等计算量大的方法在 ",["$","strong",null,{"children":"Slurm 超算集群"}]," 上运行；原生参考插件中规模固定的小型有限元参考算例（如直埋有限元温度、圆截面网格参考）声明为本机运行。没有配置集群时，只在超算运行的方法会在运行前预检中提示超算未配置，不会改到本机计算。"]}],"\n",["$","$L18",null,{"as":"h2","id":"每个方法在哪里运行","children":"每个方法在哪里运行"}],"\n",["$","p",null,{"children":"每个计算能力在插件清单里声明求解位置："}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"声明"}],["$","th",null,{"children":"含义"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"local"}]}],["$","td",null,{"children":"只在本机运行"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"slurm"}]}],["$","td",null,{"children":"只在超算运行"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":["$","code",null,{"children":"either"}]}],["$","td",null,{"children":"两者均可，按计算位置设置选择"}]]}]]}]]}]}],"\n",["$","p",null,{"children":["声明见",["$","$L19",null,{"href":"../../methods/catalog/","children":"方法清单"}],"。研究的运行前预检会写明本次在本机还是超算上求解。"]}],"\n",["$","$L18",null,{"as":"h2","id":"配置超算连接","children":"配置超算连接"}],"\n",["$","p",null,{"children":"打开“设置 → 计算位置”，在“超算连接”中填写："}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"项目"}],["$","th",null,{"children":"说明"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":"SSH 别名"}],["$","td",null,{"children":["从服务器上已登记的 SSH 主机别名中选择。别名、主机地址、账号和密钥由管理员事先写在运行 CableSimPro 的系统账户的 ",["$","code",null,{"children":"~/.ssh/config"}]," 中，CableSimPro 不保存密码或私钥。"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"分区"}],["$","td",null,{"children":"提交作业使用的 Slurm 分区名。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"远程工作目录"}],["$","td",null,{"children":["集群上事先建好的绝对路径，作业文件放在其下的 ",["$","code",null,{"children":"jobs"}]," 目录。测试连接不会创建目录。"]}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"环境"}],["$","td",null,{"children":"集群上的 Python 或 Conda 环境根目录。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"单批核时上限"}],["$","td",null,{"children":"一批作业允许使用的核时，最多 2000 核时；超出的提交会被拒绝。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"累计核时上限"}],["$","td",null,{"children":"所有作业合计允许使用的核时，不小于单批上限，最多 20000 核时；用完后新的提交会被拒绝。"}]]}]]}]]}]}],"\n",["$","p",null,{"children":["保存后用 ",["$","strong",null,{"children":"测试连接"}]," 检查 SSH、分区和目录是否可用。保存会记录修订，必要时可以撤销到上一份设置。"]}],"\n",["$","div",null,{"className":"flex gap-2 my-4 rounded-xl border bg-fd-card p-3 ps-1 text-sm text-fd-card-foreground","style":{"--callout-color":"var(--color-fd-warning, var(--color-fd-muted))"},"children":[["$","div",null,{"role":"none","className":"w-0.5 bg-(--callout-color)/50 rounded-sm"}],["$","$L1a",null,{"icon":{"name":"triangle-exclamation-point","size":24,"node":[["path",{"d":"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3","key":"wmoenq"}],["path",{"d":"M12 9v4","key":"juzpu7"}],["path",{"d":"M12 17h.01","key":"p32p05"}]],"aliases":["alert-triangle","triangle-alert"]},"className":"size-5 -me-0.5 fill-(--callout-color) text-fd-card"}],["$","div",null,{"className":"flex flex-col gap-2 min-w-0 flex-1","children":[["$","p",null,{"className":"font-medium my-0!","children":"用专用系统账户运行"}],["$","div",null,{"className":"text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":["“SSH 别名”下拉框会列出运行 CableSimPro 的系统账户 ",["$","code",null,{"children":"~/.ssh/config"}]," 中登记的",["$","strong",null,{"children":"全部"}],"主机别名，能打开设置页的用户都看得到。内网多人使用时，请用专门的系统账户运行 CableSimPro，并只在它的 ",["$","code",null,{"children":"~/.ssh/config"}]," 中登记超算集群的别名。"]}]}]]}]]}],"\n",["$","$L18",null,{"as":"h3","id":"集群上需要准备什么","children":"集群上需要准备什么"}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"能从 CableSimPro 服务器通过 SSH 免密登录的账号，以及有写权限的工作目录。"}],"\n","$L1b","\n","$L1c","\n"]}],"\n","$L1d","\n","$L1e"]}]]}],["$L1f","$L20","$L21"],"$L22"]}],"p":"$@23","v":null,"s":"$d"}}]]
+2:[["children",{"s":{"n":"slug","t":"oc","k":"install/hpc","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
+1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L25",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L27",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$28",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"仿真计算环境（Slurm 集群） | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"为有限元、批量仿真等方法配置 Slurm 超算集群，以及各方法在哪里运行。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L29","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@2a","v":null,"s":"$d"}},"a":"$@2b","u":"$@2c","b":"VFdhPxdEcqe-su-7Vvs9c"}
+2d:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
+1b:["$","li",null,{"children":["一个 Python（或 Conda）环境，安装仿真插件声明的原生依赖：仓库中的 ",["$","code",null,{"children":"plugins/requirements-native.txt"}],"（网格、有限元求解器等）。插件清单列出各自依赖，安装插件不会自动安装依赖。"]}]
+1c:["$","li",null,{"children":"作业所需的计算节点和分区访问权限。"}]
+1d:["$","$L18",null,{"as":"h2","id":"作业与证据","children":"作业与证据"}]
+1e:["$","p",null,{"children":["提交到超算的作业在“记录 → 运行与作业”中可以看到排队、运行、完成状态，支持刷新和取消。作业完成后，宿主取回结果并与输入、方法版本、网格与收敛证据一起保存；实际使用的核时也会记录。仿真结果的验证依据见",["$","$L19",null,{"href":"../../methods/fem/","children":"有限元对照"}],"。"]}]
+1f:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+20:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
+21:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
+22:["$","$L2d",null,{"children":["$","$28",null,{"name":"Next.MetadataOutlet","children":"$@2e"}]}]
+2c:true
+d:300
+2e:null
+d:C
+2b:0
+b:"$undefined"
+2a:"$undefined"
+23:"$undefined"

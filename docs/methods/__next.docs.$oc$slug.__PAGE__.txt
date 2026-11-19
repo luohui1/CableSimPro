@@ -1,0 +1,51 @@
+3:"$Sreact.fragment"
+4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
+5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
+6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
+7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
+8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
+9:I[39756,["$4","$5","$6","$7","$8"],"default"]
+a:I[37457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
+10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
+11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
+12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
+13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
+14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
+15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
+16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
+17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
+18:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
+19:I[63508,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Mermaid"]
+1a:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+24:"ViewportBoundary"
+25:I[97367,["$4","$5","$6","$7","$8"],"$24"]
+26:"MetadataBoundary"
+27:I[97367,["$4","$5","$6","$7","$8"],"$26"]
+28:"$Sreact.suspense"
+29:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+c:X
+c:C
+d:X
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#一次计算是怎样进行的","title":"一次计算是怎样进行的"},{"depth":2,"url":"#验证等级","title":"验证等级"},{"depth":2,"url":"#结果口径","title":"结果口径"},{"depth":2,"url":"#方法","title":"方法"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"方法与依据总览"}],["$","$L16",null,{"children":"计算方法如何组织、如何验证、如何追溯，以及结果怎么读。"}],["$","$L17",null,{"children":[["$","p",null,{"children":["CableSimPro 的宿主只提供工程底座（工程与版本、运行快照、来源追溯、结果工件、交付和审批），",["$","strong",null,{"children":"不内置任何算法"}],"。每种计算方法都是一个插件，在清单里声明："]}],"\n",["$","ul",null,{"children":["\n",["$","li",null,{"children":"计算能力、方法版本和适用的研究任务；"}],"\n",["$","li",null,{"children":"输入要求（参数、单位、范围、必填项）和输出；"}],"\n",["$","li",null,{"children":"适用范围与已知限制；"}],"\n",["$","li",null,{"children":"验证等级与验证用例；"}],"\n",["$","li",null,{"children":"求解位置（本机、超算或两者均可）。"}],"\n"]}],"\n",["$","p",null,{"children":"插件清单与源码由封签（逐文件 SHA256）绑定。宿主每次调用方法前都会重新核对封签，不一致就拒绝运行。"}],"\n",["$","$L18",null,{"as":"h2","id":"一次计算是怎样进行的","children":"一次计算是怎样进行的"}],"\n",["$","$L19",null,{"chart":"flowchart LR\r\n  A[\"输入<br/>型号版本 + 工况 + 来源\"] --> B[\"运行前预检<br/>完整性与适用范围\"]\r\n  B -- 缺项或超范围 --> X[\"拒绝并说明原因\"]\r\n  B -- 通过 --> C[\"插件运行<br/>封签核验后执行\"]\r\n  C --> D[\"保存运行<br/>输入快照、方法版本、结果、证据\"]\r\n  D --> E[\"结果、对比与交付文件\"]"}],"\n",["$","p",null,{"children":"每次运行都保存输入快照（SI 单位）、所用方法和插件的版本、结果工件以及核验证据；之后输入变化只会让结果标为“过期”，不会改写历史运行。"}],"\n",["$","$L18",null,{"as":"h2","id":"验证等级","children":"验证等级"}],"\n",["$","div",null,{"className":"relative overflow-auto prose-no-margin my-6","tabIndex":0,"children":["$","table",null,{"children":[["$","thead",null,{"children":["$","tr",null,{"children":[["$","th",null,{"children":"等级"}],["$","th",null,{"children":"含义"}]]}]}],["$","tbody",null,{"children":[["$","tr",null,{"children":[["$","td",null,{"children":"解析基准核对"}],["$","td",null,{"children":"与独立的解析解或手算逐项核对。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"参考算例核对"}],["$","td",null,{"children":"与公开算例（如 CIGRE TB 880）、标准附录、文献或商业软件的保存结果核对。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"接口测试"}],["$","td",null,{"children":"验证了输入输出契约和拒绝规则，数值本身另有出处。"}]]}],["$","tr",null,{"children":[["$","td",null,{"children":"未经独立验证"}],["$","td",null,{"children":"仅作参考研究使用，结果不能单独作为工程依据。"}]]}]]}]]}]}],"\n",["$","p",null,{"children":"验证只说明列明范围内的对拍结果，不代表未覆盖的工况也已验证。已复现的公开算例、文献案例和解析基准在软件的“方法 → 验证算例”中查看，并列出与原文的最大相对偏差。"}],"\n",["$","$L18",null,{"as":"h2","id":"结果口径","children":"结果口径"}],"\n",["$","p",null,{"children":["多回路时，允许电流区分“单回路能力”“全回路共同能力”和“其他回路固定负荷下的条件上限”，结果里写明是哪一种，不能混用。详见",["$","$L1a",null,{"href":"../guide/ampacity-study/#6-%E8%AF%BB%E7%BB%93%E8%AE%BA","children":"载流量研究 · 读结论"}],"。"]}],"\n",["$","$L18",null,{"as":"h2","id":"方法","children":"方法"}],"\n",["$","div",null,{"children":[["$","$L1a",null,{"href":"./iec-60287/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"IEC 60287 稳态载流量"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"地下电缆稳态温度与允许电流，多回路直埋、排管与矩形回填"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./gb-50217/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"GB 50217 载流量校正"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"把有出处的单根基准载流量按附录 D 换算到实际工况"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./thermal-network/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"热网络交叉校核"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"可审计的简化稳态热网络，用于同输入方法对比"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./fem/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"有限元对照"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":"$L1b"}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],"$L1c","$L1d"],"className":"grid grid-cols-2 gap-3 @container"}],"\n","$L1e"]}]]}],["$L1f","$L20","$L21"],"$L22"]}],"p":"$@23","v":null,"s":"$d"}}]]
+2:[["children",{"s":{"n":"slug","t":"oc","k":"methods","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
+1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L25",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L27",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$28",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"方法与依据总览 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"计算方法如何组织、如何验证、如何追溯，以及结果怎么读。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L29","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@2a","v":null,"s":"$d"}},"a":"$@2b","u":"$@2c","b":"VFdhPxdEcqe-su-7Vvs9c"}
+2d:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
+1b:["$","p",null,{"children":"有限元温度场、暂态、护套损耗与电热耦合，以及与 IEC 的对照"}]
+1c:["$","$L1a",null,{"href":"./standard-check/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"标准核对"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"按已核验的 GB 产品标准核对结构尺寸与导体电阻"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]
+1d:["$","$L1a",null,{"href":"./catalog/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"方法清单"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"全部插件、能力、验证等级与求解位置"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]
+1e:["$","p",null,{"children":"各方法的逐项依据、算例与核对表见侧栏“技术说明”。"}]
+1f:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+20:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
+21:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
+22:["$","$L2d",null,{"children":["$","$28",null,{"name":"Next.MetadataOutlet","children":"$@2e"}]}]
+2c:true
+d:300
+2e:null
+d:C
+2b:0
+b:"$undefined"
+2a:"$undefined"
+23:"$undefined"

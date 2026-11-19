@@ -1,0 +1,66 @@
+3:"$Sreact.fragment"
+4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
+5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
+6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
+7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
+8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
+9:I[39756,["$4","$5","$6","$7","$8"],"default"]
+a:I[37457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
+10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
+11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
+12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
+13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
+14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
+15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
+16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
+17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
+18:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+19:I[5014,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+1a:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
+1b:I[44324,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"CodeBlock"]
+1c:I[44324,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Pre"]
+33:"ViewportBoundary"
+34:I[97367,["$4","$5","$6","$7","$8"],"$33"]
+35:"MetadataBoundary"
+36:I[97367,["$4","$5","$6","$7","$8"],"$35"]
+37:"$Sreact.suspense"
+38:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+c:X
+c:C
+d:X
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#1-修改-releasetoml","title":"1. 修改 release.toml"},{"depth":2,"url":"#2-放行端口","title":"2. 放行端口"},{"depth":2,"url":"#3-访问","title":"3. 访问"},{"depth":2,"url":"#放在反向代理后面","title":"放在反向代理后面"},{"depth":2,"url":"#agent-对话","title":"Agent 对话"},{"depth":2,"url":"#计算资源","title":"计算资源"},{"depth":2,"url":"#数据与备份","title":"数据与备份"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"内网部署"}],["$","$L16",null,{"children":"让同一内网的多台电脑通过浏览器使用一台服务器上的 CableSimPro。"}],["$","$L17",null,{"children":[["$","p",null,{"children":["默认配置只允许本机访问。要让同一内网的同事通过浏览器使用，在服务器上按",["$","$L18",null,{"href":"../","children":"下载与安装"}],"装好后，改三处配置并放行端口。"]}],"\n",["$","div",null,{"className":"flex gap-2 my-4 rounded-xl border bg-fd-card p-3 ps-1 text-sm text-fd-card-foreground","style":{"--callout-color":"var(--color-fd-warning, var(--color-fd-muted))"},"children":[["$","div",null,{"role":"none","className":"w-0.5 bg-(--callout-color)/50 rounded-sm"}],["$","$L19",null,{"icon":{"name":"triangle-exclamation-point","size":24,"node":[["path",{"d":"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3","key":"wmoenq"}],["path",{"d":"M12 9v4","key":"juzpu7"}],["path",{"d":"M12 17h.01","key":"p32p05"}]],"aliases":["alert-triangle","triangle-alert"]},"className":"size-5 -me-0.5 fill-(--callout-color) text-fd-card"}],["$","div",null,{"className":"flex flex-col gap-2 min-w-0 flex-1","children":[["$","p",null,{"className":"font-medium my-0!","children":"没有账号与权限管理"}],["$","div",null,{"className":"text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":["当前版本不提供登录、账号和权限服务，访问到服务的人都可以读写全部工程。只在受信任的内网中开放，必要时在前面加机构已有的访问控制（VPN、带认证的反向代理等），",["$","strong",null,{"children":"不要直接暴露到公网"}],"。"]}]}]]}]]}],"\n",["$","$L1a",null,{"as":"h2","id":"1-修改-releasetoml","children":"1. 修改 release.toml"}],"\n",["$","$L1b",null,{"className":"shiki shiki-themes github-light github-dark","style":{"--shiki-light":"#24292e","--shiki-dark":"#e1e4e8","--shiki-light-bg":"#fff","--shiki-dark-bg":"#24292e"},"tabIndex":"0","icon":"<svg viewBox=\"0 0 24 24\"><path d=\"M 6,1 C 4.354992,1 3,2.354992 3,4 v 16 c 0,1.645008 1.354992,3 3,3 h 12 c 1.645008,0 3,-1.354992 3,-3 V 8 7 A 1.0001,1.0001 0 0 0 20.707031,6.2929687 l -5,-5 A 1.0001,1.0001 0 0 0 15,1 h -1 z m 0,2 h 7 v 3 c 0,1.645008 1.354992,3 3,3 h 3 v 11 c 0,0.564129 -0.435871,1 -1,1 H 6 C 5.4358712,21 5,20.564129 5,20 V 4 C 5,3.4358712 5.4358712,3 6,3 Z M 15,3.4140625 18.585937,7 H 16 C 15.435871,7 15,6.5641288 15,6 Z\" fill=\"currentColor\" /></svg>","children":["$","$L1c",null,{"children":["$","code",null,{"children":[["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"["}],["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":"server"}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"]"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"host = "}],["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":"\"0.0.0.0\""}],["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"          # 监听全部网卡；也可以写服务器在内网中的固定 IP"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"port = "}],["$","span",null,{"style":{"--shiki-light":"#005CC5","--shiki-dark":"#79B8FF"},"children":"8100"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"open_browser = "}],["$","span",null,{"style":{"--shiki-light":"#005CC5","--shiki-dark":"#79B8FF"},"children":"false"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"trusted_hosts = ["}],["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":"\"cablesim.example.com\""}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":", "}],"$L1d","$L1e"]}]]}]}]}],"\n","$L1f","\n","$L20","\n","$L21","\n","$L22","\n","$L23","\n","$L24","\n","$L25","\n","$L26","\n","$L27","\n","$L28","\n","$L29","\n","$L2a","\n","$L2b","\n","$L2c","\n","$L2d"]}]]}],["$L2e","$L2f","$L30"],"$L31"]}],"p":"$@32","v":null,"s":"$d"}}]]
+2:[["children",{"s":{"n":"slug","t":"oc","k":"install/intranet","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
+1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L34",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L36",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$37",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"内网部署 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"让同一内网的多台电脑通过浏览器使用一台服务器上的 CableSimPro。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L38","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@39","v":null,"s":"$d"}},"a":"$@3a","u":"$@3b","b":"VFdhPxdEcqe-su-7Vvs9c"}
+3c:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
+:HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
+1d:["$","span",null,{"style":{"--shiki-light":"#032F62","--shiki-dark":"#9ECBFF"},"children":"\"192.0.2.10\""}]
+1e:["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"]"}]
+1f:["$","ul",null,{"children":["\n",["$","li",null,{"children":[["$","code",null,{"children":"host"}]," 必须是 IP 地址或 ",["$","code",null,{"children":"localhost"}],"，不能写主机名。"]}],"\n",["$","li",null,{"children":[["$","code",null,{"children":"trusted_hosts"}]," 列出同事在浏览器地址栏里实际输入的主机名或 IP（上例为示例值，请换成你们的）。宿主会拒绝其他 Host 的请求（返回 403），也拒绝来自其他站点的跨站写入。"]}],"\n",["$","li",null,{"children":"保存后重启服务。"}],"\n"]}]
+20:["$","$L1a",null,{"as":"h2","id":"2-放行端口","children":"2. 放行端口"}]
+21:["$","p",null,{"children":["在服务器防火墙中允许内网访问 ",["$","code",null,{"children":"port"}]," 指定的端口（默认 8100）。只对需要使用的网段开放。"]}]
+22:["$","$L1a",null,{"as":"h2","id":"3-访问","children":"3. 访问"}]
+23:["$","p",null,{"children":["同事在浏览器打开 ",["$","code",null,{"children":"http://<trusted_hosts 中的名字>:8100/"}],"。界面和全部接口都走这一个端口。"]}]
+24:["$","$L1a",null,{"as":"h2","id":"放在反向代理后面","children":"放在反向代理后面"}]
+25:["$","p",null,{"children":["如果用 Nginx 等反向代理统一入口，代理把请求转发到 ",["$","code",null,{"children":"http://127.0.0.1:8100"}],"，并保留原始 Host："]}]
+26:["$","$L1b",null,{"className":"shiki shiki-themes github-light github-dark","style":{"--shiki-light":"#24292e","--shiki-dark":"#e1e4e8","--shiki-light-bg":"#fff","--shiki-dark-bg":"#24292e"},"tabIndex":"0","icon":"<svg viewBox=\"0 0 24 24\"><path d=\"M 6,1 C 4.354992,1 3,2.354992 3,4 v 16 c 0,1.645008 1.354992,3 3,3 h 12 c 1.645008,0 3,-1.354992 3,-3 V 8 7 A 1.0001,1.0001 0 0 0 20.707031,6.2929687 l -5,-5 A 1.0001,1.0001 0 0 0 15,1 h -1 z m 0,2 h 7 v 3 c 0,1.645008 1.354992,3 3,3 h 3 v 11 c 0,0.564129 -0.435871,1 -1,1 H 6 C 5.4358712,21 5,20.564129 5,20 V 4 C 5,3.4358712 5.4358712,3 6,3 Z M 15,3.4140625 18.585937,7 H 16 C 15.435871,7 15,6.5641288 15,6 Z\" fill=\"currentColor\" /></svg>","children":["$","$L1c",null,{"children":["$","code",null,{"children":[["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#D73A49","--shiki-dark":"#F97583"},"children":"location"}],["$","span",null,{"style":{"--shiki-light":"#6F42C1","--shiki-dark":"#B392F0"},"children":" / "}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"{"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#D73A49","--shiki-dark":"#F97583"},"children":"    proxy_pass "}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"http://127.0.0.1:8100;"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#D73A49","--shiki-dark":"#F97583"},"children":"    proxy_set_header "}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"Host $host;"}]]}],"\n",["$","span",null,{"className":"line","children":[["$","span",null,{"style":{"--shiki-light":"#D73A49","--shiki-dark":"#F97583"},"children":"    client_max_body_size "}],["$","span",null,{"style":{"--shiki-light":"#005CC5","--shiki-dark":"#79B8FF"},"children":"70m"}],["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":";   "}],["$","span",null,{"style":{"--shiki-light":"#6A737D","--shiki-dark":"#6A737D"},"children":"# 厂家 PDF 原件上传上限为 65 MiB"}]]}],"\n",["$","span",null,{"className":"line","children":["$","span",null,{"style":{"--shiki-light":"#24292E","--shiki-dark":"#E1E4E8"},"children":"}"}]}]]}]}]}]
+27:["$","p",null,{"children":["此时浏览器地址栏里的主机名仍要列入 ",["$","code",null,{"children":"trusted_hosts"}],"。上传大小：结构表等一般请求不超过 11 MiB，厂家 PDF 原件不超过 65 MiB，超过时宿主返回 413。"]}]
+28:["$","$L1a",null,{"as":"h2","id":"agent-对话","children":"Agent 对话"}]
+29:["$","p",null,{"children":["内网用户通过平台端口使用 Agent 对话：对话页和对话服务都经平台转发，对话服务本身只监听服务器本机（默认 8111 端口），",["$","strong",null,{"children":"不需要"}],"放行 8111 端口。模型请求由服务器上的平台进程发出，内网部署模型服务时，确认服务器能访问模型服务的地址。见 ",["$","$L18",null,{"href":"../agent/","children":"Agent 对话服务"}],"。"]}]
+2a:["$","$L1a",null,{"as":"h2","id":"计算资源","children":"计算资源"}]
+2b:["$","p",null,{"children":["本机方法在服务器上运行。有限元、批量仿真等标为“超算”的方法需要另外配置 Slurm 集群，见",["$","$L18",null,{"href":"../hpc/","children":"仿真计算环境"}],"。"]}]
+2c:["$","$L1a",null,{"as":"h2","id":"数据与备份","children":"数据与备份"}]
+2d:["$","p",null,{"children":["所有用户共用服务器上的一个工程库。定期备份见",["$","$L18",null,{"href":"../upgrade-restore/","children":"升级与备份恢复"}],"。"]}]
+2e:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+2f:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
+30:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
+31:["$","$L3c",null,{"children":["$","$37",null,{"name":"Next.MetadataOutlet","children":"$@3d"}]}]
+3b:true
+d:300
+3d:null
+d:C
+3a:0
+b:"$undefined"
+39:"$undefined"
+32:"$undefined"

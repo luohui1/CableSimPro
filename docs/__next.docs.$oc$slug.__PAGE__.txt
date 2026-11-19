@@ -1,69 +1,50 @@
-1:"$Sreact.fragment"
-2:"/CableSimPro/_next/static/chunks/1h-l80jw46h7z.js"
-3:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
-4:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
-5:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
-6:"/CableSimPro/_next/static/chunks/0s8n5-bqydzqx.js"
-7:I[98117,["$2","$3","$4","$5","$6"],"Provider"]
-8:I[39756,["$2","$3","$4","$5","$6"],"default"]
-9:I[37457,["$2","$3","$4","$5","$6"],"default"]
-d:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
-e:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
-f:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
-10:I[63199,["$2","$3","$4","$5","$6","$d","$e","$f"],"LayoutBody"]
-2b:"ViewportBoundary"
-2c:I[97367,["$2","$3","$4","$5","$6"],"$2b"]
-2d:"MetadataBoundary"
-2e:I[97367,["$2","$3","$4","$5","$6"],"$2d"]
-2f:"$Sreact.suspense"
-30:I[27201,["$2","$3","$4","$5","$6"],"IconMark"]
-:HL["/CableSimPro/_next/static/chunks/3_em3z08k9o4y.css","style"]
-:HL["/CableSimPro/_next/static/chunks/15n2ddfato5wj.css","style"]
-:HL["/CableSimPro/_next/static/chunks/04nybhoetfkng.css","style"]
-:HL["/CableSimPro/_next/static/chunks/0a0ueqaycjrza.css","style"]
-b:X
-27:X
-27:C
-28:[["children",{"s":"__PAGE__","h":160,"d":{"r":"$L29","p":"$@2a","v":null,"s":"$b"}}]]
-24:[["children",{"s":{"n":"slug","t":"oc","k":"","s":[]},"h":96,"d":{"r":"$L25","p":"$@26","v":"$27","s":"$b"},"c":"$Q28"}]]
-c:[["children",{"s":"docs","h":96,"d":{"r":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js","async":true}],["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js","async":true}],["$","script","script-2",{"src":"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js","async":true}]],["$","$L10",null,{"tree":{"type":"root","$ref":{"folder":"","meta":"meta.json"},"$id":"root","name":"CableSimPro 文档","children":[{"$id":"index.mdx","type":"page","name":"文档首页","description":"安装、使用、方法依据与结果解读。这是 Fumadocs 样张，目前包含两篇快速上手和 IEC 60287 方法页。","url":"/docs","$ref":"index.mdx"},{"$id":"_0","type":"separator","name":"快速上手"},{"$id":"quickstart/factory.mdx","type":"page","name":"电缆厂：从结构表到正式规格书","description":"导入厂家结构表，逐项核对来源与标准尺寸，按统一工况批量算出载流量，再生成规格书。","url":"/docs/quickstart/factory","$ref":"quickstart/factory.mdx"},{"$id":"quickstart/research.mdx","type":"page","name":"研究院：从新建工程到计算书","description":"新建工程，做 110 kV 电缆直埋载流量研究，改土壤热阻率后对比两次结果，生成并下载计算书。","url":"/docs/quickstart/research","$ref":"quickstart/research.mdx"},{"$id":"_1","type":"separator","name":"方法与依据"},{"$id":"methods/iec-60287.mdx","type":"page","name":"IEC 60287 稳态载流量","description":"按 IEC 60287-1-1 / 2-1:2023 计算地下电缆的稳态温度与允许电流：原理、适用范围、输入要求、验证依据和已知限制。","url":"/docs/methods/iec-60287","$ref":"methods/iec-60287.mdx"}]},"tabs":[],"sidebar":{},"nav":{"title":[["$","svg",null,{"viewBox":"0 0 112 100","className":"h-7 w-auto","role":"img","aria-label":"CableSimPro","children":[["$","defs",null,{"children":["$","mask",null,{"id":"_S_1_","children":[["$","rect",null,{"width":"112","height":"100","fill":"white"}],["$","rect",null,{"x":"49","width":"2","height":"100","fill":"black"}]]}]}],["$","g",null,{"mask":"url(#_S_1_)","children":[["$","path",null,{"d":"M50 2A48 48 0 0 0 50 98V90.5A40.5 40.5 0 0 1 50 9.5Z","fill":"var(--brand-ink)"}],["$","path",null,{"d":"M50 13.5A36.5 36.5 0 0 0 50 86.5","fill":"none","stroke":"var(--brand-primary)","strokeWidth":"2.2"}],"$L11","$L12","$L13"]}],"$L14","$L15","$L16",["$L17","$L18","$L19","$L1a","$L1b","$L1c","$L1d"],"$L1e","$L1f"]}],"$L20","$L21"]},"githubUrl":"https://github.com/luohui1/CableSimPro","children":"$L22"}]]}],"p":"$@23","v":null,"s":"$b"},"c":"$Q24"}]]
-0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/3_em3z08k9o4y.css","precedence":"next"}],["$","link","1",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/15n2ddfato5wj.css","precedence":"next"}],["$","link","2",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/04nybhoetfkng.css","precedence":"next"}],["$","link","3",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0a0ueqaycjrza.css","precedence":"next"}],["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/1h-l80jw46h7z.js","async":true}],["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js","async":true}],["$","script","script-2",{"src":"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js","async":true}],["$","script","script-3",{"src":"/CableSimPro/_next/static/chunks/039b2uykstso8.js","async":true}],["$","script","script-4",{"src":"/CableSimPro/_next/static/chunks/0s8n5-bqydzqx.js","async":true}]],["$","html",null,{"lang":"zh-CN","className":"Ur3q_a_variable iaM1Ya_variable Yt-Tla_variable","suppressHydrationWarning":true,"children":["$","body",null,{"className":"flex min-h-screen flex-col","children":["$","$L7",null,{"children":["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}]}]}]]}],"p":"$@a","v":null,"s":"$b"},"c":"$Qc"},"h":{"r":["$","$1","h",{"children":[null,["$","$L2c",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L2e",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$2f",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"文档首页 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"安装、使用、方法依据与结果解读。这是 Fumadocs 样张，目前包含两篇快速上手和 IEC 60287 方法页。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L30","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@31","v":null,"s":"$b"}},"a":"$@32","u":"$@33","b":"h6D0oxZzLeK-UTsVqhaVY"}
-34:"/CableSimPro/_next/static/chunks/1qupj431ajx-f.js"
-35:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
-36:I[98330,["$2","$3","$4","$5","$6","$d","$e","$f","$34","$35"],"DocsPage"]
-37:I[98330,["$2","$3","$4","$5","$6","$d","$e","$f","$34","$35"],"DocsTitle"]
-38:I[98330,["$2","$3","$4","$5","$6","$d","$e","$f","$34","$35"],"DocsDescription"]
-39:I[98330,["$2","$3","$4","$5","$6","$d","$e","$f","$34","$35"],"DocsBody"]
-3a:I[47873,["$2","$3","$4","$5","$6","$d","$e","$f","$34","$35"],"default"]
-3b:I[97367,["$2","$3","$4","$5","$6"],"OutletBoundary"]
+3:"$Sreact.fragment"
+4:"/CableSimPro/_next/static/chunks/2-prgq6nvpg6c.js"
+5:"/CableSimPro/_next/static/chunks/1ig--w77krv-y.js"
+6:"/CableSimPro/_next/static/chunks/31w0huyrs0px4.js"
+7:"/CableSimPro/_next/static/chunks/039b2uykstso8.js"
+8:"/CableSimPro/_next/static/chunks/34cw7drnfiu_8.js"
+9:I[39756,["$4","$5","$6","$7","$8"],"default"]
+a:I[37457,["$4","$5","$6","$7","$8"],"default"]
+f:"/CableSimPro/_next/static/chunks/1jqzv5grbl803.js"
+10:"/CableSimPro/_next/static/chunks/091pg7yirh3o0.js"
+11:"/CableSimPro/_next/static/chunks/1v9tcq75cdp28.js"
+12:"/CableSimPro/_next/static/chunks/01whew18vib_m.js"
+13:"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js"
+14:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsPage"]
+15:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsTitle"]
+16:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsDescription"]
+17:I[98330,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"DocsBody"]
+18:I[35272,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"VideoPlayer"]
+19:I[94157,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"Heading"]
+1a:I[47873,["$4","$5","$6","$7","$8","$f","$10","$11","$12","$13"],"default"]
+23:"ViewportBoundary"
+24:I[97367,["$4","$5","$6","$7","$8"],"$23"]
+25:"MetadataBoundary"
+26:I[97367,["$4","$5","$6","$7","$8"],"$25"]
+27:"$Sreact.suspense"
+28:I[27201,["$4","$5","$6","$7","$8"],"IconMark"]
+c:X
+c:C
+d:X
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$3","c",{"children":[["$","$L14",null,{"toc":[{"depth":2,"url":"#快速上手含实操视频","title":"快速上手（含实操视频）"},{"depth":2,"url":"#按模块查阅","title":"按模块查阅"}],"children":[["$","$L15",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"文档总览"}],["$","$L16",null,{"children":"面向电缆制造企业与科研院所的电缆设计、载流量计算、有限元仿真与工程智能体文档。"}],["$","$L17",null,{"children":[["$","p",null,{"children":"CableSimPro 将**电缆结构设计、IEC 60287 / GB 标准载流量校核、超算有限元热仿真与受控工程智能体（Agent）**整合在同一套可追溯工程库上。每一项计算结果均绑定输入快照、方法封签与版本，缺数据明确终止，审核签发由工程师确认。"}],"\n",["$","$L18",null,{"kind":"overview"}],"\n",["$","$L19",null,{"as":"h2","id":"快速上手含实操视频","children":"快速上手（含实操视频）"}],"\n",["$","div",null,{"children":[["$","$L1a",null,{"href":"./quickstart/factory/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"制造企业：从结构表到正式规格书"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"五步向导导入 Excel 结构表 → 逐项追溯原始行号 → 全系列批量核对与载流量计算 → 导出产品规格书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./quickstart/research/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"科研院所：从新建工程到计算书"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"新建 110 kV 品字形直埋研究 → 预检求解 → 修改土壤热阻率重算对比 → 预览并下载 PDF 计算书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./guide/agent/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"工程智能体（Agent）实操与边界"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"只读快照查询、“待你审阅”字段级修改提案卡、人工单步授权重算与带四级签栏正式计算书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]],"className":"grid grid-cols-2 gap-3 @container"}],"\n",["$","$L19",null,{"as":"h2","id":"按模块查阅","children":"按模块查阅"}],"\n",["$","div",null,{"children":[["$","$L1a",null,{"href":"./install/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"安装与部署"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"Windows / Linux 离线安装包、release.toml 配置、AI 模型接入、Slurm 超算接入、内网部署与备份恢复"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./guide/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"用户指南"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"型号库与结构表导入、型号设计、载流量研究与参数扫描、有限元仿真、正式交付文件与资源管理"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./methods/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"计算方法与依据"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"IEC 60287、GB 50217 校正、热网络交叉校核、产品标准核对、有限元对照及完整验证等级清单"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L1a",null,{"href":"./develop/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"插件与二次开发"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":"$L1b"}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],"$L1c","$L1d"],"className":"grid grid-cols-2 gap-3 @container"}]]}]]}],["$L1e","$L1f","$L20"],"$L21"]}],"p":"$@22","v":null,"s":"$d"}}]]
+2:[["children",{"s":{"n":"slug","t":"oc","k":"","s":[]},"h":64,"d":{"r":["$","$3","c",{"children":[null,["$","$L9",null,{"parallelRouterKey":"children","template":["$","$La",null,{}]}]]}],"p":"$@b","v":"$c","s":"$d"},"c":"$Qe"}]]
+1:[["children",{"s":"docs","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$L24",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L26",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$27",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"文档总览 | CableSimPro 文档"}],["$","meta","1",{"name":"description","content":"面向电缆制造企业与科研院所的电缆设计、载流量计算、有限元仿真与工程智能体文档。"}],["$","link","2",{"rel":"icon","href":"/CableSimPro/icon.svg?icon.0hktr9d9n2k3b.svg","sizes":"any","type":"image/svg+xml"}],["$","$L28","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@29","v":null,"s":"$d"}},"a":"$@2a","u":"$@2b","b":"VFdhPxdEcqe-su-7Vvs9c"}
+2c:I[97367,["$4","$5","$6","$7","$8"],"OutletBoundary"]
 :HL["/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","style"]
-11:["$","path",null,{"d":"M50 3A47 47 0 0 1 50 97","fill":"none","stroke":"var(--brand-primary)","strokeWidth":"2.6"}]
-12:["$","path",null,{"d":"M50 8A42 42 0 0 1 50 92","fill":"none","stroke":"var(--brand-signal)","strokeWidth":"1.8","opacity":".85"}]
-13:["$","path",null,{"d":"M50 13A37 37 0 0 1 50 87","fill":"none","stroke":"var(--brand-signal)","strokeWidth":"1.3","opacity":".6"}]
-14:["$","circle",null,{"cx":"50","cy":"50","r":"27","fill":"var(--brand-insulation)"}]
-15:["$","circle",null,{"cx":"50","cy":"50","r":"25.6","fill":"none","stroke":"var(--brand-insulation-edge)","strokeWidth":"2"}]
-16:["$","circle",null,{"cx":"50","cy":"50","r":"18.5","fill":"var(--brand-core)"}]
-17:["$","circle","0",{"cx":50,"cy":50,"r":5.4,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-18:["$","circle","1",{"cx":61.2,"cy":50,"r":5.1,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-19:["$","circle","2",{"cx":55.6,"cy":59.69948452238571,"r":5.1,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-1a:["$","circle","3",{"cx":44.400000000000006,"cy":59.69948452238572,"r":5.1,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-1b:["$","circle","4",{"cx":38.8,"cy":50,"r":5.1,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-1c:["$","circle","5",{"cx":44.39999999999999,"cy":40.30051547761429,"r":5.1,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-1d:["$","circle","6",{"cx":55.6,"cy":40.30051547761429,"r":5.1,"fill":"var(--conductor)","stroke":"var(--brand-strand-edge)","strokeWidth":".9"}]
-1e:["$","path",null,{"d":"M77 50h4l2.2-6 3.2 12 3-9 2 3h11","fill":"none","stroke":"var(--brand-signal)","strokeWidth":"1.8","strokeLinecap":"round","strokeLinejoin":"round"}]
-1f:["$","circle",null,{"cx":"105","cy":"50","r":"2.2","fill":"var(--brand-primary)"}]
-20:["$","span",null,{"className":"font-semibold tracking-[-0.01em] text-(--brand-ink) text-[17px]","children":["Cable",["$","span",null,{"className":"text-(--brand-primary)","children":"Sim"}],"Pro"]}]
-21:["$","span",null,{"className":"font-normal text-fd-muted-foreground","children":"文档"}]
-22:["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]
-25:["$","$1","c",{"children":[null,["$","$L8",null,{"parallelRouterKey":"children","template":["$","$L9",null,{}]}]]}]
-29:["$","$1","c",{"children":[["$","$L36",null,{"toc":[],"children":[["$","$L37",null,{"className":"font-display text-[2.5rem] font-normal leading-tight","children":"文档首页"}],["$","$L38",null,{"children":"安装、使用、方法依据与结果解读。这是 Fumadocs 样张，目前包含两篇快速上手和 IEC 60287 方法页。"}],["$","$L39",null,{"children":["$","div",null,{"children":[["$","$L3a",null,{"href":"./quickstart/factory/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"电缆厂：从结构表到正式规格书"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"导入厂家结构表 → 核对 → 载流量表 → 正式规格书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L3a",null,{"href":"./quickstart/research/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"研究院：从新建工程到计算书"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"新建工程 → 直埋载流量研究 → 改条件对比 → 计算书"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}],["$","$L3a",null,{"href":"./methods/iec-60287/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"IEC 60287 稳态载流量"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"原理、适用范围、输入要求、验证依据和已知限制"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]],"className":"grid grid-cols-2 gap-3 @container"}]}]]}],[["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}],["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/1qupj431ajx-f.js","async":true}],["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]],["$","$L3b",null,{"children":["$","$2f",null,{"name":"Next.MetadataOutlet","children":"$@3c"}]}]]}]
-b:300
-3c:null
-33:true
-b:C
-32:0
-26:"$undefined"
-23:"$undefined"
-a:"$undefined"
-31:"$undefined"
-2a:"$undefined"
+1b:["$","p",null,{"children":"cablesim.plugin/2 清单规范、报告模板与 Agent 技能声明示例、宿主架构契约与 REST 接口参考"}]
+1c:["$","$L1a",null,{"href":"./reference/faq/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"常见问题与术语"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"安装排错、缺项拦截原因、结果口径区分与电缆热工符号对照"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]
+1d:["$","$L1a",null,{"href":"./releases/","children":[null,["$","h3",null,{"className":"not-prose mb-1 text-sm font-medium","children":"版本说明与适用边界"}],null,["$","div",null,{"className":"text-sm text-fd-muted-foreground prose-no-margin empty:hidden","children":["$","p",null,{"children":"各版本功能范围与当前工程边界声明"}]}]],"data-card":true,"className":"block rounded-xl border bg-fd-card p-4 text-fd-card-foreground transition-colors @max-lg:col-span-full hover:bg-fd-accent/80"}]
+1e:["$","link","0",{"rel":"stylesheet","href":"/CableSimPro/_next/static/chunks/0iaxnelvtqw2u.css","precedence":"next"}]
+1f:["$","script","script-0",{"src":"/CableSimPro/_next/static/chunks/01whew18vib_m.js","async":true}]
+20:["$","script","script-1",{"src":"/CableSimPro/_next/static/chunks/3xy4-ovcuip2m.js","async":true}]
+21:["$","$L2c",null,{"children":["$","$27",null,{"name":"Next.MetadataOutlet","children":"$@2d"}]}]
+2b:true
+d:300
+2d:null
+d:C
+2a:0
+b:"$undefined"
+29:"$undefined"
+22:"$undefined"
